@@ -1,0 +1,41 @@
+
+# Secrets — NEVER commit
+
+.env
+
+*.key
+
+*.pem
+
+
+
+# Python
+
+__pycache__/
+
+*.pyc
+
+venv/
+
+.venv/
+
+
+
+# AI model weights (too big for git)
+
+models/
+
+*.gguf
+
+*.onnx
+
+*.hef
+
+
+
+# Logs / runtime
+
+*.log
+
+.lgd-nfy0
+
