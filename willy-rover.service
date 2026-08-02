@@ -16,6 +16,7 @@ EnvironmentFile=-/home/hhimmel/rover/.env
 ExecStart=/home/hhimmel/rover/venv/bin/python3 /home/hhimmel/rover/main.py
 Restart=on-failure
 RestartSec=5
+WatchdogSec=500ms
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=willy-rover

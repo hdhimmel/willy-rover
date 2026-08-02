@@ -1,30 +1,92 @@
-import time,logging,config
-from motors import DriveBase
-from sensors import SonarArray,IMU,ADC
+import time,logging,socket,os,board,busio,config
+from motors import DriveBase,Steering
+from sensors import SonarArray,IMU,ADC,Encoders,CurrentMonitor
 from display import WillyFace
 from claude_client import ClaudeClient
 logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)-7s %(message)s',datefmt='%H:%M:%S')
 log=logging.getLogger('brain')
 
+class _SdNotify:
+    # Hand-rolled systemd sd_notify (no extra dependency) — sends READY=1 once init passes and
+    # periodic WATCHDOG=1 so systemd's WatchdogSec can restart us on a stalled tick loop
+    # (§14.2: "Controller/process crash — systemd watchdog — motors disable, arm holds position").
+    def __init__(self):
+        addr=os.environ.get('NOTIFY_SOCKET'); self._sock=None; self._addr=None
+        if addr:
+            if addr.startswith('@'): addr='\0'+addr[1:]
+            self._sock=socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM); self._addr=addr
+    def notify(self,msg):
+        if self._sock:
+            try: self._sock.sendto(msg.encode(),self._addr)
+            except OSError: pass
+
+# I2C addresses expected present per §5.2's authoritative map (+0x70 PCA9685 all-call broadcast).
+_EXPECTED_I2C={config.ENCODER_ADDR,config.INA260_SERVO_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
+               config.INA260_PI_ADDR,config.INA260_MOTOR_ADDR,config.ADS_ADDR,config.IMU_ADDR,
+               config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR,0x70}
+
+# Battery ladder (§13.2), most severe first. Each entry's threshold is the "below this" boundary;
+# recovering to a less severe tier requires climbing BAT_HYSTERESIS_V above that boundary, not
+# just crossing it, so a hovering voltage doesn't flap the state back and forth.
+_BAT_TIERS=[('shutdown',config.BAT_SHUTDOWN_V),('safe',config.BAT_SAFE_V),
+            ('rth',config.BAT_RTH_V),('warn',config.BAT_WARN_V)]
+_BAT_SEVERITY={'shutdown':4,'safe':3,'rth':2,'warn':1,'normal':0}
+
 class RoverBrain:
     def __init__(self):
         log.info('Initialising WildWilly v2...')
-        self.display=WillyFace(); self.motors=DriveBase()
+        self.display=WillyFace(); self.motors=DriveBase(); self.steering=Steering()
         self.sonars=SonarArray(); self.imu=IMU(); self.adc=ADC()
-        self.claude=ClaudeClient()
-        self._state='IDLE'; self._stuck_count=0; self._last_action='none'
+        self.encoders=Encoders(); self.current=CurrentMonitor()
+        self.claude=ClaudeClient(); self._sd=_SdNotify()
+        self._state='INIT'; self._stuck_count=0; self._last_action='none'
         self._idle_t=0.0; self._avoid_start=0.0; self._running=False
+        self._motion_enabled=False; self._init_fail_reason=''
+        self._bat_tier='normal'
 
     def start(self):
         log.info('Starting subsystems...')
         self.display.start(); self.sonars.start(); self.imu.start(); self.adc.start()
-        self._running=True; self.display.update_state('idle','WildWilly v2 ready')
-        log.info('WildWilly v2 ready.')
+        self.encoders.start(); self.current.start()
+        self.steering.center_all()
+        self._running=True
+        ok,reason=self._self_test()
+        self._motion_enabled=ok; self._init_fail_reason=reason
+        if ok:
+            self._go('IDLE'); self.display.update_state('idle','WildWilly v2 ready')
+            log.info('WildWilly v2 ready.')
+        else:
+            log.error(f'Startup self-test FAILED — motion disabled: {reason}')
+            self.display.update_state('warn',f'SELF-TEST FAILED: {reason}')
+        self._sd.notify('READY=1')
+
+    def _self_test(self):
+        # FR-100-002/003/004: no motion permitted until this passes (§13.1/§14.2 INIT->IDLE gate).
+        problems=[]
+        try:
+            i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
+            while not i2c.try_lock(): pass
+            found=set(i2c.scan()); i2c.unlock()
+            missing=_EXPECTED_I2C-found
+            if missing: problems.append('I2C missing: '+','.join(hex(a) for a in sorted(missing)))
+        except Exception as e:
+            problems.append(f'I2C scan failed: {e}')
+        time.sleep(0.5)  # let sensor threads take a first reading (current monitor is the slowest, 10Hz)
+        if not self.imu.is_healthy: problems.append('IMU not reporting')
+        if self.adc.battery_volts<=0: problems.append('battery ADC not reporting')
+        if not self.encoders.is_healthy: problems.append('encoders not reporting')
+        if not self.current.is_healthy: problems.append('current monitors not reporting')
+        if problems:
+            log.error('SELF-TEST FAILED: '+'; '.join(problems))
+            return False,'; '.join(problems)
+        log.info('Self-test passed — all subsystems present.')
+        return True,''
 
     def stop(self):
         log.info('Shutting down...')
         self._running=False; self.motors.brake(); time.sleep(0.2)
-        self.motors.cleanup(); self.sonars.stop(); self.imu.stop(); self.adc.stop(); self.display.stop()
+        self.motors.cleanup(); self.sonars.stop(); self.imu.stop(); self.adc.stop()
+        self.encoders.stop(); self.current.stop(); self.display.stop()
 
     def run(self):
         self.start()
@@ -33,20 +95,63 @@ class RoverBrain:
         except KeyboardInterrupt: log.info('Stopped.')
         finally: self.stop()
 
+    def _bat_tier_for(self,volts):
+        for name,threshold in _BAT_TIERS:
+            if volts<threshold: return name
+        return 'normal'
+
+    def _update_bat_tier(self,volts):
+        raw=self._bat_tier_for(volts)
+        if _BAT_SEVERITY[raw]>=_BAT_SEVERITY[self._bat_tier]:
+            self._bat_tier=raw  # worsening (or unchanged) — react immediately, no hysteresis
+        else:
+            cur_threshold=next((t for n,t in _BAT_TIERS if n==self._bat_tier),None)
+            if cur_threshold is not None and volts>=cur_threshold+config.BAT_HYSTERESIS_V:
+                self._bat_tier=raw  # recovered enough to step down in severity
+        return self._bat_tier
+
     def _tick(self):
-        d=self.sonars.distances; tilt=self.imu.tilt; bat=self.adc.battery_pct
-        if tilt>config.IMU_TILT_LIMIT:
-            if self._state!='ESTOP': log.warning(f'ESTOP tilt={tilt:.1f}'); self._go('ESTOP')
-            self.motors.brake(); self._upd('warn',f'TILT {tilt:.1f}deg STOP',d,tilt); return
-        if self._state=='ESTOP' and tilt<config.IMU_TILT_WARN: self._go('IDLE')
-        if self.adc.battery_low and self._state not in('DOCK','ESTOP','IDLE'):
-            log.info(f'Battery low {bat}% -> DOCK'); self._go('DOCK'); return
-        if self._state=='DOCK' and self.adc.is_charging:
-            self.motors.stop(); self._upd('idle',f'Charging {bat}%',d,tilt)
-            if bat>=95: self._go('ROAM')
+        # Priority arbitration (§13.2's 5-level table, formalized): physical stability > battery
+        # ladder > autonomy > manual (manual is a no-op — no remote-control comms channel exists;
+        # FR-900 is out of scope this pass, same as M-011 remote administration). E-stop is listed
+        # in the doc's priority table too but software has no way to observe it — the hardware-only
+        # latching cut has no documented GPIO sense pin, so there is no check for it here.
+        self._sd.notify('WATCHDOG=1')
+        if not self._motion_enabled:
+            self._upd('warn',f'SELF-TEST FAILED: {self._init_fail_reason}',
+                       {'front':999,'left':999,'right':999},0.0)
             return
+        d=self.sonars.distances; tilt=self.imu.tilt; bat_v=self.adc.battery_volts; bat=self.adc.battery_pct
+        if tilt>config.IMU_TILT_LIMIT:
+            if self._state!='TILT_FAULT': log.warning(f'TILT_FAULT tilt={tilt:.1f}'); self._go('TILT_FAULT')
+            self.motors.brake(); self._upd('warn',f'TILT {tilt:.1f}deg STOP',d,tilt); return
+        if self._state=='TILT_FAULT' and tilt<config.IMU_TILT_WARN: self._go('IDLE')
+
+        tier=self._update_bat_tier(bat_v)
+        if tier=='shutdown':
+            self.motors.brake(); self._go('SHUTDOWN')
+            self._upd('warn',f'BATTERY {bat_v:.2f}V — controlled shutdown, restart required',d,tilt); return
+        if tier=='safe':
+            self.motors.brake(); self._go('SAFE_MODE')
+            self._upd('warn',f'SAFE_MODE bat={bat_v:.2f}V',d,tilt); return
+        if tier=='rth':
+            if self._state not in('DOCK','TILT_FAULT'):
+                log.info(f'Battery {bat_v:.2f}V -> DOCK (return-to-home)'); self._go('DOCK')
+        elif self._state in('SAFE_MODE','SHUTDOWN','DOCK'):
+            # Tier no longer forces a battery-driven state. Recovery can skip straight from
+            # shutdown/safe to warn/normal in one hysteresis step (bypassing 'rth') — handle
+            # release here rather than only on DOCK, or SAFE_MODE/SHUTDOWN would never exit.
+            self._go('IDLE')
+
+        if self._state=='DOCK':
+            if self.adc.is_charging:
+                self.motors.stop(); self._upd('idle',f'Charging {bat}%',d,tilt)
+                if bat>=95: self._go('ROAM')
+                return
+
         {'IDLE':self._idle,'ROAM':self._roam,'SLOW':self._slow,'AVOID':self._avoid,
-         'STUCK':self._stuck,'DOCK':self._dock,'WARN':self._warn,'ESTOP':lambda d,t:None
+         'STUCK':self._stuck,'DOCK':self._dock,'WARN':self._warn,
+         'TILT_FAULT':lambda d,t:None,'SAFE_MODE':lambda d,t:None,'SHUTDOWN':lambda d,t:None,
         }.get(self._state,lambda d,t:None)(d,tilt)
 
     def _idle(self,d,tilt):
@@ -94,7 +199,7 @@ class RoverBrain:
              'stop':lambda d,s=None:(self.motors.stop(),time.sleep(d)),
              'wait':lambda d,s=None:time.sleep(d)}.get(cmd,lambda d,s=None:self.motors.stop())(dur,spd)
             self._last_action=cmd; self._stuck_count=0; self._go('ROAM')
-        else: self._go('ESTOP')
+        else: self._go('TILT_FAULT')
 
     def _dock(self,d,tilt):
         if self.adc.is_charging: self.motors.stop(); return
