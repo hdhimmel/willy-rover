@@ -27,11 +27,11 @@ ARM_BASE=0; ARM_SHOULDER=1; ARM_ELBOW=2
 ARM_WRIST_T=3; ARM_WRIST_R=4; ARM_GRIPPER=5
 
 ADS_ADDR=0x48; ADS_CH_BATTERY=0  # AIN0 only; charge-sense divider not yet wired
-# TODO(§20.4 redo): 0.2481 was trimmed against the MCP3008's input loading.
-# ADS1115 has much higher input impedance and will load the divider less —
-# re-measure against a multimeter before trusting battery_volts.
-BATTERY_DIVIDER_SCALE=0.2481
-BAT_FULL_V=11.39; BAT_LOW_V=9.88; BAT_CRITICAL_V=9.49  # from old BAT_FULL/LOW/CRITICAL raw codes, same formula
+# Re-trimmed for the ADS1115 2026-08-02: AIN0 read 3.2749V while a multimeter
+# on the pack terminals read 11.43V (3.2749/11.43). Old MCP3008-era value was
+# 0.2481 — different chip loads the divider less, so this had to be redone.
+BATTERY_DIVIDER_SCALE=0.2865
+BAT_FULL_V=11.39; BAT_LOW_V=9.88; BAT_CRITICAL_V=9.49  # battery-terminal volts, chip-independent
 
 CLAUDE_MODEL='claude-sonnet-4-20250514'
 CLAUDE_MAX_TOKENS=300; CLAUDE_ESCALATE_AFTER=5
