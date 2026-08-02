@@ -1,5 +1,7 @@
 import RPi.GPIO as GPIO
-import smbus2, spidev, time, math, threading, statistics, config
+import smbus2, time, math, threading, statistics, logging, config
+
+log=logging.getLogger('sensors')
 
 class Sonar:
     def __init__(self,trig,echo):
@@ -87,35 +89,49 @@ class IMU:
     def should_warn(self): return self.tilt>config.IMU_TILT_WARN
 
 class ADC:
-    def __init__(self):
-        self._spi=spidev.SpiDev(); self._spi.open(0,0)
-        self._spi.max_speed_hz=1350000; self._spi.mode=0
-        self._lock=threading.Lock(); self._bat=0; self._chg=0
+    _POINTER_CONFIG=0x01; _POINTER_CONVERT=0x00
+    _CONFIG_BASE=0x8000|0x0200|0x0100|0x0080|0x0003  # single-shot start, PGA ±4.096V, single-shot mode, 128SPS, comparator off
+    _MUX={0:0x4000,1:0x5000,2:0x6000,3:0x7000}  # AINx vs GND
+    _LSB=4.096/32768  # volts/bit at this PGA setting
+    def __init__(self,bus=1):
+        self._bus=smbus2.SMBus(bus)
+        self._lock=threading.Lock(); self._bat_raw=0
         self._running=False; self._thread=None
     def read_channel(self,ch):
-        with self._lock: r=self._spi.xfer2([1,(8+ch)<<4,0])
-        return ((r[1]&3)<<8)|r[2]
+        with self._lock:
+            cfg=self._CONFIG_BASE|self._MUX[ch]
+            self._bus.write_i2c_block_data(config.ADS_ADDR,self._POINTER_CONFIG,[(cfg>>8)&0xFF,cfg&0xFF])
+            time.sleep(0.01)
+            while self._bus.read_i2c_block_data(config.ADS_ADDR,self._POINTER_CONFIG,2)[0]&0x80==0:
+                time.sleep(0.001)
+            d=self._bus.read_i2c_block_data(config.ADS_ADDR,self._POINTER_CONVERT,2)
+        raw=(d[0]<<8)|d[1]
+        return raw-65536 if raw>=32768 else raw
     @property
-    def battery_raw(self): return self._bat
+    def battery_raw(self): return self._bat_raw
     @property
-    def battery_volts(self): return self._bat*(3.3/1023)/0.2481
+    def battery_volts(self): return self._bat_raw*self._LSB/config.BATTERY_DIVIDER_SCALE
     @property
     def battery_pct(self):
-        if self._bat>=config.BAT_FULL: return 100
-        if self._bat<=config.BAT_CRITICAL: return 0
-        return int((self._bat-config.BAT_CRITICAL)/(config.BAT_FULL-config.BAT_CRITICAL)*100)
+        v=self.battery_volts
+        if v>=config.BAT_FULL_V: return 100
+        if v<=config.BAT_CRITICAL_V: return 0
+        return int((v-config.BAT_CRITICAL_V)/(config.BAT_FULL_V-config.BAT_CRITICAL_V)*100)
     @property
-    def is_charging(self): return self._chg>100
+    def is_charging(self): return False  # charge-sense divider not wired yet (AIN0 = battery only)
     @property
-    def battery_low(self): return self._bat<config.BAT_LOW
+    def battery_low(self): return self.battery_volts<config.BAT_LOW_V
     @property
-    def battery_critical(self): return self._bat<config.BAT_CRITICAL
+    def battery_critical(self): return self.battery_volts<config.BAT_CRITICAL_V
     def start(self):
         self._running=True
         self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
-    def stop(self): self._running=False; self._spi.close()
+    def stop(self): self._running=False
     def _loop(self):
         while self._running:
-            try: self._bat=self.read_channel(config.MCP_CH_BATTERY); self._chg=self.read_channel(config.MCP_CH_CHARGE)
-            except: pass
+            try:
+                self._bat_raw=self.read_channel(config.ADS_CH_BATTERY)
+            except Exception:
+                log.warning('ADS1115 read failed — assuming worst-case battery state (§8.5)', exc_info=True)
+                self._bat_raw=0
             time.sleep(1.0)
