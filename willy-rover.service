@@ -1,0 +1,24 @@
+[Unit]
+Description=WildWilly Autonomous Rover v2
+After=network.target graphical-session.target
+Wants=graphical-session.target
+
+[Service]
+User=hhimmel
+WorkingDirectory=/home/hhimmel/rover
+Environment=PYTHONUNBUFFERED=1
+Environment=SDL_VIDEODRIVER=wayland
+Environment=SDL_VIDEO_WAYLAND_WMCLASS=willy
+Environment=SDL_VIDEO_ROTATION=0
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=WAYLAND_DISPLAY=wayland-0
+EnvironmentFile=-/home/hhimmel/rover/.env
+ExecStart=/home/hhimmel/rover/venv/bin/python3 /home/hhimmel/rover/main.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=willy-rover
+
+[Install]
+WantedBy=multi-user.target

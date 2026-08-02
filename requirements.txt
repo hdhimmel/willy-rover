@@ -1,0 +1,26 @@
+# Setup: python3 -m venv --system-site-packages venv && venv/bin/pip install -r requirements.txt
+# --system-site-packages is required: inherits RPi.GPIO (actually rpi-lgpio, the Pi5-compatible
+# drop-in — apt package python3-rpi-lgpio, NOT `pip install RPi.GPIO`, which doesn't work on
+# Pi 5's RP1 chip), smbus2, and pygame from the system, all already apt-installed and working.
+# systemd's willy-rover.service ExecStart points at venv/bin/python3.
+
+Adafruit-Blinka==9.2.0
+Adafruit-Blinka-Raspberry-Pi5-Neopixel==1.0.0rc2
+adafruit-circuitpython-bno08x==1.3.3
+adafruit-circuitpython-busdevice==5.2.17
+adafruit-circuitpython-connectionmanager==3.1.8
+adafruit-circuitpython-mcp230xx==2.6.2
+adafruit-circuitpython-motor==3.5.0
+adafruit-circuitpython-motorkit==1.6.21
+adafruit-circuitpython-pca9685==3.4.22
+adafruit-circuitpython-register==1.12.1
+adafruit-circuitpython-requests==4.1.17
+adafruit-circuitpython-servokit==1.3.24
+adafruit-circuitpython-typing==1.12.3
+Adafruit-PlatformDetect==3.89.1
+Adafruit-PureIO==1.1.11
+binho-host-adapter==0.1.6
+pyftdi==0.57.2
+pyusb==1.3.1
+rpi_ws281x==5.0.0
+sysv_ipc==1.2.0

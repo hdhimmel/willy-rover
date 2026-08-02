@@ -1,5 +1,8 @@
 import RPi.GPIO as GPIO
 import smbus2, time, math, threading, statistics, logging, config
+import board, busio
+from adafruit_bno08x.i2c import BNO08X_I2C
+from adafruit_bno08x import BNO_REPORT_ROTATION_VECTOR
 
 log=logging.getLogger('sensors')
 
@@ -48,24 +51,25 @@ class SonarArray:
     def better_side(self): return 'left' if self.left.distance>=self.right.distance else 'right'
 
 class IMU:
-    _MPU=config.IMU_I2C_ADDR; _AS=16384.0; _GS=131.0
-    def __init__(self,bus=1):
-        self._bus=smbus2.SMBus(bus); self._pitch=0.0; self._roll=0.0
-        self._lock=threading.Lock(); self._last_t=time.perf_counter()
-        self._alpha=0.96; self._running=False; self._thread=None
-        self._bus.write_byte_data(self._MPU,0x6B,0x00); time.sleep(0.1)
-        self._bus.write_byte_data(self._MPU,0x1A,0x03)
+    # BNO085 SH-2 fusion chip — quaternion already drift-free, no complementary filter needed.
+    # Mounting-axis convention (which physical axis reads as pitch/roll) is unconfirmed —
+    # §20.7 bench calibration (mount level, verify) hasn't been run yet. INT (GP15) and RST
+    # (MCP23017 spare pin) are wired per §8.2 but unused here — the library works over I2C
+    # polling alone; wiring them up is a latency optimization, not required for correctness.
+    def __init__(self):
+        self._i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
+        self._bno=BNO08X_I2C(self._i2c,address=config.IMU_ADDR)
+        self._bno.enable_feature(BNO_REPORT_ROTATION_VECTOR)
+        self._pitch=0.0; self._roll=0.0
+        self._lock=threading.Lock(); self._last_ok=0.0
+        self._running=False; self._thread=None
     def _update(self):
-        now=time.perf_counter(); dt=now-self._last_t; self._last_t=now
-        d=self._bus.read_i2c_block_data(self._MPU,0x3B,14)
-        def s16(h,l): v=(h<<8)|l; return v-65536 if v>=32768 else v
-        ax=s16(d[0],d[1])/self._AS; ay=s16(d[2],d[3])/self._AS; az=s16(d[4],d[5])/self._AS
-        gx=s16(d[8],d[9])/self._GS; gy=s16(d[10],d[11])/self._GS
-        n=math.sqrt(ax*ax+ay*ay+az*az) or 1.0
-        pa=math.degrees(math.asin(max(-1,min(1,ax/n)))); ra=math.degrees(math.atan2(ay,az))
+        i,j,k,w=self._bno.quaternion
+        roll=math.degrees(math.atan2(2*(w*i+j*k),1-2*(i*i+j*j)))
+        pitch=math.degrees(math.asin(max(-1.0,min(1.0,2*(w*j-k*i)))))
         with self._lock:
-            self._pitch=self._alpha*(self._pitch+gy*dt)+(1-self._alpha)*pa
-            self._roll=self._alpha*(self._roll+gx*dt)+(1-self._alpha)*ra
+            self._pitch=pitch; self._roll=roll
+        self._last_ok=time.perf_counter()
     def start(self):
         self._running=True
         self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
@@ -74,7 +78,8 @@ class IMU:
         iv=1.0/config.IMU_POLL_HZ
         while self._running:
             try: self._update()
-            except: pass
+            except Exception:
+                log.warning('BNO085 read failed (§8.5: disable autonomy, allow limited manual)', exc_info=True)
             time.sleep(iv)
     @property
     def pitch(self):
@@ -85,6 +90,8 @@ class IMU:
     @property
     def tilt(self):
         with self._lock: return math.sqrt(self._pitch**2+self._roll**2)
+    @property
+    def is_healthy(self): return (time.perf_counter()-self._last_ok)<max(0.5,4.0/config.IMU_POLL_HZ)
     def is_safe(self): return self.tilt<config.IMU_TILT_LIMIT
     def should_warn(self): return self.tilt>config.IMU_TILT_WARN
 
