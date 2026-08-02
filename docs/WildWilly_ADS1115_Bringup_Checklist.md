@@ -23,3 +23,7 @@ I²C @ 0x48 (ADDR→GND, default), joins the existing 9-device bus fan-out (§17
 
 - User metered the pack: **11.43V**. `BATTERY_DIVIDER_SCALE` recalculated and updated in `config.py` (0.2481 → 0.2865); `battery_volts` now reads 11.431V, matching the meter to 1mV. Checklist item closed above.
 - Remaining open item: charge-sense divider (AIN1) still not wired; `is_charging` still hardcoded `False`.
+
+## Session log — 2026-08-02 (cont. 2)
+
+- **User confirms the MCP3008 chip has been physically removed from the board** — the ADS1115 is now the sole ADC, not a parallel/backup install. No SPI0 wiring or chip remains to trip over. This is consistent with the software side (no `MCP_*` references remain anywhere in the repo as of commit `09e305c`).
