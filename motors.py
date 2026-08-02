@@ -1,46 +1,73 @@
-import RPi.GPIO as GPIO
-import time, config
+import time, threading, board, busio, config
+from adafruit_motorkit import MotorKit
+from adafruit_pca9685 import PCA9685
 
-class Motor:
-    def __init__(self,in1,in2):
-        self.in1=in1; self.in2=in2
-        GPIO.setup(in1,GPIO.OUT); GPIO.setup(in2,GPIO.OUT)
-        self._p1=GPIO.PWM(in1,config.MOTOR_PWM_FREQ)
-        self._p2=GPIO.PWM(in2,config.MOTOR_PWM_FREQ)
-        self._p1.start(0); self._p2.start(0)
-    def drive(self,speed):
-        speed=max(-config.SPEED_MAX,min(config.SPEED_MAX,speed)); d=abs(speed)*100
-        if speed>0:   self._p1.ChangeDutyCycle(d);  self._p2.ChangeDutyCycle(0)
-        elif speed<0: self._p1.ChangeDutyCycle(0);  self._p2.ChangeDutyCycle(d)
-        else:         self._p1.ChangeDutyCycle(0);  self._p2.ChangeDutyCycle(0)
-    def brake(self): self._p1.ChangeDutyCycle(100); self._p2.ChangeDutyCycle(100)
-    def stop(self):  self._p1.ChangeDutyCycle(0);   self._p2.ChangeDutyCycle(0)
-    def cleanup(self): self._p1.stop(); self._p2.stop()
+_i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
 
 class DriveBase:
+    _WHEELS=('lf','lm','lr','rf','rm','rr')
     def __init__(self):
-        GPIO.setmode(GPIO.BCM); GPIO.setwarnings(False)
-        self.lf=Motor(config.MOTOR_LF_IN1,config.MOTOR_LF_IN2)
-        self.lm=Motor(config.MOTOR_LM_IN1,config.MOTOR_LM_IN2)
-        self.lr=Motor(config.MOTOR_LR_IN1,config.MOTOR_LR_IN2)
-        self.rf=Motor(config.MOTOR_RF_IN1,config.MOTOR_RF_IN2)
-        self.rm=Motor(config.MOTOR_RM_IN1,config.MOTOR_RM_IN2)
-        self.rr=Motor(config.MOTOR_RR_IN1,config.MOTOR_RR_IN2)
-        self._L=[self.lf,self.lm,self.lr]; self._R=[self.rf,self.rm,self.rr]
-        self._all=self._L+self._R; self.current_speed=0.0; self.stop()
-    def _set(self,l,r): [m.drive(l) for m in self._L]; [m.drive(r) for m in self._R]
+        kits={a:MotorKit(i2c=_i2c,address=a) for a in (config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR)}
+        self._motors={w:getattr(kits[a],f'motor{p}') for w,(a,p) in config.MOTOR_PORT.items()}
+        self._target=dict.fromkeys(self._WHEELS,0.0); self._actual=dict.fromkeys(self._WHEELS,0.0)
+        self._lock=threading.Lock(); self.current_speed=0.0
+        self._running=True
+        self._thread=threading.Thread(target=self._ramp_loop,daemon=True); self._thread.start()
+    def _ramp_loop(self):
+        # FR-400-003: slew-rate limit so throttle changes smoothly rather than jumping instantly.
+        dt=0.02; step=config.SPEED_RAMP_PER_S*dt
+        while self._running:
+            with self._lock:
+                for w in self._WHEELS:
+                    tgt=self._target[w]; cur=self._actual[w]
+                    cur = tgt if abs(tgt-cur)<=step else cur+(step if tgt>cur else -step)
+                    self._actual[w]=cur; self._motors[w].throttle=max(-1.0,min(1.0,cur))
+                self.current_speed=(self._actual['lf']+self._actual['rf'])/2
+            time.sleep(dt)
+    def _set(self,l,r):
+        with self._lock:
+            for w in ('lf','lm','lr'): self._target[w]=l
+            for w in ('rf','rm','rr'): self._target[w]=r
     def forward(self,speed=None):
-        s=speed or config.SPEED_ROAM; self.current_speed=s; self._set(s,s)
+        s=min(config.SPEED_MAX,speed or config.SPEED_ROAM); self._set(s,s)
     def reverse(self,speed=None):
-        s=speed or config.SPEED_SLOW; self.current_speed=-s; self._set(-s,-s)
+        s=min(config.SPEED_MAX,speed or config.SPEED_SLOW); self._set(-s,-s)
     def turn_left(self,speed=None):
-        s=speed or config.SPEED_TURN; self._set(-s,s)
+        s=min(config.SPEED_MAX,speed or config.SPEED_TURN); self._set(-s,s)
     def turn_right(self,speed=None):
-        s=speed or config.SPEED_TURN; self._set(s,-s)
-    def stop(self): [m.stop() for m in self._all]; self.current_speed=0.0
-    def brake(self): [m.brake() for m in self._all]; self.current_speed=0.0
+        s=min(config.SPEED_MAX,speed or config.SPEED_TURN); self._set(s,-s)
+    def stop(self): self._set(0.0,0.0)
+    def brake(self):
+        # Immediate, not ramped — for ESTOP/tilt-fault use where a 0.5s ramp-down is wrong.
+        # throttle=0.0 is adafruit_motor's hard-brake (both legs driven); throttle=None coasts.
+        with self._lock:
+            for w in self._WHEELS: self._target[w]=0.0; self._actual[w]=0.0; self._motors[w].throttle=0.0
+        self.current_speed=0.0
     def forward_for(self,t,speed=None): self.forward(speed); time.sleep(t); self.stop()
     def reverse_for(self,t,speed=None): self.reverse(speed); time.sleep(t); self.stop()
     def turn_left_for(self,t,speed=None): self.turn_left(speed); time.sleep(t); self.stop()
     def turn_right_for(self,t,speed=None): self.turn_right(speed); time.sleep(t); self.stop()
-    def cleanup(self): self.stop(); [m.cleanup() for m in self._all]; GPIO.cleanup()
+    def cleanup(self):
+        self._running=False; time.sleep(0.05)
+        for m in self._motors.values(): m.throttle=None  # release — no holding current on exit
+
+class Steering:
+    # PCA9685 @0x42, CH0-5 (§3.1/§10). Kinematics (crab/point-turn coordination, per-corner
+    # clearance limits) are undesigned in the master doc — this class only centers/holds
+    # wheels straight; brain.py calls center_all() once at startup, nothing per-tick yet.
+    _CORNERS={'lf':config.STEER_LF,'rf':config.STEER_RF,'lm':config.STEER_LM,
+              'rm':config.STEER_RM,'lr':config.STEER_LR,'rr':config.STEER_RR}
+    _PERIOD_US=1_000_000/config.SERVO_PWM_FREQ
+    def __init__(self):
+        self._pca=PCA9685(_i2c,address=config.STEER_PCA_ADDR)
+        self._pca.frequency=config.SERVO_PWM_FREQ
+    def _set_pulse(self,channel,us):
+        us=max(config.SERVO_MIN_US,min(config.SERVO_MAX_US,us))
+        self._pca.channels[channel].duty_cycle=int(us/self._PERIOD_US*65535)
+    def set_angle(self,corner,degrees):
+        # degrees relative to center, clamped to the conservative servo range's half-span
+        half_span_us=(config.SERVO_MAX_US-config.SERVO_MIN_US)/2
+        us=config.SERVO_CENTER_US+(degrees/90.0)*half_span_us
+        self._set_pulse(self._CORNERS[corner],us)
+    def center_all(self):
+        for ch in self._CORNERS.values(): self._set_pulse(ch,config.SERVO_CENTER_US)

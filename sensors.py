@@ -122,14 +122,14 @@ class ADC:
     def battery_pct(self):
         v=self.battery_volts
         if v>=config.BAT_FULL_V: return 100
-        if v<=config.BAT_CRITICAL_V: return 0
-        return int((v-config.BAT_CRITICAL_V)/(config.BAT_FULL_V-config.BAT_CRITICAL_V)*100)
+        if v<=config.BAT_SHUTDOWN_V: return 0
+        return int((v-config.BAT_SHUTDOWN_V)/(config.BAT_FULL_V-config.BAT_SHUTDOWN_V)*100)
     @property
     def is_charging(self): return False  # charge-sense divider not wired yet (AIN0 = battery only)
     @property
-    def battery_low(self): return self.battery_volts<config.BAT_LOW_V
+    def battery_low(self): return self.battery_volts<config.BAT_WARN_V
     @property
-    def battery_critical(self): return self.battery_volts<config.BAT_CRITICAL_V
+    def battery_critical(self): return self.battery_volts<config.BAT_SAFE_V
     def start(self):
         self._running=True
         self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
@@ -142,3 +142,106 @@ class ADC:
                 log.warning('ADS1115 read failed — assuming worst-case battery state (§8.5)', exc_info=True)
                 self._bat_raw=0
             time.sleep(1.0)
+
+class Encoders:
+    # MCP23017 @0x27 (§9.1), quadrature A/B per wheel. No interrupt line runs to the Pi (only
+    # the IMU has one, at GP15) — this polls GPIOA/GPIOB continuously rather than decoding on
+    # an edge interrupt. At the documented ~3292 counts/rev / 620rpm no-load spec, a ~1kHz poll
+    # (the practical ceiling on a 100kHz I2C bus for two single-byte reads) can miss edges under
+    # load — best-effort counts/stall-detection, not a substitute for a real ISR-driven decoder.
+    # Sign convention (forward=+) is asserted here, not yet confirmed against a physical dry-test
+    # per §9.3 — flip per-wheel in config.py if a corner reads backwards once tested.
+    _IODIRA=0x00; _IODIRB=0x01; _GPPUA=0x0C; _GPPUB=0x0D; _GPIOA=0x12; _GPIOB=0x13
+    _QTABLE=[0,-1,1,0, 1,0,0,-1, -1,0,0,1, 0,1,-1,0]  # [old_state<<2|new_state] -> delta
+    def __init__(self,bus=1):
+        self._bus=smbus2.SMBus(bus)
+        self._bus.write_byte_data(config.ENCODER_ADDR,self._IODIRA,0xFF)
+        self._bus.write_byte_data(config.ENCODER_ADDR,self._IODIRB,0xFF)
+        self._bus.write_byte_data(config.ENCODER_ADDR,self._GPPUA,0xFF)
+        self._bus.write_byte_data(config.ENCODER_ADDR,self._GPPUB,0xFF)
+        self._counts=dict.fromkeys(config.ENCODER_PINS,0)
+        self._rate=dict.fromkeys(config.ENCODER_PINS,0.0)
+        self._state=dict.fromkeys(config.ENCODER_PINS,0)
+        self._last_counts=dict(self._counts); self._last_rate_t=time.perf_counter()
+        self._lock=threading.Lock(); self._running=False; self._thread=None; self._last_ok=0.0
+    def _update(self):
+        a=self._bus.read_byte_data(config.ENCODER_ADDR,self._GPIOA)
+        b=self._bus.read_byte_data(config.ENCODER_ADDR,self._GPIOB)
+        with self._lock:
+            for w,(bank,bitA,bitB) in config.ENCODER_PINS.items():
+                byte=a if bank=='A' else b
+                state=(((byte>>bitA)&1)<<1)|((byte>>bitB)&1)
+                self._counts[w]+=self._QTABLE[(self._state[w]<<2)|state]
+                self._state[w]=state
+        self._last_ok=time.perf_counter()
+    def start(self):
+        self._running=True
+        self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
+    def stop(self): self._running=False
+    def _loop(self):
+        while self._running:
+            try: self._update()
+            except Exception:
+                log.warning('MCP23017 encoder read failed', exc_info=True)
+            now=time.perf_counter()
+            if now-self._last_rate_t>=0.2:
+                with self._lock:
+                    dt=now-self._last_rate_t
+                    for w in self._counts:
+                        self._rate[w]=(self._counts[w]-self._last_counts[w])/dt
+                        self._last_counts[w]=self._counts[w]
+                self._last_rate_t=now
+            time.sleep(0.001)
+    @property
+    def counts(self):
+        with self._lock: return dict(self._counts)
+    @property
+    def counts_per_sec(self):
+        with self._lock: return dict(self._rate)
+    def stalled(self,wheel,commanded):
+        # §8.5 fault behavior: no counts while commanded -> caller should stop the affected drive.
+        with self._lock: return commanded and abs(self._rate.get(wheel,0.0))<1.0
+    @property
+    def is_healthy(self): return (time.perf_counter()-self._last_ok)<1.0
+
+class CurrentMonitor:
+    # INA260 x3 (§5.2): 0x40 servo/steering rail, 0x44 Pi rail, 0x45 motor rail. Monitor/log
+    # only (feeds FR-1100 diagnostics) — no numeric overcurrent trip threshold exists anywhere
+    # in the documentation to hardcode an automatic cutoff against (§14.1 uses "threshold" as a
+    # literal placeholder with no value attached).
+    _REG_CURRENT=0x01; _REG_VOLTAGE=0x02; _REG_POWER=0x03  # 1.25mA/bit, 1.25mV/bit, 10mW/bit
+    _RAILS={'servo':config.INA260_SERVO_ADDR,'pi':config.INA260_PI_ADDR,'motor':config.INA260_MOTOR_ADDR}
+    def __init__(self,bus=1):
+        self._bus=smbus2.SMBus(bus)
+        self._data={r:{'current_a':0.0,'voltage_v':0.0,'power_w':0.0} for r in self._RAILS}
+        self._lock=threading.Lock(); self._running=False; self._thread=None; self._last_ok=0.0
+    def _be16(self,addr,reg):
+        d=self._bus.read_i2c_block_data(addr,reg,2)
+        v=(d[0]<<8)|d[1]
+        return v-65536 if v>=32768 else v
+    def _read_rail(self,addr):
+        return (self._be16(addr,self._REG_CURRENT)*0.00125,
+                self._be16(addr,self._REG_VOLTAGE)*0.00125,
+                self._be16(addr,self._REG_POWER)*0.01)
+    def _update(self):
+        for rail,addr in self._RAILS.items():
+            cur,volt,pwr=self._read_rail(addr)
+            with self._lock: self._data[rail]={'current_a':cur,'voltage_v':volt,'power_w':pwr}
+        self._last_ok=time.perf_counter()
+    def start(self):
+        self._running=True
+        self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
+    def stop(self): self._running=False
+    def _loop(self):
+        while self._running:
+            try: self._update()
+            except Exception:
+                log.warning('INA260 read failed (§8.5: log, hold last; sustained fail -> SAFE_MODE)', exc_info=True)
+            time.sleep(0.1)  # 10Hz per §8.5
+    def rail(self,name):
+        with self._lock: return dict(self._data[name])
+    @property
+    def all_rails(self):
+        with self._lock: return {k:dict(v) for k,v in self._data.items()}
+    @property
+    def is_healthy(self): return (time.perf_counter()-self._last_ok)<1.0
