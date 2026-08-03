@@ -70,6 +70,11 @@ BAT_SAFE_V=10.5        # -> SAFE_MODE (motion stop, arm holds)
 BAT_SHUTDOWN_V=10.2   # -> controlled shutdown; also the 0% anchor for battery_pct
 BAT_HYSTERESIS_V=0.2
 
+# Diagnostics/logging (FR-1100) — rotating file log alongside the existing journal output;
+# the journal is ephemeral (rotates per systemd-journald policy), this file persists independently.
+LOG_DIR='logs'; LOG_FILE='willy.log'
+LOG_MAX_BYTES=2_000_000; LOG_BACKUP_COUNT=5
+
 CLAUDE_MODEL='claude-sonnet-4-20250514'
 CLAUDE_MAX_TOKENS=300; CLAUDE_ESCALATE_AFTER=5
 STUCK_TIMEOUT=3.0; BACK_UP_TIME=0.8; TURN_TIME_90=1.2; IDLE_TIMEOUT=30.0

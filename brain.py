@@ -1,10 +1,9 @@
-import time,logging,socket,os,board,busio,config
+import time,socket,os,board,busio,config,logsetup
 from motors import DriveBase,Steering
 from sensors import SonarArray,IMU,ADC,Encoders,CurrentMonitor
 from display import WillyFace
 from claude_client import ClaudeClient
-logging.basicConfig(level=logging.INFO,format='%(asctime)s %(levelname)-7s %(message)s',datefmt='%H:%M:%S')
-log=logging.getLogger('brain')
+log=logsetup.setup('brain')
 
 class _SdNotify:
     # Hand-rolled systemd sd_notify (no extra dependency) — sends READY=1 once init passes and
@@ -42,7 +41,7 @@ class RoverBrain:
         self._state='INIT'; self._stuck_count=0; self._last_action='none'
         self._idle_t=0.0; self._avoid_start=0.0; self._running=False
         self._motion_enabled=False; self._init_fail_reason=''
-        self._bat_tier='normal'
+        self._bat_tier='normal'; self._health={}
 
     def start(self):
         log.info('Starting subsystems...')
@@ -110,7 +109,21 @@ class RoverBrain:
                 self._bat_tier=raw  # recovered enough to step down in severity
         return self._bat_tier
 
+    def _check_health(self):
+        # FR-1100-001/002: continuous subsystem health monitoring, independent of the one-shot
+        # startup self-test in _self_test(). Before this, a sensor dying mid-run (e.g. the IMU
+        # thread stalling) went completely unnoticed — is_healthy was only ever read once, at
+        # INIT — so a live fault produced no log entry and no operator-visible signal at all.
+        checks={'imu':self.imu.is_healthy,'encoders':self.encoders.is_healthy,
+                'current':self.current.is_healthy,'battery_adc':self.adc.battery_volts>0}
+        for name,healthy in checks.items():
+            was=self._health.get(name,True)
+            if was and not healthy: log.warning(f'{name} FAULT — stopped reporting')
+            elif not was and healthy: log.info(f'{name} recovered')
+            self._health[name]=healthy
+
     def _tick(self):
+        self._check_health()
         # Priority arbitration (§13.2's 5-level table, formalized): physical stability > battery
         # ladder > autonomy > manual (manual is a no-op — no remote-control comms channel exists;
         # FR-900 is out of scope this pass, same as M-011 remote administration). E-stop is listed
