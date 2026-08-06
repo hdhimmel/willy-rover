@@ -7,6 +7,12 @@
 
 *.pem
 
+secrets/
+
+*.db
+*.db-shm
+*.db-wal
+
 
 
 # Python

@@ -77,4 +77,94 @@ LOG_MAX_BYTES=2_000_000; LOG_BACKUP_COUNT=5
 
 CLAUDE_MODEL='claude-sonnet-4-20250514'
 CLAUDE_MAX_TOKENS=300; CLAUDE_ESCALATE_AFTER=5
+
+# ============================================================================
+# v2.2 subsystems (docs/WildWilly_Functional_Requirements_Document_v2.2.md).
+# Every flag below defaults OFF except the two with no external dependency
+# (display expressions, local memory) — FR-000 Directive 6 requires all
+# task-level behavior to stay inert unless explicitly enabled, and several of
+# these need assets/credentials that are not provisioned on this unit yet
+# (see docs/WildWilly_v2.2_Programming_Pass.md for the open list). Flip a
+# flag only after its prerequisite is actually in place.
+# ============================================================================
+
+# --- FR-1300/2000: Willie's own Google account. This is NOT the owner's
+# personal account (h.d.himmel@gmail.com). Create it, enable Gmail/Home Graph
+# access on it, and populate the credential paths below before flipping
+# ENABLE_SMART_HOME/ENABLE_EMAIL. Never put a live secret value directly in
+# this file (FR-2000-005) — only env var names / paths under secrets/
+# (gitignored).
+WILLIE_GOOGLE_ACCOUNT='willie.pi5.droid@gmail.com'
+
+ENABLE_SMART_HOME=False  # FR-1300
+GOOGLE_HOME_CREDS_PATH='secrets/google_home_token.json'
+SMART_HOME_DISCOVERY_TIMEOUT_S=5
+
+# FR-1400 cloud AI fallback, never a primary dependency. The FRD assumed Gemini under
+# WILLIE_GOOGLE_ACCOUNT above, but that account's Gemini API key hit a persistent zero free-tier
+# quota even with billing linked (Google-side provisioning gap, parked 2026-08-06) — swapped to
+# Anthropic's API instead, reusing ANTHROPIC_API_KEY (already configured for claude_client.py's
+# STUCK-state decisions, see .env). See cloud_ai.py for the full swap rationale.
+ENABLE_CLOUD_AI=False
+CLOUD_AI_TIMEOUT_S=8
+
+ENABLE_EMAIL=True  # FR-2000 — Gmail app password verified working 2026-08-06 (IMAP+SMTP login OK)
+GMAIL_IMAP_HOST='imap.gmail.com'; GMAIL_SMTP_HOST='smtp.gmail.com'; GMAIL_SMTP_PORT=465
+GMAIL_APP_PASSWORD_ENV='WILLIE_GMAIL_APP_PASSWORD'
+GMAIL_POLL_INTERVAL_S=120  # FR-2000-002
+OWNER_EMAIL='h.d.himmel@gmail.com'
+# FR-2000-009: single hard-coded outbound recipient, enforced in email_client.py itself, not
+# just here — changing who Willie can email requires a code change, not a config edit.
+EMAIL_OUTBOUND_ALLOWLIST=('h.d.himmel@gmail.com',)
+# FR-2000-010/011: inbound sender allowlist is owner-managed at runtime (voice/display cannot
+# touch it) so it lives in its own file, not a code constant like the outbound list above.
+EMAIL_INBOUND_ALLOWLIST_PATH='secrets/email_sender_allowlist.json'
+
+# --- FR-1500 voice pipeline. Hardware confirmed present 2026-08-06 (USB PnP Audio Device,
+# mic+speaker, card 2). Model files are NOT downloaded yet — ENABLE_VOICE stays False until
+# they exist at these paths (models/ is gitignored, too large for git).
+ENABLE_VOICE=False
+# TEMPORARY STAND-IN (2026-08-06): the real wake phrase is "Hey Willie", but that needs actual
+# custom training (synthetic TTS data + a large negative-audio corpus + a training run) — not a
+# download, and not attempted here (owner chose to defer it rather than run a multi-hour training
+# job on this Pi while it's also running the live rover service). Using openwakeword's bundled
+# "Hey Jarvis" model as a placeholder so the rest of the voice pipeline (STT/local LLM/TTS, all
+# already verified working) isn't blocked on it. Trigger phrase is literally "Hey Jarvis" until
+# swapped — update this path (and tell the owner the phrase changed) once real training is done.
+WAKEWORD_MODEL_PATH='models/hey_jarvis_v0.1.onnx'; WAKEWORD_THRESHOLD=0.5
+WHISPER_MODEL_SIZE='small.en'  # faster-whisper model name
+PIPER_VOICE_PATH='models/piper/en_US-amy-medium.onnx'
+LOCAL_LLM_MODEL_PATH='models/llama-3.2-3b-instruct-q4.gguf'  # llama.cpp gguf
+LOCAL_LLM_CONFIDENCE_FLOOR=0.55  # FR-1400-001: below this, offer cloud AI fallback if enabled
+AUDIO_INPUT_DEVICE=None; AUDIO_OUTPUT_DEVICE=None  # None = system default
+VOICE_TONE_DEFAULT='neutral'  # 'neutral'|'funny'|'silly'|'bashful' — FR-1500-008/009/010
+
+# --- FR-1600 display expressions. Pure software, layered on the existing WillyFace state
+# machine (display.py) — no new hardware/model dependency, safe to default on.
+ENABLE_DISPLAY_EXPRESSIONS=True
+IDLE_PERSONALITY_CYCLE_S=90  # FR-1600-007: how often the idle 'silly' animation may recur
+
+# --- FR-1700 object detection/retrieval. Arducam OV9281 (USB, /dev/video0) confirmed present
+# 2026-08-06. No Hailo NPU is installed on this unit (checked: no /dev/hailo*, no hailortcli) —
+# YOLO_MODEL_PATH runs on CPU via ultralytics instead of the FRD's assumed Hailo-accelerated
+# path. Swap in a .hef path + hailo runtime later if the NPU is added; vision.py's detector
+# interface is written to make that a backend swap, not a rewrite.
+ENABLE_OBJECT_RETRIEVAL=False
+CAMERA_DEVICE='/dev/video0'
+YOLO_MODEL_PATH='models/yolov8n.pt'
+YOLO_CONF_THRESHOLD=0.5
+RETRIEVAL_APPROACH_STOP_CM=25   # distance from target to halt before attempting grasp
+RETRIEVAL_GRASP_RETRIES=2       # FR-1700-005
+RETRIEVAL_PERSON_MAX_RANGE_CM=150  # FR-1700-008: hand-off proximity gate
+
+# --- FR-1800 privacy / retention. Presence of the flag file (not its content) disables mic+
+# camera, independent of and in addition to E-stop — deleting the file re-enables them.
+MIC_CAMERA_DISABLE_FLAG_PATH='secrets/privacy_disable.flag'
+DATA_RETENTION_DAYS=30          # FR-1800-004
+RAW_AUDIO_CAMERA_PERSIST=False  # FR-1800-002
+
+# --- FR-1900 local memory store. SQLite, no external dependency — safe to default on.
+ENABLE_LEARNING=True
+MEMORY_DB_PATH='memory.db'
+MEMORY_REPLAY_SIMILARITY_FLOOR=0.6  # FR-1900-003: below this, report mismatch rather than replay
 STUCK_TIMEOUT=3.0; BACK_UP_TIME=0.8; TURN_TIME_90=1.2; IDLE_TIMEOUT=30.0

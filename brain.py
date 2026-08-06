@@ -3,6 +3,14 @@ from motors import DriveBase,Steering
 from sensors import SonarArray,IMU,ADC,Encoders,CurrentMonitor
 from display import WillyFace
 from claude_client import ClaudeClient
+from arm import Arm
+from memory_store import MemoryStore
+from cloud_ai import CloudAIClient
+from smart_home import SmartHomeClient
+from voice import VoicePipeline
+from vision import ObjectDetector
+from retrieval_task import RetrievalTask
+from email_client import EmailClient
 log=logsetup.setup('brain')
 
 class _SdNotify:
@@ -36,8 +44,17 @@ class RoverBrain:
         log.info('Initialising WildWilly v2...')
         self.display=WillyFace(); self.motors=DriveBase(); self.steering=Steering()
         self.sonars=SonarArray(); self.imu=IMU(); self.adc=ADC()
-        self.encoders=Encoders(); self.current=CurrentMonitor()
+        self.encoders=Encoders(); self.current=CurrentMonitor(); self.arm=Arm()
         self.claude=ClaudeClient(); self._sd=_SdNotify()
+        # v2.2 subsystems (docs/WildWilly_Functional_Requirements_Document_v2.2.md) — each stays
+        # inert unless its config.ENABLE_* flag is on and its assets/credentials are present; see
+        # config.py's v2.2 block and docs/WildWilly_v2.2_Programming_Pass.md for what's open.
+        self.memory=MemoryStore(); self.cloud_ai=CloudAIClient(); self.smart_home=SmartHomeClient()
+        self.voice=VoicePipeline(memory=self.memory,cloud_ai=self.cloud_ai,display=self.display,
+                                  smart_home=self.smart_home)
+        self.detector=ObjectDetector()
+        self.retrieval=RetrievalTask(self.motors,self.arm,self.detector,display=self.display,voice=self.voice)
+        self.email=EmailClient()
         self._state='INIT'; self._stuck_count=0; self._last_action='none'
         self._idle_t=0.0; self._avoid_start=0.0; self._running=False
         self._motion_enabled=False; self._init_fail_reason=''
@@ -47,7 +64,12 @@ class RoverBrain:
         log.info('Starting subsystems...')
         self.display.start(); self.sonars.start(); self.imu.start(); self.adc.start()
         self.encoders.start(); self.current.start()
-        self.steering.center_all()
+        self.steering.center_all(); self.arm.center_all()
+        # v2.2: voice/email run their own background threads regardless of self-test result —
+        # neither can move the robot on its own (voice queues motion intents for _tick() to
+        # gate; email never acts autonomously per FR-2000-004) — but both stay inert no-ops if
+        # their ENABLE_* flag is off or credentials/models are missing (see each module).
+        self.voice.start(); self.email.start()
         self._running=True
         ok,reason=self._self_test()
         self._motion_enabled=ok; self._init_fail_reason=reason
@@ -84,6 +106,9 @@ class RoverBrain:
     def stop(self):
         log.info('Shutting down...')
         self._running=False; self.motors.brake(); time.sleep(0.2)
+        if self.retrieval.active: self.retrieval.abort('shutdown')
+        self.voice.stop(); self.email.stop(); self.detector.close()
+        self.memory.close()  # FR-1900-011: persist any new/updated memory before power-off
         self.motors.cleanup(); self.sonars.stop(); self.imu.stop(); self.adc.stop()
         self.encoders.stop(); self.current.stop(); self.display.stop()
 
@@ -124,31 +149,41 @@ class RoverBrain:
 
     def _tick(self):
         self._check_health()
-        # Priority arbitration (§13.2's 5-level table, formalized): physical stability > battery
-        # ladder > autonomy > manual (manual is a no-op — no remote-control comms channel exists;
-        # FR-900 is out of scope this pass, same as M-011 remote administration). E-stop is listed
-        # in the doc's priority table too but software has no way to observe it — the hardware-only
-        # latching cut has no documented GPIO sense pin, so there is no check for it here.
+        # FR-000 Prime Directives, in order — Directive 2 (self-test gate) and Directive 4
+        # (tilt/physical-limit fault) and Directive 3 (battery ladder) are checked here, each
+        # able to pre-empt Directive 6 (voice/retrieval/smart-home/email, everything added in
+        # v2.2) mid-task. E-stop (Directive 1) is listed in the doc's priority table too but
+        # software has no way to observe it — the hardware-only latching cut has no documented
+        # GPIO sense pin, so there is no check for it here, same gap as the baseline pass.
         self._sd.notify('WATCHDOG=1')
         if not self._motion_enabled:
-            self._upd('warn',f'SELF-TEST FAILED: {self._init_fail_reason}',
+            self._upd('fault',f'SELF-TEST FAILED: {self._init_fail_reason}',
                        {'front':999,'left':999,'right':999},0.0)
             return
         d=self.sonars.distances; tilt=self.imu.tilt; bat_v=self.adc.battery_volts; bat=self.adc.battery_pct
         if tilt>config.IMU_TILT_LIMIT:
+            if self.retrieval.active: self.retrieval.abort(f'tilt fault {tilt:.1f}deg')  # FR-1700-007
             if self._state!='TILT_FAULT': log.warning(f'TILT_FAULT tilt={tilt:.1f}'); self._go('TILT_FAULT')
-            self.motors.brake(); self._upd('warn',f'TILT {tilt:.1f}deg STOP',d,tilt); return
+            self.motors.brake(); self._upd('fault',f'TILT {tilt:.1f}deg STOP',d,tilt); return  # FR-1600-003
         if self._state=='TILT_FAULT' and tilt<config.IMU_TILT_WARN: self._go('IDLE')
 
         tier=self._update_bat_tier(bat_v)
         if tier=='shutdown':
+            if self.retrieval.active: self.retrieval.abort(f'battery shutdown {bat_v:.2f}V')  # FR-1700-007
             self.motors.brake(); self._go('SHUTDOWN')
-            self._upd('warn',f'BATTERY {bat_v:.2f}V — controlled shutdown, restart required',d,tilt); return
+            self.memory.save_all_now()  # best-effort backstop — the guaranteed save already ran at 'rth'
+            self._upd('lowbatt',f'BATTERY {bat_v:.2f}V — controlled shutdown, restart required',d,tilt); return
         if tier=='safe':
+            if self.retrieval.active: self.retrieval.abort(f'battery safe mode {bat_v:.2f}V')  # FR-1700-007
             self.motors.brake(); self._go('SAFE_MODE')
-            self._upd('warn',f'SAFE_MODE bat={bat_v:.2f}V',d,tilt); return
+            self._upd('lowbatt',f'SAFE_MODE bat={bat_v:.2f}V',d,tilt); return  # FR-1600-004
         if tier=='rth':
             if self._state not in('DOCK','TILT_FAULT'):
+                if self.retrieval.active: self.retrieval.abort(f'return-to-home {bat_v:.2f}V')  # FR-1700-007
+                # FR-200-005/FR-1900-011: the GUARANTEED memory save happens here, at the earlier
+                # RTH threshold, while there's still time for a full graceful save — not at the
+                # actual SHUTDOWN tier below, which only gets a best-effort backstop attempt.
+                self.memory.save_all_now()
                 log.info(f'Battery {bat_v:.2f}V -> DOCK (return-to-home)'); self._go('DOCK')
         elif self._state in('SAFE_MODE','SHUTDOWN','DOCK'):
             # Tier no longer forces a battery-driven state. Recovery can skip straight from
@@ -162,14 +197,49 @@ class RoverBrain:
                 if bat>=95: self._go('ROAM')
                 return
 
+        # FR-000 Directive 6 (v2.2): voice-queued task-level commands are only ever picked up
+        # here, after every Directive 1-5 check above has already run this tick and none of
+        # them pre-empted (FR-1500-007). Only intake a new task from IDLE — never interrupt an
+        # in-progress ROAM/AVOID/etc. state to start one.
+        if self._state=='IDLE' and not self.retrieval.active:
+            self._drain_voice_commands()
+
         {'IDLE':self._idle,'ROAM':self._roam,'SLOW':self._slow,'AVOID':self._avoid,
-         'STUCK':self._stuck,'DOCK':self._dock,'WARN':self._warn,
+         'STUCK':self._stuck,'DOCK':self._dock,'WARN':self._warn,'RETRIEVE':self._retrieve,
          'TILT_FAULT':lambda d,t:None,'SAFE_MODE':lambda d,t:None,'SHUTDOWN':lambda d,t:None,
         }.get(self._state,lambda d,t:None)(d,tilt)
+
+    def _drain_voice_commands(self):
+        try:
+            cmd=self.voice.pending_commands.get_nowait()
+        except Exception:
+            return
+        if cmd.get('intent')=='retrieve':
+            target=cmd.get('args',{}).get('object','object')
+            ok,msg=self.retrieval.start(target)
+            if ok: self._go('RETRIEVE')
+            log.info(f'Voice-triggered retrieval: {target} ({msg})')
+        # Other queued motion intents (forward/reverse/turn_*/stop/go_to) are logged but not
+        # wired to an executor this pass — FR-1000 autonomous navigation and free-form manual
+        # driving via voice were not part of the v2.2 scope actually implemented here, only the
+        # FR-1700 retrieval task was. Put back unhandled so nothing is silently swallowed.
+        elif cmd.get('intent'):
+            log.info(f'Voice intent "{cmd["intent"]}" received but not wired to an executor.')
+
+    def _retrieve(self,d,tilt):
+        self.retrieval.tick(d,tilt)
+        if self.retrieval.state in('DONE','FAILED','ABORTED'):
+            if self.retrieval.state=='DONE' and self.voice.available: self.voice.speak('All done!')
+            self.retrieval.reset(); self._go('IDLE')
 
     def _idle(self,d,tilt):
         self.motors.stop(); self._idle_t+=0.05
         self._upd('idle',f'Waiting... bat={self.adc.battery_pct}%',d,tilt)
+        summaries=self.email.get_new_summaries() if self.email.available else []
+        for s in summaries:
+            msg=f'New email from {s["from"]}: {s["subject"]}'
+            log.info(msg)
+            if self.voice.available: self.voice.speak(msg)  # FR-2000-003: surfaced, never acted on
         if self._idle_t>=config.IDLE_TIMEOUT: self._idle_t=0.0; self._go('ROAM')
 
     def _roam(self,d,tilt):

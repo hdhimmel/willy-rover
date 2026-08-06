@@ -24,3 +24,18 @@ pyftdi==0.57.2
 pyusb==1.3.1
 rpi_ws281x==5.0.0
 sysv_ipc==1.2.0
+
+# --- v2.2 subsystems (docs/WildWilly_Functional_Requirements_Document_v2.2.md) ---
+# Unpinned/not yet installed this pass — code-only pass per user instruction, no live
+# install or import test was run. Pin exact versions the first time these are actually
+# installed. Each subsystem's ENABLE_* flag in config.py defaults False until then.
+# Gemini (FR-1400), Google Home (FR-1300), and email (FR-2000) are deliberately NOT SDK
+# dependencies — cloud_ai.py/smart_home.py/email_client.py talk to their REST APIs directly
+# via urllib/imaplib/smtplib (stdlib), same minimal-dependency style as claude_client.py.
+sounddevice        # FR-1500 mic capture (USB PnP Audio Device, card 2, confirmed present)
+openwakeword       # FR-1500 wake word
+faster-whisper     # FR-1500 STT
+piper-tts          # FR-1500 TTS
+llama-cpp-python   # FR-1500 onboard command interpretation (loads LOCAL_LLM_MODEL_PATH gguf)
+ultralytics        # FR-1700 YOLOv8 CPU inference (no Hailo NPU on this unit)
+opencv-python-headless  # FR-1700 camera capture/frame handling
