@@ -3,6 +3,7 @@ from motors import DriveBase,Steering
 from sensors import SonarArray,IMU,ADC,Encoders,CurrentMonitor
 from display import WillyFace
 from claude_client import ClaudeClient
+from safety import SafetyController
 from arm import Arm
 from memory_store import MemoryStore
 from cloud_ai import CloudAIClient
@@ -46,6 +47,7 @@ class RoverBrain:
     def __init__(self):
         log.info('Initialising WildWilly v2...')
         self.display=WillyFace(); self.motors=DriveBase(); self.steering=Steering()
+        self.safety=SafetyController(self.motors)
         self.sonars=SonarArray(); self.imu=IMU(); self.adc=ADC()
         self.encoders=Encoders(); self.current=CurrentMonitor(); self.arm=Arm()
         self.claude=ClaudeClient(); self._sd=_SdNotify()
@@ -56,12 +58,13 @@ class RoverBrain:
         self.voice=VoicePipeline(memory=self.memory,cloud_ai=self.cloud_ai,display=self.display,
                                   smart_home=self.smart_home)
         self.detector=ObjectDetector()
-        self.retrieval=RetrievalTask(self.motors,self.arm,self.detector,display=self.display,voice=self.voice)
+        self.retrieval=RetrievalTask(self.safety,self.arm,self.detector,display=self.display,voice=self.voice)
         self.email=EmailClient()
         self._state='INIT'; self._stuck_count=0; self._last_action='none'
-        self._idle_t=0.0; self._avoid_start=0.0; self._running=False
+        self._idle_t=0.0; self._avoid_start=0.0; self._avoid_phase=None; self._running=False
         self._motion_enabled=False; self._init_fail_reason=''
-        self._bat_tier='normal'; self._health={}
+        self._bat_tier='normal'; self._health={}; self._fault_since={}
+        self._claude_pending=False; self._claude_move_pending=False
 
     def start(self):
         log.info('Starting subsystems...')
@@ -108,7 +111,7 @@ class RoverBrain:
 
     def stop(self):
         log.info('Shutting down...')
-        self._running=False; self.motors.brake(); time.sleep(0.2)
+        self._running=False; self.safety.emergency_stop('shutdown'); time.sleep(0.2)
         if self.retrieval.active: self.retrieval.abort('shutdown')
         self.voice.stop(); self.email.stop(); self.detector.close()
         self.memory.close()  # FR-1900-011: persist any new/updated memory before power-off
@@ -142,16 +145,39 @@ class RoverBrain:
         # startup self-test in _self_test(). Before this, a sensor dying mid-run (e.g. the IMU
         # thread stalling) went completely unnoticed — is_healthy was only ever read once, at
         # INIT — so a live fault produced no log entry and no operator-visible signal at all.
+        #
+        # §4 watchdog (docs/WildWilly_Claude_Fix_Implementation_Plan.md): logging alone isn't
+        # enough — a fault sustained past SENSOR_FAULT_GRACE_S must force a safe stopped state.
+        # battery_adc is excluded from that escalation: a failed read already defaults
+        # battery_volts to 0, which _update_bat_tier() correctly treats as 'shutdown' on its own,
+        # so this would be a redundant/less-informative path to the same outcome. imu is the
+        # sharpest case — self.imu.tilt returns the last cached reading even after the read
+        # thread dies, so a stale tilt can silently pass the TILT_FAULT check below forever
+        # without this.
         checks={'imu':self.imu.is_healthy,'encoders':self.encoders.is_healthy,
                 'current':self.current.is_healthy,'battery_adc':self.adc.battery_volts>0}
+        now=time.time(); sustained_fault=None
         for name,healthy in checks.items():
             was=self._health.get(name,True)
             if was and not healthy: log.warning(f'{name} FAULT — stopped reporting')
-            elif not was and healthy: log.info(f'{name} recovered')
+            elif not was and healthy: log.info(f'{name} recovered'); self._fault_since.pop(name,None)
             self._health[name]=healthy
+            if not healthy:
+                self._fault_since.setdefault(name,now)
+                if name!='battery_adc' and now-self._fault_since[name]>config.SENSOR_FAULT_GRACE_S:
+                    sustained_fault=name
+        return sustained_fault
+
+    def _abandon_stuck_if_active(self):
+        # Called alongside every retrieval.abort() at a Directive 1-4 preemption point (tilt,
+        # battery, sensor fault). If STUCK was mid-flight — waiting on Claude, or executing a
+        # Claude-issued timed move — this drops that in-flight work so the next STUCK entry
+        # starts clean rather than replaying a stale poll/move-pending state.
+        if self._state=='STUCK':
+            self.claude.reset(); self._claude_pending=False; self._claude_move_pending=False
 
     def _tick(self):
-        self._check_health()
+        sustained_fault=self._check_health()
         # FR-000 Prime Directives, in order — Directive 2 (self-test gate) and Directive 4
         # (tilt/physical-limit fault) and Directive 3 (battery ladder) are checked here, each
         # able to pre-empt Directive 6 (voice/retrieval/smart-home/email, everything added in
@@ -164,16 +190,33 @@ class RoverBrain:
                        {'front':999,'left':999,'right':999},0.0)
             return
         d=self.sonars.distances; tilt=self.imu.tilt; bat_v=self.adc.battery_volts; bat=self.adc.battery_pct
+        self.safety.update_context(front_cm=d['front'],tilt_deg=tilt,motion_enabled=self._motion_enabled)
+
+        if sustained_fault:
+            # §4 watchdog escalation (see _check_health) — a sensor fault this sustained means we
+            # can no longer trust our own safety checks (tilt above all), so stop unconditionally
+            # rather than let TILT_FAULT/battery logic below run on possibly-stale inputs.
+            if self.retrieval.active: self.retrieval.abort(f'sensor fault: {sustained_fault}')
+            self._abandon_stuck_if_active()
+            self.safety.emergency_stop(f'{sustained_fault} sensor fault')
+            if self._state!='SENSOR_FAULT': log.warning(f'  {self._state}->SENSOR_FAULT ({sustained_fault})')
+            self._state='SENSOR_FAULT'
+            self._upd('fault',f'SENSOR FAULT: {sustained_fault}',d,tilt); return
+        if self._state=='SENSOR_FAULT': self._go('IDLE')  # sustained_fault cleared -> recovered
+
         if tilt>config.IMU_TILT_LIMIT:
             if self.retrieval.active: self.retrieval.abort(f'tilt fault {tilt:.1f}deg')  # FR-1700-007
+            self._abandon_stuck_if_active()
             if self._state!='TILT_FAULT': log.warning(f'TILT_FAULT tilt={tilt:.1f}'); self._go('TILT_FAULT')
-            self.motors.brake(); self._upd('fault',f'TILT {tilt:.1f}deg STOP',d,tilt); return  # FR-1600-003
+            self.safety.emergency_stop(f'tilt fault {tilt:.1f}deg')
+            self._upd('fault',f'TILT {tilt:.1f}deg STOP',d,tilt); return  # FR-1600-003
         if self._state=='TILT_FAULT' and tilt<config.IMU_TILT_WARN: self._go('IDLE')
 
-        tier=self._update_bat_tier(bat_v)
+        tier=self._update_bat_tier(bat_v); self.safety.update_context(bat_tier=tier)
         if tier=='shutdown':
             if self.retrieval.active: self.retrieval.abort(f'battery shutdown {bat_v:.2f}V')  # FR-1700-007
-            self.motors.brake()
+            self._abandon_stuck_if_active()
+            self.safety.emergency_stop(f'battery shutdown {bat_v:.2f}V')
             if self._state!='SHUTDOWN':
                 # best-effort backstop — the guaranteed save already ran at 'rth'. Guarded like
                 # the 'rth' branch below: without this, every tick while voltage stays under the
@@ -183,11 +226,13 @@ class RoverBrain:
             self._upd('lowbatt',f'BATTERY {bat_v:.2f}V — controlled shutdown, restart required',d,tilt); return
         if tier=='safe':
             if self.retrieval.active: self.retrieval.abort(f'battery safe mode {bat_v:.2f}V')  # FR-1700-007
-            self.motors.brake(); self._go('SAFE_MODE')
+            self._abandon_stuck_if_active()
+            self.safety.emergency_stop(f'battery safe mode {bat_v:.2f}V'); self._go('SAFE_MODE')
             self._upd('lowbatt',f'SAFE_MODE bat={bat_v:.2f}V',d,tilt); return  # FR-1600-004
         if tier=='rth':
             if self._state not in('DOCK','TILT_FAULT'):
                 if self.retrieval.active: self.retrieval.abort(f'return-to-home {bat_v:.2f}V')  # FR-1700-007
+                self._abandon_stuck_if_active()
                 # FR-200-005/FR-1900-011: the GUARANTEED memory save happens here, at the earlier
                 # RTH threshold, while there's still time for a full graceful save — not at the
                 # actual SHUTDOWN tier below, which only gets a best-effort backstop attempt.
@@ -199,9 +244,13 @@ class RoverBrain:
             # release here rather than only on DOCK, or SAFE_MODE/SHUTDOWN would never exit.
             self._go('IDLE')
 
+        self.safety.tick()  # services any in-flight timed move's deadline/obstacle re-check —
+                             # must run every tick regardless of which state started the move
+                             # (AVOID's reverse/turn or STUCK's Claude-issued action alike).
+
         if self._state=='DOCK':
             if self.adc.is_charging:
-                self.motors.stop(); self._upd('idle',f'Charging {bat}%',d,tilt)
+                self.safety.stop(); self._upd('idle',f'Charging {bat}%',d,tilt)
                 if bat>=95: self._go('ROAM')
                 return
 
@@ -241,7 +290,7 @@ class RoverBrain:
             self.retrieval.reset(); self._go('IDLE')
 
     def _idle(self,d,tilt):
-        self.motors.stop(); self._idle_t+=0.05
+        self.safety.stop(); self._idle_t+=0.05
         self._upd('idle',f'Waiting... bat={self.adc.battery_pct}%',d,tilt)
         summaries=self.email.get_new_summaries() if self.email.available else []
         for s in summaries:
@@ -255,58 +304,89 @@ class RoverBrain:
         if tilt>config.IMU_TILT_WARN: self._go('WARN'); return
         if f<config.DIST_STOP: self._go('AVOID'); return
         if f<config.DIST_SLOW: self._go('SLOW'); return
-        self.motors.forward(config.SPEED_ROAM); self._last_action='forward'
+        self.safety.forward(config.SPEED_ROAM); self._last_action='forward'
         self._upd('roam',f'Cruising f={f:.0f}cm bat={self.adc.battery_pct}%',d,tilt,config.SPEED_ROAM)
 
     def _slow(self,d,tilt):
         f=d['front']
         if f>config.DIST_CLEAR: self._go('ROAM'); return
         if f<config.DIST_STOP: self._go('AVOID'); return
-        self.motors.forward(config.SPEED_SLOW); self._upd('slow',f'Slowing f={f:.0f}cm',d,tilt,config.SPEED_SLOW)
+        self.safety.forward(config.SPEED_SLOW); self._upd('slow',f'Slowing f={f:.0f}cm',d,tilt,config.SPEED_SLOW)
 
     def _avoid(self,d,tilt):
+        # Non-blocking (§2 of docs/WildWilly_Claude_Fix_Implementation_Plan.md): every branch that
+        # used to be a blocking motors.*_for() call now starts a deadline-based timed move via
+        # self.safety and returns immediately — self.safety.tick() (called once centrally in
+        # _tick()) services the deadline on every subsequent tick, and the timed_move_active guard
+        # below keeps this state from issuing a second, overlapping command while one is in flight.
+        # The old single-call "back up then turn" combo becomes two ticks via _avoid_phase.
         f=d['front']; l=d['left']; r=d['right']
+        if self.safety.timed_move_active:
+            self._upd('stop',f'Avoiding l={l:.0f} r={r:.0f}',d,tilt); return
+        if self._avoid_phase=='turn_after_reverse':
+            self._avoid_phase=None
+            self.safety.request('turn_right',None,config.TURN_TIME_90); self._last_action='back_turn'
+            self._upd('stop',f'Avoiding l={l:.0f} r={r:.0f}',d,tilt); return
         if time.time()-self._avoid_start>config.STUCK_TIMEOUT:
             self._stuck_count+=1
             if self._stuck_count>=config.CLAUDE_ESCALATE_AFTER: self._go('STUCK'); return
-            self._avoid_start=time.time(); self.motors.reverse_for(config.BACK_UP_TIME); return
+            self._avoid_start=time.time(); self.safety.request('reverse',None,config.BACK_UP_TIME); return
         if f>config.DIST_CLEAR: self._stuck_count=0; self._go('ROAM'); return
-        self.motors.stop()
-        if r>l: self.motors.turn_right_for(config.TURN_TIME_90*0.5); self._last_action='turn_right'
-        elif l>r: self.motors.turn_left_for(config.TURN_TIME_90*0.5); self._last_action='turn_left'
-        else: self.motors.reverse_for(config.BACK_UP_TIME); self.motors.turn_right_for(config.TURN_TIME_90); self._last_action='back_turn'
+        self.safety.stop()
+        if r>l: self.safety.request('turn_right',None,config.TURN_TIME_90*0.5); self._last_action='turn_right'
+        elif l>r: self.safety.request('turn_left',None,config.TURN_TIME_90*0.5); self._last_action='turn_left'
+        else:
+            self.safety.request('reverse',None,config.BACK_UP_TIME)
+            self._avoid_phase='turn_after_reverse'; self._last_action='back_turn'
         self._upd('stop',f'Avoiding l={l:.0f} r={r:.0f}',d,tilt)
 
     def _stuck(self,d,tilt):
-        self.motors.stop(); self._upd('stuck','Calling Claude...',d,tilt)
-        action=self.claude.decide({'state':'STUCK','front_cm':d['front'],'left_cm':d['left'],
-            'right_cm':d['right'],'tilt_deg':tilt,'speed':0.0,'stuck_count':self._stuck_count,
-            'last_action':self._last_action,'battery_pct':self.adc.battery_pct,'notes':'Cannot find clear path.'})
-        if action:
+        # Non-blocking (§2): ClaudeClient.decide()'s HTTP call now runs on ClaudeClient's own
+        # worker thread (claude_client.py) — this state polls rather than blocks, so _tick() keeps
+        # running (and Directive 1-4 checks keep firing) for however long the API call takes.
+        if self.safety.timed_move_active:
+            self._upd('stuck',f'Executing: {self._last_action}',d,tilt); return
+        if self._claude_move_pending:
+            # the Claude-issued timed move just finished (checked above) — wrap up this episode
+            self._claude_move_pending=False; self._stuck_count=0; self._go('ROAM'); return
+        if self._claude_pending:
+            action=self.claude.poll_decision()
+            if action is None:
+                self._upd('stuck','Calling Claude...',d,tilt); return
+            self._claude_pending=False
             log.info(f'Claude: {action}')
             cmd=action.get('action','stop'); dur=float(action.get('duration',1.0)); spd=float(action.get('speed',config.SPEED_SLOW))
-            {'forward':self.motors.forward_for,'reverse':self.motors.reverse_for,
-             'turn_left':self.motors.turn_left_for,'turn_right':self.motors.turn_right_for,
-             'stop':lambda d,s=None:(self.motors.stop(),time.sleep(d)),
-             'wait':lambda d,s=None:time.sleep(d)}.get(cmd,lambda d,s=None:self.motors.stop())(dur,spd)
-            self._last_action=cmd; self._stuck_count=0; self._go('ROAM')
-        else: self._go('TILT_FAULT')
+            self._last_action=cmd
+            if cmd in('forward','reverse','turn_left','turn_right','stop','wait'):
+                # 'wait' has no dedicated safety action — hold position via 'stop' for the same
+                # requested duration, matching the original blocking behavior's intent.
+                move_cmd='stop' if cmd=='wait' else cmd
+                self.safety.request(move_cmd,spd,dur); self._claude_move_pending=True  # clamped/rejected by approve_motion, not trusted blindly
+            else:
+                self.safety.stop(); self._stuck_count=0; self._go('ROAM')  # unrecognized action — no hold, matches prior behavior
+            return
+        self.safety.stop()
+        self.claude.request_decision({'state':'STUCK','front_cm':d['front'],'left_cm':d['left'],
+            'right_cm':d['right'],'tilt_deg':tilt,'speed':0.0,'stuck_count':self._stuck_count,
+            'last_action':self._last_action,'battery_pct':self.adc.battery_pct,'notes':'Cannot find clear path.'})
+        self._claude_pending=True
+        self._upd('stuck','Calling Claude...',d,tilt)
 
     def _dock(self,d,tilt):
-        if self.adc.is_charging: self.motors.stop(); return
+        if self.adc.is_charging: self.safety.stop(); return
         f=d['front']
-        if f>30: self.motors.forward(0.2); self._upd('think',f'Seeking dock bat={self.adc.battery_pct}%',d,tilt,0.2)
-        elif f>8: self.motors.forward(0.12); self._upd('think',f'Docking f={f:.0f}cm',d,tilt,0.12)
-        else: self.motors.stop(); self._upd('idle','At dock - no contact',d,tilt)
+        if f>30: self.safety.forward(0.2); self._upd('think',f'Seeking dock bat={self.adc.battery_pct}%',d,tilt,0.2)
+        elif f>8: self.safety.forward(0.12); self._upd('think',f'Docking f={f:.0f}cm',d,tilt,0.12)
+        else: self.safety.stop(); self._upd('idle','At dock - no contact',d,tilt)
 
     def _warn(self,d,tilt):
-        self.motors.stop(); self._upd('warn',f'High tilt {tilt:.1f}deg',d,tilt)
+        self.safety.stop(); self._upd('warn',f'High tilt {tilt:.1f}deg',d,tilt)
         if tilt<config.IMU_TILT_WARN: self._go('ROAM')
 
     def _go(self,state):
         if state!=self._state:
             log.info(f'  {self._state}->{state}'); self._state=state
-            if state=='AVOID': self._avoid_start=time.time()
+            if state=='AVOID': self._avoid_start=time.time(); self._avoid_phase=None
             if state=='IDLE': self._idle_t=0.0
 
     def _upd(self,fs,st,d,tilt,spd=0.0):

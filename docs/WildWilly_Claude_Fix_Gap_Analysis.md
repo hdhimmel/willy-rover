@@ -1,0 +1,116 @@
+# WildWilly — Gap Analysis vs. `WildWilly_Claude_Fix_Implementation_Plan.md`
+
+**Session: 2026-08-07.** Audit of the current `willy-rover` repo (18 `.py` files, ~2091 lines,
+commit `516d1ec`) against every section of `WildWilly_Claude_Fix_Implementation_Plan.md`, per
+that document's own §27 instruction to review before implementing. No code changed in this pass —
+read-only audit only.
+
+Status legend: **DONE** / **PARTIAL** / **MISSING** / **CONFLICT** (does the opposite of what the
+plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code gap).
+
+## Priority 0 — Safety and Control-Loop Architecture
+
+| § | Topic | Status | Finding |
+|---|---|---|---|
+| 2 | Non-blocking control loop | **CONFLICT** | `brain.py::_stuck()` calls `claude_client.py::ClaudeClient.decide()` directly on the tick thread — a blocking `urllib.request.urlopen(..., timeout=8)` HTTP call. `motors.py`'s `forward_for`/`reverse_for`/`turn_*_for` also block via `time.sleep(t)`, and `_avoid()`/`_dock()`/`_stuck()` call them directly from `_tick()`. The systemd watchdog `WATCHDOG=1` is sent at the *top* of `_tick()`, before these blocking calls, so it isn't starved outright — but real Directive 1-5 safety processing (tilt/battery) is delayed for the full blocking duration each time this path fires. |
+| 3 | Safety gate between AI and motors | **CONFLICT** | No `SafetyController.approve_motion()` or equivalent exists. Claude's proposed `duration` is cast to `float` and passed straight to `motors.forward_for()` etc. with **no clamp** — an unreasonable duration from the LLM is not rejected (the plan's own §20 test list calls this out explicitly: "excessive duration"). Speed *is* clamped (`motors.py` clamps to `config.SPEED_MAX` at the motor layer), and this path is only reachable after `CLAUDE_ESCALATE_AFTER=5` consecutive stuck-avoid cycles, so blast radius is contained today — but it is still the AI directly commanding motors with no independent legality check, which §3 explicitly forbids. |
+| 4 | Watchdog redesign | **PARTIAL** | `_check_health()` runs every tick and logs IMU/encoder/current-monitor/battery-ADC faults, but **only logs** — it never stops motors or changes FSM state on a sensor fault. Only the battery-ADC failure path is actually safe today (a failed read defaults `battery_volts` to 0, which the existing tier ladder correctly treats as `shutdown`). An IMU thread stall does not stop motion — `_tick()` reads `self.imu.tilt` unconditionally, which returns the last cached value once the thread dies, so a stale tilt reading can mask an actual tilt fault indefinitely. No separate supervisor task; watchdog heartbeat lives on the same thread as the blocking calls in §2. |
+| 5 | E-Stop integration | **N/A-HW / MISSING** | Already honestly flagged in `brain.py`'s own comments: "software has no way to observe [E-stop] — the hardware-only latching cut has no documented GPIO sense pin." This needs a wiring change (a sense pin into a GPIO) before any software can be written against it — not purely a code gap. |
+| 6 | Battery voltage logic | **PARTIAL** | The protection half is already done well: `config.py` has a distinct `BAT_WARN/RTH/SAFE/SHUTDOWN_V` ladder with hysteresis (`BAT_HYSTERESIS_V`), separate from the old flat low/critical pair, and `brain.py`'s `_update_bat_tier` implements one-way-worse-then-hysteresis-to-recover correctly. What §6 flags — `battery_pct` is still a plain linear map between `BAT_SHUTDOWN_V` and `BAT_FULL_V` — is still present, but it is **display-only** (used for the HUD/voice announcements, not for any safety decision, which all key off raw voltage vs. the tier thresholds directly). No code comment documents that voltage-under-load ≠ open-circuit voltage, as §6 asks. |
+
+## Priority 1 — Motion Foundation / World Model / Navigation / Vision
+
+| § | Topic | Status | Finding |
+|---|---|---|---|
+| 7 | RP2040 encoder architecture | **N/A-HW** | No RP2040 exists on this unit per any prior session or doc. Current `Encoders` (MCP23017 polling, ~1kHz ceiling, self-documented as lossy at speed) already exposes close to the requested API shape (`counts`, `counts_per_sec`, `is_healthy`, per-wheel `stalled()`) — swapping to an RP2040 later looks like a backend swap behind the existing interface, not a rewrite, consistent with how `vision.py`/`smart_home.py` already handle their own hardware-substitution notes. |
+| 8 | Odometry | **MISSING** | No pose/odometry module anywhere. Raw per-wheel counts and rates exist; nothing converts them into `(x, y, heading, linear_velocity, angular_velocity)`. |
+| 9 | World model | **MISSING** | No `world_model` package or any of `RobotState/Pose/Room/Doorway/Obstacle/Object/Landmark/Route/Observation`. `memory_store.py` is a flat SQLite store (facts/instructions/demonstrations/routines) with no spatial semantics. Confirmed as the "major missing subsystem" the plan itself calls it. |
+| 10 | Mapping / learning mode | **MISSING** | No mapping/exploration mode, no room/landmark detection, no persistent map load/save. `memory_store.py`'s `record_demonstration`/`replay_demonstration` (a named waypoint list + similarity-gated replay) is a starting precedent for "demonstrations" but not a map. |
+| 11 | Navigation layer | **MISSING** | Current "navigation" is `brain.py`'s reactive ROAM/SLOW/AVOID sonar FSM plus `retrieval_task.py`'s fixed approach sequence — no Mission/Global-route/Local-planner layering above it. The plan explicitly says keep the sonar fallback and don't remove it; nothing built on top of it yet means that's trivially true today. |
+| 12 | YOLO / vision integration | **PARTIAL** | `vision.py`'s `detect()` returns `class/conf/bbox/frame_w/frame_h` but not `timestamp` or `camera_id` as the plan's detection shape wants, and bearing/range come from a separate `localize()` call rather than being bundled onto the detection. Already good: the code's own comments explicitly warn distance/bearing are heuristic, not calibrated ranging — exactly what §12 asks for ("do not describe bounding-box-size distance estimation as accurate ranging"). Fusion into a world model is blocked on §9. |
+
+## Priority 1 — Memory / AI Interface / Retrieval
+
+| § | Topic | Status | Finding |
+|---|---|---|---|
+| 13 | Memory architecture | **MISSING** | Single SQLite file, no RAM/SSD/SD tiering, no `WILLY_DATA_ROOT`/`MAP_ROOT`/`MEMORY_ROOT`/`LOG_ROOT` env vars — paths (`MEMORY_DB_PATH`, `LOG_DIR`) are hardcoded relative to the script directory. No storage-availability/permission startup checks. The underlying save/purge/replay mechanics are a reasonable seed for "long-term memory," just not tiered. |
+| 14 | AI / LLM interface | **CONFLICT** | Three separate, un-unified AI call sites instead of one `AIProvider` abstraction: `claude_client.py::ClaudeClient.decide()` (motion-command-shaped, called only from `_stuck()` — this is the same object flagged in §3 as bypassing the safety gate), `cloud_ai.py::CloudAIClient.ask()` (free-text fallback, called from `voice.py`), and a third local-LLM call inlined directly inside `voice.py::_interpret_local()` (not even its own class). No structured world-state payload (room/pose/battery/goal/nearby_objects/routes) is assembled anywhere — inputs are raw sensor dicts today, which tracks with §9/§11 not existing yet to source that from. |
+| 15 | AI confidence | **CONFLICT** | `voice.py::_interpret_local()`'s own comment admits it: "uses a plain heuristic (did the model return well-formed JSON we asked for) rather than a real probability" — `return parsed,0.8` on parse success, `return None,0.0` on any exception. This is exactly the anti-pattern §15 names: "Do not use 'valid JSON' as AI confidence." The *consequence* handling is already correct, though — low confidence does fall back to "ask for clarification" rather than guessing, which is what §15 wants downstream of a real confidence signal. |
+| 16 | Retrieval behavior | **DONE** (mostly) | `retrieval_task.py` already implements almost exactly the requested state list — `LOCALIZE/APPROACH/GRASP/VERIFY/DELIVER/AWAIT_CONFIRM` — as its own sub-FSM, gated correctly behind `brain.py`'s Directive 1-5 checks, with `abort()` always called externally per §27's "never decide internally" pattern. Its own comments already honestly flag the two real remaining gaps: grasp is a fixed primitive sequence, not IK (no per-joint calibration exists — §20.6 in the master doc), and hand-off confirmation is timeout-based, not tactile-sensed. Best-covered section in the whole plan; what remains is hardware calibration work, not architecture work. |
+
+## Priority 2 / Cross-Cutting
+
+| § | Topic | Status | Finding |
+|---|---|---|---|
+| 17 | Stair-climbing prep | **MISSING (expected)** | No `STAIR_*` states exist. Plan explicitly says not to build this without hardware/testing support and marks it Priority 2 lowest — absence here is correct, not a gap to close now. |
+| 18 | Configuration cleanup | **PARTIAL, already unusually rigorous** | Config values already carry dated calibration notes and explicit master-doc section citations (e.g. a 2026-08-02 GPIO pin fix, a 2026-08-02 battery-divider recalibration, per-value "confirmed/unconfirmed" flags). Credentials are correctly kept out of `config.py` (env var names/paths only). One thing worth explicit owner confirmation: `ENABLE_CLOUD_AI=True` and `ENABLE_EMAIL=True` are both default-on — each cites a specific FR number and a dated verification note, so this reads as an intentional, documented decision, not an oversight, but §18 is unusually blunt about not defaulting these on without the engineering package's explicit say-so. |
+| 19 | Hardware abstraction | **PARTIAL** | Classes matching most of the requested interface list already exist (`DriveBase`/`Steering` in `motors.py`; `IMU`/`ADC`/`Encoders`/`CurrentMonitor`/`SonarArray` in `sensors.py`; `ObjectDetector` in `vision.py`), each with `is_healthy` where it matters. What's fully missing: **no mock/simulation backend for anything** — every class opens real I2C/GPIO/SPI/USB at construction time (`busio.I2C(board.SCL,board.SDA,...)` at module scope in `motors.py`/`sensors.py`/`arm.py`), so none of this can run or be tested off the physical Pi. This is the direct root cause of §20 below. |
+| 20 | Testing | **MISSING** | Zero test files anywhere in the repo (verified via search). Root-caused by §19 — hardware access at import time means even importing `brain.py` without the real Pi attached fails today. |
+| 21 | Logging / diagnostics | **PARTIAL** | `logsetup.py` gives every subsystem a shared rotating-file + console logger (already UTF-8-safe, with a dated comment explaining why that matters on this Pi's locale). `diagnostics.py` is a genuinely solid standalone read-only self-test (I2C scan + every sensor healthy-check + pass/fail exit code) that already matches the plan's diagnostic intent closely. What's missing: log lines are free text, not structured/machine-parseable — no consistent `EVENT=ESTOP_ACTIVE`-style tagging as §21 asks for. |
+| 22 | Documentation | **PARTIAL** | `docs/` already has an actively maintained, dated, section-cited doc set (Master Engineering Package rev6.0.7, FRD v2.2, several checklists) — this practice already matches the spirit of §22 well. What's missing is the specific `IMPLEMENTED/HARDWARE REQUIRED/SIMULATION ONLY/PARTIALLY IMPLEMENTED/PLANNED` tag taxonomy per subsystem; today that status is conveyed in prose instead. |
+
+## Summary
+
+Out of 21 substantive sections (excluding §1/23-27, which are process/meta):
+- **DONE:** 1 (§16 retrieval, modulo hardware-calibration gaps)
+- **PARTIAL:** 8 (§4, §6, §12, §13, §18, §19, §21, §22)
+- **MISSING:** 6 (§8, §9, §10, §11, §17-expected, §20)
+- **CONFLICT** (actively does what the plan says not to): 3 (§2, §3, §14, §15 — see note)
+- **N/A-HW** (blocked on hardware, not code): 2 (§5, §7)
+
+The three CONFLICT findings (§2, §3, §14/§15) all point at the same root cause: **the one existing
+AI-to-motor path (`claude_client.py` via `brain.py::_stuck()`) blocks the tick thread and has no
+independent safety gate or duration clamp.** This is the highest-leverage place to start — fixing
+it addresses §2, §3, and half of §14 simultaneously. §19's missing mock hardware layer is the
+second highest-leverage item: it blocks §20 entirely and would make every subsequent phase safer
+to develop against without touching the physical rover.
+
+## Proposed Phase 1 scope (safety only, per the plan's own §24 ordering)
+
+1. **Non-blocking control loop**: move `ClaudeClient.decide()` off the tick thread onto a worker
+   (mirroring the pattern `voice.py`/`email_client.py` already use for their own background
+   threads) with a request/result queue; `_stuck()` becomes a state that polls for a result rather
+   than blocking on one.
+2. **Replace blocking timed moves**: turn `motors.py`'s `*_for()` helpers into deadline-based
+   states driven from `_tick()`'s own 20Hz cadence instead of `time.sleep()`-blocking calls.
+3. **`SafetyController.approve_motion()`**: a single authoritative gate all motor commands
+   (reactive FSM, retrieval task, and the Claude-decided action alike) pass through — enforcing
+   speed limit, a real duration cap, tilt, battery tier, and command-timeout in one place instead
+   of duplicated per-caller checks.
+4. **Watchdog**: extend `_check_health()` so a sustained IMU/encoder/current fault actually
+   transitions to a safe stopped state, not just a log line.
+5. **Battery**: add the missing code comment distinguishing load vs. open-circuit voltage; leave
+   `battery_pct`'s linear map as display-only (already the case) but document that explicitly.
+6. **E-Stop**: flagged as blocked on hardware — no software action possible until a GPIO sense pin
+   is wired. Left out of Phase 1 scope pending that.
+
+## Phase 1 status (2026-08-07, later same session): code written, NOT yet live-verified
+
+All six items above are implemented in the working tree (uncommitted):
+
+- New `safety.py`: `approve_motion()` is a pure function (no hardware access) doing the
+  speed/duration clamp + tilt/battery-tier/obstacle checks; `SafetyController` wraps `DriveBase`
+  as the only thing anything is allowed to call directly. 15 unit tests in `tests/test_safety.py`
+  cover it in isolation (`venv/bin/python -m pytest tests/test_safety.py` — all pass).
+- `motors.py`'s blocking `*_for()` methods removed; `claude_client.py`'s HTTP call moved onto its
+  own worker thread (`request_decision()`/`poll_decision()`/`reset()`).
+- `brain.py`: `_avoid()`/`_stuck()` rewritten as non-blocking, deadline-serviced states (via a
+  central `self.safety.tick()` call each tick); tilt/battery/new-`SENSOR_FAULT` faults now go
+  through `safety.emergency_stop()`; `_check_health()` now escalates a sustained (>1s)
+  imu/encoders/current fault to a stopped `SENSOR_FAULT` state instead of only logging.
+  `retrieval_task.py` takes the same `SafetyController` instead of raw `motors`.
+
+**Not yet done — explicitly out of scope for this pass, needs the owner:**
+- **Live verification on the real rover.** `willy-rover.service` on this unit has been
+  crash-looping since 17:44 today (744 restarts as of this check) on a `RuntimeError: Was not
+  able to enable feature` from the BNO085 IMU init in `sensors.py` — confirmed via
+  `journalctl`/restart-counter timestamps to **predate this session and be unrelated to these
+  changes** (crash happens during `IMU()` construction, before any FSM/safety code runs). This is
+  the already-tracked I2C-bus-fault issue, not a new one — do not attempt a software fix here;
+  the planned ISO154x isolator hardware fix is what addresses it. Practical consequence:
+  `RoverBrain.start()`/`run()` — and therefore every line of this Phase 1 rewrite — has **never
+  actually executed** on this unit yet, crash-loop or not; only `SafetyController`'s constructor
+  and the pure `approve_motion()` logic have been exercised (via unit tests + a standalone smoke
+  test).
+- Nothing has been committed or deployed. Do the real hardware verification pass (once the IMU
+  fault is fixed) before considering Phase 1 done, and before starting Phase 2.

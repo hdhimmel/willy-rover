@@ -23,8 +23,11 @@ log=logsetup.setup('retrieval')
 _MOTION_STATES=('LOCALIZE','APPROACH','GRASP','VERIFY','DELIVER','AWAIT_CONFIRM')
 
 class RetrievalTask:
-    def __init__(self,motors,arm,detector,display=None,voice=None):
-        self.motors=motors; self.arm=arm; self.detector=detector
+    def __init__(self,safety,arm,detector,display=None,voice=None):
+        # safety: a safety.SafetyController — the same single authoritative motor gate brain.py's
+        # own FSM routes through (docs/WildWilly_Claude_Fix_Implementation_Plan.md §3). Nothing in
+        # this class talks to DriveBase directly.
+        self.safety=safety; self.arm=arm; self.detector=detector
         self.display=display; self.voice=voice
         self.state='IDLE'; self._target_class=None; self._requester_hint=None
         self._dist_cm=999.0; self._bearing_deg=0.0; self._lost_count=0; self._retries=0
@@ -44,7 +47,7 @@ class RetrievalTask:
         # FR-1700-007: called by brain.py, never decided internally — "never complete a grasp or
         # hand-off motion while a higher-priority directive is active".
         if self.active:
-            self.motors.stop()
+            self.safety.stop()
             log.warning(f'Retrieval task ABORTED: {reason}')
         self.state='ABORTED'; self._fail_reason=reason
 
@@ -73,24 +76,29 @@ class RetrievalTask:
     def _approach(self,d,tilt):
         # FR-1700-003: respects the same obstacle thresholds as brain.py's ROAM/SLOW/AVOID —
         # a real obstacle takes priority over the retrieval path, same as normal driving.
+        # Non-blocking (§2): bearing-correction turns are now deadline-based via self.safety,
+        # serviced by brain.py's central self.safety.tick() call every tick — this guard just
+        # keeps _approach() from issuing a second, overlapping turn while one is still in flight
+        # (the camera frame during a turn is stale anyway, so waiting costs nothing real).
+        if self.safety.timed_move_active: return
         if d['front']<config.DIST_STOP:
-            self.motors.stop(); return
+            self.safety.stop(); return
         det=self._best(self.detector.detect(classes=[self._target_class]))
         if det is None:
             self._lost_count+=1
             if self._lost_count>20:
-                self.motors.stop(); self.state='FAILED'; self._fail_reason='lost sight of target while approaching'
+                self.safety.stop(); self.state='FAILED'; self._fail_reason='lost sight of target while approaching'
             return
         self._lost_count=0
         self._dist_cm,self._bearing_deg=self.detector.localize(det)
         if abs(self._bearing_deg)>8:
-            self.motors.stop()
-            (self.motors.turn_right_for if self._bearing_deg>0 else self.motors.turn_left_for)(0.15,config.SPEED_SLOW*0.5)
+            self.safety.stop()
+            (self.safety.turn_right_for if self._bearing_deg>0 else self.safety.turn_left_for)(0.15,config.SPEED_SLOW*0.5)
             return
         if self._dist_cm>config.RETRIEVAL_APPROACH_STOP_CM:
-            self.motors.forward(config.SPEED_SLOW*0.6)
+            self.safety.forward(config.SPEED_SLOW*0.6)
         else:
-            self.motors.stop(); self.state='GRASP'
+            self.safety.stop(); self.state='GRASP'
 
     def _grasp(self,d,tilt):
         # FR-1700-004 — see module docstring: fixed primitive sequence, not real IK.

@@ -63,6 +63,14 @@ BATTERY_DIVIDER_SCALE=0.2865
 
 # Battery threshold ladder (§13.2) — one-way toward safer states until voltage recovers above
 # the next threshold up + hysteresis. Supersedes the old flat BAT_LOW/BAT_CRITICAL pair.
+#
+# BAT_FULL_V is a *display-only* 100% anchor for the battery_pct linear map (sensors.py
+# ADC.battery_pct) — not a true full-charge voltage. A fully charged 3S LiPo open-circuit/rested
+# reads ~12.6V; 11.39V is what this pack read *under load* while driving at calibration time
+# (§13.2). battery_pct is cosmetic (HUD/voice announcements only) — every real safety decision
+# in brain.py compares raw measured voltage against BAT_WARN/RTH/SAFE/SHUTDOWN_V directly, never
+# battery_pct. Don't treat voltage-under-load as equivalent to open-circuit/rested voltage if
+# these thresholds are ever recalibrated from a bench (unloaded) reading.
 BAT_FULL_V=11.39      # display-only 100% anchor for battery_pct
 BAT_WARN_V=11.4       # -> warn
 BAT_RTH_V=10.8        # -> return-to-home / DOCK
@@ -77,6 +85,13 @@ LOG_MAX_BYTES=2_000_000; LOG_BACKUP_COUNT=5
 
 CLAUDE_MODEL='claude-sonnet-5'
 CLAUDE_MAX_TOKENS=300; CLAUDE_ESCALATE_AFTER=5
+
+# safety.py SafetyController (§3/§4 of docs/WildWilly_Claude_Fix_Implementation_Plan.md) — the
+# single authoritative gate all motor commands pass through, reactive-FSM and Claude-proposed
+# alike.
+MAX_COMMAND_DURATION_S=3.0  # hard cap on any single timed move regardless of what was requested
+SENSOR_FAULT_GRACE_S=1.0    # how long imu/encoders/current may report unhealthy before _tick()
+                            # forces a safe stopped state (SENSOR_FAULT) instead of just logging
 
 # ============================================================================
 # v2.2 subsystems (docs/WildWilly_Functional_Requirements_Document_v2.2.md).

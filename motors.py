@@ -43,10 +43,11 @@ class DriveBase:
         with self._lock:
             for w in self._WHEELS: self._target[w]=0.0; self._actual[w]=0.0; self._motors[w].throttle=0.0
         self.current_speed=0.0
-    def forward_for(self,t,speed=None): self.forward(speed); time.sleep(t); self.stop()
-    def reverse_for(self,t,speed=None): self.reverse(speed); time.sleep(t); self.stop()
-    def turn_left_for(self,t,speed=None): self.turn_left(speed); time.sleep(t); self.stop()
-    def turn_right_for(self,t,speed=None): self.turn_right(speed); time.sleep(t); self.stop()
+    # No *_for() blocking helpers here anymore — a sleep-based timed move on this thread would
+    # stall whatever calls it (originally brain.py's tick loop, §2 of
+    # docs/WildWilly_Claude_Fix_Implementation_Plan.md). Timed moves are now deadline-based and
+    # live in safety.py's SafetyController, which is the only thing allowed to drive this class
+    # per-tick.
     def cleanup(self):
         self._running=False; time.sleep(0.05)
         for m in self._motors.values(): m.throttle=None  # release — no holding current on exit

@@ -120,6 +120,10 @@ class ADC:
     def battery_volts(self): return self._bat_raw*self._LSB/config.BATTERY_DIVIDER_SCALE
     @property
     def battery_pct(self):
+        # Display-only (HUD/voice) — a linear map between under-load thresholds, not a true
+        # state-of-charge model. Voltage under load != open-circuit/rested voltage; see the
+        # BAT_FULL_V comment in config.py. Nothing safety-relevant reads this — brain.py's tier
+        # ladder always compares battery_volts against BAT_WARN/RTH/SAFE/SHUTDOWN_V directly.
         v=self.battery_volts
         if v>=config.BAT_FULL_V: return 100
         if v<=config.BAT_SHUTDOWN_V: return 0

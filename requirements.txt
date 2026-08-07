@@ -32,6 +32,9 @@ sysv_ipc==1.2.0
 # Gemini (FR-1400), Google Home (FR-1300), and email (FR-2000) are deliberately NOT SDK
 # dependencies — cloud_ai.py/smart_home.py/email_client.py talk to their REST APIs directly
 # via urllib/imaplib/smtplib (stdlib), same minimal-dependency style as claude_client.py.
+# --- dev/test only, not deployed to willy-rover.service ---
+pytest             # tests/ — pure-logic unit tests (e.g. safety.py's approve_motion), no hardware needed
+
 sounddevice        # FR-1500 mic capture (USB PnP Audio Device, card 2, confirmed present)
 openwakeword       # FR-1500 wake word
 faster-whisper     # FR-1500 STT
