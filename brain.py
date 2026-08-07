@@ -27,10 +27,13 @@ class _SdNotify:
             try: self._sock.sendto(msg.encode(),self._addr)
             except OSError: pass
 
-# I2C addresses expected present per §5.2's authoritative map (+0x70 PCA9685 all-call broadcast).
+# I2C addresses expected present per §5.2's authoritative map. Deliberately excludes 0x70 (PCA9685
+# all-call broadcast) — PCA9685.reset() clears MODE1's ALLCALL bit during motors.py/arm.py's
+# construction in RoverBrain.__init__, which runs before this self-test, so 0x70 legitimately
+# never answers by the time we scan; it was never a real device to begin with.
 _EXPECTED_I2C={config.ENCODER_ADDR,config.INA260_SERVO_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
                config.INA260_PI_ADDR,config.INA260_MOTOR_ADDR,config.ADS_ADDR,config.IMU_ADDR,
-               config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR,0x70}
+               config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR}
 
 # Battery ladder (§13.2), most severe first. Each entry's threshold is the "below this" boundary;
 # recovering to a less severe tier requires climbing BAT_HYSTERESIS_V above that boundary, not
