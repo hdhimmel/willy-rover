@@ -130,3 +130,32 @@ the arm or near a person (the hand-off path especially).
 6. Decide on a real hand-off confirmation method (weight-sensing gripper, timeout tuning, or
    accept voice-confirmation-or-timeout as the permanent design) before this runs near a person
    for real.
+
+## Session log — 2026-08-07: live display + shutdown bugs found and fixed
+
+First live check of `display.py` on real hardware (a DSI touchscreen on the Pi 5, driven via
+labwc/wayvnc through Raspberry Pi Connect) turned up two bugs, both now fixed and deployed
+(commit `9a5fcf2`):
+
+- **Black screen, `display.py`.** `WillyFace.__init__` called `pygame.init()` /
+  `pygame.display.set_mode()` on the main thread, but `_loop()` (the actual render loop calling
+  `pygame.display.flip()`) ran on a separate daemon thread. SDL's Wayland backend needs window
+  creation and every subsequent display call on one consistent thread — the split let the loop
+  run at full CPU/FPS with no crash, but frames never actually reached the compositor. Confirmed
+  via `wlr-screencopy`/`grim`: raw compositor capture was solid black, and a throwaway
+  single-threaded pygame test window rendered fine on the same output, isolating it to
+  `display.py`'s specific threading, not the compositor/GPU/Pi Connect stack. Fix: moved
+  `pygame.init()`, `set_mode()`, font creation, and `pygame.quit()` all into `_loop()` itself.
+- **`willy-rover.service` never stopped cleanly on SIGTERM.** `systemctl stop`/`restart` would
+  hang in `deactivating (stop-sigterm)` indefinitely (previously listed above as "SIGTERM
+  shutdown unclean"). Root cause: SDL installs its own process-wide SIGINT/SIGTERM handlers by
+  default on `pygame.init()`, translating them into an `SDL_QUIT` event that only `display.py`'s
+  own `pygame.event.get()` loop consumes — `main.py`'s run loop and `RoverBrain.stop()` never
+  saw the signal at all. Fix: `SDL_NO_SIGNAL_HANDLERS=1` set in `display.py`, plus an explicit
+  `signal.signal(signal.SIGTERM, signal.default_int_handler)` in `main.py` so SIGTERM now takes
+  the same `except KeyboardInterrupt` / `finally: self.stop()` path SIGINT already used. Verified
+  live: `systemctl restart willy-rover.service` now returns and reaches `active (running)` with a
+  new PID in ~1s, vs. hanging past a minute (and needing `SIGKILL`) before.
+
+Both fixes are software-only, unrelated to the vision/voice/email v2.2 subsystems above, which
+are still untested against real hardware/credentials as noted throughout this doc.
