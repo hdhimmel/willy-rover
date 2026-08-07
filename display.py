@@ -1,6 +1,11 @@
 import pygame,math,time,threading,os,config
 os.environ.setdefault('SDL_VIDEODRIVER','wayland')
 os.environ.setdefault('SDL_VIDEO_WAYLAND_WMCLASS','willy')
+# SDL installs its own process-wide SIGINT/SIGTERM handlers by default, translating them into an
+# SDL_QUIT event that only this module's own event loop consumes — that silently ate shutdown
+# signals before main.py's run loop ever saw them. Disabling it lets Python's normal signal
+# delivery (main.py's SIGTERM handler) through instead.
+os.environ.setdefault('SDL_NO_SIGNAL_HANDLERS','1')
 C_BG=(8,8,16);C_FACE=(30,30,45);C_EYE_W=(230,230,240)
 C_ROAM=(0,200,80);C_STOP=(255,180,0);C_WARN=(255,80,40);C_IDLE=(80,120,255)
 C_MOUTH=(200,200,210);C_ACCENT=(232,93,36);C_TEXT=(180,180,200);C_DIM=(60,60,70)
@@ -15,12 +20,6 @@ STATUS_Y=400;HUD_X=560
 
 class WillyFace:
     def __init__(self):
-        pygame.init()
-        self.screen=pygame.display.set_mode((W,H),pygame.FULLSCREEN|pygame.NOFRAME)
-        pygame.display.set_caption('WildWilly'); pygame.mouse.set_visible(False)
-        self.f_sm=pygame.font.SysFont('monospace',18)
-        self.f_md=pygame.font.SysFont('monospace',26)
-        self.f_xl=pygame.font.SysFont(None,80)
         self._state='idle';self._status='Initialising...';self._dists={'front':999,'left':999,'right':999}
         self._tilt=0.0;self._speed=0.0;self._lock=threading.Lock()
         self._t=0.0;self._blink_t=0.0;self._blink_next=3.5
@@ -54,9 +53,18 @@ class WillyFace:
         self._running=True
         self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
 
-    def stop(self): self._running=False; pygame.quit()
+    def stop(self): self._running=False
 
     def _loop(self):
+        # SDL/Wayland requires init, window creation, and every subsequent display
+        # call to happen on the same thread — creating the window in __init__ (main
+        # thread) while flipping here caused frames to render but never present.
+        pygame.init()
+        self.screen=pygame.display.set_mode((W,H),pygame.FULLSCREEN|pygame.NOFRAME)
+        pygame.display.set_caption('WildWilly'); pygame.mouse.set_visible(False)
+        self.f_sm=pygame.font.SysFont('monospace',18)
+        self.f_md=pygame.font.SysFont('monospace',26)
+        self.f_xl=pygame.font.SysFont(None,80)
         clk=pygame.time.Clock()
         while self._running:
             for e in pygame.event.get():
@@ -73,6 +81,7 @@ class WillyFace:
                 else:
                     self._idle_cycle_t=config.IDLE_PERSONALITY_CYCLE_S
             self._draw(); clk.tick(config.DISPLAY_FPS)
+        pygame.quit()
 
     def _draw(self):
         s=self.screen; t=self._t; s.fill(C_BG)
