@@ -173,8 +173,13 @@ class RoverBrain:
         tier=self._update_bat_tier(bat_v)
         if tier=='shutdown':
             if self.retrieval.active: self.retrieval.abort(f'battery shutdown {bat_v:.2f}V')  # FR-1700-007
-            self.motors.brake(); self._go('SHUTDOWN')
-            self.memory.save_all_now()  # best-effort backstop — the guaranteed save already ran at 'rth'
+            self.motors.brake()
+            if self._state!='SHUTDOWN':
+                # best-effort backstop — the guaranteed save already ran at 'rth'. Guarded like
+                # the 'rth' branch below: without this, every tick while voltage stays under the
+                # threshold re-runs a full WAL checkpoint to disk, forever (found 2026-08-07 —
+                # spun at ~9Hz for over an hour with the base powered off, pinning CPU).
+                self._go('SHUTDOWN'); self.memory.save_all_now()
             self._upd('lowbatt',f'BATTERY {bat_v:.2f}V — controlled shutdown, restart required',d,tilt); return
         if tier=='safe':
             if self.retrieval.active: self.retrieval.abort(f'battery safe mode {bat_v:.2f}V')  # FR-1700-007
