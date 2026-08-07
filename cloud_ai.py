@@ -36,7 +36,7 @@ class CloudAIClient:
         # (voice.py) is responsible for FR-1400-003's onboard-only fallback-with-notice.
         if not self.available: return None,'cloud AI not configured/enabled'
         payload={'model':config.CLAUDE_MODEL,'max_tokens':config.CLAUDE_MAX_TOKENS,
-                 'messages':[{'role':'user','content':prompt}]}
+                 'thinking':{'type':'disabled'},'messages':[{'role':'user','content':prompt}]}
         if system: payload['system']=system
         req=urllib.request.Request('https://api.anthropic.com/v1/messages',data=json.dumps(payload).encode(),
             headers={'x-api-key':self._key,'anthropic-version':'2023-06-01','content-type':'application/json'},

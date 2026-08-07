@@ -13,7 +13,7 @@ class ClaudeClient:
         self._history.append({'role':'user','content':msg})
         if len(self._history)>12: self._history=self._history[-12:]
         payload=json.dumps({'model':config.CLAUDE_MODEL,'max_tokens':config.CLAUDE_MAX_TOKENS,
-            'system':SYSTEM,'messages':self._history}).encode()
+            'thinking':{'type':'disabled'},'system':SYSTEM,'messages':self._history}).encode()
         req=urllib.request.Request('https://api.anthropic.com/v1/messages',data=payload,
             headers={'x-api-key':self._key,'anthropic-version':'2023-06-01','content-type':'application/json'},method='POST')
         try:

@@ -75,7 +75,7 @@ BAT_HYSTERESIS_V=0.2
 LOG_DIR='logs'; LOG_FILE='willy.log'
 LOG_MAX_BYTES=2_000_000; LOG_BACKUP_COUNT=5
 
-CLAUDE_MODEL='claude-sonnet-4-20250514'
+CLAUDE_MODEL='claude-sonnet-5'
 CLAUDE_MAX_TOKENS=300; CLAUDE_ESCALATE_AFTER=5
 
 # ============================================================================
@@ -105,7 +105,7 @@ SMART_HOME_DISCOVERY_TIMEOUT_S=5
 # quota even with billing linked (Google-side provisioning gap, parked 2026-08-06) — swapped to
 # Anthropic's API instead, reusing ANTHROPIC_API_KEY (already configured for claude_client.py's
 # STUCK-state decisions, see .env). See cloud_ai.py for the full swap rationale.
-ENABLE_CLOUD_AI=False
+ENABLE_CLOUD_AI=True
 CLOUD_AI_TIMEOUT_S=8
 
 ENABLE_EMAIL=True  # FR-2000 — Gmail app password verified working 2026-08-06 (IMAP+SMTP login OK)
