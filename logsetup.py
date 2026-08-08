@@ -23,3 +23,20 @@ def setup(name):
         root.setLevel(logging.INFO)
         root.addHandler(file_handler); root.addHandler(console_handler)
     return logging.getLogger(name)
+
+def log_event(logger,event,severity='info',**fields):
+    """§21 of docs/WildWilly_Claude_Fix_Implementation_Plan.md: "use structured logging... every
+    major subsystem should report timestamp/subsystem/event/severity/status." timestamp/severity
+    already come from the existing %(asctime)s/%(levelname)s formatter above (setup()'s own
+    format string) -- this adds the missing piece, a consistent EVENT=<NAME> tag (plus any
+    subsystem=/status=/etc. fields) so a fault class is grep-able (`grep 'EVENT=IMU_FAULT'
+    willy.log`) without rewriting every existing log call into a JSON blob, which would trade
+    this file's human-readable console output for a much larger, riskier reformat of ~15 files'
+    worth of log.info/warning calls for no benefit proportional to that risk. "Important safety
+    events must be persistent" is already satisfied by the rotating file handler above
+    (FR-1100-003) -- these calls land in the same persistent file as everything else, not a new
+    store. Used at real fault/abort call sites only (brain.py's health-check transitions/battery
+    tiers, safety.py's mid-flight obstacle abort, navigation.py/mapping.py's abort(),
+    ai_provider.py's timeout path) -- not applied wholesale to every log line in the codebase."""
+    tag=' '.join(f'{k}={v}' for k,v in fields.items())
+    getattr(logger,severity.lower())(f'EVENT={event} {tag}'.rstrip())

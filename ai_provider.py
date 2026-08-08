@@ -1,5 +1,6 @@
 import json,os,math,threading,queue,urllib.request,urllib.error,config,logsetup
 from abc import ABC,abstractmethod
+from logsetup import log_event
 log=logsetup.setup('ai_provider')
 
 # §14/§15 of docs/WildWilly_Claude_Fix_Implementation_Plan.md: one AIProvider abstraction over
@@ -191,7 +192,11 @@ class CloudAIProvider(AIProvider):
         try:
             txt=self._post_anthropic(system,messages)
         except Exception as e:
-            log.info(f'Cloud AI call failed (expected if offline/quota): {type(e).__name__}: {e}')
+            if isinstance(e,TimeoutError):  # §21: urllib raises socket.timeout, a TimeoutError subclass/alias
+                log_event(log,'AI_TIMEOUT',severity='warning',subsystem='ai_provider',
+                          provider='cloud',timeout_s=config.CLOUD_AI_TIMEOUT_S)
+            else:
+                log.info(f'Cloud AI call failed (expected if offline/quota): {type(e).__name__}: {e}')
             return AIResult(False,0.0,None,False,None,f'{type(e).__name__}: {e}')
         return _parse_response(txt,schema)
 

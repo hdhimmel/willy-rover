@@ -1,4 +1,5 @@
 import time,config,logsetup
+from logsetup import log_event
 log=logsetup.setup('safety')
 
 # WildWilly_Claude_Fix_Implementation_Plan.md §3/§25: "Willy's AI may decide what it wants to
@@ -88,7 +89,8 @@ class SafetyController:
         Returns True while a timed move is still running, False once finished/absent."""
         if self._deadline is None: return False
         if self._active_action=='forward' and self._ctx['front_cm']<config.DIST_STOP:
-            log.warning('timed move aborted mid-flight: obstacle appeared')
+            log_event(log,'OBSTACLE_STOP',severity='warning',subsystem='safety',
+                      status='mid_flight_abort',front_cm=f'{self._ctx["front_cm"]:.0f}')
             self._drive.stop(); self._deadline=None; self._active_action=None; return False
         if time.time()>=self._deadline:
             self._drive.stop(); self._deadline=None; self._active_action=None; return False

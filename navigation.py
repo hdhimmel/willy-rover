@@ -1,5 +1,6 @@
 import math,time,config,logsetup
 import networkx as nx
+from logsetup import log_event
 log=logsetup.setup('navigation')
 
 # §11 of docs/WildWilly_Claude_Fix_Implementation_Plan.md: Mission -> Global route -> Local
@@ -59,7 +60,8 @@ class Navigator:
         # preemption, never decided internally.
         if self.active:
             self.safety.stop()
-            log.warning(f'Navigation ABORTED: {reason}')
+            log_event(log,'NAVIGATION_ABORT',severity='warning',subsystem='navigation',
+                      status='aborted',reason=reason)
         self.state='ABORTED'; self._fail_reason=reason
 
     def reset(self): self.state='IDLE'

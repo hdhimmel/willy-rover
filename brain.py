@@ -1,4 +1,5 @@
 import json,time,socket,os,config,logsetup,storage
+from logsetup import log_event
 if not config.SIMULATE_HARDWARE: import board,busio
 from motors import DriveBase,Steering
 from sensors import SonarArray,IMU,ADC,Encoders,CurrentMonitor
@@ -190,7 +191,8 @@ class RoverBrain:
         now=time.time(); sustained_fault=None
         for name,healthy in checks.items():
             was=self._health.get(name,True)
-            if was and not healthy: log.warning(f'{name} FAULT — stopped reporting')
+            if was and not healthy:
+                log_event(log,f'{name.upper()}_FAULT',severity='warning',subsystem=name,status='fault')
             elif not was and healthy: log.info(f'{name} recovered'); self._fault_since.pop(name,None)
             self._health[name]=healthy
             if not healthy:
@@ -270,6 +272,8 @@ class RoverBrain:
             self._abandon_stuck_if_active()
             self.safety.emergency_stop(f'battery shutdown {bat_v:.2f}V')
             if self._state!='SHUTDOWN':
+                log_event(log,'LOW_BATTERY',severity='error',subsystem='battery',
+                          status='shutdown',volts=f'{bat_v:.2f}')
                 # best-effort backstop — the guaranteed save already ran at 'rth'. Guarded like
                 # the 'rth' branch below: without this, every tick while voltage stays under the
                 # threshold re-runs a full WAL checkpoint to disk, forever (found 2026-08-07 —
@@ -281,6 +285,9 @@ class RoverBrain:
             if self.mapping.active: self.mapping.abort(f'battery safe mode {bat_v:.2f}V')
             if self.navigator.active: self.navigator.abort(f'battery safe mode {bat_v:.2f}V')
             self._abandon_stuck_if_active()
+            if self._state!='SAFE_MODE':
+                log_event(log,'LOW_BATTERY',severity='warning',subsystem='battery',
+                          status='safe_mode',volts=f'{bat_v:.2f}')
             self.safety.emergency_stop(f'battery safe mode {bat_v:.2f}V'); self._go('SAFE_MODE')
             self._upd('lowbatt',f'SAFE_MODE bat={bat_v:.2f}V',d,tilt); return  # FR-1600-004
         if tier=='rth':
@@ -293,7 +300,9 @@ class RoverBrain:
                 # RTH threshold, while there's still time for a full graceful save — not at the
                 # actual SHUTDOWN tier below, which only gets a best-effort backstop attempt.
                 self.memory.save_all_now()
-                log.info(f'Battery {bat_v:.2f}V -> DOCK (return-to-home)'); self._go('DOCK')
+                log_event(log,'LOW_BATTERY',severity='warning',subsystem='battery',
+                          status='return_to_home',volts=f'{bat_v:.2f}')
+                self._go('DOCK')
         elif self._state in('SAFE_MODE','SHUTDOWN','DOCK'):
             # Tier no longer forces a battery-driven state. Recovery can skip straight from
             # shutdown/safe to warn/normal in one hysteresis step (bypassing 'rth') — handle
