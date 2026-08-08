@@ -7,6 +7,7 @@ from claude_client import ClaudeClient
 from safety import SafetyController
 from odometry import Odometry
 from world_model import WorldModel,Observation,project_point
+from mapping import MappingSession
 from arm import Arm
 from memory_store import MemoryStore
 from cloud_ai import CloudAIClient
@@ -63,6 +64,7 @@ class RoverBrain:
         self.voice=VoicePipeline(memory=self.memory,cloud_ai=self.cloud_ai,display=self.display,
                                   smart_home=self.smart_home)
         self.detector=ObjectDetector()
+        self.mapping=MappingSession(self.world_model,self.detector)  # §10
         self.retrieval=RetrievalTask(self.safety,self.arm,self.detector,display=self.display,voice=self.voice)
         self.email=EmailClient()
         self._state='INIT'; self._stuck_count=0; self._last_action='none'
@@ -122,6 +124,7 @@ class RoverBrain:
         log.info('Shutting down...')
         self._running=False; self.safety.emergency_stop('shutdown'); time.sleep(0.2)
         if self.retrieval.active: self.retrieval.abort('shutdown')
+        if self.mapping.active: self.mapping.abort('shutdown')
         self.voice.stop(); self.email.stop(); self.detector.close()
         self.memory.close()  # FR-1900-011: persist any new/updated memory before power-off
         self.world_model.close()  # §9/§10: persist rooms/landmarks/objects/routes before power-off
@@ -213,12 +216,16 @@ class RoverBrain:
             if dist_cm<999.0:
                 x,y=project_point(pose,config.SONAR_BEARING_DEG[name],dist_cm/100.0)
                 self.world_model.update_observation(Observation('obstacle',x,y,payload={'source':f'sonar_{name}'}))
+        # §10: orthogonal to self._state -- see mapping.py's module docstring for why this is a
+        # passive tick alongside whatever ROAM/SLOW/AVOID/STUCK is already doing, not its own FSM state.
+        if self.mapping.active: self.mapping.tick(d,tilt)
 
         if sustained_fault:
             # §4 watchdog escalation (see _check_health) — a sensor fault this sustained means we
             # can no longer trust our own safety checks (tilt above all), so stop unconditionally
             # rather than let TILT_FAULT/battery logic below run on possibly-stale inputs.
             if self.retrieval.active: self.retrieval.abort(f'sensor fault: {sustained_fault}')
+            if self.mapping.active: self.mapping.abort(f'sensor fault: {sustained_fault}')
             self._abandon_stuck_if_active()
             self.safety.emergency_stop(f'{sustained_fault} sensor fault')
             if self._state!='SENSOR_FAULT': log.warning(f'  {self._state}->SENSOR_FAULT ({sustained_fault})')
@@ -228,6 +235,7 @@ class RoverBrain:
 
         if tilt>config.IMU_TILT_LIMIT:
             if self.retrieval.active: self.retrieval.abort(f'tilt fault {tilt:.1f}deg')  # FR-1700-007
+            if self.mapping.active: self.mapping.abort(f'tilt fault {tilt:.1f}deg')
             self._abandon_stuck_if_active()
             if self._state!='TILT_FAULT': log.warning(f'TILT_FAULT tilt={tilt:.1f}'); self._go('TILT_FAULT')
             self.safety.emergency_stop(f'tilt fault {tilt:.1f}deg')
@@ -237,6 +245,7 @@ class RoverBrain:
         tier=self._update_bat_tier(bat_v); self.safety.update_context(bat_tier=tier)
         if tier=='shutdown':
             if self.retrieval.active: self.retrieval.abort(f'battery shutdown {bat_v:.2f}V')  # FR-1700-007
+            if self.mapping.active: self.mapping.abort(f'battery shutdown {bat_v:.2f}V')
             self._abandon_stuck_if_active()
             self.safety.emergency_stop(f'battery shutdown {bat_v:.2f}V')
             if self._state!='SHUTDOWN':
@@ -248,12 +257,14 @@ class RoverBrain:
             self._upd('lowbatt',f'BATTERY {bat_v:.2f}V — controlled shutdown, restart required',d,tilt); return
         if tier=='safe':
             if self.retrieval.active: self.retrieval.abort(f'battery safe mode {bat_v:.2f}V')  # FR-1700-007
+            if self.mapping.active: self.mapping.abort(f'battery safe mode {bat_v:.2f}V')
             self._abandon_stuck_if_active()
             self.safety.emergency_stop(f'battery safe mode {bat_v:.2f}V'); self._go('SAFE_MODE')
             self._upd('lowbatt',f'SAFE_MODE bat={bat_v:.2f}V',d,tilt); return  # FR-1600-004
         if tier=='rth':
             if self._state not in('DOCK','TILT_FAULT'):
                 if self.retrieval.active: self.retrieval.abort(f'return-to-home {bat_v:.2f}V')  # FR-1700-007
+                if self.mapping.active: self.mapping.abort(f'return-to-home {bat_v:.2f}V')
                 self._abandon_stuck_if_active()
                 # FR-200-005/FR-1900-011: the GUARANTEED memory save happens here, at the earlier
                 # RTH threshold, while there's still time for a full graceful save — not at the
@@ -279,8 +290,11 @@ class RoverBrain:
         # FR-000 Directive 6 (v2.2): voice-queued task-level commands are only ever picked up
         # here, after every Directive 1-5 check above has already run this tick and none of
         # them pre-empted (FR-1500-007). Only intake a new task from IDLE — never interrupt an
-        # in-progress ROAM/AVOID/etc. state to start one.
-        if self._state=='IDLE' and not self.retrieval.active:
+        # in-progress ROAM/AVOID/etc. state to start one. Exception: mapping.active also opens
+        # the gate (§10) -- mapping never touches self._state (see mapping.py's module docstring),
+        # so without this a voice-issued "stop mapping" could never be drained while ROAM/SLOW/
+        # AVOID legitimately keeps running the whole session.
+        if (self._state=='IDLE' or self.mapping.active) and not self.retrieval.active:
             self._drain_voice_commands()
 
         {'IDLE':self._idle,'ROAM':self._roam,'SLOW':self._slow,'AVOID':self._avoid,
@@ -298,6 +312,10 @@ class RoverBrain:
             ok,msg=self.retrieval.start(target)
             if ok: self._go('RETRIEVE')
             log.info(f'Voice-triggered retrieval: {target} ({msg})')
+        elif cmd.get('intent')=='map':
+            ok,msg=self.mapping.start(); log.info(f'Voice-triggered mapping start: {msg}')
+        elif cmd.get('intent')=='stop_map':
+            ok,msg=self.mapping.stop(); log.info(f'Voice-triggered mapping stop: {msg}')
         # Other queued motion intents (forward/reverse/turn_*/stop/go_to) are logged but not
         # wired to an executor this pass — FR-1000 autonomous navigation and free-form manual
         # driving via voice were not part of the v2.2 scope actually implemented here, only the

@@ -152,7 +152,7 @@ class VoicePipeline:
         # confirm_receipt doesn't move anything itself, but still has to cross to the tick
         # thread via this same queue — retrieval_task.py's AWAIT_CONFIRM state is the consumer.
         motion_intents={'forward','reverse','turn_left','turn_right','stop','go_to','retrieve',
-                         'confirm_receipt'}
+                         'confirm_receipt','map','stop_map'}
         if name in motion_intents:
             # FR-1500-007: queued only — brain.py applies full Directive 1-5 gating before this
             # is ever executed.
