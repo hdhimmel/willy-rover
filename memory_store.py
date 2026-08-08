@@ -28,10 +28,31 @@ class MemoryStore:
         db_path=db_path or config.MEMORY_DB_PATH
         self._path=os.path.join(config.WILLY_MEMORY_ROOT,db_path)  # §13 -- was __file__-relative directly
         self._lock=threading.Lock()
-        self._conn=sqlite3.connect(self._path,check_same_thread=False)
-        self._conn.execute('PRAGMA journal_mode=WAL')
-        self._conn.executescript(_SCHEMA)
-        self._conn.commit()
+        self._conn=self._open(self._path)
+
+    def _open(self,path):
+        # §20: a corrupted file (e.g. from an unclean shutdown mid-write -- a real failure mode on
+        # a robot that can lose power) must not crash the whole service on startup. Moved aside
+        # rather than deleted, matching this file's own never-silently-discard-data instinct
+        # elsewhere (purge_expired only ever deletes on an explicit age cutoff).
+        conn=None
+        try:
+            conn=sqlite3.connect(path,check_same_thread=False)
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.executescript(_SCHEMA)
+            conn.commit()
+            return conn
+        except sqlite3.DatabaseError as e:
+            log.error(f'{path} is corrupted ({e}) — moving it aside and starting fresh.')
+            if conn is not None:
+                try: conn.close()
+                except Exception: pass
+            os.replace(path,f'{path}.corrupted.{int(time.time())}')
+            conn=sqlite3.connect(path,check_same_thread=False)
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.executescript(_SCHEMA)
+            conn.commit()
+            return conn
 
     # --- demonstrations (FR-1900-001/002/003) ---
     def record_demonstration(self,name,waypoints,context=None):

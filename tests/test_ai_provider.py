@@ -2,8 +2,8 @@ import os,sys,time,tempfile
 sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 from world_model import WorldModel,Object as WMObject
-from ai_provider import (AIProvider,AIResult,_validate_schema,_clamp01,_action_confidence,
-                          _parse_response,build_world_state)
+from ai_provider import (AIProvider,AIResult,CloudAIProvider,_validate_schema,_clamp01,
+                          _action_confidence,_parse_response,build_world_state)
 
 # Pure-logic tests for ai_provider.py -- no network access, no hardware (§20/§14/§15 of
 # docs/WildWilly_Claude_Fix_Implementation_Plan.md). HTTP calls are never exercised here; a
@@ -168,3 +168,26 @@ def test_history_threaded_through_to_call():
     p.request_async('hello',history=history)
     _wait_poll(p)
     assert seen[0]==history
+
+# --- AI timeout (§20) ---
+# CloudAIProvider._call()'s generic `except Exception` already happens to catch a network
+# timeout -- this pins that down explicitly rather than leaving it only accidentally covered.
+# No real network access: _post_anthropic is monkeypatched to raise directly.
+
+def test_cloud_provider_call_handles_timeout_gracefully():
+    p=CloudAIProvider()
+    p._enabled=True; p._key='test-key-not-real'  # force available=True without a real network call
+    def _raise_timeout(system,messages): raise TimeoutError('timed out')
+    p._post_anthropic=_raise_timeout
+    result=p._call('hello')
+    assert result.parse_success is False
+    assert result.payload is None
+    assert 'TimeoutError' in result.reason
+
+def test_cloud_provider_unavailable_never_reaches_network():
+    p=CloudAIProvider()
+    p._enabled=False
+    def _should_not_be_called(system,messages): raise AssertionError('must not reach the network when unavailable')
+    p._post_anthropic=_should_not_be_called
+    result=p._call('hello')
+    assert result.parse_success is False and 'not configured' in result.reason

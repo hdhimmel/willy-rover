@@ -45,15 +45,15 @@ plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code 
 | 17 | Stair-climbing prep | **MISSING (expected)** | No `STAIR_*` states exist. Plan explicitly says not to build this without hardware/testing support and marks it Priority 2 lowest — absence here is correct, not a gap to close now. |
 | 18 | Configuration cleanup | **PARTIAL, already unusually rigorous** | Config values already carry dated calibration notes and explicit master-doc section citations (e.g. a 2026-08-02 GPIO pin fix, a 2026-08-02 battery-divider recalibration, per-value "confirmed/unconfirmed" flags). Credentials are correctly kept out of `config.py` (env var names/paths only). One thing worth explicit owner confirmation: `ENABLE_CLOUD_AI=True` and `ENABLE_EMAIL=True` are both default-on — each cites a specific FR number and a dated verification note, so this reads as an intentional, documented decision, not an oversight, but §18 is unusually blunt about not defaulting these on without the engineering package's explicit say-so. |
 | 19 | Hardware abstraction | **DONE** (2026-08-07) for motors/sensors/arm; camera/display out of scope | `config.SIMULATE_HARDWARE` (env var `WILLY_SIMULATE=1`) gates every real I2C/GPIO open in `motors.py`/`arm.py`/`sensors.py`/`brain.py`'s own I2C self-test scan, both the module-level conditional imports and each class's construction/`_update()`. New `hw_sim.py` holds the two shared mocks (`SimMotor`, `SimServoBank`) that satisfy `DriveBase`/`Steering`/`Arm`'s existing interfaces unchanged — no caller-visible API change. `ObjectDetector` (`vision.py`) was already safely gated behind `ENABLE_OBJECT_RETRIEVAL` and didn't need this. `display.py`'s pygame/Wayland init is **not** covered — out of scope (not one of §19's listed interfaces) and confirmed to still throw in its own background thread under simulation, non-fatally (daemon thread, doesn't block `RoverBrain.start()`). |
-| 20 | Testing | **PARTIAL** (2026-08-07) | `tests/test_safety.py` (15), `tests/test_odometry.py` (6), and `tests/test_sim_hardware.py` (1, subprocess-based — constructs a full `RoverBrain()` under `WILLY_SIMULATE=1`, runs `start()`→`_tick()`→a safety-gated forward command→`stop()`, asserting self-test passes and the sim `DriveBase`/`Encoders`/odometry chain actually responds) all pass. This proves the §19 root cause is fixed: `RoverBrain()` now constructs and runs a full tick off the physical Pi. Still not covered from §20's own list: AI-interface tests (malformed JSON/invalid action/timeout — `claude_client.py` untested), memory tests, navigation tests (no navigation layer exists yet, §11). |
+| 20 | Testing | **DONE (milestone 1)** (2026-08-08) | 107 tests across 12 files, all off-hardware. Every item on §20's own checklist now has coverage except E-Stop (**N/A-HW**, no GPIO sense pin wired — correctly untestable) and encoder rollover (no rollover case exists — `Encoders`' counts are unbounded Python ints, not read from a fixed-width register, per `sensors.py`'s own comment). This update closed the three real gaps found by auditing that checklist: (1) `SafetyController` itself (not just the pure `approve_motion()`) had zero tests — `tests/test_safety_controller.py` (10) now covers command timeout/cancellation, mid-flight obstacle abort, `emergency_stop()`. (2) Corrupted-database handling wasn't just untested, it was **unhandled** — `MemoryStore`/`WorldModel.__init__` would raise `sqlite3.DatabaseError` straight out of `RoverBrain.__init__`, crashing the whole service on a corrupted `memory.db`/`world_model.db` (a real failure mode after an unclean shutdown). Both now catch it, move the corrupted file aside (never deleted), and start fresh — verified against a real garbage file before committing, not just the unit tests (`tests/test_memory_store.py`, `tests/test_world_model.py`). (3) AI timeout was only accidentally covered by a generic exception handler — now pinned down explicitly (`tests/test_ai_provider.py`). Also added: battery-tier hysteresis (`tests/test_brain_battery.py`) — real safety-relevant logic that had only ever been exercised indirectly through full sim construction. |
 | 21 | Logging / diagnostics | **PARTIAL** | `logsetup.py` gives every subsystem a shared rotating-file + console logger (already UTF-8-safe, with a dated comment explaining why that matters on this Pi's locale). `diagnostics.py` is a genuinely solid standalone read-only self-test (I2C scan + every sensor healthy-check + pass/fail exit code) that already matches the plan's diagnostic intent closely. What's missing: log lines are free text, not structured/machine-parseable — no consistent `EVENT=ESTOP_ACTIVE`-style tagging as §21 asks for. |
 | 22 | Documentation | **PARTIAL** | `docs/` already has an actively maintained, dated, section-cited doc set (Master Engineering Package rev6.0.7, FRD v2.2, several checklists) — this practice already matches the spirit of §22 well. What's missing is the specific `IMPLEMENTED/HARDWARE REQUIRED/SIMULATION ONLY/PARTIALLY IMPLEMENTED/PLANNED` tag taxonomy per subsystem; today that status is conveyed in prose instead. |
 
 ## Summary
 
 Out of 21 substantive sections (excluding §1/23-27, which are process/meta):
-- **DONE:** 9 (§8 odometry, §9 world model milestone 1, §10 mapping/learning mode milestone 1, §11 navigation layer milestone 1, §13 memory architecture milestone 1, §14 AI/LLM interface milestone 1, §15 AI confidence milestone 1, §16 retrieval modulo hardware-calibration gaps, §19 hardware abstraction for motors/sensors/arm — camera/display out of scope)
-- **PARTIAL:** 7 (§4, §6, §12, §18, §20, §21, §22)
+- **DONE:** 10 (§8 odometry, §9 world model milestone 1, §10 mapping/learning mode milestone 1, §11 navigation layer milestone 1, §13 memory architecture milestone 1, §14 AI/LLM interface milestone 1, §15 AI confidence milestone 1, §16 retrieval modulo hardware-calibration gaps, §19 hardware abstraction for motors/sensors/arm — camera/display out of scope, §20 testing milestone 1)
+- **PARTIAL:** 6 (§4, §6, §12, §18, §21, §22)
 - **MISSING:** 1 (§17-expected)
 - **CONFLICT** (actively does what the plan says not to): 2 (§2, §3 — see note)
 - **N/A-HW** (blocked on hardware, not code): 2 (§5, §7)
@@ -211,3 +211,23 @@ Per §24, Phases 1-6 are now all code-complete at milestone-1 scope. Remaining u
 cleanup, PARTIAL), and Phase 7 (advanced retrieval/requester-navigation/stair autonomy). Nothing
 through §13 is **live-verified** — same standing gate, still blocked on the pre-existing IMU/I2C
 fault.
+
+## Update (2026-08-08, same day): §20 Testing Requirements milestone 1 — three real gaps closed
+
+Audited §20's own checklist against the (by then) 91-test suite and found three genuine blind
+spots rather than just thin coverage (see the updated §20 row above for full detail): zero tests
+on `SafetyController` itself (only the pure `approve_motion()` function was covered), corrupted-
+database handling that was **unhandled, not just untested** (a corrupted `memory.db`/
+`world_model.db` would crash `RoverBrain.__init__` outright — fixed, verified against a real
+garbage file before committing, not just unit-test assertions), and AI timeout only accidentally
+covered by a generic exception handler. Also added battery-tier hysteresis tests — real
+safety-relevant logic that had never been directly unit tested. 16 new tests across 4 files
+(`test_safety_controller.py`, `test_memory_store.py` — new, `test_world_model.py`,
+`test_ai_provider.py`, `test_brain_battery.py` — new). 107 tests total, all pass.
+
+Tally now DONE:10, PARTIAL:6, MISSING:1 (§17-expected), CONFLICT:2 (§2/§3, stale), N/A-HW:2
+(§5/§7). Remaining: §17 (intentionally deferred, needs hardware), §18 (config audit — mostly
+owner-confirmation work, not code), §21 (structured `EVENT=...` logging tags), §22 (doc status
+taxonomy), Phase 7 (advanced behavior — hardware-calibration gaps, not architecture). Nothing
+through §20 is **live-verified** — same standing gate, still blocked on the pre-existing IMU/I2C
+fault. That gap is now seven phases/sections wide.

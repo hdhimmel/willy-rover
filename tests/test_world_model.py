@@ -14,6 +14,9 @@ class _FakeOdometry:
 def _wm(tmp_path,pose=None):
     return WorldModel(_FakeOdometry(pose),db_path=os.path.join(tmp_path,'wm_test.db'))
 
+def _wm_at(db_path,pose=None):
+    return WorldModel(_FakeOdometry(pose),db_path=db_path)
+
 def test_get_robot_pose_delegates_to_odometry():
     with tempfile.TemporaryDirectory() as d:
         wm=_wm(d,pose='sentinel-pose')
@@ -79,6 +82,17 @@ def test_save_load_round_trip():
         assert wm2.get_landmark('dock').kind=='charging_dock'
         assert len(wm2.get_objects('bottle'))==1
         assert wm2.get_route('to_kitchen').waypoints==[(0.0,0.0),(1.0,2.0)]
+
+def test_corrupted_database_is_moved_aside_and_starts_fresh():
+    # §20: a corrupted file (e.g. from an unclean shutdown mid-write) must not crash construction.
+    with tempfile.TemporaryDirectory() as d:
+        path=os.path.join(d,'corrupt.db')
+        with open(path,'wb') as f: f.write(b'not a sqlite database'*5)
+        wm=_wm_at(path)  # must not raise
+        assert wm.all_rooms()==[]  # usable, empty
+        moved=[f for f in os.listdir(d) if f.startswith('corrupt.db.corrupted.')]
+        assert len(moved)==1  # original renamed aside, not deleted
+        with open(os.path.join(d,moved[0]),'rb') as f: assert f.read()==b'not a sqlite database'*5
 
 def test_obstacles_are_not_persisted():
     with tempfile.TemporaryDirectory() as d:

@@ -112,10 +112,7 @@ class WorldModel:
         db_path=db_path or config.WORLD_MODEL_DB_PATH
         self._path=os.path.join(config.WILLY_MAP_ROOT,db_path)  # §13 -- was __file__-relative directly
         self._lock=threading.Lock()
-        self._conn=sqlite3.connect(self._path,check_same_thread=False)
-        self._conn.execute('PRAGMA journal_mode=WAL')
-        self._conn.executescript(_SCHEMA)
-        self._conn.commit()
+        self._conn=self._open(self._path)
         self._obstacles=[]           # list[Obstacle], ephemeral, never persisted
         self._rooms={}               # name -> Room
         self._doorways=[]            # list[Doorway]
@@ -124,6 +121,28 @@ class WorldModel:
         self._routes={}              # name -> Route
         self._object_seq=1
         self.load()  # §10 step 8: resume a later session automatically
+
+    def _open(self,path):
+        # §20: mirrors memory_store.py's MemoryStore._open() -- a corrupted file must not crash
+        # the whole service on startup. Moved aside rather than deleted.
+        conn=None
+        try:
+            conn=sqlite3.connect(path,check_same_thread=False)
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.executescript(_SCHEMA)
+            conn.commit()
+            return conn
+        except sqlite3.DatabaseError as e:
+            log.error(f'{path} is corrupted ({e}) — moving it aside and starting fresh.')
+            if conn is not None:
+                try: conn.close()
+                except Exception: pass
+            os.replace(path,f'{path}.corrupted.{int(time.time())}')
+            conn=sqlite3.connect(path,check_same_thread=False)
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.executescript(_SCHEMA)
+            conn.commit()
+            return conn
 
     # --- Layer 1: local obstacle map ---
     def _prune_obstacles(self):
