@@ -14,7 +14,7 @@ plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code 
 |---|---|---|---|
 | 2 | Non-blocking control loop | **CONFLICT** *(stale finding, kept for history — see the 2026-08-07 Phase 1 update below: fixed by commit `adb9077`, not yet live-verified)* | `brain.py::_stuck()` calls `claude_client.py::ClaudeClient.decide()` directly on the tick thread — a blocking `urllib.request.urlopen(..., timeout=8)` HTTP call. `motors.py`'s `forward_for`/`reverse_for`/`turn_*_for` also block via `time.sleep(t)`, and `_avoid()`/`_dock()`/`_stuck()` call them directly from `_tick()`. The systemd watchdog `WATCHDOG=1` is sent at the *top* of `_tick()`, before these blocking calls, so it isn't starved outright — but real Directive 1-5 safety processing (tilt/battery) is delayed for the full blocking duration each time this path fires. `claude_client.py` itself no longer exists — retired 2026-08-08, folded into `ai_provider.py::CloudAIProvider` (§14). |
 | 3 | Safety gate between AI and motors | **CONFLICT** *(stale finding, kept for history — see the 2026-08-07 Phase 1 update below: fixed by commit `adb9077`, not yet live-verified)* | No `SafetyController.approve_motion()` or equivalent exists. Claude's proposed `duration` is cast to `float` and passed straight to `motors.forward_for()` etc. with **no clamp** — an unreasonable duration from the LLM is not rejected (the plan's own §20 test list calls this out explicitly: "excessive duration"). Speed *is* clamped (`motors.py` clamps to `config.SPEED_MAX` at the motor layer), and this path is only reachable after `CLAUDE_ESCALATE_AFTER=5` consecutive stuck-avoid cycles, so blast radius is contained today — but it is still the AI directly commanding motors with no independent legality check, which §3 explicitly forbids. `safety.py::SafetyController.approve_motion()` now exists and is unchanged by the §14/§15 AI-provider refactor (2026-08-08) — it remains the sole gate regardless of which AI backend answers. |
-| 4 | Watchdog redesign | **PARTIAL** | `_check_health()` runs every tick and logs IMU/encoder/current-monitor/battery-ADC faults, but **only logs** — it never stops motors or changes FSM state on a sensor fault. Only the battery-ADC failure path is actually safe today (a failed read defaults `battery_volts` to 0, which the existing tier ladder correctly treats as `shutdown`). An IMU thread stall does not stop motion — `_tick()` reads `self.imu.tilt` unconditionally, which returns the last cached value once the thread dies, so a stale tilt reading can mask an actual tilt fault indefinitely. No separate supervisor task; watchdog heartbeat lives on the same thread as the blocking calls in §2. |
+| 4 | Watchdog redesign | **DONE** *(stale finding corrected 2026-08-08 — fixed by commit `adb9077`, not yet live-verified)* | Original finding said `_check_health()` only logs and never stops motors, and that a stale cached `self.imu.tilt` could mask a real tilt fault indefinitely. Both are now false: `brain.py::_check_health()` tracks a per-subsystem `_fault_since` and returns a `sustained_fault` once any of `imu`/`encoders`/`current` (battery_adc excluded — see the code's own comment on why that path is already safe) has been unhealthy past `config.SENSOR_FAULT_GRACE_S`. `_tick()` then routes that through `self.safety.emergency_stop()` unconditionally and forces the `SENSOR_FAULT` FSM state — this is exactly the "stale tilt reading masking a real fault" case the original finding worried about, now closed: an unhealthy IMU forces a stop before its (possibly stale) `tilt` value is ever consulted for the `IMU_TILT_LIMIT` check below it. Still not a separate supervisor task/thread (unchanged from the original finding) — the check runs inline at the top of `_tick()`, same thread as everything else. |
 | 5 | E-Stop integration | **N/A-HW / MISSING** | Already honestly flagged in `brain.py`'s own comments: "software has no way to observe [E-stop] — the hardware-only latching cut has no documented GPIO sense pin." This needs a wiring change (a sense pin into a GPIO) before any software can be written against it — not purely a code gap. |
 | 6 | Battery voltage logic | **PARTIAL** | The protection half is already done well: `config.py` has a distinct `BAT_WARN/RTH/SAFE/SHUTDOWN_V` ladder with hysteresis (`BAT_HYSTERESIS_V`), separate from the old flat low/critical pair, and `brain.py`'s `_update_bat_tier` implements one-way-worse-then-hysteresis-to-recover correctly. What §6 flags — `battery_pct` is still a plain linear map between `BAT_SHUTDOWN_V` and `BAT_FULL_V` — is still present, but it is **display-only** (used for the HUD/voice announcements, not for any safety decision, which all key off raw voltage vs. the tier thresholds directly). No code comment documents that voltage-under-load ≠ open-circuit voltage, as §6 asks. |
 
@@ -52,8 +52,8 @@ plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code 
 ## Summary
 
 Out of 21 substantive sections (excluding §1/23-27, which are process/meta):
-- **DONE:** 12 (§8 odometry, §9 world model milestone 1, §10 mapping/learning mode milestone 1, §11 navigation layer milestone 1, §13 memory architecture milestone 1, §14 AI/LLM interface milestone 1, §15 AI confidence milestone 1, §16 retrieval modulo hardware-calibration gaps, §19 hardware abstraction for motors/sensors/arm — camera/display out of scope, §20 testing milestone 1, §21 structured logging milestone 1, §22 documentation milestone 1)
-- **PARTIAL:** 4 (§4, §6, §12, §18)
+- **DONE:** 13 (§4 watchdog — corrected 2026-08-08, was mismarked PARTIAL, §8 odometry, §9 world model milestone 1, §10 mapping/learning mode milestone 1, §11 navigation layer milestone 1, §13 memory architecture milestone 1, §14 AI/LLM interface milestone 1, §15 AI confidence milestone 1, §16 retrieval modulo hardware-calibration gaps, §19 hardware abstraction for motors/sensors/arm — camera/display out of scope, §20 testing milestone 1, §21 structured logging milestone 1, §22 documentation milestone 1)
+- **PARTIAL:** 3 (§6, §12, §18)
 - **MISSING:** 1 (§17-expected)
 - **CONFLICT** (actively does what the plan says not to): 2 (§2, §3 — see note)
 - **N/A-HW** (blocked on hardware, not code): 2 (§5, §7)
@@ -254,3 +254,20 @@ code-complete" and "this plan is actually trustworthy."** 110 tests pass, all of
 since Phase 1 has run a real `RoverBrain.run()` on the physical rover — see
 `docs/WildWilly_Subsystem_Status.md`'s standing note, and update it (not just this doc) the moment
 that changes.
+
+## Update (2026-08-08, same day): §4 corrected (stale, not fixed by new code); IMU RST pin wired up
+
+Auditing §4's row against the current `brain.py` found it was simply wrong, not stale-but-still-true
+like §2/§3 — `_check_health()`/`SENSOR_FAULT` already does exactly what the row said was missing
+(commit `adb9077`, 2026-08-07). Corrected to **DONE** above; tally is now DONE:13/PARTIAL:3.
+
+Separately: owner confirmed the BNO085's RST line is wired to MCP23017 port B bit 4 (previously
+the master doc only said "spare pin", no bit number). `sensors.py::IMU.__init__` now builds a real
+`digitalio`-style reset pin via `adafruit_mcp230xx` (already a dependency, previously unused) and
+passes it to `BNO08X_I2C(reset=...)` — `adafruit_bno08x`'s own `initialize()` calls `hard_reset()`
+before every `soft_reset()`/`_check_id()` retry, so this was a real no-op before, not just a missing
+optimization as the old code comment claimed. Verified live on the actual Pi (`Willie`, this unit
+*is* the deployment target — see `reference_rover_project` memory): `IMU()` and `Encoders()`
+constructed together in `brain.py`'s exact init order, both report healthy, no register-write
+interference on the shared MCP23017 chip. This is a real fix to a previously-open lead, not part of
+the plan's own numbered sections — logged here since it's adjacent to §4/§8.2 hardware notes.

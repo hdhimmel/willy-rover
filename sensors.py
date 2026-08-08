@@ -4,6 +4,7 @@ if not config.SIMULATE_HARDWARE:
     import board, busio
     from adafruit_bno08x.i2c import BNO08X_I2C
     from adafruit_bno08x import BNO_REPORT_ROTATION_VECTOR
+    from adafruit_mcp230xx.mcp23017 import MCP23017
 
 log=logging.getLogger('sensors')
 
@@ -56,13 +57,19 @@ class SonarArray:
 class IMU:
     # BNO085 SH-2 fusion chip — quaternion already drift-free, no complementary filter needed.
     # Mounting-axis convention (which physical axis reads as pitch/roll) is unconfirmed —
-    # §20.7 bench calibration (mount level, verify) hasn't been run yet. INT (GP15) and RST
-    # (MCP23017 spare pin) are wired per §8.2 but unused here — the library works over I2C
-    # polling alone; wiring them up is a latency optimization, not required for correctness.
+    # §20.7 bench calibration (mount level, verify) hasn't been run yet. RST (MCP23017 port B
+    # bit 4, confirmed 2026-08-08) is now wired up below via adafruit_mcp230xx's DigitalInOut
+    # pin, so BNO08X_I2C.hard_reset() does a real GPIO pulse instead of the silent no-op it was
+    # before — a genuine SH-2 chip reset before enable_feature, not just the I2C soft-reset
+    # command. INT (GP15) is still unused — the library works over I2C polling alone; §8.2 of
+    # the master doc calls INT "required for SH-2 report timing" while this comment previously
+    # called it optional, a still-unreconciled contradiction (not addressed by this change).
     def __init__(self):
         if not config.SIMULATE_HARDWARE:
             self._i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
-            self._bno=BNO08X_I2C(self._i2c,address=config.IMU_ADDR)
+            mcp=MCP23017(self._i2c,address=config.ENCODER_ADDR)
+            reset_pin=mcp.get_pin(config.IMU_RST_MCP_PIN)
+            self._bno=BNO08X_I2C(self._i2c,reset=reset_pin,address=config.IMU_ADDR)
             self._bno.enable_feature(BNO_REPORT_ROTATION_VECTOR)
         self._pitch=0.0; self._roll=0.0
         self._lock=threading.Lock(); self._last_ok=0.0
