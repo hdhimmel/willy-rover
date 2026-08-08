@@ -25,6 +25,10 @@ pyusb==1.3.1
 rpi_ws281x==5.0.0
 sysv_ipc==1.2.0
 
+networkx==3.6.1    # §11 navigation.py's Room/Doorway global-route graph — already present as a
+                   # transitive dep of ultralytics/opencv, declared explicitly now that
+                   # navigation.py imports it directly (unconditionally, not v2.2-gated)
+
 # --- v2.2 subsystems (docs/WildWilly_Functional_Requirements_Document_v2.2.md) ---
 # Unpinned/not yet installed this pass — code-only pass per user instruction, no live
 # install or import test was run. Pin exact versions the first time these are actually

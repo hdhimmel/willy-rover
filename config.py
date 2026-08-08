@@ -116,6 +116,13 @@ OBJECT_DEDUPE_RADIUS_M=0.5   # repeated detections of the same class within this
 # current pose (mapping.py). Re-measure off the chassis before trusting mapped obstacle positions.
 SONAR_BEARING_DEG={'front':0.0,'left':-90.0,'right':90.0}
 
+# Navigation (§11, WildWilly_Claude_Fix_Implementation_Plan.md) -- local planner tunables for
+# navigation.py's Navigator. No bench-measurement basis for these two (same "UNCONFIRMED
+# placeholder" caveat as WHEEL_DIAMETER_M/TRACK_WIDTH_M above) -- reasonable starting guesses.
+NAV_ARRIVAL_RADIUS_M=0.3       # how close counts as "reached" a waypoint
+NAV_HEADING_DEADBAND_DEG=15.0  # within this heading error, drive forward instead of turning first
+NAV_TURN_STEP_S=0.2            # duration of each incremental heading-correction turn while seeking
+
 CLAUDE_MODEL='claude-sonnet-5'
 CLAUDE_MAX_TOKENS=300; CLAUDE_ESCALATE_AFTER=5
 

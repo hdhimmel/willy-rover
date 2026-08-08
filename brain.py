@@ -8,6 +8,7 @@ from safety import SafetyController
 from odometry import Odometry
 from world_model import WorldModel,Observation,project_point
 from mapping import MappingSession
+from navigation import Navigator,Mission
 from arm import Arm
 from memory_store import MemoryStore
 from cloud_ai import CloudAIClient
@@ -65,6 +66,7 @@ class RoverBrain:
                                   smart_home=self.smart_home)
         self.detector=ObjectDetector()
         self.mapping=MappingSession(self.world_model,self.detector)  # §10
+        self.navigator=Navigator(self.safety,self.odometry,self.world_model)  # §11
         self.retrieval=RetrievalTask(self.safety,self.arm,self.detector,display=self.display,voice=self.voice)
         self.email=EmailClient()
         self._state='INIT'; self._stuck_count=0; self._last_action='none'
@@ -125,6 +127,7 @@ class RoverBrain:
         self._running=False; self.safety.emergency_stop('shutdown'); time.sleep(0.2)
         if self.retrieval.active: self.retrieval.abort('shutdown')
         if self.mapping.active: self.mapping.abort('shutdown')
+        if self.navigator.active: self.navigator.abort('shutdown')
         self.voice.stop(); self.email.stop(); self.detector.close()
         self.memory.close()  # FR-1900-011: persist any new/updated memory before power-off
         self.world_model.close()  # §9/§10: persist rooms/landmarks/objects/routes before power-off
@@ -226,6 +229,7 @@ class RoverBrain:
             # rather than let TILT_FAULT/battery logic below run on possibly-stale inputs.
             if self.retrieval.active: self.retrieval.abort(f'sensor fault: {sustained_fault}')
             if self.mapping.active: self.mapping.abort(f'sensor fault: {sustained_fault}')
+            if self.navigator.active: self.navigator.abort(f'sensor fault: {sustained_fault}')
             self._abandon_stuck_if_active()
             self.safety.emergency_stop(f'{sustained_fault} sensor fault')
             if self._state!='SENSOR_FAULT': log.warning(f'  {self._state}->SENSOR_FAULT ({sustained_fault})')
@@ -236,6 +240,7 @@ class RoverBrain:
         if tilt>config.IMU_TILT_LIMIT:
             if self.retrieval.active: self.retrieval.abort(f'tilt fault {tilt:.1f}deg')  # FR-1700-007
             if self.mapping.active: self.mapping.abort(f'tilt fault {tilt:.1f}deg')
+            if self.navigator.active: self.navigator.abort(f'tilt fault {tilt:.1f}deg')
             self._abandon_stuck_if_active()
             if self._state!='TILT_FAULT': log.warning(f'TILT_FAULT tilt={tilt:.1f}'); self._go('TILT_FAULT')
             self.safety.emergency_stop(f'tilt fault {tilt:.1f}deg')
@@ -246,6 +251,7 @@ class RoverBrain:
         if tier=='shutdown':
             if self.retrieval.active: self.retrieval.abort(f'battery shutdown {bat_v:.2f}V')  # FR-1700-007
             if self.mapping.active: self.mapping.abort(f'battery shutdown {bat_v:.2f}V')
+            if self.navigator.active: self.navigator.abort(f'battery shutdown {bat_v:.2f}V')
             self._abandon_stuck_if_active()
             self.safety.emergency_stop(f'battery shutdown {bat_v:.2f}V')
             if self._state!='SHUTDOWN':
@@ -258,6 +264,7 @@ class RoverBrain:
         if tier=='safe':
             if self.retrieval.active: self.retrieval.abort(f'battery safe mode {bat_v:.2f}V')  # FR-1700-007
             if self.mapping.active: self.mapping.abort(f'battery safe mode {bat_v:.2f}V')
+            if self.navigator.active: self.navigator.abort(f'battery safe mode {bat_v:.2f}V')
             self._abandon_stuck_if_active()
             self.safety.emergency_stop(f'battery safe mode {bat_v:.2f}V'); self._go('SAFE_MODE')
             self._upd('lowbatt',f'SAFE_MODE bat={bat_v:.2f}V',d,tilt); return  # FR-1600-004
@@ -265,6 +272,7 @@ class RoverBrain:
             if self._state not in('DOCK','TILT_FAULT'):
                 if self.retrieval.active: self.retrieval.abort(f'return-to-home {bat_v:.2f}V')  # FR-1700-007
                 if self.mapping.active: self.mapping.abort(f'return-to-home {bat_v:.2f}V')
+                if self.navigator.active: self.navigator.abort(f'return-to-home {bat_v:.2f}V')
                 self._abandon_stuck_if_active()
                 # FR-200-005/FR-1900-011: the GUARANTEED memory save happens here, at the earlier
                 # RTH threshold, while there's still time for a full graceful save — not at the
@@ -299,6 +307,7 @@ class RoverBrain:
 
         {'IDLE':self._idle,'ROAM':self._roam,'SLOW':self._slow,'AVOID':self._avoid,
          'STUCK':self._stuck,'DOCK':self._dock,'WARN':self._warn,'RETRIEVE':self._retrieve,
+         'NAVIGATE':self._navigate,
          'TILT_FAULT':lambda d,t:None,'SAFE_MODE':lambda d,t:None,'SHUTDOWN':lambda d,t:None,
         }.get(self._state,lambda d,t:None)(d,tilt)
 
@@ -316,10 +325,22 @@ class RoverBrain:
             ok,msg=self.mapping.start(); log.info(f'Voice-triggered mapping start: {msg}')
         elif cmd.get('intent')=='stop_map':
             ok,msg=self.mapping.stop(); log.info(f'Voice-triggered mapping stop: {msg}')
-        # Other queued motion intents (forward/reverse/turn_*/stop/go_to) are logged but not
-        # wired to an executor this pass — FR-1000 autonomous navigation and free-form manual
-        # driving via voice were not part of the v2.2 scope actually implemented here, only the
-        # FR-1700 retrieval task was. Put back unhandled so nothing is silently swallowed.
+        elif cmd.get('intent')=='go_to':
+            # §11: mission target from whatever shape the local LLM's free-form args happened to
+            # produce -- 'room' (name) or 'x'/'y' (raw world coords) are the two shapes navigation.py
+            # understands; anything else is reported rather than guessed at (FR-1500-005).
+            args=cmd.get('args',{})
+            mission=(Mission(room=args['room']) if 'room' in args else
+                     Mission(xy=(float(args['x']),float(args['y']))) if 'x' in args and 'y' in args else None)
+            if mission is None:
+                log.info(f'Voice go_to intent missing room/x,y args: {args}')
+            else:
+                ok,msg=self.navigator.start(mission)
+                if ok: self._go('NAVIGATE')
+                log.info(f'Voice-triggered navigation: {mission} ({msg})')
+        # Other queued motion intents (forward/reverse/turn_*/stop) are logged but not wired to
+        # an executor this pass — free-form manual driving via voice was not part of the v2.2
+        # scope actually implemented here. Put back unhandled so nothing is silently swallowed.
         elif cmd.get('intent'):
             log.info(f'Voice intent "{cmd["intent"]}" received but not wired to an executor.')
 
@@ -328,6 +349,12 @@ class RoverBrain:
         if self.retrieval.state in('DONE','FAILED','ABORTED'):
             if self.retrieval.state=='DONE' and self.voice.available: self.voice.speak('All done!')
             self.retrieval.reset(); self._go('IDLE')
+
+    def _navigate(self,d,tilt):
+        self.navigator.tick(d,tilt)
+        if self.navigator.state in('DONE','FAILED','ABORTED'):
+            if self.navigator.state=='DONE' and self.voice.available: self.voice.speak("I'm here.")
+            self.navigator.reset(); self._go('IDLE')
 
     def _idle(self,d,tilt):
         self.safety.stop(); self._idle_t+=0.05
