@@ -110,7 +110,7 @@ class WorldModel:
     def __init__(self,odometry,db_path=None):
         self.odometry=odometry
         db_path=db_path or config.WORLD_MODEL_DB_PATH
-        self._path=os.path.join(os.path.dirname(os.path.abspath(__file__)),db_path)
+        self._path=os.path.join(config.WILLY_MAP_ROOT,db_path)  # §13 -- was __file__-relative directly
         self._lock=threading.Lock()
         self._conn=sqlite3.connect(self._path,check_same_thread=False)
         self._conn.execute('PRAGMA journal_mode=WAL')

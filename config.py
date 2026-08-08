@@ -1,7 +1,7 @@
 # WildWilly Rover — Central Configuration v2
 # 180x125mm chassis · 5" 800x480 landscape display
 
-import os
+import os,storage
 # §19 of docs/WildWilly_Claude_Fix_Implementation_Plan.md: every hardware-backed class in
 # motors.py/sensors.py/arm.py checks this at construction time and, when set, skips opening real
 # I2C/GPIO/SPI entirely in favor of an in-memory simulated stand-in with the same public
@@ -9,6 +9,16 @@ import os
 # physical rover, per §20's testing requirements. Default OFF: the real hardware path is
 # unchanged unless this is explicitly requested.
 SIMULATE_HARDWARE=os.environ.get('WILLY_SIMULATE','0')=='1'
+
+# §13: configurable storage roots — see storage.py's module docstring for why the *default*
+# (unset env var) anchors to the repo directory rather than the process's CWD, and why this unit
+# doesn't yet split these across a real SSD/SD (no such split physically exists here — confirmed
+# 2026-08-08, boot-from-SSD is still a pending item per the master doc §13.4). Setting an env var
+# overrides that tier's location with zero further code changes whenever that migration happens.
+WILLY_DATA_ROOT=storage.resolve_root('WILLY_DATA_ROOT','.')      # operational/working files root
+WILLY_MAP_ROOT=storage.resolve_root('WILLY_MAP_ROOT','.')        # world_model.db lives here (§9)
+WILLY_MEMORY_ROOT=storage.resolve_root('WILLY_MEMORY_ROOT','.')  # memory.db lives here (§FR-1900)
+WILLY_LOG_ROOT=storage.resolve_root('WILLY_LOG_ROOT','logs')     # logsetup.py's rotating file dir
 
 DISPLAY_W=800; DISPLAY_H=480; DISPLAY_FPS=30; DISPLAY_ROTATE=0
 
@@ -100,7 +110,9 @@ BAT_HYSTERESIS_V=0.2
 
 # Diagnostics/logging (FR-1100) — rotating file log alongside the existing journal output;
 # the journal is ephemeral (rotates per systemd-journald policy), this file persists independently.
-LOG_DIR='logs'; LOG_FILE='willy.log'
+# §13: the directory itself is now WILLY_LOG_ROOT above (was a bare 'logs' joined against the
+# script's own directory here — that join now happens once, in storage.resolve_root()).
+LOG_FILE='willy.log'
 LOG_MAX_BYTES=2_000_000; LOG_BACKUP_COUNT=5
 
 # World model (§9/§10, WildWilly_Claude_Fix_Implementation_Plan.md) — spatial/semantic memory,

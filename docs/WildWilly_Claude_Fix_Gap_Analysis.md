@@ -33,7 +33,7 @@ plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code 
 
 | § | Topic | Status | Finding |
 |---|---|---|---|
-| 13 | Memory architecture | **MISSING** | Single SQLite file, no RAM/SSD/SD tiering, no `WILLY_DATA_ROOT`/`MAP_ROOT`/`MEMORY_ROOT`/`LOG_ROOT` env vars — paths (`MEMORY_DB_PATH`, `LOG_DIR`) are hardcoded relative to the script directory. No storage-availability/permission startup checks. The underlying save/purge/replay mechanics are a reasonable seed for "long-term memory," just not tiered. |
+| 13 | Memory architecture | **DONE (milestone 1)** (2026-08-08) | New `storage.py`: `resolve_root(env_var,default)` (env var set -> used as-is; unset -> repo-relative default, unchanged from today's behavior) backs new `config.WILLY_DATA_ROOT`/`WILLY_MAP_ROOT`/`WILLY_MEMORY_ROOT`/`WILLY_LOG_ROOT`, exactly the four names §13 names. `memory_store.py`/`world_model.py`/`logsetup.py` now root off these instead of three independent copies of the same `__file__`-relative join. `check_storage()` adds the startup availability/permission check §13 asks for, folded into `brain.py::_self_test()`'s existing INIT->IDLE gate — a bad storage mount now blocks motion the same way a missing sensor already does. **No physical RAM/SSD/SD split** — confirmed via `df`/`mount` this unit has no separate SSD/SD mount yet (master doc §13.4's boot-from-SSD migration is still pending), so all four roots currently resolve to the same microSD card; genuinely overridable via env var whenever that migration happens, with zero further code changes. Operational memory (current mission/robot state/map/active obstacles) was **not** built as a new RAM class — already satisfied by live objects (`brain.py`'s `self._state`, `self.navigator`, `self.world_model`'s in-memory layers); adding a duplicate accessor with no real consumer would be pure overhead. 8 new tests (`tests/test_storage.py`). |
 | 14 | AI / LLM interface | **DONE (milestone 1)** (2026-08-08) | New `ai_provider.py`: `AIProvider` ABC (owns the non-blocking worker-thread plumbing, unchanged in shape from the old `claude_client.py`, plus a synchronous `ask_sync()` path for off-tick-thread callers) with `CloudAIProvider`/`LocalAIProvider` implementations — `claude_client.py` and `cloud_ai.py` (previously two separate clients independently hitting the same Anthropic endpoint) are fully retired, folded into one `CloudAIProvider` instance `brain.py` now shares with `voice.py`. `build_world_state()` assembles §14's exact schema (`robot: {room,pose,battery}, goal, nearby_objects, nearby_obstacles, available_routes`) from real `world_model.py` (§9) data — no longer blocked on §9 not existing. `brain.py::_stuck()` now builds its situation this way instead of a raw sensor dict; conversation history is caller-owned (threaded through each call) rather than provider-owned, so one shared provider instance can't leak STUCK's motion-decision turns into voice's unrelated free-text turns or vice versa. **No change to what actually gates motion** — `safety.py::SafetyController.approve_motion()` remains the sole authority, untouched. |
 | 15 | AI confidence | **DONE (milestone 1)** (2026-08-08) | Fixed alongside §14 (same `ai_provider.py`) — `AIResult` carries `parse_success`, `intent_confidence` (the model's own self-reported `"confidence"` field, not a parse-success proxy), `action_confidence` (separately *computed*: is the specific action/duration/speed structurally sane — `None` for non-motion queries), and `safety_validation` (structural plausibility only, explicitly documented as not the real safety gate). `voice.py::_interpret_local()`'s old hardcoded `0.8`/`0.0` is gone, replaced by `result.intent_confidence`. The already-correct downstream consequence handling (low confidence -> ask for clarification, never guess) is unchanged. |
 | 16 | Retrieval behavior | **DONE** (mostly) | `retrieval_task.py` already implements almost exactly the requested state list — `LOCALIZE/APPROACH/GRASP/VERIFY/DELIVER/AWAIT_CONFIRM` — as its own sub-FSM, gated correctly behind `brain.py`'s Directive 1-5 checks, with `abort()` always called externally per §27's "never decide internally" pattern. Its own comments already honestly flag the two real remaining gaps: grasp is a fixed primitive sequence, not IK (no per-joint calibration exists — §20.6 in the master doc), and hand-off confirmation is timeout-based, not tactile-sensed. Best-covered section in the whole plan; what remains is hardware calibration work, not architecture work. |
@@ -52,8 +52,8 @@ plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code 
 ## Summary
 
 Out of 21 substantive sections (excluding §1/23-27, which are process/meta):
-- **DONE:** 8 (§8 odometry, §9 world model milestone 1, §10 mapping/learning mode milestone 1, §11 navigation layer milestone 1, §14 AI/LLM interface milestone 1, §15 AI confidence milestone 1, §16 retrieval modulo hardware-calibration gaps, §19 hardware abstraction for motors/sensors/arm — camera/display out of scope)
-- **PARTIAL:** 8 (§4, §6, §12, §13, §18, §20, §21, §22)
+- **DONE:** 9 (§8 odometry, §9 world model milestone 1, §10 mapping/learning mode milestone 1, §11 navigation layer milestone 1, §13 memory architecture milestone 1, §14 AI/LLM interface milestone 1, §15 AI confidence milestone 1, §16 retrieval modulo hardware-calibration gaps, §19 hardware abstraction for motors/sensors/arm — camera/display out of scope)
+- **PARTIAL:** 7 (§4, §6, §12, §18, §20, §21, §22)
 - **MISSING:** 1 (§17-expected)
 - **CONFLICT** (actively does what the plan says not to): 2 (§2, §3 — see note)
 - **N/A-HW** (blocked on hardware, not code): 2 (§5, §7)
@@ -190,3 +190,24 @@ Tally now DONE:8, PARTIAL:8, MISSING:1 (§17-expected only), CONFLICT:2 (§2/§3
 §18/§21/§22 (config/logging/docs cleanup, PARTIAL), and Phase 6/7 (§13/§17 overlap — memory
 architecture, advanced retrieval/requester-navigation behavior). Phase 1 through §15 remains
 **not live-verified** — unchanged gating item, still blocked on the pre-existing IMU/I2C fault.
+
+## Update (2026-08-08, same day): Phase 6 — §13 Memory Architecture milestone 1 implemented
+
+Continuing per §24's phase order (Phase 6 — Memory, after Phase 5 Vision/AI):
+
+New `storage.py` (see updated §13 row above) gives the four env-var-configurable roots §13 names
+(`WILLY_DATA_ROOT`/`MAP_ROOT`/`MEMORY_ROOT`/`LOG_ROOT`), a startup availability/permission check
+folded into `brain.py::_self_test()`'s existing gate, and unifies three previously-independent
+copies of the same `__file__`-relative path-join logic (`memory_store.py`/`world_model.py`/
+`logsetup.py`). Confirmed via `df`/`mount` this unit has no physical SSD/SD split yet (master doc
+§13.4's boot-from-SSD migration is still pending) — all four roots resolve to today's exact
+locations by default, verified unchanged
+(`WILLY_DATA_ROOT`/`WILLY_MAP_ROOT`/`WILLY_MEMORY_ROOT`=`/home/hhimmel/rover`,
+`WILLY_LOG_ROOT`=`/home/hhimmel/rover/logs`). 8 new tests (`tests/test_storage.py`).
+
+Tally now DONE:9, PARTIAL:7, MISSING:1 (§17-expected), CONFLICT:2 (§2/§3, stale), N/A-HW:2 (§5/§7).
+Per §24, Phases 1-6 are now all code-complete at milestone-1 scope. Remaining unstarted: §17
+(stair-climbing prep, intentionally deferred), §18/§20/§21/§22 (config/testing/logging/docs
+cleanup, PARTIAL), and Phase 7 (advanced retrieval/requester-navigation/stair autonomy). Nothing
+through §13 is **live-verified** — same standing gate, still blocked on the pre-existing IMU/I2C
+fault.

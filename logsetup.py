@@ -3,7 +3,7 @@ import logging,logging.handlers,os,config
 def setup(name):
     # Shared by brain.py and diagnostics.py so both land in the same rotating file (FR-1100-003)
     # — useful for correlating a diagnostic run against brain.py activity around the same time.
-    log_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)),config.LOG_DIR)
+    log_dir=config.WILLY_LOG_ROOT  # §13 — was os.path.dirname(__file__)+config.LOG_DIR, now resolved once in storage.py
     os.makedirs(log_dir,exist_ok=True)
     root=logging.getLogger()
     if not root.handlers:

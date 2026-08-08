@@ -1,4 +1,4 @@
-import json,time,socket,os,config,logsetup
+import json,time,socket,os,config,logsetup,storage
 if not config.SIMULATE_HARDWARE: import board,busio
 from motors import DriveBase,Steering
 from sensors import SonarArray,IMU,ADC,Encoders,CurrentMonitor
@@ -112,6 +112,9 @@ class RoverBrain:
     def _self_test(self):
         # FR-100-002/003/004: no motion permitted until this passes (§13.1/§14.2 INIT->IDLE gate).
         problems=[]
+        storage_ok,storage_problems=storage.check_storage({'data':config.WILLY_DATA_ROOT,
+            'map':config.WILLY_MAP_ROOT,'memory':config.WILLY_MEMORY_ROOT,'log':config.WILLY_LOG_ROOT})
+        if not storage_ok: problems.extend(storage_problems)  # §13: startup availability/permission check
         if config.SIMULATE_HARDWARE:
             pass  # no real bus to scan — every sim class already reports itself healthy below
         else:
