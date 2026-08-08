@@ -1,5 +1,6 @@
-import smbus2, time, math, threading, statistics, logging, config
+import time, math, threading, statistics, logging, config
 if not config.SIMULATE_HARDWARE:
+    import smbus2
     import RPi.GPIO as GPIO
     import board, busio
     from adafruit_bno08x.i2c import BNO08X_I2C
