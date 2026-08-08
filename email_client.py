@@ -42,6 +42,9 @@ class EmailClient:
         self._pending_sends={}  # id -> (to, subject, body) awaiting confirm_and_send
         self._inbox_summaries=queue.Queue()  # FR-2000-003: surfaced to voice/display, not acted on
         self._running=False; self._thread=None
+        self._stop_event=threading.Event()  # lets stop() interrupt the poll loop's long wait
+                                              # immediately instead of blocking up to
+                                              # GMAIL_POLL_INTERVAL_S (120s) via a plain time.sleep
 
     @property
     def available(self): return self._enabled
@@ -109,10 +112,12 @@ class EmailClient:
     # --- inbound (FR-2000-002/003/006/010) ---
     def start(self):
         if not self._enabled: return
-        self._running=True
+        self._running=True; self._stop_event.clear()
         self._thread=threading.Thread(target=self._poll_loop,daemon=True); self._thread.start()
 
-    def stop(self): self._running=False
+    def stop(self):
+        self._running=False; self._stop_event.set()
+        if self._thread is not None: self._thread.join(timeout=2.0)
 
     def _poll_loop(self):
         # FR-2000-008: runs entirely off brain.py's tick thread; a slow/hung IMAP server never
@@ -121,7 +126,7 @@ class EmailClient:
             try: self._check_inbox()
             except (imaplib.IMAP4.error,OSError,TimeoutError) as e:
                 log.info(f'Inbox check failed (expected if offline): {e}')
-            time.sleep(config.GMAIL_POLL_INTERVAL_S)
+            if self._stop_event.wait(config.GMAIL_POLL_INTERVAL_S): break  # interrupted by stop()
 
     def _check_inbox(self):
         with imaplib.IMAP4_SSL(config.GMAIL_IMAP_HOST,timeout=10) as m:

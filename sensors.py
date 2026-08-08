@@ -45,7 +45,9 @@ class SonarArray:
     def start(self):
         self._running=True
         self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
-    def stop(self): self._running=False
+    def stop(self):
+        self._running=False
+        if self._thread is not None: self._thread.join(timeout=2.0)
     def _loop(self):
         while self._running:
             for s in self._sensors: s.update(); time.sleep(config.SONAR_INTERVAL/3)
@@ -88,7 +90,9 @@ class IMU:
     def start(self):
         self._running=True
         self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
-    def stop(self): self._running=False
+    def stop(self):
+        self._running=False
+        if self._thread is not None: self._thread.join(timeout=2.0)
     def _loop(self):
         iv=1.0/config.IMU_POLL_HZ
         while self._running:
@@ -156,7 +160,9 @@ class ADC:
     def start(self):
         self._running=True
         self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
-    def stop(self): self._running=False
+    def stop(self):
+        self._running=False
+        if self._thread is not None: self._thread.join(timeout=2.0)
     def _loop(self):
         while self._running:
             try:
@@ -208,7 +214,9 @@ class Encoders:
     def start(self):
         self._running=True
         self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
-    def stop(self): self._running=False
+    def stop(self):
+        self._running=False
+        if self._thread is not None: self._thread.join(timeout=2.0)
     def _loop(self):
         while self._running:
             try: self._update()
@@ -266,7 +274,9 @@ class CurrentMonitor:
     def start(self):
         self._running=True
         self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
-    def stop(self): self._running=False
+    def stop(self):
+        self._running=False
+        if self._thread is not None: self._thread.join(timeout=2.0)
     def _loop(self):
         while self._running:
             try: self._update()

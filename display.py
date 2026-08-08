@@ -53,7 +53,9 @@ class WillyFace:
         self._running=True
         self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
 
-    def stop(self): self._running=False
+    def stop(self):
+        self._running=False
+        if self._thread is not None: self._thread.join(timeout=2.0)
 
     def _loop(self):
         # SDL/Wayland requires init, window creation, and every subsequent display

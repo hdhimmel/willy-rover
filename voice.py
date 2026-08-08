@@ -70,6 +70,8 @@ class VoicePipeline:
 
     def stop(self):
         self._running=False
+        if self._thread is not None: self._thread.join(timeout=3.0)
+        if self._speaker_thread is not None: self._speaker_thread.join(timeout=3.0)
 
     def _speaker_loop(self):
         # Sole consumer of _speak_queue — keeps every speak()/speak_safety() call (including
