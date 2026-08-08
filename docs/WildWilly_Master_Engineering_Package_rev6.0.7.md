@@ -495,7 +495,13 @@ Control), this table is correct.
                                                   \"RX\" on the Nano HAT
                                                   Hacker, UART group ---
                                                   not a numbered pin),
-                                                  RST→MCP23017 spare pin.
+                                                  RST→MCP23017 (0x27)
+                                                  port B bit 4, confirmed
+                                                  2026-08-08 (previously
+                                                  only \"spare pin\", no
+                                                  bit number) --- now
+                                                  wired in software too
+                                                  (§8.2, §13.1).
 
   0x60                    Adafruit FeatherWing    LEFT motor driver ---
                           #2927                   LF/LM/LR.
@@ -875,10 +881,38 @@ nearby motors). VIN = 3.3V, P0/P1 floating selects I²C mode.
   AD0               IN                GND               sets address 0x4A
 
   INT               OUT               Raspberry Pi GP15 required for SH-2
-                                                        report timing
+                                                        report timing.
+                                                        Still unused in
+                                                        software as of
+                                                        2026-08-08 ---
+                                                        `sensors.py`
+                                                        polls over I²C
+                                                        alone; its own
+                                                        code comment
+                                                        calls INT
+                                                        optional, which
+                                                        contradicts this
+                                                        row and hasn't
+                                                        been reconciled.
 
-  RST               IN                MCP23017 spare    software-reset
-                                      GPIO              capable
+  RST               IN                MCP23017 (0x27)   software-reset
+                                      port B bit 4       capable ---
+                                      (confirmed         wired up in
+                                      2026-08-08)        software
+                                                        2026-08-08
+                                                        (`sensors.py::
+                                                        IMU`, via
+                                                        `adafruit_mcp230xx`);
+                                                        previously a
+                                                        silent no-op even
+                                                        though physically
+                                                        wired. Verified
+                                                        live: real
+                                                        `hard_reset()`
+                                                        pulse, no
+                                                        register conflict
+                                                        with the encoders
+                                                        on the same chip.
 
   P0 / P1           ---               unconnected       selects I²C mode
   -----------------------------------------------------------------------
@@ -927,25 +961,63 @@ the circuit topology correctly, not real hole positions).
   **Sensor**              **Target poll**         **Timeout / fault
                                                   response**
   ----------------------- ----------------------- -----------------------
-  BNO085 IMU              100 Hz                  I²C timeout → disable
-                                                  autonomy, allow limited
-                                                  manual
+  BNO085 IMU              100 Hz                  read stale >1s
+                                                  (`SENSOR_FAULT_GRACE_S`)
+                                                  → `SafetyController.
+                                                  emergency_stop()` (hard
+                                                  brake) + `SENSOR_FAULT`
+                                                  FSM state, not the
+                                                  \"disable autonomy,
+                                                  allow limited manual\"
+                                                  this row previously
+                                                  said (as-built
+                                                  2026-08-08, `brain.py::
+                                                  _check_health()`)
 
   INA current (×3)        10 Hz                   read fail → log, hold
-                                                  last; sustained fail →
-                                                  SAFE_MODE
+                                                  last; sustained fail (>1s)
+                                                  → same `SENSOR_FAULT`
+                                                  escalation as IMU
+                                                  above, corrected
+                                                  2026-08-08 (this row
+                                                  previously said
+                                                  \"SAFE_MODE\", which
+                                                  isn\'t what the code
+                                                  does)
 
-  Encoders (MCP23017)     continuous (IRQ/poll)   no counts while
-                                                  commanded → stop
-                                                  affected drive
+  Encoders (MCP23017)     continuous (IRQ/poll)   sustained fail (>1s) →
+                                                  same `SENSOR_FAULT`
+                                                  escalation, not just
+                                                  \"stop affected drive\"
+                                                  (corrected 2026-08-08)
 
   HC-SR04 sonar (×3)      10--20 Hz               echo timeout → treat as
                                                   \"no obstacle in
                                                   range\", flag noisy
 
-  Battery (ADS1115 A0)    1 Hz                    read fail → assume
-                                                  worst-case, warn
+  Battery (ADS1115 A0)    1 Hz                    read fail → defaults to
+                                                  0V, which the battery
+                                                  tier ladder (§13.2)
+                                                  already treats as
+                                                  \`shutdown\` on its own
+                                                  --- deliberately
+                                                  excluded from the
+                                                  `SENSOR_FAULT` path
+                                                  above as a redundant
+                                                  route to the same
+                                                  outcome
   -----------------------------------------------------------------------
+
+**As-built correction (2026-08-08):** none of the three current-monitor
+rows above actually trip on an overcurrent *value* --- `sensors.py`\'s
+own long-standing comment confirms \"no numeric overcurrent trip
+threshold exists anywhere in the documentation to hardcode an automatic
+cutoff against.\" `is_healthy` for all three current/IMU/encoder
+sensors is **read-recency only** (last successful I²C read <1s ago),
+not a threshold on the reading\'s value. The Hazard Response Matrix
+(§14.1) rows for servo-rail/motor-rail overcurrent and Pi undervoltage
+describe intended, not yet implemented, behavior --- see that section\'s
+own as-built note.
 
 9\. Drive System Design
 
@@ -1391,27 +1463,75 @@ function --- see §13, local-first design.
 
 13\. Software Architecture
 
-13.1 Codebase
+13.1 Codebase (as-built, 2026-08-08 --- supersedes the description
+below this note, kept for history)
 
-/home/hhimmel/rover/: config.py, motors.py, sensors.py, brain.py,
-display.py, claude_client.py, arm.py, main.py, willy-rover.service
-(systemd, 500ms watchdog). States: INIT / IDLE / ACTIVE / SAFE_MODE.
-motors.py is being rewritten to drive the FeatherWings via the Adafruit
-MotorKit library (I²C) rather than the GPIO-PWM approach an earlier
-hardware design assumed.
+**This entire §13 predates the \"WildWilly Claude Fix\" architecture
+pass (`docs/WildWilly_Claude_Fix_Implementation_Plan.md`, Phases 1--6,
+landed 2026-08-07/08) and describes an earlier, largely aspirational
+design (\"proposed --- adopt or adjust\"). The real, current
+architecture is tracked in `docs/WildWilly_Subsystem_Status.md` (per-file
+IMPLEMENTED/HARDWARE REQUIRED/SIMULATION ONLY/PARTIAL tags) and
+`docs/WildWilly_Claude_Fix_Gap_Analysis.md` (plan-section-by-section
+status, DONE:14/PARTIAL:2/MISSING:1(§17, correctly hardware-gated) as of
+2026-08-08). This section is corrected below rather than left wrong.**
 
-Claude Code v2.1.215 (native) is installed and authenticated on Willy
-directly (\~/.local/bin/claude, user hhimmel), on Python 3.13.5 / Debian
-trixie. The rover code is under local git (branch main, .gitignore
-protects .env). GitHub push is currently parked on a token
-permission-scope issue (non-blocking --- commits are safe locally; fix
-is a classic repo-scope token or broader fine-grained-token
-permissions). A personal access token was briefly exposed in an external
-chat during setup and was revoked/replaced --- tokens should only ever
-be pasted at the on-device gh prompt, never into chat.
+`/home/hhimmel/rover/`: `config.py`, `motors.py`, `sensors.py`,
+`brain.py`, `display.py`, `arm.py`, `main.py`, plus (added by the Claude
+fix pass) `safety.py` (the single authoritative motion gate --- see
+§13.2), `odometry.py`, `world_model.py`, `mapping.py`, `navigation.py`,
+`ai_provider.py` (unifies what were three separate AI call sites),
+`storage.py` (configurable data-root paths), `hw_sim.py` (hardware
+mocks for `WILLY_SIMULATE=1`), `logsetup.py`, plus the v2.2 additions
+`voice.py`/`memory_store.py`/`vision.py`/`retrieval_task.py`/
+`smart_home.py`/`email_client.py`/`diagnostics.py`/`privacy.py`.
+`claude_client.py` and `cloud_ai.py` (two separate clients that had
+independently been hitting the same Anthropic endpoint) were both
+**fully retired 2026-08-08**, folded into `ai_provider.py`.
 
-13.2 Software Control-Priority / Arbitration (proposed --- adopt or
-adjust)
+`motors.py` finished its MotorKit rewrite long ago --- it is not \"being
+rewritten,\" it drives the two FeatherWings over I²C via the Adafruit
+MotorKit library today, with no GPIO-PWM path remaining.
+
+Real FSM states in `brain.py` (not \"INIT / IDLE / ACTIVE / SAFE_MODE\"
+as this section previously said): `INIT`, `IDLE`, `ROAM`, `SLOW`,
+`AVOID`, `WARN`, `STUCK`, `DOCK`, `RETRIEVE`, `NAVIGATE`, `TILT_FAULT`,
+`SENSOR_FAULT`, `SAFE_MODE`, `SHUTDOWN`. There is no `ACTIVE` state.
+
+`willy-rover.service`\'s watchdog is **not** 500ms as every other
+mention in this document (§14, §14.2) claims --- the deployed unit file
+(`systemctl cat willy-rover.service`, checked 2026-08-08) has **no
+`WatchdogSec=` directive at all**. `brain.py` does call
+`sd_notify('WATCHDOG=1')` every tick, but with no `WatchdogSec`
+configured, systemd never enforces a timeout on it --- a hung (not
+crashed) tick thread would not be caught by this mechanism today. What
+*is* configured: `Restart=on-failure`, `RestartSec=5` --- covers a
+process crash/exit, not a hang. See §14\'s as-built note.
+
+Claude Code (native) is installed and authenticated on Willy directly
+(user `hhimmel`), on Python 3.13.5 / Debian trixie. The rover code is
+under local git (branch `main`, `.gitignore` protects `.env`). The
+GitHub push issue this section used to describe is resolved --- pushes
+to `origin/main` (`https://github.com/hdhimmel/willy-rover.git`) have
+been working normally for some time; `main` was pushed current as of
+2026-08-08 (`30efab7`). A personal access token was briefly exposed in
+an external chat during setup and was revoked/replaced --- tokens
+should only ever be pasted at the on-device `gh` prompt, never into
+chat.
+
+Test suite: 113 tests across 13 files, `WILLY_SIMULATE=1` (mostly)
+hardware-independent. **One real portability gap found 2026-08-08** (an
+external code audit, corroborated by direct inspection): `sensors.py`
+imports `smbus2` unconditionally at module level, outside the
+`SIMULATE_HARDWARE` guard that shields every other hardware import
+(`RPi.GPIO`/`board`/`busio`/`adafruit_bno08x`/`adafruit_mcp230xx`). On
+this Pi it\'s a non-issue (`smbus2` is installed), which is why all 113
+tests pass here --- but on a machine without it (a laptop, CI), even
+`WILLY_SIMULATE=1` would fail to import the app at all. Not yet fixed
+as of this doc update; tracked as open work.
+
+13.2 Software Control-Priority / Arbitration (as-built, 2026-08-08 ---
+was \"proposed\"; now literally implemented in `safety.py`)
 
   -----------------------------------------------------------------------
   **Priority**      **Source**        **Can command**   **Override rule**
@@ -1433,8 +1553,32 @@ adjust)
 
 Battery-threshold transitions (one-way toward safer states until voltage
 recovers above the next threshold + 0.2V hysteresis): 11.4V → warn;
-10.8V → return-to-home; 10.5V → SAFE_MODE (motion stop, arm park); 10.2V
-→ controlled shutdown.
+10.8V → return-to-home; 10.5V → SAFE_MODE (motion stop); 10.2V →
+controlled shutdown. These four values are exactly
+`config.BAT_WARN_V`/`BAT_RTH_V`/`BAT_SAFE_V`/`BAT_SHUTDOWN_V` ---
+verified live 2026-08-08 (`battery_volts=3.16V` correctly forced
+`SHUTDOWN` with the base intentionally powered off, first live exercise
+of this path).
+
+**As-built corrections (2026-08-08):** row 1 (E-stop) is still not
+software-observable at all --- no GPIO sense pin exists, so software
+cannot detect or react to it; don\'t read this row as implemented. Row 2
+conflates two different things: there is no configured systemd watchdog
+timeout (§13.1) that could trigger a stop on its own; what actually
+enforces \"stop motion\" is `safety.py::SafetyController.
+emergency_stop()`, called from `brain.py` on a tilt fault, a sustained
+IMU/encoder/current-sensor fault (`SENSOR_FAULT`, added 2026-08-07), or
+battery shutdown/safe tier --- a real, tested, now live-verified
+software safety layer, just not the OS-level watchdog this row implies.
+\"Park arm\" is not implemented on any fault path --- the arm is
+centered once at startup (`brain.py`\'s `start()`) and never
+repositioned by `emergency_stop()` or any FSM fault state; only the
+drive base is braked. The one thing genuinely new and correct in this
+table: `approve_motion()` (`safety.py`) is the literal, single,
+independently-unit-tested authoritative gate every motion source (the
+reactive FSM, `RetrievalTask`, `MappingSession`, `Navigator`, and any
+AI-proposed action) must pass through --- this row\'s \"normal control\"
+language for priority 4 undersells how hard that boundary now is.
 
 Platform constraints shaping software design: no depth sensor (3D
 position from known-object-size + sonar, not a range camera); the front
@@ -1466,6 +1610,22 @@ per step is only \~59% end-to-end --- each stage should be built and
 tuned to a demoable milestone independently, with per-stage retry/abort,
 before chaining.
 
+**As-built update (2026-08-08):** layer (3), behavior sequencing, has a
+real milestone-1 foundation now: `world_model.py` (persistent
+room/object/landmark/route/obstacle store), `mapping.py`
+(`MappingSession`, voice-triggered, records vision detections into the
+world model while active), and `navigation.py` (`Navigator`/`Mission`,
+a `NAVIGATE` FSM state that resolves and drives a route through
+`safety.py`\'s gate). All three are explicitly milestone-1, not SLAM ---
+dead-reckoning odometry only (no slip correction, no IMU fusion), no
+room-identification heuristic yet, and a straight-line fallback when no
+route graph is known. `retrieval_task.py`\'s `LOCALIZE/APPROACH/GRASP/
+VERIFY/DELIVER/AWAIT_CONFIRM` sub-FSM (pre-existing, v2.2) already
+implements most of this worked example\'s per-stage-retry structure ---
+its own remaining gaps are hardware calibration (no per-joint IK, no
+tactile hand-off sensor), not missing architecture. See
+`docs/WildWilly_Subsystem_Status.md` for the full per-module breakdown.
+
 13.4 Persistence & Network Memory (WD My Cloud)
 
 Principle: local-first, network-synced, never network-dependent --- a
@@ -1482,14 +1642,37 @@ LAN-only, SMB2/3 only (not SMB1), dedicated share user, credentials in a
 InfluxDB/Grafana for history/graphs, kept separate from the file-sync
 path.
 
+**As-built status (2026-08-08):** none of the WD My Cloud/rsync/SMB
+sync described above has been built --- this section is still a
+roadmap, not yet implemented. What *is* real: `storage.py::
+resolve_root()` makes the four data roots
+(`WILLY_DATA_ROOT`/`MAP_ROOT`/`MEMORY_ROOT`/`LOG_ROOT`) genuinely
+configurable via environment variable instead of three independent
+hardcoded `__file__`-relative paths (`memory_store.py`/`world_model.py`/
+`logsetup.py` previously each computed their own). Confirmed via `df`/
+`mount` this unit has no physical SSD/SD split yet --- all four roots
+currently resolve to the same microSD card. `check_storage()` folds a
+startup availability/permission check into `brain.py`\'s self-test gate
+(a bad mount now blocks motion the same way a missing sensor already
+does). `MemoryStore`/`WorldModel` also now survive a corrupted database
+file (a real failure mode after an unclean power-loss shutdown) ---
+caught, moved aside (never deleted), fresh store started, verified
+2026-08-08 against a real garbage file on this Pi.
+
 14\. Safety Architecture
 
 Layered: 30A ATC main fuse, per-rail branch fuses, dual per-pack BMS,
 FQP27P06 reverse-polarity FET, P6KE15A TVS, and a physical latching
 E-stop (NC mushroom) cutting the 12V bus --- INSTALLED (2026-07-31);
 functional test pending as part of first-power-on commissioning (§21.1).
-500ms software watchdog → SAFE_MODE. Switch 2 provides a separate
-Pi-only cutoff (§6.6).
+Switch 2 provides a separate Pi-only cutoff (§6.6). **As-built correction
+(2026-08-08): there is no 500ms software watchdog** --- the deployed
+`willy-rover.service` unit has no `WatchdogSec=` directive (§13.1); the
+real software safety layer is `safety.py::SafetyController.
+emergency_stop()`, triggered by tilt/sustained-sensor-fault/battery
+tiers, not a systemd watchdog timeout. See §14.1/§14.2\'s own
+corrections below --- most of both tables describe intended, not
+built, behavior.
 
 14.1 Hazard Response Matrix
 
@@ -1522,6 +1705,20 @@ Pi-only cutoff (§6.6).
   (10.2V)                             shutdown          packs
   -----------------------------------------------------------------------
 
+**As-built corrections (2026-08-08):** only the bottom two rows (E-stop,
+battery critical) are real. \"Pi undervoltage\" and both overcurrent
+rows are **not implemented** --- `CurrentMonitor.is_healthy`
+(`sensors.py`) is read-recency-only, no threshold on the actual
+current/voltage value exists anywhere in code (§8.5 has the full
+detail); don\'t treat these three rows as built. \"IMU missing\"\'s
+actual response is stronger than \"disable autonomy, allow limited
+manual\" --- a sustained (>1s) IMU fault now forces a full
+`emergency_stop()` and the `SENSOR_FAULT` FSM state (added
+2026-08-07), same as encoder failure (also corrected here, not a
+separate \"stop affected drive mode\" --- it\'s the same `SENSOR_FAULT`
+path). There is no partial/\"limited manual\" mode anywhere in the
+code.
+
 14.2 Command-Loss & Fail-Safe Behavior
 
   -----------------------------------------------------------------------
@@ -1544,6 +1741,19 @@ Pi-only cutoff (§6.6).
   Low-voltage shutdown    ADS1115 A0 \< 10.2V     controlled shutdown,
                                                   park arm
   -----------------------------------------------------------------------
+
+**As-built corrections (2026-08-08):** row 1 describes a remote
+command-link that doesn\'t exist in the codebase at all (no teleop/RC
+receive path anywhere) --- this is unbuilt, not just untested. Row 2\'s
+\"systemd watchdog\" doesn\'t exist either (§13.1/§14); what actually
+restarts a crashed process is `Restart=on-failure`/`RestartSec=5` ---
+real, but reacts to the process exiting, not to a hang. \"Arm holds
+position\" and \"park arm\" (rows 2 and 5) are both aspirational --- no
+fault path in `brain.py` repositions the arm; only the drive base is
+braked (same correction as §14.1). Startup interlock (row 3) and E-stop
+(row 4, still not software-observable) and low-voltage shutdown\'s
+detection/trigger (row 5, minus \"park arm\") are all real and, as of
+2026-08-08, live-verified on hardware.
 
 Default motor state is DISABLED --- motion requires an active, valid
 command; loss of command always fails to stop, never to run.
@@ -2296,7 +2506,10 @@ fighting) and cut PWM if seen.
 20.7 IMU
 
 Mount the BNO085 level; run the SH-2 calibration; confirm INT (GP15)
-toggles on report-ready and RST (MCP23017 spare pin) resets cleanly.
+toggles on report-ready (still not done as of 2026-08-08 --- INT is
+unused in software) and RST (MCP23017 port B bit 4) resets cleanly ---
+this half done 2026-08-08: `sensors.py::IMU` now drives a real
+`hard_reset()` pulse through it and it was verified live (§8.2).
 
 21\. Validation and Test Plan
 
@@ -3008,4 +3221,55 @@ source file if the granular audit trail is ever needed.
                                                   assembly clasped to main
                                                   frame. Two physical
                                                   milestones logged.
+
+  6.0.8                   2026-08-08              As-built pass over §§5.2,
+                                                  8.2, 8.5, 13.1--13.4,
+                                                  14--14.2, 20.7, correcting
+                                                  drift against the
+                                                  \"WildWilly Claude Fix\"
+                                                  software architecture
+                                                  (Phases 1--6, landed
+                                                  2026-08-07/08) that this
+                                                  doc predated. Key
+                                                  corrections: no configured
+                                                  systemd `WatchdogSec`
+                                                  (500ms claim was never
+                                                  deployed); real FSM states
+                                                  and `SafetyController.
+                                                  emergency_stop()`
+                                                  documented in place of
+                                                  \"ACTIVE/SAFE_MODE\" and
+                                                  \"disable autonomy, allow
+                                                  limited manual\"; servo/
+                                                  motor-rail overcurrent and
+                                                  Pi-undervoltage hazard rows
+                                                  marked not implemented (no
+                                                  numeric current/voltage
+                                                  trip threshold exists in
+                                                  code); \"park arm\" on
+                                                  fault marked not
+                                                  implemented; remote
+                                                  command-link timeout marked
+                                                  unbuilt (no teleop path
+                                                  exists); BNO085 RST pin
+                                                  bit-number confirmed
+                                                  (MCP23017 port B bit 4) and
+                                                  wired in software for the
+                                                  first time; GitHub push
+                                                  status corrected (working,
+                                                  not parked); WD My Cloud
+                                                  sync marked roadmap-only,
+                                                  `storage.py`\'s real
+                                                  configurable-root
+                                                  implementation documented
+                                                  in its place; world
+                                                  model/mapping/navigation
+                                                  milestone-1 status added to
+                                                  the capability roadmap. See
+                                                  `docs/
+                                                  WildWilly_Claude_Fix_Gap_Analysis.md`
+                                                  and `docs/
+                                                  WildWilly_Subsystem_Status.md`
+                                                  for the full detail behind
+                                                  each correction.
   ----------------------------------------------------------------------------
