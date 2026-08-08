@@ -1,4 +1,5 @@
-import os,sys,tempfile,stat
+import os,sys,tempfile
+from unittest.mock import patch
 sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from storage import resolve_root,check_storage,_REPO_DIR
 
@@ -37,13 +38,13 @@ def test_check_storage_creates_missing_dir():
         assert ok is True and os.path.isdir(target)
 
 def test_check_storage_reports_unwritable_dir():
+    # chmod-based denial doesn't work when the test runs as root (root bypasses file permission
+    # checks entirely, silently turning this into a false-pass) -- found 2026-08-08 via an external
+    # audit. A mocked open() failure is deterministic regardless of which user runs the suite.
     with tempfile.TemporaryDirectory() as d:
-        os.chmod(d,stat.S_IREAD|stat.S_IEXEC)  # read+execute only, no write
-        try:
+        with patch('builtins.open',side_effect=PermissionError('mocked: no write access')):
             ok,problems=check_storage({'data':d})
-            assert ok is False and any('data' in p for p in problems)
-        finally:
-            os.chmod(d,stat.S_IRWXU)  # restore so TemporaryDirectory's own cleanup can remove it
+        assert ok is False and any('data' in p for p in problems)
 
 def test_check_storage_multiple_roots_all_ok():
     with tempfile.TemporaryDirectory() as d:
@@ -52,12 +53,10 @@ def test_check_storage_multiple_roots_all_ok():
         assert ok is True and problems==[] and all(os.path.isdir(p) for p in roots.values())
 
 def test_check_storage_reports_path_that_cannot_be_created():
+    # Same root-fragility issue as the unwritable-dir test above -- mocked os.makedirs() failure
+    # instead of a chmod-locked parent directory.
     with tempfile.TemporaryDirectory() as d:
-        parent=os.path.join(d,'locked_parent')
-        os.makedirs(parent); os.chmod(parent,stat.S_IREAD|stat.S_IEXEC)
-        target=os.path.join(parent,'child')
-        try:
+        target=os.path.join(d,'locked_parent','child')
+        with patch('os.makedirs',side_effect=OSError('mocked: cannot create')):
             ok,problems=check_storage({'data':target})
-            assert ok is False and len(problems)==1
-        finally:
-            os.chmod(parent,stat.S_IRWXU)
+        assert ok is False and len(problems)==1
