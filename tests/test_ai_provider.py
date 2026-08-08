@@ -191,3 +191,33 @@ def test_cloud_provider_unavailable_never_reaches_network():
     p._post_anthropic=_should_not_be_called
     result=p._call('hello')
     assert result.parse_success is False and 'not configured' in result.reason
+
+# --- AI safety telemetry (2026-08-08 external code audit's P2 recommendation) ---
+# AI_REQUEST/AI_RESULT/AI_REJECTED/AI_UNAVAILABLE, alongside the pre-existing AI_TIMEOUT, so it's
+# easy to reconstruct what the AI was asked, what it returned, and what got rejected -- without
+# needing a real network call, same monkeypatch pattern as the timeout test above.
+
+def test_unavailable_call_logs_ai_unavailable(caplog):
+    p=CloudAIProvider(); p._enabled=False
+    with caplog.at_level('INFO','ai_provider'):
+        p._call('hello')
+    assert any('AI_UNAVAILABLE' in r.message for r in caplog.records)
+
+def test_successful_call_logs_ai_request_and_ai_result(caplog):
+    p=CloudAIProvider(); p._enabled=True; p._key='test-key-not-real'
+    p._post_anthropic=lambda system,messages:'{"confidence":0.9}'
+    with caplog.at_level('INFO','ai_provider'):
+        result=p._call('hello',schema={'confidence':(int,float)})
+    assert result.parse_success is True
+    assert any('AI_REQUEST' in r.message for r in caplog.records)
+    assert any('AI_RESULT' in r.message for r in caplog.records)
+    assert not any('AI_REJECTED' in r.message for r in caplog.records)
+
+def test_unparseable_response_logs_ai_rejected_not_ai_result(caplog):
+    p=CloudAIProvider(); p._enabled=True; p._key='test-key-not-real'
+    p._post_anthropic=lambda system,messages:'not json at all'
+    with caplog.at_level('INFO','ai_provider'):
+        result=p._call('hello',schema={'confidence':(int,float)})
+    assert result.parse_success is False
+    assert any('AI_REJECTED' in r.message for r in caplog.records)
+    assert not any('AI_RESULT' in r.message for r in caplog.records)

@@ -187,7 +187,9 @@ class CloudAIProvider(AIProvider):
 
     def _call(self,prompt,system=None,schema=None,history=None):
         if not self.available:
+            log_event(log,'AI_UNAVAILABLE',severity='info',subsystem='ai_provider',provider='cloud')
             return AIResult(False,0.0,None,False,None,'cloud AI not configured/enabled')
+        log_event(log,'AI_REQUEST',severity='info',subsystem='ai_provider',provider='cloud')
         messages=(history or [])+[{'role':'user','content':prompt}]
         try:
             txt=self._post_anthropic(system,messages)
@@ -198,7 +200,14 @@ class CloudAIProvider(AIProvider):
             else:
                 log.info(f'Cloud AI call failed (expected if offline/quota): {type(e).__name__}: {e}')
             return AIResult(False,0.0,None,False,None,f'{type(e).__name__}: {e}')
-        return _parse_response(txt,schema)
+        result=_parse_response(txt,schema)
+        if not result.parse_success:
+            log_event(log,'AI_REJECTED',severity='warning',subsystem='ai_provider',
+                      provider='cloud',reason=result.reason)
+        else:
+            log_event(log,'AI_RESULT',severity='info',subsystem='ai_provider',provider='cloud',
+                      intent_confidence=result.intent_confidence,action_confidence=result.action_confidence)
+        return result
 
 class LocalAIProvider(AIProvider):
     # Wraps llama_cpp.Llama, moved out of voice.py's __init__/_load_models() so it goes through
@@ -221,7 +230,9 @@ class LocalAIProvider(AIProvider):
     def _call(self,prompt,system=None,schema=None,history=None):
         # history unused -- local interpretation is single-turn, same as the code this replaces.
         if not self.available:
+            log_event(log,'AI_UNAVAILABLE',severity='info',subsystem='ai_provider',provider='local')
             return AIResult(False,0.0,None,False,None,'local LLM not loaded')
+        log_event(log,'AI_REQUEST',severity='info',subsystem='ai_provider',provider='local')
         full_prompt=f'{system}\n{prompt}' if system else prompt
         try:
             out=self._llm(full_prompt,max_tokens=200,stop=['\n\n'])
@@ -229,4 +240,11 @@ class LocalAIProvider(AIProvider):
         except Exception as e:
             log.info(f'Local LLM call failed: {type(e).__name__}: {e}')
             return AIResult(False,0.0,None,False,None,f'{type(e).__name__}: {e}')
-        return _parse_response(txt,schema)
+        result=_parse_response(txt,schema)
+        if not result.parse_success:
+            log_event(log,'AI_REJECTED',severity='warning',subsystem='ai_provider',
+                      provider='local',reason=result.reason)
+        else:
+            log_event(log,'AI_RESULT',severity='info',subsystem='ai_provider',provider='local',
+                      intent_confidence=result.intent_confidence,action_confidence=result.action_confidence)
+        return result
