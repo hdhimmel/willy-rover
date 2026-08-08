@@ -43,7 +43,7 @@ plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code 
 | § | Topic | Status | Finding |
 |---|---|---|---|
 | 17 | Stair-climbing prep | **MISSING (expected)** | No `STAIR_*` states exist. Plan explicitly says not to build this without hardware/testing support and marks it Priority 2 lowest — absence here is correct, not a gap to close now. |
-| 18 | Configuration cleanup | **PARTIAL, already unusually rigorous** | Config values already carry dated calibration notes and explicit master-doc section citations (e.g. a 2026-08-02 GPIO pin fix, a 2026-08-02 battery-divider recalibration, per-value "confirmed/unconfirmed" flags). Credentials are correctly kept out of `config.py` (env var names/paths only). One thing worth explicit owner confirmation: `ENABLE_CLOUD_AI=True` and `ENABLE_EMAIL=True` are both default-on — each cites a specific FR number and a dated verification note, so this reads as an intentional, documented decision, not an oversight, but §18 is unusually blunt about not defaulting these on without the engineering package's explicit say-so. |
+| 18 | Configuration cleanup | **DONE** (owner sign-off 2026-08-08) | Config values already carry dated calibration notes and explicit master-doc section citations (e.g. a 2026-08-02 GPIO pin fix, a 2026-08-02 battery-divider recalibration, per-value "confirmed/unconfirmed" flags). Credentials are correctly kept out of `config.py` (env var names/paths only). The one item needing explicit owner confirmation — `ENABLE_CLOUD_AI=True`/`ENABLE_EMAIL=True` both default-on — was put to the owner directly on 2026-08-08: **both confirmed to stay `True`**, no code change. This closes the last open item in §18. |
 | 19 | Hardware abstraction | **DONE** (2026-08-07) for motors/sensors/arm; camera/display out of scope | `config.SIMULATE_HARDWARE` (env var `WILLY_SIMULATE=1`) gates every real I2C/GPIO open in `motors.py`/`arm.py`/`sensors.py`/`brain.py`'s own I2C self-test scan, both the module-level conditional imports and each class's construction/`_update()`. New `hw_sim.py` holds the two shared mocks (`SimMotor`, `SimServoBank`) that satisfy `DriveBase`/`Steering`/`Arm`'s existing interfaces unchanged — no caller-visible API change. `ObjectDetector` (`vision.py`) was already safely gated behind `ENABLE_OBJECT_RETRIEVAL` and didn't need this. `display.py`'s pygame/Wayland init is **not** covered — out of scope (not one of §19's listed interfaces) and confirmed to still throw in its own background thread under simulation, non-fatally (daemon thread, doesn't block `RoverBrain.start()`). |
 | 20 | Testing | **DONE (milestone 1)** (2026-08-08) | 107 tests across 12 files, all off-hardware. Every item on §20's own checklist now has coverage except E-Stop (**N/A-HW**, no GPIO sense pin wired — correctly untestable) and encoder rollover (no rollover case exists — `Encoders`' counts are unbounded Python ints, not read from a fixed-width register, per `sensors.py`'s own comment). This update closed the three real gaps found by auditing that checklist: (1) `SafetyController` itself (not just the pure `approve_motion()`) had zero tests — `tests/test_safety_controller.py` (10) now covers command timeout/cancellation, mid-flight obstacle abort, `emergency_stop()`. (2) Corrupted-database handling wasn't just untested, it was **unhandled** — `MemoryStore`/`WorldModel.__init__` would raise `sqlite3.DatabaseError` straight out of `RoverBrain.__init__`, crashing the whole service on a corrupted `memory.db`/`world_model.db` (a real failure mode after an unclean shutdown). Both now catch it, move the corrupted file aside (never deleted), and start fresh — verified against a real garbage file before committing, not just the unit tests (`tests/test_memory_store.py`, `tests/test_world_model.py`). (3) AI timeout was only accidentally covered by a generic exception handler — now pinned down explicitly (`tests/test_ai_provider.py`). Also added: battery-tier hysteresis (`tests/test_brain_battery.py`) — real safety-relevant logic that had only ever been exercised indirectly through full sim construction. |
 | 21 | Logging / diagnostics | **DONE (milestone 1)** (2026-08-08) | New `logsetup.log_event(logger,event,severity='info',**fields)`: the exact `EVENT=<NAME>` tag §21 asks for (`grep 'EVENT=IMU_FAULT' willy.log`-able), applied at real fault/abort call sites — `brain.py::_check_health()`'s per-subsystem transitions (`IMU_FAULT`/`ENCODERS_FAULT`/`CURRENT_FAULT`/`BATTERY_ADC_FAULT`), all three battery-tier branches (`LOW_BATTERY`, tagged `safe_mode`/`shutdown`/`return_to_home`), `safety.py`'s mid-flight obstacle abort (`OBSTACLE_STOP`), `navigation.py`'s `Navigator.abort()` (`NAVIGATION_ABORT`), and `ai_provider.py`'s `CloudAIProvider._call()` specifically when the exception is a real `TimeoutError` (`AI_TIMEOUT`, not every failure — offline/quota errors stay a plain log line, not mislabeled as a timeout). Deliberately **not** a wholesale reformat into JSON — every existing free-text `log.info`/`log.warning` call elsewhere is unchanged; a full structured-logging rewrite across ~15 files would be a much larger, riskier change for no benefit proportional to the risk. `ESTOP_ACTIVE` stays untagged (**N/A-HW**, no GPIO sense pin exists to observe it). `WATCHDOG_FAULT` stays untagged too — architecturally can't self-log: by the time systemd's watchdog fires, the process is being killed/restarted, not running code. `MOTOR_FAULT` has no real call site to tag — `Encoders.stalled()` exists but is never actually called anywhere in production code (confirmed via repo-wide grep), and no overcurrent trip threshold exists per `config.py`'s own long-standing comment; fabricating a call site for an example event with no underlying detection would be worse than leaving it out. "Important safety events must be persistent" was already satisfied by the existing rotating file handler (FR-1100-003) — no new persistence mechanism was needed. 3 new tests (`tests/test_logsetup.py`). `diagnostics.py`'s existing solid self-test is unchanged. |
@@ -52,8 +52,8 @@ plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code 
 ## Summary
 
 Out of 21 substantive sections (excluding §1/23-27, which are process/meta):
-- **DONE:** 13 (§4 watchdog — corrected 2026-08-08, was mismarked PARTIAL, §8 odometry, §9 world model milestone 1, §10 mapping/learning mode milestone 1, §11 navigation layer milestone 1, §13 memory architecture milestone 1, §14 AI/LLM interface milestone 1, §15 AI confidence milestone 1, §16 retrieval modulo hardware-calibration gaps, §19 hardware abstraction for motors/sensors/arm — camera/display out of scope, §20 testing milestone 1, §21 structured logging milestone 1, §22 documentation milestone 1)
-- **PARTIAL:** 3 (§6, §12, §18)
+- **DONE:** 14 (§4 watchdog — corrected 2026-08-08, was mismarked PARTIAL, §8 odometry, §9 world model milestone 1, §10 mapping/learning mode milestone 1, §11 navigation layer milestone 1, §13 memory architecture milestone 1, §14 AI/LLM interface milestone 1, §15 AI confidence milestone 1, §16 retrieval modulo hardware-calibration gaps, §18 configuration cleanup — owner sign-off 2026-08-08, §19 hardware abstraction for motors/sensors/arm — camera/display out of scope, §20 testing milestone 1, §21 structured logging milestone 1, §22 documentation milestone 1)
+- **PARTIAL:** 2 (§6, §12)
 - **MISSING:** 1 (§17-expected)
 - **CONFLICT** (actively does what the plan says not to): 2 (§2, §3 — see note)
 - **N/A-HW** (blocked on hardware, not code): 2 (§5, §7)
@@ -271,3 +271,42 @@ optimization as the old code comment claimed. Verified live on the actual Pi (`W
 constructed together in `brain.py`'s exact init order, both report healthy, no register-write
 interference on the shared MCP23017 chip. This is a real fix to a previously-open lead, not part of
 the plan's own numbered sections — logged here since it's adjacent to §4/§8.2 hardware notes.
+
+## Update (2026-08-08, same day): §18 closed; first-ever live `RoverBrain.run()`; one live bug found + fixed
+
+Owner confirmed both `ENABLE_CLOUD_AI`/`ENABLE_EMAIL` stay `True` — §18 moved to **DONE** above
+(tally now DONE:14, PARTIAL:2 (§6,§12), MISSING:1 (§17), CONFLICT:2 (§2/§3, stale), N/A-HW:2
+(§5/§7)). Only §17 (correctly hardware-gated), §6/§12 (documented, low-stakes partials), and Phase
+7 (hardware-calibration gaps per §16's own notes) remain — nothing else code-shaped is open.
+
+Separately, and much bigger: the owner reconnected VCC to the arm's PCA9685 board (the physical
+root cause of the `0x43` "No I2C device" crash that had blocked every restart since 08-07 —
+confirmed by `i2cdetect`: `0x43` went from silent to acking, nothing else changed). `willy-rover.
+service` came up **`active (running)`** for the first time since Phase 1 shipped — the
+live-verification gap flagged as "seven phases wide" earlier today is now closed for
+construction/init at least; a real `RoverBrain.run()` is executing on hardware.
+
+With the base intentionally powered off, `battery_volts` correctly read ~3.17V (confirmed by
+owner: expected, not a sensor fault) and the battery-shutdown safety path engaged exactly as
+designed — first live exercise of that path. It surfaced one real bug: `safety.py::
+emergency_stop()`'s own `log.warning()` had no throttle, and `brain.py` calls it every tick while
+a fault persists, so the log filled at ~20Hz indefinitely (same bug class as `516d1ec`'s
+`memory.save_all_now()` fix, just for a log line, and missed by that pass since it lives in
+`safety.py` not `brain.py`). Fixed same session: throttled to `ESTOP_LOG_INTERVAL_S` (5s) via a
+last-logged timestamp, `brake()` itself untouched — still fires every call. 2 new tests
+(`tests/test_safety_controller.py`).
+
+Owner also asked about adding a new low-current emergency-stop trigger on the Pi INA260 rail
+(current, not the voltage the master doc's §5.5 undervoltage row describes) — explicitly deferred
+("disable emergency stop for now", clarified via AskUserQuestion to mean *skip this new feature*,
+not disable the real `SafetyController.emergency_stop()` safety gate). Not built this session;
+`CurrentMonitor.is_healthy` remains read-recency-only, unchanged. Needs before attempting: which
+rail(s), a real amp threshold (no numeric overcurrent value exists anywhere in the docs per
+`sensors.py`'s own long-standing comment), and whether it should mean the harder immediate
+`emergency_stop()` brake or the master doc's distinct SAFE_MODE behavior.
+
+**How to apply now:** this is the first time any of Phase 1 through §22's code has run live —
+init, the safety FSM, and the battery-shutdown path are now real-hardware-verified, not just
+sim-tested. Motion itself (forward/reverse/turn through `SafetyController.request()`, `NAVIGATE`,
+retrieval, mapping) is still **not** live-verified — nothing in this session commanded the drive
+base. That's the next real milestone once the battery/base situation allows it.
