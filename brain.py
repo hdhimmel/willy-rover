@@ -1,4 +1,5 @@
-import time,socket,os,board,busio,config,logsetup
+import time,socket,os,config,logsetup
+if not config.SIMULATE_HARDWARE: import board,busio
 from motors import DriveBase,Steering
 from sensors import SonarArray,IMU,ADC,Encoders,CurrentMonitor
 from display import WillyFace
@@ -93,14 +94,17 @@ class RoverBrain:
     def _self_test(self):
         # FR-100-002/003/004: no motion permitted until this passes (§13.1/§14.2 INIT->IDLE gate).
         problems=[]
-        try:
-            i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
-            while not i2c.try_lock(): pass
-            found=set(i2c.scan()); i2c.unlock()
-            missing=_EXPECTED_I2C-found
-            if missing: problems.append('I2C missing: '+','.join(hex(a) for a in sorted(missing)))
-        except Exception as e:
-            problems.append(f'I2C scan failed: {e}')
+        if config.SIMULATE_HARDWARE:
+            pass  # no real bus to scan — every sim class already reports itself healthy below
+        else:
+            try:
+                i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
+                while not i2c.try_lock(): pass
+                found=set(i2c.scan()); i2c.unlock()
+                missing=_EXPECTED_I2C-found
+                if missing: problems.append('I2C missing: '+','.join(hex(a) for a in sorted(missing)))
+            except Exception as e:
+                problems.append(f'I2C scan failed: {e}')
         time.sleep(0.5)  # let sensor threads take a first reading (current monitor is the slowest, 10Hz)
         if not self.imu.is_healthy: problems.append('IMU not reporting')
         if self.adc.battery_volts<=0: problems.append('battery ADC not reporting')

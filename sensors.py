@@ -1,17 +1,20 @@
-import RPi.GPIO as GPIO
 import smbus2, time, math, threading, statistics, logging, config
-import board, busio
-from adafruit_bno08x.i2c import BNO08X_I2C
-from adafruit_bno08x import BNO_REPORT_ROTATION_VECTOR
+if not config.SIMULATE_HARDWARE:
+    import RPi.GPIO as GPIO
+    import board, busio
+    from adafruit_bno08x.i2c import BNO08X_I2C
+    from adafruit_bno08x import BNO_REPORT_ROTATION_VECTOR
 
 log=logging.getLogger('sensors')
 
 class Sonar:
     def __init__(self,trig,echo):
         self.trig=trig; self.echo=echo
-        GPIO.setup(trig,GPIO.OUT,initial=GPIO.LOW); GPIO.setup(echo,GPIO.IN)
+        if not config.SIMULATE_HARDWARE:
+            GPIO.setup(trig,GPIO.OUT,initial=GPIO.LOW); GPIO.setup(echo,GPIO.IN)
         self._lock=threading.Lock(); self._last=999.0
     def _ping(self):
+        if config.SIMULATE_HARDWARE: return 200.0  # simulated "clear path" reading
         with self._lock:
             GPIO.output(self.trig,GPIO.LOW); time.sleep(0.000002)
             GPIO.output(self.trig,GPIO.HIGH); time.sleep(0.000010)
@@ -31,7 +34,7 @@ class Sonar:
 
 class SonarArray:
     def __init__(self):
-        GPIO.setmode(GPIO.BCM); GPIO.setwarnings(False)
+        if not config.SIMULATE_HARDWARE: GPIO.setmode(GPIO.BCM); GPIO.setwarnings(False)
         self.front=Sonar(config.SONAR_FRONT_TRIG,config.SONAR_FRONT_ECHO)
         self.left=Sonar(config.SONAR_LEFT_TRIG,config.SONAR_LEFT_ECHO)
         self.right=Sonar(config.SONAR_RIGHT_TRIG,config.SONAR_RIGHT_ECHO)
@@ -57,13 +60,17 @@ class IMU:
     # (MCP23017 spare pin) are wired per §8.2 but unused here — the library works over I2C
     # polling alone; wiring them up is a latency optimization, not required for correctness.
     def __init__(self):
-        self._i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
-        self._bno=BNO08X_I2C(self._i2c,address=config.IMU_ADDR)
-        self._bno.enable_feature(BNO_REPORT_ROTATION_VECTOR)
+        if not config.SIMULATE_HARDWARE:
+            self._i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
+            self._bno=BNO08X_I2C(self._i2c,address=config.IMU_ADDR)
+            self._bno.enable_feature(BNO_REPORT_ROTATION_VECTOR)
         self._pitch=0.0; self._roll=0.0
         self._lock=threading.Lock(); self._last_ok=0.0
         self._running=False; self._thread=None
     def _update(self):
+        if config.SIMULATE_HARDWARE:
+            with self._lock: self._pitch=0.0; self._roll=0.0  # simulated level chassis
+            self._last_ok=time.perf_counter(); return
         i,j,k,w=self._bno.quaternion
         roll=math.degrees(math.atan2(2*(w*i+j*k),1-2*(i*i+j*j)))
         pitch=math.degrees(math.asin(max(-1.0,min(1.0,2*(w*j-k*i)))))
@@ -101,10 +108,14 @@ class ADC:
     _MUX={0:0x4000,1:0x5000,2:0x6000,3:0x7000}  # AINx vs GND
     _LSB=4.096/32768  # volts/bit at this PGA setting
     def __init__(self,bus=1):
-        self._bus=smbus2.SMBus(bus)
+        self._bus=None if config.SIMULATE_HARDWARE else smbus2.SMBus(bus)
         self._lock=threading.Lock(); self._bat_raw=0
         self._running=False; self._thread=None
     def read_channel(self,ch):
+        if config.SIMULATE_HARDWARE:
+            # simulated healthy mid-charge pack (§18: not a real 100%/full-charge claim, just a
+            # safe-above-BAT_WARN_V value so sim-mode brain.py doesn't sit in a battery fault state)
+            return int(12.0*config.BATTERY_DIVIDER_SCALE/self._LSB)
         with self._lock:
             cfg=self._CONFIG_BASE|self._MUX[ch]
             self._bus.write_i2c_block_data(config.ADS_ADDR,self._POINTER_CONFIG,[(cfg>>8)&0xFF,cfg&0xFF])
@@ -158,17 +169,25 @@ class Encoders:
     _IODIRA=0x00; _IODIRB=0x01; _GPPUA=0x0C; _GPPUB=0x0D; _GPIOA=0x12; _GPIOB=0x13
     _QTABLE=[0,-1,1,0, 1,0,0,-1, -1,0,0,1, 0,1,-1,0]  # [old_state<<2|new_state] -> delta
     def __init__(self,bus=1):
-        self._bus=smbus2.SMBus(bus)
-        self._bus.write_byte_data(config.ENCODER_ADDR,self._IODIRA,0xFF)
-        self._bus.write_byte_data(config.ENCODER_ADDR,self._IODIRB,0xFF)
-        self._bus.write_byte_data(config.ENCODER_ADDR,self._GPPUA,0xFF)
-        self._bus.write_byte_data(config.ENCODER_ADDR,self._GPPUB,0xFF)
+        if config.SIMULATE_HARDWARE:
+            self._bus=None
+        else:
+            self._bus=smbus2.SMBus(bus)
+            self._bus.write_byte_data(config.ENCODER_ADDR,self._IODIRA,0xFF)
+            self._bus.write_byte_data(config.ENCODER_ADDR,self._IODIRB,0xFF)
+            self._bus.write_byte_data(config.ENCODER_ADDR,self._GPPUA,0xFF)
+            self._bus.write_byte_data(config.ENCODER_ADDR,self._GPPUB,0xFF)
         self._counts=dict.fromkeys(config.ENCODER_PINS,0)
         self._rate=dict.fromkeys(config.ENCODER_PINS,0.0)
         self._state=dict.fromkeys(config.ENCODER_PINS,0)
         self._last_counts=dict(self._counts); self._last_rate_t=time.perf_counter()
         self._lock=threading.Lock(); self._running=False; self._thread=None; self._last_ok=0.0
     def _update(self):
+        if config.SIMULATE_HARDWARE:
+            # No simulated physics loop drives wheel rotation — counts simply hold their current
+            # value each tick. Enough to exercise is_healthy/stalled()/the odometry wiring path
+            # off real hardware; not a claim that simulated counts track a simulated motion.
+            self._last_ok=time.perf_counter(); return
         a=self._bus.read_byte_data(config.ENCODER_ADDR,self._GPIOA)
         b=self._bus.read_byte_data(config.ENCODER_ADDR,self._GPIOB)
         with self._lock:
@@ -216,7 +235,7 @@ class CurrentMonitor:
     _REG_CURRENT=0x01; _REG_VOLTAGE=0x02; _REG_POWER=0x03  # 1.25mA/bit, 1.25mV/bit, 10mW/bit
     _RAILS={'servo':config.INA260_SERVO_ADDR,'pi':config.INA260_PI_ADDR,'motor':config.INA260_MOTOR_ADDR}
     def __init__(self,bus=1):
-        self._bus=smbus2.SMBus(bus)
+        self._bus=None if config.SIMULATE_HARDWARE else smbus2.SMBus(bus)
         self._data={r:{'current_a':0.0,'voltage_v':0.0,'power_w':0.0} for r in self._RAILS}
         self._lock=threading.Lock(); self._running=False; self._thread=None; self._last_ok=0.0
     def _be16(self,addr,reg):
@@ -228,6 +247,10 @@ class CurrentMonitor:
                 self._be16(addr,self._REG_VOLTAGE)*0.00125,
                 self._be16(addr,self._REG_POWER)*0.01)
     def _update(self):
+        if config.SIMULATE_HARDWARE:
+            with self._lock:
+                for rail in self._RAILS: self._data[rail]={'current_a':0.5,'voltage_v':12.0,'power_w':6.0}
+            self._last_ok=time.perf_counter(); return
         for rail,addr in self._RAILS.items():
             cur,volt,pwr=self._read_rail(addr)
             with self._lock: self._data[rail]={'current_a':cur,'voltage_v':volt,'power_w':pwr}

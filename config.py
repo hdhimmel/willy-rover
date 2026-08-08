@@ -1,6 +1,15 @@
 # WildWilly Rover — Central Configuration v2
 # 180x125mm chassis · 5" 800x480 landscape display
 
+import os
+# §19 of docs/WildWilly_Claude_Fix_Implementation_Plan.md: every hardware-backed class in
+# motors.py/sensors.py/arm.py checks this at construction time and, when set, skips opening real
+# I2C/GPIO/SPI entirely in favor of an in-memory simulated stand-in with the same public
+# interface — this is what lets brain.py (and everything built on it) import and run off the
+# physical rover, per §20's testing requirements. Default OFF: the real hardware path is
+# unchanged unless this is explicitly requested.
+SIMULATE_HARDWARE=os.environ.get('WILLY_SIMULATE','0')=='1'
+
 DISPLAY_W=800; DISPLAY_H=480; DISPLAY_FPS=30; DISPLAY_ROTATE=0
 
 # Drive — 2x Adafruit FeatherWing #2927 MotorKit boards over I2C (§9, §1.3 master doc).

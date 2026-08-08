@@ -1,7 +1,9 @@
-import board, busio, config
-from adafruit_pca9685 import PCA9685
-
-_i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
+import config
+import hw_sim
+if not config.SIMULATE_HARDWARE:
+    import board, busio
+    from adafruit_pca9685 import PCA9685
+    _i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
 
 class Arm:
     # PCA9685 @0x43, CH0-6, base->gripper order (§11.1). No per-joint safe limits, preset poses,
@@ -13,7 +15,7 @@ class Arm:
              'gripper':config.ARM_GRIPPER}
     _PERIOD_US=1_000_000/config.SERVO_PWM_FREQ
     def __init__(self):
-        self._pca=PCA9685(_i2c,address=config.ARM_PCA_ADDR)
+        self._pca=hw_sim.SimServoBank() if config.SIMULATE_HARDWARE else PCA9685(_i2c,address=config.ARM_PCA_ADDR)
         self._pca.frequency=config.SERVO_PWM_FREQ
         self._pulse=dict.fromkeys(self._JOINTS,config.ARM_SERVO_CENTER_US)
     def _drive(self,joint,us):

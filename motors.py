@@ -1,14 +1,19 @@
-import time, threading, board, busio, config
-from adafruit_motorkit import MotorKit
-from adafruit_pca9685 import PCA9685
-
-_i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
+import time, threading, config
+import hw_sim
+if not config.SIMULATE_HARDWARE:
+    import board, busio
+    from adafruit_motorkit import MotorKit
+    from adafruit_pca9685 import PCA9685
+    _i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
 
 class DriveBase:
     _WHEELS=('lf','lm','lr','rf','rm','rr')
     def __init__(self):
-        kits={a:MotorKit(i2c=_i2c,address=a) for a in (config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR)}
-        self._motors={w:getattr(kits[a],f'motor{p}') for w,(a,p) in config.MOTOR_PORT.items()}
+        if config.SIMULATE_HARDWARE:
+            self._motors={w:hw_sim.SimMotor() for w in self._WHEELS}
+        else:
+            kits={a:MotorKit(i2c=_i2c,address=a) for a in (config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR)}
+            self._motors={w:getattr(kits[a],f'motor{p}') for w,(a,p) in config.MOTOR_PORT.items()}
         self._target=dict.fromkeys(self._WHEELS,0.0); self._actual=dict.fromkeys(self._WHEELS,0.0)
         self._lock=threading.Lock(); self.current_speed=0.0
         self._running=True
@@ -60,7 +65,7 @@ class Steering:
               'rm':config.STEER_RM,'lr':config.STEER_LR,'rr':config.STEER_RR}
     _PERIOD_US=1_000_000/config.SERVO_PWM_FREQ
     def __init__(self):
-        self._pca=PCA9685(_i2c,address=config.STEER_PCA_ADDR)
+        self._pca=hw_sim.SimServoBank() if config.SIMULATE_HARDWARE else PCA9685(_i2c,address=config.STEER_PCA_ADDR)
         self._pca.frequency=config.SERVO_PWM_FREQ
     def _set_pulse(self,channel,us):
         us=max(config.SERVO_MIN_US,min(config.SERVO_MAX_US,us))
