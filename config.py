@@ -251,3 +251,76 @@ ENABLE_LEARNING=True
 MEMORY_DB_PATH='memory.db'
 MEMORY_REPLAY_SIMILARITY_FLOOR=0.6  # FR-1900-003: below this, report mismatch rather than replay
 STUCK_TIMEOUT=3.0; BACK_UP_TIME=0.8; TURN_TIME_90=1.2; IDLE_TIMEOUT=30.0
+
+def validate():
+    """Configuration self-test (2026-08-08 external code audit's P2 item): config.py has grown
+    into the central hardware/software contract, large enough that a copy-paste or typo drift
+    (a duplicate address, a threshold quietly out of order) is a real risk and easy to miss by
+    reading the file top to bottom. Pure function, no hardware access -- returns a list of
+    problem strings (empty if clean). Deliberately NOT wired into brain.py::_self_test()'s
+    motion-blocking gate: unlike a missing sensor, a config problem found here doesn't mean the
+    robot can't safely hold still, and unilaterally turning validation on for a live safety gate
+    is an owner decision, not something to flip silently. Wired into diagnostics.py (read-only,
+    FR-1100-004) instead -- run `python3 diagnostics.py` to see current results."""
+    problems=[]
+
+    i2c_addrs={'ENCODER_ADDR':ENCODER_ADDR,'INA260_SERVO_ADDR':INA260_SERVO_ADDR,
+               'STEER_PCA_ADDR':STEER_PCA_ADDR,'ARM_PCA_ADDR':ARM_PCA_ADDR,
+               'INA260_PI_ADDR':INA260_PI_ADDR,'INA260_MOTOR_ADDR':INA260_MOTOR_ADDR,
+               'ADS_ADDR':ADS_ADDR,'IMU_ADDR':IMU_ADDR,
+               'MOTORKIT_LEFT_ADDR':MOTORKIT_LEFT_ADDR,'MOTORKIT_RIGHT_ADDR':MOTORKIT_RIGHT_ADDR}
+    seen={}
+    for name,addr in i2c_addrs.items():
+        if addr in seen: problems.append(f'duplicate I2C address {addr:#x}: {seen[addr]} and {name}')
+        else: seen[addr]=name
+
+    gpio_pins={'SONAR_FRONT_TRIG':SONAR_FRONT_TRIG,'SONAR_FRONT_ECHO':SONAR_FRONT_ECHO,
+               'SONAR_LEFT_TRIG':SONAR_LEFT_TRIG,'SONAR_LEFT_ECHO':SONAR_LEFT_ECHO,
+               'SONAR_RIGHT_TRIG':SONAR_RIGHT_TRIG,'SONAR_RIGHT_ECHO':SONAR_RIGHT_ECHO}
+    seen={}
+    for name,pin in gpio_pins.items():
+        if pin in seen: problems.append(f'duplicate GPIO pin {pin}: {seen[pin]} and {name}')
+        else: seen[pin]=name
+
+    # MCP23017 (0x27) pin-index namespace is separate from raw Pi GPIO above -- 0-7=port A,
+    # 8-15=port B (adafruit_mcp230xx's own get_pin() numbering). Encoders use bank-A entirely
+    # (2 bits x 6 wheels doesn't fit in 8, so lr/rr spill onto B0-B3) plus IMU_RST_MCP_PIN=B4.
+    mcp_pins={}
+    for wheel,(bank,bitA,bitB) in ENCODER_PINS.items():
+        base=0 if bank=='A' else 8
+        for bit,role in ((bitA,'A'),(bitB,'B')):
+            idx=base+bit
+            key=f'ENCODER_PINS[{wheel!r}] ({role})'
+            if idx in mcp_pins: problems.append(f'duplicate MCP23017 pin {idx}: {mcp_pins[idx]} and {key}')
+            else: mcp_pins[idx]=key
+    if IMU_RST_MCP_PIN in mcp_pins:
+        problems.append(f'IMU_RST_MCP_PIN={IMU_RST_MCP_PIN} collides with {mcp_pins[IMU_RST_MCP_PIN]}')
+
+    if not (BAT_SHUTDOWN_V<BAT_SAFE_V<BAT_RTH_V<BAT_WARN_V):
+        problems.append(f'battery tier thresholds not strictly ordered: '
+                         f'SHUTDOWN={BAT_SHUTDOWN_V} SAFE={BAT_SAFE_V} RTH={BAT_RTH_V} WARN={BAT_WARN_V}')
+    if BAT_FULL_V<BAT_WARN_V:
+        problems.append(f'BAT_FULL_V={BAT_FULL_V} is below BAT_WARN_V={BAT_WARN_V} -- battery_pct could '
+                         f'report 100% while the safety tier ladder has already escalated to \'warn\'')
+    if BAT_HYSTERESIS_V<=0:
+        problems.append(f'BAT_HYSTERESIS_V={BAT_HYSTERESIS_V} must be positive')
+
+    if IMU_TILT_WARN>=IMU_TILT_LIMIT:
+        problems.append(f'IMU_TILT_WARN={IMU_TILT_WARN} must be below IMU_TILT_LIMIT={IMU_TILT_LIMIT} '
+                         f'(warn should fire before the hard stop, not after)')
+
+    for label,lo,center,hi in (('SERVO',SERVO_MIN_US,SERVO_CENTER_US,SERVO_MAX_US),
+                                ('ARM_SERVO',ARM_SERVO_MIN_US,ARM_SERVO_CENTER_US,ARM_SERVO_MAX_US)):
+        if not (lo<center<hi):
+            problems.append(f'{label} pulse-width range not ordered MIN<CENTER<MAX: {lo}<{center}<{hi}')
+
+    for name,speed in (('SPEED_ROAM',SPEED_ROAM),('SPEED_TURN',SPEED_TURN),('SPEED_SLOW',SPEED_SLOW)):
+        if not (0<speed<=SPEED_MAX):
+            problems.append(f'{name}={speed} must be in (0, SPEED_MAX={SPEED_MAX}]')
+    if not (0<SPEED_MAX<=1.0):
+        problems.append(f'SPEED_MAX={SPEED_MAX} must be in (0, 1.0]')
+
+    if MAX_COMMAND_DURATION_S<=0:
+        problems.append(f'MAX_COMMAND_DURATION_S={MAX_COMMAND_DURATION_S} must be positive')
+
+    return problems

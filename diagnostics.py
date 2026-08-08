@@ -20,6 +20,12 @@ def scan_i2c():
 
 def main():
     print('WildWilly diagnostic test mode - read-only, no actuation.\n')
+    config_problems=config.validate()
+    if config_problems:
+        print(f'Config validation: {len(config_problems)} problem(s):')
+        for p in config_problems: print(f'  - {p}')
+    else:
+        print('Config validation: clean.')
     found=scan_i2c()
     missing=_EXPECTED_I2C-found
     print(f'I2C devices found:  {", ".join(hex(a) for a in sorted(found))}')
@@ -42,10 +48,12 @@ def main():
 
     sonars.stop(); imu.stop(); adc.stop(); encoders.stop(); current.stop()
 
-    ok=not missing and imu.is_healthy and adc_healthy and encoders.is_healthy and current.is_healthy
+    ok=(not missing and not config_problems and imu.is_healthy and adc_healthy
+        and encoders.is_healthy and current.is_healthy)
     print(f'\nOverall: {"PASS" if ok else "FAIL"}')
     log.info('Diagnostic test mode run - overall '+('PASS' if ok else 'FAIL')
-              +(f'; I2C missing: {sorted(hex(a) for a in missing)}' if missing else ''))
+              +(f'; I2C missing: {sorted(hex(a) for a in missing)}' if missing else '')
+              +(f'; config problems: {len(config_problems)}' if config_problems else ''))
     return 0 if ok else 1
 
 if __name__=='__main__':

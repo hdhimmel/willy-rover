@@ -112,6 +112,12 @@ class RoverBrain:
 
     def _self_test(self):
         # FR-100-002/003/004: no motion permitted until this passes (§13.1/§14.2 INIT->IDLE gate).
+        # config.validate() (2026-08-08 audit P2) is deliberately NOT added to `problems` below --
+        # a config inconsistency (e.g. today's real BAT_FULL_V vs BAT_WARN_V finding) doesn't mean
+        # the robot can't safely hold still, and turning it into a new motion-blocking gate is an
+        # owner decision, not something to flip silently. Logged for visibility only.
+        config_problems=config.validate()
+        if config_problems: log.warning('Config validation found issues (non-blocking): '+'; '.join(config_problems))
         problems=[]
         storage_ok,storage_problems=storage.check_storage({'data':config.WILLY_DATA_ROOT,
             'map':config.WILLY_MAP_ROOT,'memory':config.WILLY_MEMORY_ROOT,'log':config.WILLY_LOG_ROOT})
