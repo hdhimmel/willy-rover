@@ -23,7 +23,7 @@ plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code 
 | § | Topic | Status | Finding |
 |---|---|---|---|
 | 7 | RP2040 encoder architecture | **N/A-HW** | No RP2040 exists on this unit per any prior session or doc. Current `Encoders` (MCP23017 polling, ~1kHz ceiling, self-documented as lossy at speed) already exposes close to the requested API shape (`counts`, `counts_per_sec`, `is_healthy`, per-wheel `stalled()`) — swapping to an RP2040 later looks like a backend swap behind the existing interface, not a rewrite, consistent with how `vision.py`/`smart_home.py` already handle their own hardware-substitution notes. |
-| 8 | Odometry | **MISSING** | No pose/odometry module anywhere. Raw per-wheel counts and rates exist; nothing converts them into `(x, y, heading, linear_velocity, angular_velocity)`. |
+| 8 | Odometry | **DONE** (2026-08-07) | `odometry.py` added: `Odometry.update()` (called every `brain.py` tick) converts averaged left/right wheel counts into a `Pose(x,y,heading,linear_velocity,angular_velocity,timestamp,stale)`, logged at `POSE_LOG_INTERVAL_S`. Pure-logic `integrate()` unit-tested (`tests/test_odometry.py`, 6 cases). Dead-reckoning only — no slip correction, no IMU fusion — and `WHEEL_DIAMETER_M`/`TRACK_WIDTH_M` are unconfirmed placeholder measurements (flagged in `config.py`); not yet consumed by navigation/mapping since neither exists (§9/§11). |
 | 9 | World model | **MISSING** | No `world_model` package or any of `RobotState/Pose/Room/Doorway/Obstacle/Object/Landmark/Route/Observation`. `memory_store.py` is a flat SQLite store (facts/instructions/demonstrations/routines) with no spatial semantics. Confirmed as the "major missing subsystem" the plan itself calls it. |
 | 10 | Mapping / learning mode | **MISSING** | No mapping/exploration mode, no room/landmark detection, no persistent map load/save. `memory_store.py`'s `record_demonstration`/`replay_demonstration` (a named waypoint list + similarity-gated replay) is a starting precedent for "demonstrations" but not a map. |
 | 11 | Navigation layer | **MISSING** | Current "navigation" is `brain.py`'s reactive ROAM/SLOW/AVOID sonar FSM plus `retrieval_task.py`'s fixed approach sequence — no Mission/Global-route/Local-planner layering above it. The plan explicitly says keep the sonar fallback and don't remove it; nothing built on top of it yet means that's trivially true today. |
@@ -52,9 +52,9 @@ plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code 
 ## Summary
 
 Out of 21 substantive sections (excluding §1/23-27, which are process/meta):
-- **DONE:** 1 (§16 retrieval, modulo hardware-calibration gaps)
+- **DONE:** 2 (§8 odometry, §16 retrieval modulo hardware-calibration gaps)
 - **PARTIAL:** 8 (§4, §6, §12, §13, §18, §19, §21, §22)
-- **MISSING:** 6 (§8, §9, §10, §11, §17-expected, §20)
+- **MISSING:** 5 (§9, §10, §11, §17-expected, §20)
 - **CONFLICT** (actively does what the plan says not to): 3 (§2, §3, §14, §15 — see note)
 - **N/A-HW** (blocked on hardware, not code): 2 (§5, §7)
 
@@ -114,3 +114,20 @@ All six items above are implemented in the working tree (uncommitted):
   test).
 - Nothing has been committed or deployed. Do the real hardware verification pass (once the IMU
   fault is fixed) before considering Phase 1 done, and before starting Phase 2.
+
+## Update (2026-08-07, later): Phase 1 committed + deployed; §8 odometry done ahead of live verification
+
+Phase 1 was committed (`adb9077`) and `scp`'d to the live Pi — verified byte-identical post-copy.
+`willy-rover.service` was restarted but is still crash-looping on the same pre-existing IMU fault
+described above (confirmed unrelated to Phase 1: crash happens in `sensors.py::IMU.__init__`,
+before `RoverBrain`'s safety/motor code ever runs), even after a genuine power cycle of the base —
+so Phase 1 is still **not live-verified**, unchanged from the note above. Owner directed moving on
+to the next code-level item rather than continuing to chase the IMU fault this session.
+
+§8 (odometry, see the updated row above) was implemented next. This is a deliberate exception to
+this doc's own earlier advice ("before starting Phase 2"): §8 has no dependency on live rover
+verification — `odometry.py`'s `integrate()` is pure math, fully covered by
+`tests/test_odometry.py` off the physical hardware, and `Odometry.update()` is wired into
+`brain.py`'s tick loop as a passive read (no motor consequence) that simply won't produce
+meaningful numbers until the IMU/encoder fault is resolved and the rover actually drives. Phase 1
+live verification is still the gating item before either is trusted in the field.

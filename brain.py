@@ -4,6 +4,7 @@ from sensors import SonarArray,IMU,ADC,Encoders,CurrentMonitor
 from display import WillyFace
 from claude_client import ClaudeClient
 from safety import SafetyController
+from odometry import Odometry
 from arm import Arm
 from memory_store import MemoryStore
 from cloud_ai import CloudAIClient
@@ -50,6 +51,7 @@ class RoverBrain:
         self.safety=SafetyController(self.motors)
         self.sonars=SonarArray(); self.imu=IMU(); self.adc=ADC()
         self.encoders=Encoders(); self.current=CurrentMonitor(); self.arm=Arm()
+        self.odometry=Odometry(self.encoders)
         self.claude=ClaudeClient(); self._sd=_SdNotify()
         # v2.2 subsystems (docs/WildWilly_Functional_Requirements_Document_v2.2.md) — each stays
         # inert unless its config.ENABLE_* flag is on and its assets/credentials are present; see
@@ -65,6 +67,7 @@ class RoverBrain:
         self._motion_enabled=False; self._init_fail_reason=''
         self._bat_tier='normal'; self._health={}; self._fault_since={}
         self._claude_pending=False; self._claude_move_pending=False
+        self._pose_log_t=0.0
 
     def start(self):
         log.info('Starting subsystems...')
@@ -185,6 +188,11 @@ class RoverBrain:
         # software has no way to observe it — the hardware-only latching cut has no documented
         # GPIO sense pin, so there is no check for it here, same gap as the baseline pass.
         self._sd.notify('WATCHDOG=1')
+        pose=self.odometry.update()  # §8: passive dead-reckoning, runs regardless of motion_enabled
+                                      # — no motor consequence, just keeps the estimate current for
+                                      # logging/diagnostics (nothing consumes it for navigation yet).
+        if time.time()-self._pose_log_t>config.POSE_LOG_INTERVAL_S:
+            self._pose_log_t=time.time(); log.info(f'pose: {pose}')
         if not self._motion_enabled:
             self._upd('fault',f'SELF-TEST FAILED: {self._init_fail_reason}',
                        {'front':999,'left':999,'right':999},0.0)

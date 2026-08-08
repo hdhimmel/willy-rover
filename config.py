@@ -51,6 +51,17 @@ ENCODER_PINS={'lf':('A',0,1),'lm':('A',2,3),'lr':('B',0,1),
               'rf':('A',4,5),'rm':('A',6,7),'rr':('B',2,3)}
 ENCODER_COUNTS_PER_REV=3292  # §9.2: 823.1 PPR x4 quadrature decode
 
+# Odometry (§8, WildWilly_Claude_Fix_Implementation_Plan.md). UNCONFIRMED: the master doc gives
+# only the overall chassis envelope (430x330x220mm, §2), never a wheel diameter or track (L/R
+# wheel-center spacing) measurement — these two values are placeholder estimates derived from
+# that envelope, not a bench/caliper measurement. odometry.py's pose output is dead-reckoning
+# only (no slip correction, no fusion with the IMU heading) and will drift; re-measure these two
+# values directly off the chassis before trusting distances/headings for anything beyond rough
+# relative dead-reckoning.
+WHEEL_DIAMETER_M=0.065  # UNCONFIRMED placeholder
+TRACK_WIDTH_M=0.28      # UNCONFIRMED placeholder — center-to-center of left/right wheel tracks
+POSE_LOG_INTERVAL_S=5.0 # brain.py logs the current odometry pose at most this often
+
 # Current monitoring — INA260 x3 (§5.2). Monitor/log only (FR-1100 diagnostics) — no numeric
 # overcurrent trip thresholds exist anywhere in the documentation to hardcode a cutoff against.
 INA260_SERVO_ADDR=0x40; INA260_PI_ADDR=0x44; INA260_MOTOR_ADDR=0x45
