@@ -6,6 +6,7 @@ from display import WillyFace
 from claude_client import ClaudeClient
 from safety import SafetyController
 from odometry import Odometry
+from world_model import WorldModel,Observation,project_point
 from arm import Arm
 from memory_store import MemoryStore
 from cloud_ai import CloudAIClient
@@ -53,6 +54,7 @@ class RoverBrain:
         self.sonars=SonarArray(); self.imu=IMU(); self.adc=ADC()
         self.encoders=Encoders(); self.current=CurrentMonitor(); self.arm=Arm()
         self.odometry=Odometry(self.encoders)
+        self.world_model=WorldModel(self.odometry)  # §9: loads any previously saved map in __init__
         self.claude=ClaudeClient(); self._sd=_SdNotify()
         # v2.2 subsystems (docs/WildWilly_Functional_Requirements_Document_v2.2.md) — each stays
         # inert unless its config.ENABLE_* flag is on and its assets/credentials are present; see
@@ -122,6 +124,7 @@ class RoverBrain:
         if self.retrieval.active: self.retrieval.abort('shutdown')
         self.voice.stop(); self.email.stop(); self.detector.close()
         self.memory.close()  # FR-1900-011: persist any new/updated memory before power-off
+        self.world_model.close()  # §9/§10: persist rooms/landmarks/objects/routes before power-off
         self.motors.cleanup(); self.sonars.stop(); self.imu.stop(); self.adc.stop()
         self.encoders.stop(); self.current.stop(); self.display.stop()
 
@@ -203,6 +206,13 @@ class RoverBrain:
             return
         d=self.sonars.distances; tilt=self.imu.tilt; bat_v=self.adc.battery_volts; bat=self.adc.battery_pct
         self.safety.update_context(front_cm=d['front'],tilt_deg=tilt,motion_enabled=self._motion_enabled)
+        # §9: passive Layer-1 obstacle feed, same "no motor consequence, just keeps an estimate
+        # current" spirit as the odometry pose logging above -- every real (non-timeout) sonar hit
+        # this tick becomes a world_model Obstacle point at the robot's current pose+bearing.
+        for name,dist_cm in d.items():
+            if dist_cm<999.0:
+                x,y=project_point(pose,config.SONAR_BEARING_DEG[name],dist_cm/100.0)
+                self.world_model.update_observation(Observation('obstacle',x,y,payload={'source':f'sonar_{name}'}))
 
         if sustained_fault:
             # §4 watchdog escalation (see _check_health) — a sensor fault this sustained means we

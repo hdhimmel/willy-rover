@@ -103,6 +103,19 @@ BAT_HYSTERESIS_V=0.2
 LOG_DIR='logs'; LOG_FILE='willy.log'
 LOG_MAX_BYTES=2_000_000; LOG_BACKUP_COUNT=5
 
+# World model (§9/§10, WildWilly_Claude_Fix_Implementation_Plan.md) — spatial/semantic memory,
+# a separate SQLite file from memory.db per the master doc's §13.4 storage design ("SQLite on
+# the SSD = spatial/semantic memory... live source of truth").
+WORLD_MODEL_DB_PATH='world_model.db'
+OBSTACLE_MAX_AGE_S=30.0      # Layer-1 local obstacle points older than this are dropped, never persisted
+ROOM_MATCH_RADIUS_M=1.5      # default Room radius when add_room() isn't given one
+OBJECT_DEDUPE_RADIUS_M=0.5   # repeated detections of the same class within this radius merge into one Object
+# Sonar mounting bearing relative to chassis forward (0deg, matches odometry.py's heading
+# convention) — UNCONFIRMED placeholder, no bench measurement exists in any doc for how the side
+# sonars are actually angled. Used to project a sonar hit into a world (x,y) point via the
+# current pose (mapping.py). Re-measure off the chassis before trusting mapped obstacle positions.
+SONAR_BEARING_DEG={'front':0.0,'left':-90.0,'right':90.0}
+
 CLAUDE_MODEL='claude-sonnet-5'
 CLAUDE_MAX_TOKENS=300; CLAUDE_ESCALATE_AFTER=5
 

@@ -24,7 +24,7 @@ plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code 
 |---|---|---|---|
 | 7 | RP2040 encoder architecture | **N/A-HW** | No RP2040 exists on this unit per any prior session or doc. Current `Encoders` (MCP23017 polling, ~1kHz ceiling, self-documented as lossy at speed) already exposes close to the requested API shape (`counts`, `counts_per_sec`, `is_healthy`, per-wheel `stalled()`) — swapping to an RP2040 later looks like a backend swap behind the existing interface, not a rewrite, consistent with how `vision.py`/`smart_home.py` already handle their own hardware-substitution notes. |
 | 8 | Odometry | **DONE** (2026-08-07) | `odometry.py` added: `Odometry.update()` (called every `brain.py` tick) converts averaged left/right wheel counts into a `Pose(x,y,heading,linear_velocity,angular_velocity,timestamp,stale)`, logged at `POSE_LOG_INTERVAL_S`. Pure-logic `integrate()` unit-tested (`tests/test_odometry.py`, 6 cases). Dead-reckoning only — no slip correction, no IMU fusion — and `WHEEL_DIAMETER_M`/`TRACK_WIDTH_M` are unconfirmed placeholder measurements (flagged in `config.py`); not yet consumed by navigation/mapping since neither exists (§9/§11). |
-| 9 | World model | **MISSING** | No `world_model` package or any of `RobotState/Pose/Room/Doorway/Obstacle/Object/Landmark/Route/Observation`. `memory_store.py` is a flat SQLite store (facts/instructions/demonstrations/routines) with no spatial semantics. Confirmed as the "major missing subsystem" the plan itself calls it. |
+| 9 | World model | **DONE (milestone 1)** (2026-08-08) | `world_model.py` added: `WorldModel` class + `RobotState/Pose(delegated)/Room/Doorway/Obstacle/Object/Landmark/Route/Observation` types, exposing exactly the plan's own API (`update_observation/get_robot_pose/get_nearby_obstacles/get_room/remember_object/save/load`). Layered per §9's own instruction (obstacle map / odometry-delegated / rooms / objects-landmarks / routes), explicitly not SLAM. Own SQLite file (`world_model.db`, separate from `memory.db` per master doc §13.4), same WAL/lock/upsert convention as `memory_store.py`. Wired into `brain.py`: constructed + auto-loaded in `__init__`, a passive per-tick sonar->obstacle feed (no motor consequence), saved on shutdown. 8 unit tests (`tests/test_world_model.py`), all off-hardware. Room-identification (§10 step 6) is an intentional gap, not attempted yet — rooms/doorways/routes have no producer wired in this step (that's §10/§11). |
 | 10 | Mapping / learning mode | **MISSING** | No mapping/exploration mode, no room/landmark detection, no persistent map load/save. `memory_store.py`'s `record_demonstration`/`replay_demonstration` (a named waypoint list + similarity-gated replay) is a starting precedent for "demonstrations" but not a map. |
 | 11 | Navigation layer | **MISSING** | Current "navigation" is `brain.py`'s reactive ROAM/SLOW/AVOID sonar FSM plus `retrieval_task.py`'s fixed approach sequence — no Mission/Global-route/Local-planner layering above it. The plan explicitly says keep the sonar fallback and don't remove it; nothing built on top of it yet means that's trivially true today. |
 | 12 | YOLO / vision integration | **PARTIAL** | `vision.py`'s `detect()` returns `class/conf/bbox/frame_w/frame_h` but not `timestamp` or `camera_id` as the plan's detection shape wants, and bearing/range come from a separate `localize()` call rather than being bundled onto the detection. Already good: the code's own comments explicitly warn distance/bearing are heuristic, not calibrated ranging — exactly what §12 asks for ("do not describe bounding-box-size distance estimation as accurate ranging"). Fusion into a world model is blocked on §9. |
@@ -52,9 +52,9 @@ plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code 
 ## Summary
 
 Out of 21 substantive sections (excluding §1/23-27, which are process/meta):
-- **DONE:** 3 (§8 odometry, §16 retrieval modulo hardware-calibration gaps, §19 hardware abstraction for motors/sensors/arm — camera/display out of scope)
+- **DONE:** 4 (§8 odometry, §9 world model milestone 1, §16 retrieval modulo hardware-calibration gaps, §19 hardware abstraction for motors/sensors/arm — camera/display out of scope)
 - **PARTIAL:** 8 (§4, §6, §12, §13, §18, §20, §21, §22)
-- **MISSING:** 4 (§9, §10, §11, §17-expected)
+- **MISSING:** 3 (§10, §11, §17-expected)
 - **CONFLICT** (actively does what the plan says not to): 3 (§2, §3, §14, §15 — see note)
 - **N/A-HW** (blocked on hardware, not code): 2 (§5, §7)
 
@@ -131,3 +131,12 @@ verification — `odometry.py`'s `integrate()` is pure math, fully covered by
 `brain.py`'s tick loop as a passive read (no motor consequence) that simply won't produce
 meaningful numbers until the IMU/encoder fault is resolved and the rover actually drives. Phase 1
 live verification is still the gating item before either is trusted in the field.
+
+## Update (2026-08-08): §9 World Model milestone 1 implemented
+
+Same "no live-verification dependency" exception as §8: `world_model.py` is pure Python +
+SQLite, fully covered off-hardware by `tests/test_world_model.py`, and its one `brain.py` hook
+(a per-tick sonar->obstacle feed) is passive, matching how odometry was wired in. See the updated
+§9 row above for what shipped. §10 (mapping/learning mode) and §11 (navigation layer) are next,
+in that order per §24's phase ordering — both depend on this landing first. Phase 1 live
+verification is still the overall gating item before any of §8/§9/§10/§11 is trusted in the field.
