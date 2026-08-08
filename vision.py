@@ -16,6 +16,9 @@ log=logsetup.setup('vision')
 _ASSUMED_OBJECT_WIDTH_CM=8.0   # generic small handheld object — no real per-class size table
 _ASSUMED_HFOV_DEG=70.0         # typical USB webcam-class FOV, not bench-measured for the OV9281
 _FOCAL_PX_ESTIMATE=600.0       # rough: focal_px = (frame_w/2) / tan(HFOV/2) at 640px width
+_CAMERA_ID='front'             # §12: this unit has one camera (config.CAMERA_DEVICE) — named
+                                # rather than a bare magic string so a second camera later is an
+                                # obvious addition here, not a silent inconsistency.
 
 class ObjectDetector:
     def __init__(self):
@@ -57,7 +60,8 @@ class ObjectDetector:
             if classes and cls_name not in classes: continue
             x1,y1,x2,y2=box.xyxy[0].tolist()
             out.append({'class':cls_name,'conf':float(box.conf[0]),
-                        'bbox':(x1,y1,x2,y2),'frame_w':w,'frame_h':h})
+                        'bbox':(x1,y1,x2,y2),'frame_w':w,'frame_h':h,
+                        'timestamp':time.time(),'camera_id':_CAMERA_ID})  # §12
         return out
 
     def localize(self,detection):
