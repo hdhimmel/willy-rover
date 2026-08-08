@@ -85,6 +85,13 @@ class RoverBrain:
         self._idle_t=0.0; self._avoid_start=0.0; self._avoid_phase=None; self._running=False
         self._motion_enabled=False; self._init_fail_reason=''
         self._bat_tier='normal'; self._health={}; self._fault_since={}
+        # 2026-08-08 audit P1: no systemd WatchdogSec is actually configured (confirmed via
+        # `systemctl cat willy-rover.service` -- see docs/WildWilly_Master_Engineering_Package_
+        # rev6.0.7.md §14's as-built correction), so a hung (not crashed) tick loop has no OS-level
+        # backstop today. This is pure visibility, not a fix for that gap -- it doesn't do
+        # anything about an overrun, just makes one observable instead of silent.
+        self._last_tick_duration_s=0.0; self._max_tick_duration_s=0.0; self._tick_overrun_count=0
+        self._stopped=False
         self._claude_pending=False; self._claude_move_pending=False
         self._stuck_history=[]; self._last_stuck_prompt=''  # §14: caller-owned conversation history
         self._pose_log_t=0.0
@@ -145,6 +152,14 @@ class RoverBrain:
         return True,''
 
     def stop(self):
+        # Not just a nicety -- found live 2026-08-08: a second stop() call used to crash on
+        # memory.close()'s already-closed sqlite connection (sqlite3.ProgrammingError), which
+        # silently skipped every cleanup step after it (world_model.close(), motors.cleanup(),
+        # every sensor's stop()). run()'s own `finally: self.stop()` plus any external caller
+        # invoking stop() independently (this session's own live smoke test did exactly that)
+        # is a real double-call path, not a hypothetical.
+        if self._stopped: return
+        self._stopped=True
         log.info('Shutting down...')
         self._running=False; self.safety.emergency_stop('shutdown'); time.sleep(0.2)
         if self.retrieval.active: self.retrieval.abort('shutdown')
@@ -159,9 +174,26 @@ class RoverBrain:
     def run(self):
         self.start()
         try:
-            while self._running: self._tick(); time.sleep(0.05)
+            while self._running:
+                t0=time.perf_counter(); self._tick(); self._record_tick_duration(time.perf_counter()-t0)
+                time.sleep(0.05)
         except KeyboardInterrupt: log.info('Stopped.')
         finally: self.stop()
+
+    def _record_tick_duration(self,dt):
+        self._last_tick_duration_s=dt
+        if dt>self._max_tick_duration_s: self._max_tick_duration_s=dt
+        if dt>config.TICK_OVERRUN_THRESHOLD_S:
+            self._tick_overrun_count+=1
+            log_event(log,'TICK_OVERRUN',severity='warning',subsystem='brain',
+                      duration_ms=f'{dt*1000:.0f}',threshold_ms=f'{config.TICK_OVERRUN_THRESHOLD_S*1000:.0f}')
+
+    @property
+    def tick_duration_ms(self): return self._last_tick_duration_s*1000
+    @property
+    def max_tick_duration_ms(self): return self._max_tick_duration_s*1000
+    @property
+    def tick_overrun_count(self): return self._tick_overrun_count
 
     def _bat_tier_for(self,volts):
         for name,threshold in _BAT_TIERS:

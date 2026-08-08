@@ -42,3 +42,23 @@ def test_roverbrain_full_lifecycle_under_simulation():
     assert 'SIM_OK' in result.stdout, (
         f'sim-mode RoverBrain lifecycle failed\n--- stdout ---\n{result.stdout}\n'
         f'--- stderr ---\n{result.stderr}')
+
+_DOUBLE_STOP_SCRIPT='''
+import brain
+b=brain.RoverBrain()
+b.start()
+b.stop()
+b.stop()  # found live 2026-08-08: this used to crash on memory.close()'s already-closed sqlite
+          # connection, silently skipping every cleanup step after it (world_model.close(),
+          # motors.cleanup(), every sensor's stop()) -- run()'s own finally:self.stop() plus an
+          # external caller invoking stop() independently is a real double-call path.
+print("DOUBLE_STOP_OK")
+'''
+
+def test_roverbrain_stop_is_idempotent():
+    env=dict(os.environ,WILLY_SIMULATE='1')
+    result=subprocess.run([sys.executable,'-c',_DOUBLE_STOP_SCRIPT],cwd=_REPO_ROOT,env=env,
+                           capture_output=True,text=True,timeout=30)
+    assert 'DOUBLE_STOP_OK' in result.stdout, (
+        f'calling stop() twice should be a safe no-op the second time\n--- stdout ---\n{result.stdout}\n'
+        f'--- stderr ---\n{result.stderr}')
