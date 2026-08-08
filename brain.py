@@ -1,9 +1,9 @@
-import time,socket,os,config,logsetup
+import json,time,socket,os,config,logsetup
 if not config.SIMULATE_HARDWARE: import board,busio
 from motors import DriveBase,Steering
 from sensors import SonarArray,IMU,ADC,Encoders,CurrentMonitor
 from display import WillyFace
-from claude_client import ClaudeClient
+from ai_provider import CloudAIProvider,build_world_state
 from safety import SafetyController
 from odometry import Odometry
 from world_model import WorldModel,Observation,project_point
@@ -11,7 +11,6 @@ from mapping import MappingSession
 from navigation import Navigator,Mission
 from arm import Arm
 from memory_store import MemoryStore
-from cloud_ai import CloudAIClient
 from smart_home import SmartHomeClient
 from voice import VoicePipeline
 from vision import ObjectDetector
@@ -48,6 +47,15 @@ _BAT_TIERS=[('shutdown',config.BAT_SHUTDOWN_V),('safe',config.BAT_SAFE_V),
             ('rth',config.BAT_RTH_V),('warn',config.BAT_WARN_V)]
 _BAT_SEVERITY={'shutdown':4,'safe':3,'rth':2,'warn':1,'normal':0}
 
+# §14/§15: what _stuck() asks the AI for — was ai_provider.py's predecessor claude_client.py's
+# module-level SYSTEM constant. _MOTION_SCHEMA is what ai_provider.py structurally validates the
+# response against (AIResult.parse_success/action_confidence) — this is NOT the safety gate,
+# safety.py::SafetyController.approve_motion() still independently clamps/rejects whatever action
+# comes out of this, unchanged.
+_MOTION_SYSTEM=("You are the brain of WildWilly, a 6-wheel autonomous rover.\n"
+                "Safety: never forward if front<15cm. Stop if tilt>22deg.")
+_MOTION_SCHEMA={'action':str,'duration':(int,float),'speed':(int,float)}
+
 class RoverBrain:
     def __init__(self):
         log.info('Initialising WildWilly v2...')
@@ -57,11 +65,14 @@ class RoverBrain:
         self.encoders=Encoders(); self.current=CurrentMonitor(); self.arm=Arm()
         self.odometry=Odometry(self.encoders)
         self.world_model=WorldModel(self.odometry)  # §9: loads any previously saved map in __init__
-        self.claude=ClaudeClient(); self._sd=_SdNotify()
+        self._sd=_SdNotify()
         # v2.2 subsystems (docs/WildWilly_Functional_Requirements_Document_v2.2.md) — each stays
         # inert unless its config.ENABLE_* flag is on and its assets/credentials are present; see
         # config.py's v2.2 block and docs/WildWilly_v2.2_Programming_Pass.md for what's open.
-        self.memory=MemoryStore(); self.cloud_ai=CloudAIClient(); self.smart_home=SmartHomeClient()
+        # §14: one CloudAIProvider instance now serves both STUCK-state motion decisions (below)
+        # and voice.py's free-text fallback — was two separate, un-unified clients hitting the
+        # same Anthropic endpoint (ClaudeClient + CloudAIClient).
+        self.memory=MemoryStore(); self.cloud_ai=CloudAIProvider(); self.smart_home=SmartHomeClient()
         self.voice=VoicePipeline(memory=self.memory,cloud_ai=self.cloud_ai,display=self.display,
                                   smart_home=self.smart_home)
         self.detector=ObjectDetector()
@@ -74,6 +85,7 @@ class RoverBrain:
         self._motion_enabled=False; self._init_fail_reason=''
         self._bat_tier='normal'; self._health={}; self._fault_since={}
         self._claude_pending=False; self._claude_move_pending=False
+        self._stuck_history=[]; self._last_stuck_prompt=''  # §14: caller-owned conversation history
         self._pose_log_t=0.0
 
     def start(self):
@@ -190,7 +202,7 @@ class RoverBrain:
         # Claude-issued timed move — this drops that in-flight work so the next STUCK entry
         # starts clean rather than replaying a stale poll/move-pending state.
         if self._state=='STUCK':
-            self.claude.reset(); self._claude_pending=False; self._claude_move_pending=False
+            self.cloud_ai.reset_async(); self._claude_pending=False; self._claude_move_pending=False
 
     def _tick(self):
         sustained_fault=self._check_health()
@@ -408,21 +420,31 @@ class RoverBrain:
         self._upd('stop',f'Avoiding l={l:.0f} r={r:.0f}',d,tilt)
 
     def _stuck(self,d,tilt):
-        # Non-blocking (§2): ClaudeClient.decide()'s HTTP call now runs on ClaudeClient's own
-        # worker thread (claude_client.py) — this state polls rather than blocks, so _tick() keeps
-        # running (and Directive 1-4 checks keep firing) for however long the API call takes.
+        # Non-blocking (§2): the AI call runs on CloudAIProvider's own worker thread
+        # (ai_provider.py) — this state polls rather than blocks, so _tick() keeps running (and
+        # Directive 1-4 checks keep firing) for however long the API call takes.
         if self.safety.timed_move_active:
             self._upd('stuck',f'Executing: {self._last_action}',d,tilt); return
         if self._claude_move_pending:
             # the Claude-issued timed move just finished (checked above) — wrap up this episode
             self._claude_move_pending=False; self._stuck_count=0; self._go('ROAM'); return
         if self._claude_pending:
-            action=self.claude.poll_decision()
-            if action is None:
+            result=self.cloud_ai.poll_async()
+            if result is None:
                 self._upd('stuck','Calling Claude...',d,tilt); return
             self._claude_pending=False
-            log.info(f'Claude: {action}')
-            cmd=action.get('action','stop'); dur=float(action.get('duration',1.0)); spd=float(action.get('speed',config.SPEED_SLOW))
+            log.info(f'Claude: parse_success={result.parse_success} '
+                     f'intent_confidence={result.intent_confidence} '
+                     f'action_confidence={result.action_confidence} payload={result.payload}')  # §15
+            payload=result.payload if(result.parse_success and isinstance(result.payload,dict)) else {}
+            if result.parse_success:
+                # §14: caller-owned history (see ai_provider.py's CloudAIProvider docstring) —
+                # only recorded on a successful parse, matching the old claude_client.py's own
+                # _call()'s behavior (its except-branch never appended to history either).
+                self._stuck_history.append({'role':'user','content':self._last_stuck_prompt})
+                self._stuck_history.append({'role':'assistant','content':json.dumps(payload)})
+                self._stuck_history=self._stuck_history[-12:]
+            cmd=payload.get('action','stop'); dur=float(payload.get('duration',1.0)); spd=float(payload.get('speed',config.SPEED_SLOW))
             self._last_action=cmd
             if cmd in('forward','reverse','turn_left','turn_right','stop','wait'):
                 # 'wait' has no dedicated safety action — hold position via 'stop' for the same
@@ -433,9 +455,16 @@ class RoverBrain:
                 self.safety.stop(); self._stuck_count=0; self._go('ROAM')  # unrecognized action — no hold, matches prior behavior
             return
         self.safety.stop()
-        self.claude.request_decision({'state':'STUCK','front_cm':d['front'],'left_cm':d['left'],
-            'right_cm':d['right'],'tilt_deg':tilt,'speed':0.0,'stuck_count':self._stuck_count,
-            'last_action':self._last_action,'battery_pct':self.adc.battery_pct,'notes':'Cannot find clear path.'})
+        situation=build_world_state(self.world_model,goal='find a clear path to continue roaming',
+                                     battery=self.adc.battery_pct,front_cm=d['front'],left_cm=d['left'],
+                                     right_cm=d['right'],tilt_deg=tilt,stuck_count=self._stuck_count,
+                                     last_action=self._last_action)  # §14: structured world state, not raw sensor values
+        self._last_stuck_prompt=(
+            f'Situation: {json.dumps(situation)}\nWhat should I do? Respond ONLY with JSON: '
+            f'{{"action":"forward"|"reverse"|"turn_left"|"turn_right"|"stop"|"wait","duration":<float>,'
+            f'"speed":<0.0-1.0>,"reason":"<60 chars>","confidence":<0.0-1.0, how sure you are>}}')
+        self.cloud_ai.request_async(self._last_stuck_prompt,system=_MOTION_SYSTEM,
+                                     schema=_MOTION_SCHEMA,history=self._stuck_history)
         self._claude_pending=True
         self._upd('stuck','Calling Claude...',d,tilt)
 

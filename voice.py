@@ -1,6 +1,14 @@
 import json,os,re,queue,subprocess,sys,tempfile,threading,time,numpy as np
 import config,logsetup,privacy
+from ai_provider import LocalAIProvider
 log=logsetup.setup('voice')
+
+_INTENT_SCHEMA={'intent':str,'args':dict,'reply':str}  # §14/§15 -- required keys _interpret_local()
+                                                         # validates against; 'confidence' is asked
+                                                         # for in the prompt but not required here,
+                                                         # since older/smaller local models may not
+                                                         # reliably emit it -- missing just means
+                                                         # ai_provider.py's _clamp01() default (0.3).
 
 # FR-1500 Voice Interaction. The wake-word/STT/LLM pipeline runs entirely on background
 # threads. brain.py DOES call speak()/speak_safety() directly from RoverBrain._tick() (e.g. to
@@ -27,7 +35,7 @@ class VoicePipeline:
         self.pending_commands=queue.Queue()
         self._speak_queue=queue.Queue()
         self._running=False; self._thread=None; self._speaker_thread=None
-        self._wakeword=None; self._whisper=None; self._llm=None
+        self._wakeword=None; self._whisper=None; self._local_ai=None
         if self._enabled: self._load_models()
 
     def _load_models(self):
@@ -39,13 +47,13 @@ class VoicePipeline:
         try:
             import openwakeword; from openwakeword.model import Model as OwwModel
             from faster_whisper import WhisperModel
-            from llama_cpp import Llama
             # openwakeword 0.4.0's Model.__init__ takes wakeword_model_paths, not
             # wakeword_models — the old kwarg silently fell through to **kwargs and crashed
             # deeper inside AudioFeatures.__init__, caught here and disabling voice entirely.
             self._wakeword=OwwModel(wakeword_model_paths=[config.WAKEWORD_MODEL_PATH])
             self._whisper=WhisperModel(config.WHISPER_MODEL_SIZE,device='cpu',compute_type='int8')
-            self._llm=Llama(model_path=config.LOCAL_LLM_MODEL_PATH,n_ctx=2048,verbose=False)
+            self._local_ai=LocalAIProvider()  # §14 -- was a bare Llama(...) instance here
+            if not self._local_ai.available: raise RuntimeError('local LLM failed to load')
         except Exception as e:
             log.error(f'Voice model load failed, staying disabled: {e}')
             self._enabled=False
@@ -114,9 +122,9 @@ class VoicePipeline:
         if confidence<config.LOCAL_LLM_CONFIDENCE_FLOOR:
             if self.cloud_ai and self.cloud_ai.available:
                 import privacy as _p; _p.note_cloud_send(self.display,self,'your request')
-                reply,err=self.cloud_ai.ask(text)
-                if reply:
-                    self.speak(reply,tone=config.VOICE_TONE_DEFAULT); return
+                result=self.cloud_ai.ask_sync(text)  # §14: schema=None -> free text, result.payload is the reply
+                if result.parse_success:
+                    self.speak(result.payload,tone=config.VOICE_TONE_DEFAULT); return
             # FR-1500-005: never guess and act.
             self.speak("I'm not confident I understood that — could you rephrase it?"); return
         self._act_on_intent(intent,text)
@@ -130,21 +138,19 @@ class VoicePipeline:
         return False
 
     def _interpret_local(self,text):
-        # FR-1500-003. llama.cpp doesn't expose a clean confidence score, so this uses a plain
-        # heuristic (did the model return well-formed JSON we asked for) rather than a real
-        # probability — good enough to gate the FR-1400 fallback decision, not a calibrated metric.
+        # FR-1500-003/§15: parse_success and intent_confidence are independent AIResult signals
+        # now, not one masquerading as the other — see ai_provider.py's module docstring. The
+        # model is asked to self-report its own confidence rather than confidence being inferred
+        # from whether the JSON happened to parse.
         ctx=self.memory.get_context_for(text) if self.memory else {}
         prompt=(f'You are Willie, a home-assistant rover. Known facts: {json.dumps(ctx)}\n'
                 f'User said: "{text}"\nRespond ONLY with JSON: '
-                f'{{"intent":"<short action name>","args":{{}},"reply":"<what to say back, <200 chars>"}}')
-        try:
-            out=self._llm(prompt,max_tokens=200,stop=['\n\n'])
-            raw=out['choices'][0]['text'].strip()
-            parsed=json.loads(raw[raw.index('{'):raw.rindex('}')+1])
-            return parsed,0.8
-        except Exception as e:
-            log.info(f'Local interpretation low-confidence/failed: {e}')
-            return None,0.0
+                f'{{"intent":"<short action name>","args":{{}},"reply":"<what to say back, <200 chars>",'
+                f'"confidence":<0.0-1.0, how sure you are of this interpretation>}}')
+        result=self._local_ai.ask_sync(prompt,schema=_INTENT_SCHEMA)
+        if not result.parse_success:
+            log.info(f'Local interpretation low-confidence/failed: {result.reason}')
+        return result.payload,result.intent_confidence
 
     def _act_on_intent(self,intent,original_text):
         reply=intent.get('reply','') if intent else ''

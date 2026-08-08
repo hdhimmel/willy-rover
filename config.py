@@ -125,6 +125,8 @@ NAV_TURN_STEP_S=0.2            # duration of each incremental heading-correction
 
 CLAUDE_MODEL='claude-sonnet-5'
 CLAUDE_MAX_TOKENS=300; CLAUDE_ESCALATE_AFTER=5
+AI_NEARBY_RADIUS_M=3.0  # §14: how far counts as "nearby" when ai_provider.py's build_world_state()
+                        # filters world_model.py objects/obstacles into the AI's world-state payload
 
 # safety.py SafetyController (§3/§4 of docs/WildWilly_Claude_Fix_Implementation_Plan.md) — the
 # single authoritative gate all motor commands pass through, reactive-FSM and Claude-proposed
@@ -158,8 +160,9 @@ SMART_HOME_DISCOVERY_TIMEOUT_S=5
 # FR-1400 cloud AI fallback, never a primary dependency. The FRD assumed Gemini under
 # WILLIE_GOOGLE_ACCOUNT above, but that account's Gemini API key hit a persistent zero free-tier
 # quota even with billing linked (Google-side provisioning gap, parked 2026-08-06) — swapped to
-# Anthropic's API instead, reusing ANTHROPIC_API_KEY (already configured for claude_client.py's
-# STUCK-state decisions, see .env). See cloud_ai.py for the full swap rationale.
+# Anthropic's API instead, reusing ANTHROPIC_API_KEY (already configured for brain.py's STUCK-
+# state decisions, see .env). See ai_provider.py::CloudAIProvider for the unified client (§14) —
+# both this fallback and the STUCK-state decisions now share one Anthropic client instance.
 ENABLE_CLOUD_AI=True
 CLOUD_AI_TIMEOUT_S=8
 

@@ -12,8 +12,8 @@ plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code 
 
 | § | Topic | Status | Finding |
 |---|---|---|---|
-| 2 | Non-blocking control loop | **CONFLICT** | `brain.py::_stuck()` calls `claude_client.py::ClaudeClient.decide()` directly on the tick thread — a blocking `urllib.request.urlopen(..., timeout=8)` HTTP call. `motors.py`'s `forward_for`/`reverse_for`/`turn_*_for` also block via `time.sleep(t)`, and `_avoid()`/`_dock()`/`_stuck()` call them directly from `_tick()`. The systemd watchdog `WATCHDOG=1` is sent at the *top* of `_tick()`, before these blocking calls, so it isn't starved outright — but real Directive 1-5 safety processing (tilt/battery) is delayed for the full blocking duration each time this path fires. |
-| 3 | Safety gate between AI and motors | **CONFLICT** | No `SafetyController.approve_motion()` or equivalent exists. Claude's proposed `duration` is cast to `float` and passed straight to `motors.forward_for()` etc. with **no clamp** — an unreasonable duration from the LLM is not rejected (the plan's own §20 test list calls this out explicitly: "excessive duration"). Speed *is* clamped (`motors.py` clamps to `config.SPEED_MAX` at the motor layer), and this path is only reachable after `CLAUDE_ESCALATE_AFTER=5` consecutive stuck-avoid cycles, so blast radius is contained today — but it is still the AI directly commanding motors with no independent legality check, which §3 explicitly forbids. |
+| 2 | Non-blocking control loop | **CONFLICT** *(stale finding, kept for history — see the 2026-08-07 Phase 1 update below: fixed by commit `adb9077`, not yet live-verified)* | `brain.py::_stuck()` calls `claude_client.py::ClaudeClient.decide()` directly on the tick thread — a blocking `urllib.request.urlopen(..., timeout=8)` HTTP call. `motors.py`'s `forward_for`/`reverse_for`/`turn_*_for` also block via `time.sleep(t)`, and `_avoid()`/`_dock()`/`_stuck()` call them directly from `_tick()`. The systemd watchdog `WATCHDOG=1` is sent at the *top* of `_tick()`, before these blocking calls, so it isn't starved outright — but real Directive 1-5 safety processing (tilt/battery) is delayed for the full blocking duration each time this path fires. `claude_client.py` itself no longer exists — retired 2026-08-08, folded into `ai_provider.py::CloudAIProvider` (§14). |
+| 3 | Safety gate between AI and motors | **CONFLICT** *(stale finding, kept for history — see the 2026-08-07 Phase 1 update below: fixed by commit `adb9077`, not yet live-verified)* | No `SafetyController.approve_motion()` or equivalent exists. Claude's proposed `duration` is cast to `float` and passed straight to `motors.forward_for()` etc. with **no clamp** — an unreasonable duration from the LLM is not rejected (the plan's own §20 test list calls this out explicitly: "excessive duration"). Speed *is* clamped (`motors.py` clamps to `config.SPEED_MAX` at the motor layer), and this path is only reachable after `CLAUDE_ESCALATE_AFTER=5` consecutive stuck-avoid cycles, so blast radius is contained today — but it is still the AI directly commanding motors with no independent legality check, which §3 explicitly forbids. `safety.py::SafetyController.approve_motion()` now exists and is unchanged by the §14/§15 AI-provider refactor (2026-08-08) — it remains the sole gate regardless of which AI backend answers. |
 | 4 | Watchdog redesign | **PARTIAL** | `_check_health()` runs every tick and logs IMU/encoder/current-monitor/battery-ADC faults, but **only logs** — it never stops motors or changes FSM state on a sensor fault. Only the battery-ADC failure path is actually safe today (a failed read defaults `battery_volts` to 0, which the existing tier ladder correctly treats as `shutdown`). An IMU thread stall does not stop motion — `_tick()` reads `self.imu.tilt` unconditionally, which returns the last cached value once the thread dies, so a stale tilt reading can mask an actual tilt fault indefinitely. No separate supervisor task; watchdog heartbeat lives on the same thread as the blocking calls in §2. |
 | 5 | E-Stop integration | **N/A-HW / MISSING** | Already honestly flagged in `brain.py`'s own comments: "software has no way to observe [E-stop] — the hardware-only latching cut has no documented GPIO sense pin." This needs a wiring change (a sense pin into a GPIO) before any software can be written against it — not purely a code gap. |
 | 6 | Battery voltage logic | **PARTIAL** | The protection half is already done well: `config.py` has a distinct `BAT_WARN/RTH/SAFE/SHUTDOWN_V` ladder with hysteresis (`BAT_HYSTERESIS_V`), separate from the old flat low/critical pair, and `brain.py`'s `_update_bat_tier` implements one-way-worse-then-hysteresis-to-recover correctly. What §6 flags — `battery_pct` is still a plain linear map between `BAT_SHUTDOWN_V` and `BAT_FULL_V` — is still present, but it is **display-only** (used for the HUD/voice announcements, not for any safety decision, which all key off raw voltage vs. the tier thresholds directly). No code comment documents that voltage-under-load ≠ open-circuit voltage, as §6 asks. |
@@ -34,8 +34,8 @@ plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code 
 | § | Topic | Status | Finding |
 |---|---|---|---|
 | 13 | Memory architecture | **MISSING** | Single SQLite file, no RAM/SSD/SD tiering, no `WILLY_DATA_ROOT`/`MAP_ROOT`/`MEMORY_ROOT`/`LOG_ROOT` env vars — paths (`MEMORY_DB_PATH`, `LOG_DIR`) are hardcoded relative to the script directory. No storage-availability/permission startup checks. The underlying save/purge/replay mechanics are a reasonable seed for "long-term memory," just not tiered. |
-| 14 | AI / LLM interface | **CONFLICT** | Three separate, un-unified AI call sites instead of one `AIProvider` abstraction: `claude_client.py::ClaudeClient.decide()` (motion-command-shaped, called only from `_stuck()` — this is the same object flagged in §3 as bypassing the safety gate), `cloud_ai.py::CloudAIClient.ask()` (free-text fallback, called from `voice.py`), and a third local-LLM call inlined directly inside `voice.py::_interpret_local()` (not even its own class). No structured world-state payload (room/pose/battery/goal/nearby_objects/routes) is assembled anywhere — inputs are raw sensor dicts today, which tracks with §9/§11 not existing yet to source that from. |
-| 15 | AI confidence | **CONFLICT** | `voice.py::_interpret_local()`'s own comment admits it: "uses a plain heuristic (did the model return well-formed JSON we asked for) rather than a real probability" — `return parsed,0.8` on parse success, `return None,0.0` on any exception. This is exactly the anti-pattern §15 names: "Do not use 'valid JSON' as AI confidence." The *consequence* handling is already correct, though — low confidence does fall back to "ask for clarification" rather than guessing, which is what §15 wants downstream of a real confidence signal. |
+| 14 | AI / LLM interface | **DONE (milestone 1)** (2026-08-08) | New `ai_provider.py`: `AIProvider` ABC (owns the non-blocking worker-thread plumbing, unchanged in shape from the old `claude_client.py`, plus a synchronous `ask_sync()` path for off-tick-thread callers) with `CloudAIProvider`/`LocalAIProvider` implementations — `claude_client.py` and `cloud_ai.py` (previously two separate clients independently hitting the same Anthropic endpoint) are fully retired, folded into one `CloudAIProvider` instance `brain.py` now shares with `voice.py`. `build_world_state()` assembles §14's exact schema (`robot: {room,pose,battery}, goal, nearby_objects, nearby_obstacles, available_routes`) from real `world_model.py` (§9) data — no longer blocked on §9 not existing. `brain.py::_stuck()` now builds its situation this way instead of a raw sensor dict; conversation history is caller-owned (threaded through each call) rather than provider-owned, so one shared provider instance can't leak STUCK's motion-decision turns into voice's unrelated free-text turns or vice versa. **No change to what actually gates motion** — `safety.py::SafetyController.approve_motion()` remains the sole authority, untouched. |
+| 15 | AI confidence | **DONE (milestone 1)** (2026-08-08) | Fixed alongside §14 (same `ai_provider.py`) — `AIResult` carries `parse_success`, `intent_confidence` (the model's own self-reported `"confidence"` field, not a parse-success proxy), `action_confidence` (separately *computed*: is the specific action/duration/speed structurally sane — `None` for non-motion queries), and `safety_validation` (structural plausibility only, explicitly documented as not the real safety gate). `voice.py::_interpret_local()`'s old hardcoded `0.8`/`0.0` is gone, replaced by `result.intent_confidence`. The already-correct downstream consequence handling (low confidence -> ask for clarification, never guess) is unchanged. |
 | 16 | Retrieval behavior | **DONE** (mostly) | `retrieval_task.py` already implements almost exactly the requested state list — `LOCALIZE/APPROACH/GRASP/VERIFY/DELIVER/AWAIT_CONFIRM` — as its own sub-FSM, gated correctly behind `brain.py`'s Directive 1-5 checks, with `abort()` always called externally per §27's "never decide internally" pattern. Its own comments already honestly flag the two real remaining gaps: grasp is a fixed primitive sequence, not IK (no per-joint calibration exists — §20.6 in the master doc), and hand-off confirmation is timeout-based, not tactile-sensed. Best-covered section in the whole plan; what remains is hardware calibration work, not architecture work. |
 
 ## Priority 2 / Cross-Cutting
@@ -52,18 +52,18 @@ plan asks) / **N/A-HW** (blocked on hardware that doesn't exist yet, not a code 
 ## Summary
 
 Out of 21 substantive sections (excluding §1/23-27, which are process/meta):
-- **DONE:** 6 (§8 odometry, §9 world model milestone 1, §10 mapping/learning mode milestone 1, §11 navigation layer milestone 1, §16 retrieval modulo hardware-calibration gaps, §19 hardware abstraction for motors/sensors/arm — camera/display out of scope)
+- **DONE:** 8 (§8 odometry, §9 world model milestone 1, §10 mapping/learning mode milestone 1, §11 navigation layer milestone 1, §14 AI/LLM interface milestone 1, §15 AI confidence milestone 1, §16 retrieval modulo hardware-calibration gaps, §19 hardware abstraction for motors/sensors/arm — camera/display out of scope)
 - **PARTIAL:** 8 (§4, §6, §12, §13, §18, §20, §21, §22)
 - **MISSING:** 1 (§17-expected)
-- **CONFLICT** (actively does what the plan says not to): 3 (§2, §3, §14, §15 — see note)
+- **CONFLICT** (actively does what the plan says not to): 2 (§2, §3 — see note)
 - **N/A-HW** (blocked on hardware, not code): 2 (§5, §7)
 
-The three CONFLICT findings (§2, §3, §14/§15) all point at the same root cause: **the one existing
-AI-to-motor path (`claude_client.py` via `brain.py::_stuck()`) blocks the tick thread and has no
-independent safety gate or duration clamp.** This is the highest-leverage place to start — fixing
-it addresses §2, §3, and half of §14 simultaneously. §19's missing mock hardware layer is the
-second highest-leverage item: it blocks §20 entirely and would make every subsequent phase safer
-to develop against without touching the physical rover.
+*(Historical, 2026-08-07)* The three original CONFLICT findings (§2, §3, §14/§15) all pointed at
+the same root cause: the one existing AI-to-motor path (`claude_client.py` via `brain.py::_stuck()`)
+blocked the tick thread and had no independent safety gate or duration clamp. Phase 1 (§2/§3) and
+now §14/§15 (2026-08-08, `ai_provider.py`) have both landed — §2/§3 remain listed as CONFLICT only
+because Phase 1 is still not *live-verified* (see below), not because the code itself still
+conflicts with the plan.
 
 ## Proposed Phase 1 scope (safety only, per the plan's own §24 ordering)
 
@@ -163,3 +163,30 @@ across prior sessions) is the overall gating item, and §9/§10/§11's own
 documented gaps (room-identification heuristic, real slip-corrected localization, obstacle-aware
 global planning beyond straight-line fallback) remain open for a future milestone 2, by design —
 not attempted here per each section's own "not full SLAM" instruction.
+
+## Update (2026-08-08, same day): Phase 5 begun — §12 (vision shape) and §14/§15 (AIProvider
+## unification) implemented
+
+Continuing per §24's phase order (Phase 1 Safety → Phase 2 Motion foundation → Phase 3 World
+model → Phase 4 Navigation, all now done → **Phase 5 Vision/AI**, begun this update):
+
+- **§12** (see updated row above): `vision.py::ObjectDetector.detect()` now returns
+  `timestamp`/`camera_id` per detection.
+- **§14/§15** (see updated rows above, and the retired-`claude_client.py`/`safety.py`-unchanged
+  notes added to the §2/§3 rows): new `ai_provider.py` — `AIProvider` ABC + `AIResult` +
+  `CloudAIProvider`/`LocalAIProvider`, `build_world_state()` implementing §14's schema from real
+  `world_model.py` data. `claude_client.py` and `cloud_ai.py` fully deleted, not shimmed —
+  `brain.py` and `voice.py` now share one `CloudAIProvider` instance instead of two independent,
+  duplicated Anthropic clients. `voice.py`'s old hardcoded `0.8`/`0.0` "confidence" is gone,
+  replaced by a real model-self-reported `intent_confidence` plus a separately-computed
+  `action_confidence`. **`safety.py::SafetyController.approve_motion()` was not touched** — it
+  remains the sole authority over what the rover is allowed to do, unchanged by this refactor.
+  25 new tests (`tests/test_ai_provider.py`), all off-network (HTTP calls faked/never reached in
+  any automated test — no live Anthropic API call is made by this test suite).
+
+Tally now DONE:8, PARTIAL:8, MISSING:1 (§17-expected only), CONFLICT:2 (§2/§3, both stale findings
+— see the notes added to those rows), N/A-HW:2 (§5/§7). Remaining unstarted work in the plan:
+§13 (memory tiering, currently PARTIAL), §17 (stair-climbing prep, intentionally not started),
+§18/§21/§22 (config/logging/docs cleanup, PARTIAL), and Phase 6/7 (§13/§17 overlap — memory
+architecture, advanced retrieval/requester-navigation behavior). Phase 1 through §15 remains
+**not live-verified** — unchanged gating item, still blocked on the pre-existing IMU/I2C fault.
