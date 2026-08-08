@@ -37,6 +37,7 @@ class SafetyController:
         self._drive=drive_base
         self._ctx={'front_cm':999.0,'tilt_deg':0.0,'bat_tier':'normal','motion_enabled':False}
         self._deadline=None; self._active_action=None
+        self._last_estop_log_t=0.0
 
     def update_context(self,front_cm=None,tilt_deg=None,bat_tier=None,motion_enabled=None):
         # Called once near the top of brain.py's _tick() so per-call sites (forward()/stop()/etc.)
@@ -100,5 +101,11 @@ class SafetyController:
         # Immediate hard brake (not the ramped stop()) — for tilt/battery faults and sustained
         # sensor faults, where a 0.5s ramp-down is the wrong call. Also clears any in-flight timed
         # move so a stale deadline can't fire after recovery.
-        log.warning(f'emergency stop: {reason}')
+        # brain.py calls this every tick for as long as the fault persists (correct — the brake
+        # must be reasserted continuously) but the log line is throttled to ESTOP_LOG_INTERVAL_S
+        # so a sustained fault doesn't flood the log at tick rate (found 2026-08-08 live: a
+        # powered-off base sitting in battery-shutdown logged this line ~20x/sec, unbounded).
+        now=time.time()
+        if now-self._last_estop_log_t>config.ESTOP_LOG_INTERVAL_S:
+            log.warning(f'emergency stop: {reason}'); self._last_estop_log_t=now
         self._drive.brake(); self._deadline=None; self._active_action=None

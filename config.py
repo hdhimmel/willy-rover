@@ -85,6 +85,14 @@ ENCODER_COUNTS_PER_REV=3292  # §9.2: 823.1 PPR x4 quadrature decode
 WHEEL_DIAMETER_M=0.065  # UNCONFIRMED placeholder
 TRACK_WIDTH_M=0.28      # UNCONFIRMED placeholder — center-to-center of left/right wheel tracks
 POSE_LOG_INTERVAL_S=5.0 # brain.py logs the current odometry pose at most this often
+ESTOP_LOG_INTERVAL_S=5.0 # safety.py throttles emergency_stop()'s own log line to at most this
+                          # often — the brake() call itself still fires every tick unconditionally,
+                          # only the logging is throttled (found 2026-08-08: a sustained fault/tilt/
+                          # battery-shutdown condition calls emergency_stop() every tick for as long
+                          # as it persists, which had been flooding the log at ~20Hz with no limit —
+                          # same class of bug as 516d1ec's memory.save_all_now() fix, just for a
+                          # log line instead of a disk write, and missed by that pass since it lives
+                          # in safety.py not brain.py)
 
 # Current monitoring — INA260 x3 (§5.2). Monitor/log only (FR-1100 diagnostics) — no numeric
 # overcurrent trip thresholds exist anywhere in the documentation to hardcode a cutoff against.

@@ -92,6 +92,29 @@ def test_emergency_stop_clears_pending_deadline():
     sc.request('forward',0.5,0.01)
     sc.emergency_stop('test')
     time.sleep(0.02)
+
+def test_emergency_stop_brakes_every_call_even_while_log_throttled():
+    # Found 2026-08-08 live: brain.py calls emergency_stop() every tick for as long as a fault
+    # persists (correct -- the brake must be reasserted continuously), but its log line isn't
+    # meant to repeat at tick rate. Braking must never be affected by the log throttle below.
+    sc,drive=_sc()
+    for _ in range(5): sc.emergency_stop('battery shutdown 3.17V')
+    assert drive.calls.count(('brake',))==5
+
+def test_emergency_stop_log_throttled(caplog):
+    sc,drive=_sc()
+    with caplog.at_level('WARNING','safety'):
+        sc.emergency_stop('reason A'); sc.emergency_stop('reason B'); sc.emergency_stop('reason C')
+    assert sum('emergency stop' in r.message for r in caplog.records)==1
+
+def test_emergency_stop_logs_again_after_interval_elapses(monkeypatch,caplog):
+    monkeypatch.setattr(config,'ESTOP_LOG_INTERVAL_S',0.01)
+    sc,drive=_sc()
+    with caplog.at_level('WARNING','safety'):
+        sc.emergency_stop('reason A')
+        time.sleep(0.02)
+        sc.emergency_stop('reason B')
+    assert sum('emergency stop' in r.message for r in caplog.records)==2
     assert sc.tick() is False  # nothing left to time out -- already cleared
 
 # --- request() respects cached context (update_context) ---
