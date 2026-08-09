@@ -85,11 +85,20 @@ ENCODER_COUNTS_PER_REV=3292  # §9.2: 823.1 PPR x4 quadrature decode
 WHEEL_DIAMETER_M=0.065  # UNCONFIRMED placeholder
 TRACK_WIDTH_M=0.28      # UNCONFIRMED placeholder — center-to-center of left/right wheel tracks
 POSE_LOG_INTERVAL_S=5.0 # brain.py logs the current odometry pose at most this often
-TICK_OVERRUN_THRESHOLD_S=0.1 # brain.py::run() logs+counts a TICK_OVERRUN when a single _tick()
-                              # call takes longer than this (loop targets ~50ms sleep + tick time;
-                              # 100ms is a generous budget before it's eating real margin) --
+TICK_OVERRUN_THRESHOLD_S=0.15 # brain.py::run() logs+counts a TICK_OVERRUN when a single _tick()
+                              # call takes longer than this (loop targets ~50ms sleep + tick time) --
                               # 2026-08-08 audit P1, pure visibility since no systemd WatchdogSec
-                              # is actually configured to catch a hung loop on its own
+                              # is actually configured to catch a hung loop on its own.
+                              # Raised from 0.1 2026-08-09 after this ran live for the first time:
+                              # a sustained-brake state (battery shutdown/tilt/sensor fault) makes
+                              # safety.py::emergency_stop() call motors.py::brake() every tick, which
+                              # is 6 real per-wheel PCA9685 I2C writes -- that alone measured
+                              # 100-134ms live (py-spy confirmed the cost is in
+                              # adafruit_pca9685.duty_cycle's I2C write, not a bug). That write is
+                              # intentional (safety.py's own comment: must reassert every tick to
+                              # survive a noise-flipped register) so the threshold moved up to match
+                              # real cost instead of the write being removed. Still tight enough to
+                              # catch a genuine hang well above this range.
 ESTOP_LOG_INTERVAL_S=5.0 # safety.py throttles emergency_stop()'s own log line to at most this
                           # often — the brake() call itself still fires every tick unconditionally,
                           # only the logging is throttled (found 2026-08-08: a sustained fault/tilt/
