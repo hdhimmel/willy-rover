@@ -51,7 +51,13 @@ class VoicePipeline:
             # wakeword_models — the old kwarg silently fell through to **kwargs and crashed
             # deeper inside AudioFeatures.__init__, caught here and disabling voice entirely.
             self._wakeword=OwwModel(wakeword_model_paths=[config.WAKEWORD_MODEL_PATH])
-            self._whisper=WhisperModel(config.WHISPER_MODEL_SIZE,device='cpu',compute_type='int8')
+            # local_files_only: WHISPER_MODEL_SIZE is a hub name, not a path like the other three
+            # models above -- without this, construction hits huggingface.co to check the cached
+            # revision every time, violating FR-1500-002's "no cloud dependency for basic STT"
+            # and adding a startup network dependency. Cache already exists at
+            # ~/.cache/huggingface/hub/models--Systran--faster-whisper-small.en (found 2026-08-09).
+            self._whisper=WhisperModel(config.WHISPER_MODEL_SIZE,device='cpu',compute_type='int8',
+                                        local_files_only=True)
             self._local_ai=LocalAIProvider()  # §14 -- was a bare Llama(...) instance here
             if not self._local_ai.available: raise RuntimeError('local LLM failed to load')
         except Exception as e:

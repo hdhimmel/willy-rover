@@ -790,16 +790,21 @@ a `tone` argument and `_SAFETY_PATTERN` correctly forces it to
 but after that check `tone` is never actually used for anything; no
 caller in the codebase ever requests `'funny'`/`'silly'`/`'bashful'`,
 only the default `'neutral'`. The guard rail is real and correctly
-built; the capability it guards doesn't exist yet. **Operational note:**
-`ENABLE_VOICE=False` on this unit today. `config.py`'s own comment
-attributes this to voice model files "not downloaded yet," but that
-comment is stale --- `models/hey_jarvis_v0.1.onnx`,
-`models/llama-3.2-3b-instruct-q4.gguf`, and `models/piper/*` are all
-present on disk (dated 2026-08-06) and every required package
-(`openwakeword`/`faster_whisper`/`llama_cpp`) imports cleanly in this
-venv. Whether `ENABLE_VOICE` can now be flipped on, or is deliberately
-still off for an untested-end-to-end or wake-phrase-placeholder reason,
-is worth confirming with the owner rather than assuming.
+built; the capability it guards doesn't exist yet. **Operational update
+(2026-08-09): `ENABLE_VOICE` flipped to `True` on owner's go-ahead** ---
+model files were confirmed present (dated 2026-08-06, the "not
+downloaded yet" comment was stale) and all required packages import
+cleanly. Flipping it on surfaced one real, now-fixed gap:
+`WhisperModel(config.WHISPER_MODEL_SIZE, ...)` made a live HTTP request
+to huggingface.co at construction time on every startup, even with the
+model already cached locally --- `WHISPER_MODEL_SIZE` is a hub name, not
+a filesystem path like the other three models, so without
+`local_files_only=True` it phones home to check the cached revision.
+This violated FR-1500-002's "no cloud dependency for basic STT" and
+added a startup network dependency; fixed in `voice.py` by passing
+`local_files_only=True` (the cache already exists locally). Not yet
+live-verified end-to-end on hardware --- wake phrase is still the "Hey
+Jarvis" placeholder, not "Hey Willie".
 
 # FR-1600 Facial Expression / Display Feedback
 
@@ -1498,7 +1503,7 @@ autonomy.
 | ID | Status | Reason |
 |---|---|---|
 | M-001 Autonomous navigation | DONE | `navigation.py::Navigator` FSM wired as `brain.py`'s `NAVIGATE` state; raw-coordinate targets work, room-name resolution untested in production (`world_model.add_room()` only ever called from tests). |
-| M-002 Voice command processing | PARTIAL | Pipeline fully built; `ENABLE_VOICE=False` by default despite model files actually being present (see FR-1500 status note). |
+| M-002 Voice command processing | PARTIAL | Pipeline fully built and now enabled (`ENABLE_VOICE=True`, 2026-08-09); not yet live-verified end-to-end on hardware (see FR-1500 status note). |
 | M-003 Local AI inference | DONE | `ai_provider.py::LocalAIProvider` wraps `llama_cpp.Llama`, confirmed importable; gates FR-1400 fallback via confidence floor. |
 | M-004 Object recognition | PARTIAL | YOLOv8 on CPU, not the Hailo NPU the FRD assumes (none installed); `ENABLE_OBJECT_RETRIEVAL=False` by default. |
 | M-005 Obstacle avoidance | DONE | Sonar-driven `AVOID` state backed by `safety.py::approve_motion()`'s unconditional obstacle reject. |

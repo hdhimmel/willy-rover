@@ -218,9 +218,11 @@ EMAIL_OUTBOUND_ALLOWLIST=('h.d.himmel@gmail.com',)
 EMAIL_INBOUND_ALLOWLIST_PATH='secrets/email_sender_allowlist.json'
 
 # --- FR-1500 voice pipeline. Hardware confirmed present 2026-08-06 (USB PnP Audio Device,
-# mic+speaker, card 2). Model files are NOT downloaded yet — ENABLE_VOICE stays False until
-# they exist at these paths (models/ is gitignored, too large for git).
-ENABLE_VOICE=False
+# mic+speaker, card 2). Model files (models/ is gitignored, too large for git) confirmed present
+# 2026-08-09 (downloaded 2026-08-06, comment above previously said otherwise — stale). Enabled
+# 2026-08-09 on owner's go-ahead; not yet live-verified end-to-end on hardware. Wake phrase is
+# still the "Hey Jarvis" placeholder below, not "Hey Willie" — see that note.
+ENABLE_VOICE=True
 # TEMPORARY STAND-IN (2026-08-06): the real wake phrase is "Hey Willie", but that needs actual
 # custom training (synthetic TTS data + a large negative-audio corpus + a training run) — not a
 # download, and not attempted here (owner chose to defer it rather than run a multi-hour training
