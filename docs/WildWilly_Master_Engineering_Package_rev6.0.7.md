@@ -297,6 +297,28 @@ Demonstration.
                                                                             pending (§0.5)
   -----------------------------------------------------------------------------------------
 
+**As-built note (2026-08-09):** this table's Status column predates the
+entire software build (Phases 1-6 + audit follow-on, landed
+2026-08-07/09) and was never revisited alongside it — most rows still
+read "pending build" for software that has since shipped.
+`WildWilly_Functional_Requirements_Document_v2.2.md` is now the
+authoritative, actively-maintained source for M-table status (its own
+text: "moved here... so this document is the single source for all
+functional-requirement content") — see that file's M-table section for
+current per-item status rather than trusting this row's "Status" text.
+Compact gloss, software side only (mechanical/electrical build status
+above in §0 is separately current): M-001 (navigation), M-002 (voice),
+M-003 (local AI), M-004 (vision/YOLO), M-005 (obstacle avoidance) are
+all code-complete at milestone-1 scope but motion has not been
+hardware-verified live; M-002's voice pipeline is additionally disabled
+today (`ENABLE_VOICE=False` — model files not yet provisioned on this
+unit); M-009 (thermal monitoring) is fully unbuilt, not just untested;
+M-011 as defined *here* ("Cockpit access test, :9090") is a different
+capability than M-011 as defined in the FRD ("Remote administration") —
+neither is built, but the two documents don't even agree on what M-011
+means; worth reconciling with the owner rather than guessing which
+definition is authoritative.
+
 3\. System Architecture
 
 3.1 System Actuator & Sensor Census (final)
