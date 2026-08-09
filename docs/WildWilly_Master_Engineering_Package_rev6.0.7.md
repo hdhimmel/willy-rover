@@ -1626,6 +1626,33 @@ its own remaining gaps are hardware calibration (no per-joint IK, no
 tactile hand-off sensor), not missing architecture. See
 `docs/WildWilly_Subsystem_Status.md` for the full per-module breakdown.
 
+**As-built update (2026-08-09), plan closure:** every section of
+`docs/WildWilly_Claude_Fix_Implementation_Plan.md` that is code-shaped
+(not hardware-gated) is now done. `docs/WildWilly_Claude_Fix_Gap_Analysis.md`\'s
+tally: **DONE 15, PARTIAL 1 (§12 YOLO/vision, deliberately --- bearing/
+range kept as a separate `localize()` call rather than merged into
+`detect()`, a documented minimal-diff choice, not a gap), MISSING 1
+(§17 stair-climbing prep, correctly hardware-gated, matches M-006\'s
+stretch-goal reclassification above).** A follow-on external code-audit
+pass (8 more commits, `bb90e38`..`0deecc3`) closed the remaining P0/P1/P2
+findings it raised: the `smbus2` import wasn\'t actually simulation-safe
+(§19 had one real gap after all), storage-permission tests false-passed
+under root, no regression test existed to catch a future direct
+`DriveBase` bypass of `safety.py`, five background threads didn\'t
+join on `stop()`, `config.validate()` now self-checks address/pin/
+threshold sanity at startup (and found a real bug doing it --- see
+`BAT_FULL_V` below), tick-duration telemetry was added, and
+`RoverBrain.stop()` wasn\'t idempotent (a second call crashed mid-cleanup,
+silently skipping `world_model.close()`/`motors.cleanup()`/every sensor\'s
+`stop()` --- fixed). Two real, still-open items surfaced along the way,
+not fixed because they\'re calibration values or need the owner\'s
+input, not architecture: **`config.BAT_FULL_V=11.39V` sits below
+`BAT_WARN_V=11.4V`** (so `battery_pct` --- display-only, never a safety
+input --- could read 100% at a voltage the safety ladder already calls
+\'warn\'; owner is measuring the real resting voltage to correct it), and
+the tick-loop\'s `TICK_OVERRUN_THRESHOLD_S` needed live recalibration ---
+see the §14 safety-architecture note below.
+
 13.4 Persistence & Network Memory (WD My Cloud)
 
 Principle: local-first, network-synced, never network-dependent --- a
@@ -1757,6 +1784,31 @@ detection/trigger (row 5, minus \"park arm\") are all real and, as of
 
 Default motor state is DISABLED --- motion requires an active, valid
 command; loss of command always fails to stop, never to run.
+
+**As-built update (2026-08-09), tick-loop timing under sustained fault:**
+the first live run of the tick-duration telemetry added in the audit
+pass above (`brain.py::_record_tick_duration()`) surfaced a real,
+previously-unmeasured cost: while `SafetyController.emergency_stop()`
+is asserting a brake every tick (battery shutdown, tilt fault, or
+sensor fault --- i.e. exactly the states this section is about), each
+tick does 6 real per-wheel I²C writes to the PCA9685 (`motors.py::
+brake()`), measured live at 100--134ms per tick against `_tick()`\'s
+50ms sleep target. Confirmed via `py-spy` against the live process, not
+inferred. This is intentional, not a bug --- `safety.py`\'s own comment
+notes the brake must be reasserted every tick to survive a
+noise-flipped register, the same reasoning as this section\'s "default
+motor state is DISABLED" principle above. Practical effect: control-loop
+rate during a sustained fault is closer to 7--10Hz than the nominal 20Hz.
+No functional consequence today since row 2\'s systemd watchdog was
+already established above as not configured; `TICK_OVERRUN_THRESHOLD_S`
+was raised 0.1s→0.15s to match the measured cost rather than the writes
+being removed (owner\'s choice, given the noise-resilience tradeoff).
+Separately, this same week\'s restart cycle re-confirmed live (not just
+via the 2026-08-08 pass) that init, the safety FSM, and the battery-
+shutdown path all behave correctly on fresh code --- motion itself
+(forward/reverse/turn, `NAVIGATE`, retrieval, mapping) still has not
+been commanded live; the drive base remains unpowered as of this
+update.
 
 15\. Wiring Standards
 
@@ -3272,4 +3324,49 @@ source file if the granular audit trail is ever needed.
                                                   WildWilly_Subsystem_Status.md`
                                                   for the full detail behind
                                                   each correction.
+
+  6.0.9                   2026-08-09              Plan closure: gap-analysis
+                                                  tally now DONE 15/PARTIAL 1
+                                                  (§12, deliberate)/MISSING 1
+                                                  (§17, hardware-gated) ---
+                                                  every code-shaped section
+                                                  of the Claude Fix plan is
+                                                  done. External code-audit
+                                                  follow-on closed (8 more
+                                                  commits): `smbus2` import
+                                                  simulation-safety gap,
+                                                  root-false-passing storage
+                                                  tests, a new regression
+                                                  test against direct
+                                                  `DriveBase` bypass,
+                                                  thread-join on shutdown for
+                                                  5 background threads,
+                                                  `config.validate()`
+                                                  startup self-check, tick-
+                                                  duration telemetry, and a
+                                                  `RoverBrain.stop()`
+                                                  non-idempotency bug (2nd
+                                                  call crashed mid-cleanup).
+                                                  Live-verified again on
+                                                  fresh code after two
+                                                  owner-run restarts: clean
+                                                  init, safety FSM, battery-
+                                                  shutdown; motion still not
+                                                  commanded live. `TICK_
+                                                  OVERRUN_THRESHOLD_S` raised
+                                                  0.1s→0.15s after `py-spy`
+                                                  traced the real cause to
+                                                  `brake()`\'s intentional
+                                                  per-tick PCA9685
+                                                  reassertion (§14). Two
+                                                  items remain genuinely
+                                                  open, not fixed here:
+                                                  `BAT_FULL_V` calibration
+                                                  (below `BAT_WARN_V`,
+                                                  awaiting owner\'s meter
+                                                  reading) and live motion
+                                                  verification. See `docs/
+                                                  WildWilly_Claude_Fix_Gap_Analysis.md`
+                                                  for the section-by-section
+                                                  detail.
   ----------------------------------------------------------------------------

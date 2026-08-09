@@ -1,6 +1,15 @@
 **Willy Functional Requirements Document (FRD)\
 Version 1.0**
 
+**SUPERSEDED (2026-08-09) — use `WildWilly_Functional_Requirements_Document_v2.2.md` instead.**
+This file predates the entire v2.2 subsystem set (smart home, cloud AI, voice, display
+expressions, retrieval, learning, email) and is missing 50 of the 55 FR-IDs actually cited in the
+current codebase (repo-wide grep). The 2026-08-08 as-built implementation-status pass below was
+mistakenly applied to this file instead of `v2.2.md` — a same-named-family versioning trap, same
+class of mistake already documented for the two Master Engineering Package files. The correct,
+current as-built pass is in `v2.2.md`. This file is kept for history only; do not treat its
+implementation-status notes below as current.
+
 # 1. Purpose
 
 This Functional Requirements Document defines the required behavior, safety functions, control systems, autonomy, mobility, and future capabilities of the WildWilly robotic platform.

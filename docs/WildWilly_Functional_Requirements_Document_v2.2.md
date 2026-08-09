@@ -7,6 +7,23 @@ This Functional Requirements Document defines the required behavior,
 safety functions, control systems, autonomy, mobility, and future
 capabilities of the WildWilly robotic platform.
 
+**As-built status pass added 2026-08-09.** This document — not
+`WildWilly_Functional_Requirements_Document_v1.1.md` — is the FRD that
+matches the current codebase: every FR-ID actually cited in
+`/home/hhimmel/rover`'s `.py` files (55 distinct IDs, repo-wide grep)
+appears here; `v1.1.md` is missing 50 of those 55 and predates the
+entire v2.2 subsystem set (smart home, cloud AI, voice, display
+expressions, retrieval, learning, email). An earlier as-built pass
+(2026-08-08) was mistakenly applied to `v1.1.md` instead of this file —
+a same-named-family versioning trap matching the one already documented
+for the two Master Engineering Package files. `v1.1.md` should be
+treated as superseded; a note has been added there pointing here. Every
+requirement group below now has an "Implementation status" note
+verified directly against the current code (not carried over from the
+misapplied v1.1.md pass). See `docs/WildWilly_Claude_Fix_Gap_Analysis.md`
+and `docs/WildWilly_Subsystem_Status.md` for the software-architecture
+detail behind these notes.
+
 # FR-000 Prime Directives (Arbitration Priority Order)
 
 This section establishes a single enforceable priority hierarchy for
@@ -53,6 +70,19 @@ before executing any task-level (Directive 6) behavior. A directive
 violation (e.g. a queued arm motion executing after E-stop trigger) is a
 critical defect, not a tuning issue.
 
+**Implementation status (2026-08-09): DONE for Directives 2-6, with one
+hardware gap.** `brain.py::_tick()` checks sensor faults, tilt, and
+battery tier in that order, each able to preempt retrieval/mapping/
+navigation/voice before Directive 6's FSM dispatch runs -- matches this
+table exactly, and the code's own comments cite "FR-000 Directive N" at
+each check. Directive 1 (E-stop) is **not software-observable** -- no
+GPIO sense pin exists for the physical latching E-stop, so nothing in
+`brain.py` can check it; the hardware cut works independently of
+software. Directives 2-5 are live-verified as of 2026-08-09 (init,
+safety FSM, and battery-shutdown all reconfirmed on a fresh restart);
+Directive 6 task-level behavior (voice/retrieval/mapping/navigation)
+has not yet been live-verified in motion.
+
 # FR-100 System Startup and Initialization
 
   -----------------------------------------------------------------------
@@ -76,6 +106,13 @@ critical defect, not a tuning issue.
   -----------------------------------------------------------------------
 
 # Acceptance Criteria
+
+**Implementation status (2026-08-09): DONE, live-verified.**
+`willy-rover.service` (systemd, `WantedBy=multi-user.target`) auto-starts
+`main.py`; `RoverBrain.__init__`/`_self_test()` probes every I2C device
+before `INIT->IDLE`; `_motion_enabled` stays `False` until self-test
+passes. Live-verified repeatedly, most recently 2026-08-09 across two
+restarts picking up this session's commits -- clean init both times.
 
 # FR-200 Power Monitoring and Protection
 
@@ -123,6 +160,24 @@ critical defect, not a tuning issue.
 
 # Acceptance Criteria
 
+**Implementation status (2026-08-09): PARTIAL, plus one open calibration
+bug.** FR-200-001/003/004/005 DONE and live-verified: `ADC` (ADS1115
+@0x48) reads battery voltage; three `INA260`s log current/power per
+rail; the tier ladder (`config.BAT_WARN/RTH/SAFE/SHUTDOWN_V`, with
+hysteresis) warns, proactively return-to-homes at the RTH threshold
+with a guaranteed `memory.save_all_now()` (FR-200-005/FR-1900-011), then
+controlled-shuts-down at the SHUTDOWN threshold -- reconfirmed live
+2026-08-09 (`battery_volts=3.16-3.17V` correctly forced `SHUTDOWN` on a
+fresh restart). FR-200-002 is **half-missing**: undervoltage detection
+works via the ladder above; overcurrent detection does not exist --
+`CurrentMonitor.is_healthy` is read-recency only, no numeric overcurrent
+trip threshold exists anywhere in the code. **Open bug, not yet fixed:**
+`config.validate()`'s startup self-check (added this session) found
+`BAT_FULL_V=11.39` is below `BAT_WARN_V=11.4` -- `battery_pct` (display-
+only, never a safety input) could report 100% at a voltage the tier
+ladder has already escalated to 'warn'. Owner is taking a real meter
+reading to correct the calibration value.
+
 # FR-300 Safety and Emergency Stop
 
   -----------------------------------------------------------------------
@@ -149,6 +204,19 @@ critical defect, not a tuning issue.
 
 # Acceptance Criteria
 
+**Implementation status (2026-08-09): PARTIAL, with a real gap.**
+FR-300-001 is **not satisfiable in software today** -- no GPIO sense pin
+exists for the physical E-stop, so nothing in `brain.py` can observe
+it; the latching NC mushroom switch cuts the 12V motion bus directly in
+hardware, which incidentally satisfies FR-300-002/003 (immediate cut,
+manual-latch reset) at the hardware layer only. FR-300-004 is partial:
+a process crash/exit triggers `Restart=on-failure`/`RestartSec=5`
+(motors de-energize when the process exits) -- but there is still no
+configured `WatchdogSec` on the deployed unit (confirmed again
+2026-08-09), so a *hang* (not a crash) would not be caught by anything.
+Do not describe the physical E-stop as software-observable, and do not
+describe a systemd watchdog as configured -- it isn't.
+
 # FR-400 Mobility and Drive Control
 
   -----------------------------------------------------------------------
@@ -172,6 +240,15 @@ critical defect, not a tuning issue.
 
 # Acceptance Criteria
 
+**Implementation status (2026-08-09): DONE.** `motors.py`'s `DriveBase`
+(Adafruit MotorKit, 2x FeatherWing) controls left/right independently;
+forward/reverse/turn all implemented; `_ramp_loop()` slew-rate-limits
+throttle changes (cited as FR-400-003 in the code's own comment);
+`safety.py::approve_motion()` clamps every commanded speed to
+`config.SPEED_MAX` before it reaches the motors -- the single
+authoritative gate (a static-scan regression test, added this session,
+now proves no other module calls `DriveBase` motion methods directly).
+
 # FR-500 Encoder and Speed Control
 
   -----------------------------------------------------------------------
@@ -194,6 +271,18 @@ critical defect, not a tuning issue.
 
 # Acceptance Criteria
 
+**Implementation status (2026-08-09): PARTIAL.** FR-500-001/002 DONE:
+`Encoders` (MCP23017 @0x27 polling) reads quadrature counts;
+`odometry.py::Odometry.update()` converts them into a dead-reckoning
+`Pose` (speed/distance). FR-500-003 is a **real gap, still dead code**:
+`Encoders.stalled()` exists but has zero call sites anywhere in
+production code (confirmed again this session via repo-wide grep).
+FR-500-004 is **not implemented**: odometry is a passive read logged
+every tick with no motor consequence -- `navigation.py::Navigator` does
+close a heading-correction loop (bearing-to-waypoint steering), but
+that's directional, not speed control; there is no closed-loop *speed*
+control anywhere in the codebase.
+
 # FR-600 Steering Control
 
   -----------------------------------------------------------------------
@@ -215,6 +304,15 @@ critical defect, not a tuning issue.
 
 # Acceptance Criteria
 
+**Implementation status (2026-08-09): PARTIAL.** FR-600-001/002/003
+DONE: `Steering` (PCA9685 @0x42) controls all 6 channels; `config.py`
+holds per-servo pulse-width calibration; travel is limited to the
+configured range. FR-600-004 (manual override) is **not built** -- no
+teleop/RC input path exists anywhere in the codebase (see FR-900); the
+only external control surface is voice commands (when
+`ENABLE_VOICE=True` -- see FR-1500's status note on why that's currently
+`False` on this unit), which is not a manual override during autonomy.
+
 # FR-700 Robotic Arm Control
 
   -----------------------------------------------------------------------
@@ -235,6 +333,19 @@ critical defect, not a tuning issue.
 
 # Acceptance Criteria
 
+**Implementation status (2026-08-09): PARTIAL, with a real gap.**
+FR-700-001/002 DONE: `arm.py`'s `Arm` (PCA9685 @0x43) controls all
+joints; `retrieval_task.py` sequences fixed preset positions -- not full
+inverse kinematics (no per-joint calibration exists, honestly flagged
+in the code's own comments). FR-700-003 (joint limits) is enforced via
+configured pulse-width ranges, same mechanism as steering. **FR-700-004
+is still not implemented**: no fault path in `brain.py` (tilt fault,
+sensor fault, battery shutdown) repositions or freezes the arm -- only
+`safety.py::SafetyController.emergency_stop()` brakes the *drive base*
+(`self.steering.center_all(); self.arm.center_all()` runs once at
+startup self-test, not on any later fault). The arm holds whatever PWM
+position it was last commanded to through any live fault.
+
 # FR-800 Sensor Systems
 
   -----------------------------------------------------------------------
@@ -254,6 +365,14 @@ critical defect, not a tuning issue.
   -----------------------------------------------------------------------
 
 # Acceptance Criteria
+
+**Implementation status (2026-08-09): DONE, live-verified.**
+`sensors.py::IMU` (BNO085 @0x4A, 100Hz) reports orientation;
+`SonarArray` (3x HC-SR04) reports obstacle ranges; `TILT_FAULT` FSM
+state trips at `config.IMU_TILT_LIMIT`; `brain.py::_check_health()`
+reports IMU/encoder/current/battery-ADC health every tick and escalates
+a sustained (>1s) fault to `SENSOR_FAULT` + `emergency_stop()`. Live-
+verified repeatedly, most recently on the 2026-08-09 restarts.
 
 # FR-900 Manual Operations
 
@@ -280,6 +399,23 @@ critical defect, not a tuning issue.
 
 # Acceptance Criteria
 
+**Implementation status (2026-08-09): MOSTLY MISSING, and FR-900-005 is
+also not built.** This group describes a remote-operator capability
+that does not exist -- no teleop/RC/remote-command receive path was
+found anywhere (repo-wide grep, confirmed again this session).
+FR-900-002 is the one partial exception: `display.py` shows live
+state/status on the rover's own local screen, but that's a local HUD,
+not remote operator display. FR-900-001/003/004 are unbuilt: no remote
+commands to accept, no communication-loss detection (nothing to lose),
+no remote emergency-override path. **FR-900-005 (accept a voice/manual
+commanded graceful shutdown) is also unbuilt** -- confirmed via grep:
+`voice.py` only pattern-matches the word "shutdown" as part of its
+FR-1500-010 safety-tone-forcing regex (to keep TTS neutral when
+*describing* a shutdown), there is no voice intent that *triggers* one.
+The only shutdown paths today are the FR-200-004/005 battery-tier ones
+and `systemctl stop` from outside the process. This matches M-011
+(Remote administration), also not built -- see the M-table status below.
+
 # FR-1000 Autonomous Navigation
 
   -----------------------------------------------------------------------
@@ -299,6 +435,21 @@ critical defect, not a tuning issue.
   -----------------------------------------------------------------------
 
 # Acceptance Criteria
+
+**Implementation status (2026-08-09): DONE at milestone-1 scope, not
+live-verified for motion.** `navigation.py::Navigator` resolves and
+drives routes (known waypoints, room-graph shortest-path via
+`networkx`, or straight-line fallback) through a `NAVIGATE` FSM state;
+obstacle avoidance exists both in the base reactive FSM (`ROAM`/`AVOID`)
+and as `Navigator`'s own self-contained copy of that logic. Explicitly
+milestone-1, not SLAM: dead-reckoning odometry only, no room-
+identification heuristic, no obstacle-aware global planner beyond the
+straight-line fallback. Voice `stop`/similar commands would return
+control to the operator once voice is enabled (see FR-1500's status).
+**Caveat, unchanged since 2026-08-08 and reconfirmed 2026-08-09:** init/
+safety/battery-shutdown are live-verified on hardware; nothing has yet
+commanded the drive base live -- `NAVIGATE`/obstacle avoidance remain
+sim-tested only, not yet hardware-verified in motion.
 
 # FR-1100 Diagnostics and Logging
 
@@ -320,6 +471,19 @@ critical defect, not a tuning issue.
   -----------------------------------------------------------------------
 
 # Acceptance Criteria
+
+**Implementation status (2026-08-09): DONE.** `brain.py::_check_health()`
+monitors IMU/encoders/current/battery-ADC every tick;
+`logsetup.py::log_event()` tags real fault/abort sites with structured
+`EVENT=<NAME>` markers (`IMU_FAULT`, `LOW_BATTERY`, `OBSTACLE_STOP`,
+`NAVIGATION_ABORT`, `AI_TIMEOUT`, and -- added this session --
+`AI_REQUEST`/`AI_RESULT`/`AI_REJECTED`/`AI_UNAVAILABLE` and
+`TICK_OVERRUN`); a rotating file handler keeps timestamped persistent
+logs; `diagnostics.py` provides the self-test/diagnostic mode.
+`ESTOP_ACTIVE`/`WATCHDOG_FAULT` are deliberately untagged -- the first
+has no GPIO sense pin to observe, the second can't self-log since the
+process is being killed by the time it would fire (moot anyway, since
+no watchdog timeout is configured -- see FR-300).
 
 # FR-1200 Mobility Intelligence and Stair Navigation
 
