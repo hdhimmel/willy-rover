@@ -506,6 +506,17 @@ no watchdog timeout is configured -- see FR-300).
                     model                               
   -----------------------------------------------------------------------
 
+**Implementation status (2026-08-09): MISSING, confirmed and expected.**
+FR-1200-001 through FR-1200-004 have zero code presence anywhere
+(`grep -rni "stair"` across every `.py` file, excluding venv, returns no
+hits in `brain.py`/`world_model.py`/`navigation.py`/`safety.py`; no
+`STAIR_*` FSM state exists; `world_model.py`'s `Room` schema has no
+floor/level concept at all). Matches the project's own documented
+decision: `docs/WildWilly_Claude_Fix_Implementation_Plan.md` explicitly
+says not to implement this yet, and M-006 below was reclassified to a
+stretch goal on 2026-07-18. Clean, intentional deferral, not a
+partially-started feature.
+
 # FR-1300 Smart Home Integration (Google Home)
 
 ASSUMPTION (flag for review): direction is Willie sending commands OUT
@@ -563,6 +574,23 @@ Not yet in scope for any CC session to date.
 
 # Acceptance Criteria
 
+**Implementation status (2026-08-09): PARTIAL --- built and disabled,
+plus one real wiring gap.** `smart_home.py::SmartHomeClient` implements
+device discovery (FR-1300-001) and on/off/dim/scene commands that
+report success/failure back through `voice.py` (FR-1300-002/003).
+FR-1300-004 (works independently of connectivity) is real: missing
+credentials or a network error disable the feature/return an error
+tuple rather than raising, and nothing in `safety.py`/`brain.py`'s
+Directive 1-5 path references this class at all. The real gap:
+**`discover_devices()` is never called from anywhere in the codebase**
+--- no caller ever populates an `entity_id` for `send_command()`, so the
+discovery half is dead code today. FR-1300-005's dedicated-account
+design is sound, but the actual backend is a **Home Assistant REST
+bridge, not the real Google Home/Home Graph API** (documented in the
+module's own comment --- Google doesn't expose third-party control of
+existing Home devices). `ENABLE_SMART_HOME=False` by default with no
+credentials file present on this unit; never exercised end-to-end.
+
 # FR-1400 Cloud AI Assistance (Gemini Fallback)
 
 ASSUMPTION (flag for review): Gemini is a FALLBACK path used only when
@@ -573,6 +601,20 @@ be Willie\'s first cloud-dependent capability if implemented as anything
 more than an optional fallback. Verify this priority with the owner
 before implementation. Added 2026-08-01, v1.3. Not yet in scope for any
 CC session to date.
+
+**CORRECTION (2026-08-09): this assumption is stale --- the FALLBACK
+provider that got built is Anthropic Claude, not Gemini.**
+`config.py:199-204`\'s own comment documents why: Willie\'s dedicated
+Google account\'s Gemini API key hit a persistent zero free-tier quota
+even with billing linked (a Google-side provisioning gap, parked
+2026-08-06), so the fallback was swapped to Anthropic\'s API instead,
+reusing the same `ANTHROPIC_API_KEY` already configured for `brain.py`\'s
+STUCK-state motion decisions. The fallback-not-primary-dependency
+priority this ASSUMPTION cared about is still honored (see the
+implementation-status note below) --- only the specific provider
+changed. FR-1400-005\'s "same dedicated Google account as FR-1300-005"
+authentication requirement is now inaccurate as literally written:
+Anthropic auth is an unrelated API key, not a Google-account credential.
 
   -----------------------------------------------------------------------
   Requirement ID    Requirement       Priority          Verification
@@ -623,6 +665,20 @@ CC session to date.
                     on-device per                       
                     FR-2000                             
   -----------------------------------------------------------------------
+
+**Implementation status (2026-08-09): PARTIAL, with a confirmed spec-
+vs-implementation mismatch --- see the CORRECTION note above the
+ASSUMPTION callout for the Gemini-to-Claude swap itself.** Sound parts:
+FR-1400-001 (confidence-threshold routing, `LOCAL_LLM_CONFIDENCE_FLOOR=0.55`),
+FR-1400-003 (graceful onboard-only fallback, never guesses), and
+FR-1400-004 (never blocks Directives 1-5 --- `ai_provider.py`'s
+`AIProvider` runs every cloud call on its own worker thread, `brain.py`'s
+`_stuck()` polls non-blockingly) are all genuinely satisfied. FR-1400-002
+(only with active connectivity) is satisfied reactively, not
+proactively --- there is no pre-flight connectivity check; a request is
+attempted and a `URLError`/`TimeoutError` is caught and treated as
+unavailable, which is functionally equivalent but worth being precise
+about.
 
 # FR-1500 Voice Interaction
 
@@ -716,6 +772,35 @@ section behind it until now. Added 2026-08-02, v1.4.
 
 # Acceptance Criteria
 
+**Implementation status (2026-08-09): PARTIAL. Core pipeline is real;
+the personality-tone system (FR-1500-008/009) is unused plumbing, not a
+working capability.** FR-1500-001-004 are implemented and correctly
+wired: openwakeword (currently the bundled "Hey Jarvis" model as a
+documented placeholder for an untrained "Hey Willie" wake word --- see
+[[project_rover_wakeword_training]]), faster-whisper STT, local Llama
+3.2 3B with FR-1400 fallback only below the confidence floor, and Piper
+TTS. FR-1500-005/006/007 (never guess, non-blocking, Directive-gated)
+are all correctly enforced --- `speak()` only enqueues to a
+dedicated-thread queue, and every motion-triggering voice intent is
+queued for `brain.py` to drain and gate through Directives 1-5, never
+executed directly by `voice.py`. **FR-1500-008/009 (playful/bashful
+tone) are effectively not implemented**: `speak(text, tone=...)` accepts
+a `tone` argument and `_SAFETY_PATTERN` correctly forces it to
+`'neutral'` for safety-shaped text (satisfying FR-1500-010's guard) ---
+but after that check `tone` is never actually used for anything; no
+caller in the codebase ever requests `'funny'`/`'silly'`/`'bashful'`,
+only the default `'neutral'`. The guard rail is real and correctly
+built; the capability it guards doesn't exist yet. **Operational note:**
+`ENABLE_VOICE=False` on this unit today. `config.py`'s own comment
+attributes this to voice model files "not downloaded yet," but that
+comment is stale --- `models/hey_jarvis_v0.1.onnx`,
+`models/llama-3.2-3b-instruct-q4.gguf`, and `models/piper/*` are all
+present on disk (dated 2026-08-06) and every required package
+(`openwakeword`/`faster_whisper`/`llama_cpp`) imports cleanly in this
+venv. Whether `ENABLE_VOICE` can now be flipped on, or is deliberately
+still off for an untested-end-to-end or wake-phrase-placeholder reason,
+is worth confirming with the owner rather than assuming.
+
 # FR-1600 Facial Expression / Display Feedback
 
 Covers runtime use of the RPi Touch Display 2 (already wired, §7.x) for
@@ -777,6 +862,21 @@ anywhere in the FRD or master doc. Added 2026-08-02, v1.4.
                     always take immediate                        
                     visual priority                              
   --------------------------------------------------------------------------------
+
+**Implementation status (2026-08-09): MOSTLY DONE, one dead trigger.**
+`display.py::WillyFace` implements distinct idle/listening/processing
+(FR-1600-001), speaking (FR-1600-002), and an unambiguous fault/E-stop
+and low-battery badge (FR-1600-003/004) driven off the true FSM state,
+never the personality overlay. FR-1600-005 (never delay the tick loop)
+is genuinely satisfied --- rendering runs on its own dedicated thread,
+entirely separate from `brain.py`'s tick thread. FR-1600-007 (silly idle
+animation) is real and working, triggered every `IDLE_PERSONALITY_CYCLE_S`
+(90s) while idle. FR-1600-008 (personality never overrides fault/lowbatt)
+is correctly enforced via an explicit safe-states exclusion list. **The
+one real gap: FR-1600-006 ("bashful" expression) is built but never
+triggered** --- the rendering exists but nothing anywhere detects the
+"being complimented"/personal-question triggers that would call it,
+mirroring FR-1500-009's same non-implementation.
 
 # FR-1700 Object Detection and Retrieval Task
 
@@ -878,6 +978,31 @@ capability in the spec and was not previously captured anywhere. Added
 
 # Acceptance Criteria
 
+**Implementation status (2026-08-09): DONE mostly, hardware-calibration
+gaps confirmed accurate, plus one additional hand-off gap found this
+pass.** The most complete v2.2 subsystem. FR-1700-001 detection works
+via YOLOv8 through `ultralytics` on **CPU, not the Hailo NPU** the FRD
+assumes --- no Hailo hardware is installed on this unit, and
+`vision.py`'s detect/localize interface is written as a backend swap
+point for later. FR-1700-002 localization is an explicitly documented
+heuristic (no depth sensor/camera calibration), "usable for coarse...
+approach control, not for precision placement" per the code's own
+comment. FR-1700-003 obstacle avoidance during approach is real, but
+the "head/arm keep-out volume (arm.py)" the FRD cites **does not
+exist** --- `arm.py` states plainly no per-joint safe limits or IK exist
+yet. FR-1700-004 is confirmed a fixed primitive sequence, not IK, as
+previously known. FR-1700-005 (grasp-failure retry) is real, capped at
+`RETRIEVAL_GRASP_RETRIES`. FR-1700-006 hand-off confirmation is
+confirmed timeout-based (15s), not tactile, as previously known, and
+honestly logged as such on a timeout release. FR-1700-007 (abort on any
+Directive 1-5 trigger) is correctly wired at every battery
+tier/tilt/sensor-fault call site. **New gap found this pass, beyond what
+was previously known: FR-1700-008 is only partially satisfied** ---
+person presence is checked before entering the hand-off wait, but is
+**never re-checked before a timeout-triggered release**; if the person
+walks away during the 15s window, the object still releases with no
+re-verification anyone is there to receive it.
+
 # FR-1800 Privacy and Data Handling
 
 Covers microphone, camera, and cloud-fallback data handling --- relevant
@@ -945,6 +1070,27 @@ v1.6.
                     independent of                       
                     E-stop                               
   ------------------------------------------------------------------------
+
+**Implementation status (2026-08-09): PARTIAL --- real-time behaviors
+are solid, retention enforcement is dead code.** FR-1800-001/002
+(local-only by default) hold by construction: no raw audio/frame ever
+gets written to disk or transmitted outside the FR-1400 cloud path.
+FR-1800-003 (indicate when data leaves the device) is real but
+**incompletely wired**: the cloud-send notice fires from `voice.py`'s
+free-text fallback path, but is **never called from `brain.py`'s
+`_stuck()`**, which uses the same shared `CloudAIProvider` for
+STUCK-state motion decisions --- no privacy indication when Claude is
+queried for navigation, only for voice free-text. FR-1800-004 (defined
+retention period) has a real config value and a real purge function
+(`memory_store.py`/`privacy.py::purge_expired()`) --- but **neither is
+ever called from anywhere in production**; retention is configured but
+not actually enforced by any scheduled job, so data accumulates
+indefinitely in practice despite the documented 30-day ceiling.
+FR-1800-005 (disable mic/camera) is real as a mechanism --- a flag-file
+check, re-evaluated continuously by both `voice.py` and `vision.py` ---
+but `disable_mic_camera()`/`enable_mic_camera()` are **never called from
+any voice intent or exposed control path**; the only way to trigger it
+today is manually creating the flag file by hand.
 
 # FR-1900 Learning from Observation and Instruction
 
@@ -1112,6 +1258,34 @@ control, detect faults, avoid obstacles, support autonomous navigation,
 and enter a safe state when power, communications, or safety conditions
 become invalid.
 
+**Implementation status (2026-08-09): PARTIAL/MISSING --- no
+demonstration capture/replay exists; verbal-instruction and fact
+storage are real but narrower than specced.** **FR-1900-001/002/003
+(capture, replay, and mismatch-detection of a camera-observed human
+demonstration) do not exist as a working capability**: the storage-layer
+methods (`record_demonstration()`/`replay_demonstration()`) are fully
+implemented but **never called from anywhere outside their own module**
+--- no camera-watching capture loop exists anywhere, and `retrieval_task.py`'s
+grasp is the fixed primitive sequence confirmed under FR-1700, not
+anything demonstration-learned. What does work: FR-1900-004 (persist
+environment facts) is real for objects via `mapping.py`'s voice-triggered
+`MappingSession` in production, but "room layout" is not --- `world_model.add_room()`
+is only ever called from test files, never production code (matches
+`mapping.py`'s own documented "room identification is an explicit gap
+this milestone" note). FR-1900-005 (routine-pattern recognition) exists
+at the storage layer only, never called. FR-1900-006 (verbal "remember
+that.../when I say X do Y") is real and wired via `voice.py::_maybe_learn()`.
+FR-1900-007 (apply stored context) is **only half-wired**: voice
+free-text interpretation pulls stored facts/instructions into the LLM
+prompt, but `RetrievalTask` is constructed with no `memory` reference at
+all --- stored facts/instructions are never available as context for
+FR-1700 retrieval tasks. FR-1900-008 (confirm + support deletion) is
+half-real: storage confirms back via speech, but delete methods exist
+with no voice intent ever calling them --- no way to actually ask Willie
+to forget something today. **FR-1900-011 (guaranteed save before
+shutdown) is confirmed correctly implemented**, including proactively at
+the earlier RTH battery threshold, not just at commanded shutdown.
+
 # FR-2000 Email Account and Management
 
 Covers Willie\'s own dedicated Google/Gmail account --- used both as the
@@ -1225,6 +1399,33 @@ expand who\'s trusted enough to be read.
 
 # Acceptance Criteria
 
+**Implementation status (2026-08-09): PARTIAL --- the three documented
+security layers are real and well-written in-code, but the outbound/
+allowlist-management paths are entirely unwired to any live caller.**
+FR-2000-001/002/005 are solid: dedicated-account app-password login,
+120s inbox polling on its own thread (satisfying FR-2000-008's
+never-block-Directives requirement by construction), credentials never
+in plaintext logs. FR-2000-003 (surface, don't act silently) is real ---
+`brain.py::_idle()` speaks new-mail summaries only, never acts on
+content. **FR-2000-006's prompt-injection boundary is exactly as
+documented**, worth quoting directly from `email_client.py`'s own
+comment: *"this module never itself constructs an LLM prompt from email
+content... it wraps the body in an explicit untrusted-data delimiter and
+instructs the model not to treat it as commands."* FR-2000-009's
+single-recipient allowlist is enforced at two independent code points
+(queue time and send time), not just config. FR-2000-010/011 (inbound
+allowlist) is enforced via `_sender_allowed()`, with the module's own
+comment honestly flagging the real limit of "owner-confirmed": *"there
+is no voiceprint/biometric auth anywhere in this codebase... in practice
+this means 'a command spoken at the physical device,' not a
+cryptographically verified owner identity."* **The gap beyond what the
+code already self-documents:** outbound sending, allowlist management,
+and the prompt-template helper are **never called from `voice.py` or
+`brain.py`** --- only inbound summarization is wired end-to-end today.
+FR-2000-004's "never send without confirmation" is true today only
+because sending is unreachable from any live user-facing trigger, not
+because a tested confirm-then-send flow has been exercised.
+
 # Mission-Level Functional Requirements (M-001--M-012)
 
 Moved here from the WildWilly Master Engineering Package (rev 6.0) so
@@ -1291,3 +1492,55 @@ autonomy.
   M-020          Email account and management --- FR-2000  NEW v2.0 ---
                                                            unassigned
   ------------------------------------------------------------------------
+
+**Implementation status (2026-08-09), per mission item:**
+
+| ID | Status | Reason |
+|---|---|---|
+| M-001 Autonomous navigation | DONE | `navigation.py::Navigator` FSM wired as `brain.py`'s `NAVIGATE` state; raw-coordinate targets work, room-name resolution untested in production (`world_model.add_room()` only ever called from tests). |
+| M-002 Voice command processing | PARTIAL | Pipeline fully built; `ENABLE_VOICE=False` by default despite model files actually being present (see FR-1500 status note). |
+| M-003 Local AI inference | DONE | `ai_provider.py::LocalAIProvider` wraps `llama_cpp.Llama`, confirmed importable; gates FR-1400 fallback via confidence floor. |
+| M-004 Object recognition | PARTIAL | YOLOv8 on CPU, not the Hailo NPU the FRD assumes (none installed); `ENABLE_OBJECT_RETRIEVAL=False` by default. |
+| M-005 Obstacle avoidance | DONE | Sonar-driven `AVOID` state backed by `safety.py::approve_motion()`'s unconditional obstacle reject. |
+| M-006 Stair climbing | MISSING (STRETCH, confirmed deferred) | Zero code presence anywhere; correctly reclassified 2026-07-18. |
+| M-007 Arm pick/place (flat ground) | PARTIAL | Fixed primitive grasp sequence, not IK; no per-joint calibration run. |
+| M-008 Battery monitoring | DONE | Full voltage/current tier ladder with hysteresis, backed by real ADC threads. |
+| M-009 Thermal monitoring | MISSING, confirmed | Zero hits for "thermal"/"temperature" anywhere in the codebase — no sensing, no fault handling. |
+| M-010 Emergency shutdown | PARTIAL | No GPIO E-stop sense pin; graceful low-battery shutdown + guaranteed memory save work. Repo's `willy-rover.service` file has `WatchdogSec=500ms`, but the **deployed** unit does not — config drift, not just "never configured" (see note below). |
+| M-011 Remote administration | MISSING, confirmed | No listening sockets, teleop, HTTP/websocket server, or remote-command receive path anywhere. Note: this table's own M-011 wording ("Cockpit access test, :9090") describes a different capability than the FRD's "Remote administration" — the two documents don't agree on what M-011 even means; worth reconciling with the owner. |
+| M-012 Local data storage | DONE | `memory.db` + `world_model.db`, both SQLite/WAL, both checkpointed on shutdown. |
+| M-013 Smart home integration | PARTIAL | Built, fails open correctly, but `discover_devices()` is dead code and disabled by default. |
+| M-014 Cloud AI fallback | PARTIAL, mismatch | Actually Anthropic Claude, not Gemini — see the CORRECTION note under FR-1400. Confidence-routing and non-blocking design are solid. |
+| M-015 Voice interaction pipeline | PARTIAL | Code-complete but disabled by default; personality-tone system unimplemented. |
+| M-016 Facial expression/display | DONE (mostly) | Real, own thread, correctly prioritizes fault states; only the bashful-trigger wiring is missing. |
+| M-017 Object detection/retrieval (core mission) | PARTIAL | DONE mostly, hardware-calibration gaps only, plus a hand-off re-verification gap found this pass (FR-1700-008). |
+| M-018 Privacy and data handling | PARTIAL | Real-time behaviors solid; retention purge and mic/camera-disable are unwired dead code from a usability standpoint. |
+| M-019 Learning from observation/instruction | PARTIAL/MISSING | Demonstration capture/replay entirely unimplemented; verbal fact/instruction storage works but isn't consumed by FR-1700 retrieval. |
+| M-020 Email account and management | PARTIAL | Inbound polling/summarization and all three security layers are real; outbound sending and allowlist management are unwired to any caller. |
+
+**Cross-cutting findings from this pass, flagged for the owner rather
+than silently fixed:**
+
+1. **Service-config drift, confirmed via `systemctl cat` vs. the repo
+   file:** `willy-rover.service` in the repo (last touched 2026-08-02)
+   includes `WatchdogSec=500ms`, but the *deployed* unit does not have
+   that line at all. Someone edited the repo copy but it was never
+   redeployed (`cp` to `/etc/systemd/system/` + `daemon-reload` never
+   ran, or ran before the edit). This is a real drift, not just "the
+   watchdog was never configured" as prior sessions' notes assumed —
+   worth a deploy-and-verify pass if the watchdog is wanted, since right
+   now the two files disagree about whether it exists at all.
+2. **Several security/privacy-relevant methods are implemented and
+   tested as library functions but have no production caller anywhere**:
+   `discover_devices()` (smart_home.py), `queue_outbound()`/
+   `confirm_and_send()`/`add_allowed_sender()` (email_client.py),
+   `delete_fact()`/`delete_instruction()`/`delete_demonstration()`
+   (memory_store.py), `disable_mic_camera()`/`enable_mic_camera()`/
+   `purge_expired()` (privacy.py/memory_store.py), and
+   `record_demonstration()`/`replay_demonstration()`/`note_routine()`
+   (memory_store.py). None of these are bugs — the code that exists is
+   careful and well-guarded — but "implemented and reachable by a real
+   user action" and "implemented as a tested function nothing calls" are
+   different claims, and several FR sub-requirements above (FR-1800-004/
+   005, FR-1900-001/002/005/008, FR-2000-004/010/011's practical
+   reachability) only hold under the weaker of the two.
