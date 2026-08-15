@@ -13,10 +13,10 @@ C_GREEN=(0,210,90);C_RED=(220,50,50);C_AMBER=(255,165,0)
 # FR-1600: states a personality overlay (bashful/silly) is allowed to visually decorate. Any
 # state NOT in this set (fault/lowbatt/warn/stuck) is mandatory and always wins — FR-1600-008.
 _PERSONALITY_SAFE_STATES={'idle','roam','slow','listening','processing','think','speak'}
-W,H=800,480; FACE_CX=340; FACE_CY=210
-EYE_L=250;EYE_R=430;EYE_CY=190;EYE_RX=70;EYE_RY=65;IRIS_R=34;PUPIL_R=15
-MOUTH_CX=340;MOUTH_CY=310;MOUTH_W=190;MOUTH_H=55
-STATUS_Y=400;HUD_X=560
+W,H=1280,720; FACE_CX=640; FACE_CY=360
+EYE_L=415;EYE_R=865;EYE_CY=340;EYE_RX=175;EYE_RY=130;IRIS_R=86;PUPIL_R=38
+MOUTH_CX=640;MOUTH_CY=580;MOUTH_W=475;MOUTH_H=110
+STATUS_Y=600;HUD_X=896
 
 class WillyFace:
     def __init__(self):
@@ -28,6 +28,13 @@ class WillyFace:
         # base state above — see _PERSONALITY_SAFE_STATES for when it's actually shown.
         self._personality=None;self._personality_until=0.0
         self._idle_cycle_t=config.IDLE_PERSONALITY_CYCLE_S
+        self._heard_until=0.0  # note_heard() flashes a small corner icon, separate from state='listening'
+
+    def note_heard(self,duration=2.0):
+        # Confirms a command was actually transcribed (non-empty STT text) — distinct from the
+        # LISTENING/PROCESSING state badge, which just says the mic/pipeline stage, not that
+        # anything was understood as speech yet.
+        with self._lock: self._heard_until=self._t+duration
 
     def update_state(self,state,status='',distances=None,tilt=0.0,speed=0.0):
         with self._lock:
@@ -91,6 +98,7 @@ class WillyFace:
             state=self._state; status=self._status[:44]
             dists=dict(self._dists); tilt=self._tilt; speed=self._speed
             personality=self._personality if self._t<self._personality_until else None
+            heard=self._t<self._heard_until
         # FR-1600-008: personality only ever substitutes the VISUAL state (vis), never the real
         # `state` used for the HUD badge/status text below — and only when `state` is itself in
         # _PERSONALITY_SAFE_STATES. A fault/lowbatt/warn/stuck state always draws as itself.
@@ -98,15 +106,15 @@ class WillyFace:
         ic={'idle':C_IDLE,'roam':C_ROAM,'slow':C_STOP,'stop':C_WARN,'warn':C_RED,'stuck':C_RED,
             'fault':C_RED,'lowbatt':C_AMBER,'listening':C_IDLE,'processing':C_IDLE,'think':C_IDLE,
             'speak':C_ROAM,'bashful':C_AMBER,'silly':C_GREEN}.get(vis,C_IDLE)
-        pygame.draw.ellipse(s,C_FACE,pygame.Rect(FACE_CX-220,FACE_CY-170,440,320))
+        pygame.draw.ellipse(s,C_FACE,pygame.Rect(FACE_CX-550,FACE_CY-320,1100,640))
         self._blink_next-=1.0/config.DISPLAY_FPS
         if self._blink_next<=0: self._blink_t=0.12; self._blink_next=3.0+math.sin(t*0.7)*1.5
         bf=0.0
         if self._blink_t>0:
             self._blink_t-=1.0/config.DISPLAY_FPS; h=0.06
             bf=(1.0-(self._blink_t-h)/h) if self._blink_t>h else self._blink_t/h
-        pb=math.sin(t*1.2)*5 if vis=='roam' else 0
-        ps=math.cos(t*0.8)*4 if vis in('roam','idle') else 0
+        pb=math.sin(t*1.2)*10 if vis=='roam' else 0
+        ps=math.cos(t*0.8)*11 if vis in('roam','idle') else 0
         if vis=='bashful': ps=-EYE_RX*0.5; pb=EYE_RY*0.3  # look away and down (FR-1600-006)
         for ex in [EYE_L,EYE_R]:
             ery=max(2,int(EYE_RY*(1.0-bf)))
@@ -115,19 +123,19 @@ class WillyFace:
                 ix=ex+int(ps*(1 if ex<FACE_CX else -1)); iz=EYE_CY+int(pb)
                 pygame.draw.circle(s,ic,(ix,iz),IRIS_R)
                 pygame.draw.circle(s,(0,0,0),(ix,iz),PUPIL_R)
-                pygame.draw.circle(s,(255,255,255),(ix-7,iz-7),5)
-            pygame.draw.ellipse(s,C_DIM,pygame.Rect(ex-EYE_RX,EYE_CY-ery,EYE_RX*2,ery*2),2)
-        br={'warn':-14,'stuck':-11,'fault':-16,'lowbatt':-9,'stop':-7,'listening':9,'processing':7,
-            'think':7,'idle':3,'roam':1,'silly':10,'bashful':-4}.get(vis,0)
+                pygame.draw.circle(s,(255,255,255),(ix-18,iz-18),13)
+            pygame.draw.ellipse(s,C_DIM,pygame.Rect(ex-EYE_RX,EYE_CY-ery,EYE_RX*2,ery*2),4)
+        br={'warn':-29,'stuck':-21,'fault':-31,'lowbatt':-19,'stop':-14,'listening':19,'processing':14,
+            'think':14,'idle':6,'roam':1,'silly':20,'bashful':-9}.get(vis,0)
         for ex,fl in [(EYE_L,1),(EYE_R,-1)]:
-            by=EYE_CY-EYE_RY-16+br; mid=by-(9*fl if vis in('warn','stuck','fault') else 0)
-            pygame.draw.lines(s,C_ACCENT,False,[(ex-52,by+4),(ex,mid),(ex+52,by+4)],4)
+            by=EYE_CY-EYE_RY-31+br; mid=by-(19*fl if vis in('warn','stuck','fault') else 0)
+            pygame.draw.lines(s,C_ACCENT,False,[(ex-130,by+9),(ex,mid),(ex+130,by+9)],7)
         ms={'roam':1.0,'speak':0.8,'silly':0.9,'listening':0.4,'idle':0.5,'slow':0.3,'processing':0.1,
             'think':0.1,'bashful':0.2,'stop':-0.3,'warn':-0.7,'stuck':-0.9,'fault':-1.0,'lowbatt':-0.5,
             }.get(vis,0.3)
         mr=pygame.Rect(MOUTH_CX-MOUTH_W//2,MOUTH_CY-MOUTH_H//2,MOUTH_W,MOUTH_H)
         sa,ea=(math.pi*0.1,math.pi*0.9) if ms>=0 else (math.pi*1.1,math.pi*1.9)
-        pygame.draw.arc(s,C_MOUTH,mr,sa,ea,5)
+        pygame.draw.arc(s,C_MOUTH,mr,sa,ea,7)
         pygame.draw.line(s,C_DIM,(HUD_X-10,0),(HUD_X-10,STATUS_Y),1)
         # FR-1600-003/004: badge always reflects the true `state` (never `vis`/personality) so
         # fault/low-battery is always the unambiguous, non-decorated signal an operator sees.
@@ -135,18 +143,22 @@ class WillyFace:
             'lowbatt':C_AMBER,'listening':C_IDLE,'processing':C_IDLE,'idle':C_IDLE,'think':C_IDLE,
             'speak':C_GREEN}.get(state,C_DIM)
         if state in('fault','lowbatt') and math.sin(t*6)<0: bc=C_BG  # FR-1600-003/004: flash for attention
-        s.blit(self.f_md.render(f' {state.upper()} ',True,C_BG,bc),(HUD_X,18))
-        s.blit(self.f_xl.render('WILLY',True,C_ACCENT),(HUD_X,54))
+        s.blit(self.f_md.render(f' {state.upper()} ',True,C_BG,bc),(HUD_X,27))
+        s.blit(self.f_xl.render('WILLY',True,C_ACCENT),(HUD_X,81))
         for i,(lbl,key) in enumerate([('F','front'),('L','left'),('R','right')]):
             d=dists.get(key,999); col=C_RED if d<config.DIST_STOP else C_AMBER if d<config.DIST_SLOW else C_GREEN
-            s.blit(self.f_md.render(f'{lbl} {d:3.0f}cm',True,col),(HUD_X,148+i*36))
+            s.blit(self.f_md.render(f'{lbl} {d:3.0f}cm',True,col),(HUD_X,222+i*54))
         tc=C_RED if tilt>config.IMU_TILT_LIMIT else C_AMBER if tilt>config.IMU_TILT_WARN else C_DIM
-        s.blit(self.f_sm.render(f'TILT {tilt:.1f}deg',True,tc),(HUD_X,268))
-        pygame.draw.rect(s,C_DIM,pygame.Rect(HUD_X,296,220,14),1)
-        sw=int(abs(speed)*220)
-        pygame.draw.rect(s,C_GREEN if speed>=0 else C_AMBER,pygame.Rect(HUD_X,296,sw,14))
+        s.blit(self.f_sm.render(f'TILT {tilt:.1f}deg',True,tc),(HUD_X,402))
+        pygame.draw.rect(s,C_DIM,pygame.Rect(HUD_X,444,352,21),1)
+        sw=int(abs(speed)*352)
+        pygame.draw.rect(s,C_GREEN if speed>=0 else C_AMBER,pygame.Rect(HUD_X,444,sw,21))
         pygame.draw.rect(s,(12,12,22),pygame.Rect(0,STATUS_Y,W,H-STATUS_Y))
         pygame.draw.line(s,C_DIM,(0,STATUS_Y),(W,STATUS_Y),1)
         s.blit(self.f_sm.render(status,True,C_TEXT),(12,STATUS_Y+10))
         s.blit(self.f_sm.render(time.strftime('%H:%M:%S'),True,C_DIM),(W-100,STATUS_Y+10))
+        if heard:
+            cx,cy=36,36
+            pygame.draw.circle(s,C_GREEN,(cx,cy),22)
+            pygame.draw.lines(s,C_BG,False,[(cx-10,cy),(cx-3,cy+9),(cx+12,cy-11)],5)
         pygame.display.flip()

@@ -34,8 +34,8 @@ modules below sound adjacent to them:
 | `brain.py` (core FSM) | **PARTIALLY IMPLEMENTED** | Phase 1 safety rewrite + all subsequent phases are code-complete and off-hardware tested, but not live-verified — see standing note below. |
 | `safety.py` (SafetyController) | **IMPLEMENTED** | Sole motion gate, unchanged since Phase 1. 25 tests (`test_safety.py`+`test_safety_controller.py`). Not live-verified. |
 | `motors.py`/`steering.py`-equiv (`motors.py`) | **PARTIALLY IMPLEMENTED** | Ran successfully during the 2026-08-02 baseline pass; not re-verified against this session's Phase 1+ rewrite on real hardware. |
-| `sensors.py` (Sonar/ADC/Encoders/CurrentMonitor) | **PARTIALLY IMPLEMENTED** | Sonar/ADC/encoders/current all confirmed working in prior sessions. IMU has an active, evolving hardware-fault investigation — see `arm.py` row and the I2C fault tracking. |
-| `arm.py` | **HARDWARE REQUIRED — currently faulting** | Live crash point as of 2026-08-08 morning: `PCA9685@0x43` "No I2C device at address." Not diagnosed further this session (code-only session, by explicit choice). |
+| `sensors.py` (Sonar/ADC/Encoders/CurrentMonitor) | **IMPLEMENTED** | IMU root-caused and fixed live 2026-08-14: `adafruit_bno08x.hard_reset()`'s stock 10ms post-RST-release delay was too short for the BNO085 to boot its SH-2 firmware, causing every `soft_reset()` I2C write to NACK (`OSError: Errno 121`) — patched in `sensors.py` to hold reset 300ms. Verified via standalone cold construction (service stopped) and again through the real `IMU`/`SonarArray`/`ADC` classes: quaternion streaming, sonars reading live distances, ADC reading live battery voltage. Not yet re-verified through a full `willy-rover.service` restart. |
+| `arm.py` | **HARDWARE REQUIRED, not re-verified this session** | Resolved 2026-08-08 (arm PCA9685 VCC had been disconnected — power issue, not bus/software); `willy-rover.service` reached `active (running)` that day for the first time since Phase 1. Not touched again 2026-08-14 — session paused before restarting the service, pending battery charge (see standing note). |
 | `odometry.py` | **PARTIALLY IMPLEMENTED** | Dead-reckoning math is solid and unit-tested; `WHEEL_DIAMETER_M`/`TRACK_WIDTH_M` are unconfirmed placeholder measurements (flagged in `config.py`) — do not trust absolute distances. |
 | `world_model.py` | **PARTIALLY IMPLEMENTED** | Milestone 1 — see Capability caution above. 8 tests, fully off-hardware. |
 | `mapping.py` | **PARTIALLY IMPLEMENTED** | Milestone 1. Room-identification not attempted. 11 tests. |
@@ -82,10 +82,17 @@ structurally: nothing added since Phase 1 gained a second path to the motors.
 
 ## Standing note: nothing below Phase 1 is live-verified
 
-Every "PARTIALLY IMPLEMENTED" tag above that mentions "not live-verified" is the same underlying
-gap: this unit has an active, unresolved I2C hardware fault (symptom has shifted across sessions —
-was a BNO085 IMU `enable_feature` failure, now the arm's PCA9685@0x43 not answering) that has
-blocked running a real `RoverBrain.run()` since before this session started. Everything in this
-table has been validated by unit tests and `WILLY_SIMULATE=1` subprocess tests only. Update this
-note (and the per-row tags above) the moment a real live-verification pass actually happens —
-don't let this doc's tags drift stale in the optimistic direction.
+**Update 2026-08-14: the I2C hardware fault arc referenced below is now closed** (arm PCA9685 VCC
+fix 2026-08-08 + IMU reset-timing fix same day as this note — see `sensors.py` row above). IMU,
+sonars, and battery ADC are now live-verified reading real values through the actual sensor
+classes. Motors/full `RoverBrain.run()` still not attempted — session paused with
+`willy-rover.service` stopped because the battery read 9.5V (below `BAT_SHUTDOWN_V`); user
+confirmed the packs have never been charged, so this is expected first-use state, not a fault.
+Resume with a service restart once the packs are charged above `BAT_WARN_V` (11.4V).
+
+Every "PARTIALLY IMPLEMENTED" tag above that predates this update was blocked by the same
+underlying gap: an I2C hardware fault (symptom shifted across sessions — noisy bus, then BNO085
+IMU `enable_feature` failure, then the arm's PCA9685@0x43 not answering, then the IMU reset-timing
+bug fixed today) that prevented running a real `RoverBrain.run()`. Update the per-row tags above
+the moment each subsystem gets its own live-verification pass — don't let this doc's tags drift
+stale in the optimistic direction.

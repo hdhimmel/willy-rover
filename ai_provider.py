@@ -233,10 +233,16 @@ class LocalAIProvider(AIProvider):
             log_event(log,'AI_UNAVAILABLE',severity='info',subsystem='ai_provider',provider='local')
             return AIResult(False,0.0,None,False,None,'local LLM not loaded')
         log_event(log,'AI_REQUEST',severity='info',subsystem='ai_provider',provider='local')
-        full_prompt=f'{system}\n{prompt}' if system else prompt
+        # Raw completion (bare self._llm(...)) on an instruct-tuned model was unreliable: no
+        # chat template meant it sometimes echoed the instruction text back verbatim instead of
+        # filling it in, or hit the '\n\n' stop sequence almost immediately and returned nothing
+        # at all -- confirmed 2026-08-15 as the actual cause of the near-100% local parse-failure
+        # rate (every request paying full local-inference latency for nothing, always falling
+        # back to cloud). create_chat_completion applies the model's real system/user template.
+        messages=([{'role':'system','content':system}] if system else [])+[{'role':'user','content':prompt}]
         try:
-            out=self._llm(full_prompt,max_tokens=200,stop=['\n\n'])
-            txt=out['choices'][0]['text'].strip()
+            out=self._llm.create_chat_completion(messages=messages,max_tokens=200)
+            txt=out['choices'][0]['message']['content'].strip()
         except Exception as e:
             log.info(f'Local LLM call failed: {type(e).__name__}: {e}')
             return AIResult(False,0.0,None,False,None,f'{type(e).__name__}: {e}')

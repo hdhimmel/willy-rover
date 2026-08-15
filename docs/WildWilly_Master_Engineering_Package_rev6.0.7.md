@@ -2070,6 +2070,17 @@ entirely I²C via the two FeatherWings (§9).
 
 17.2 I²C Bus Fan-out & Pull-ups
 
+**Update 2026-08-14: bus is now electrically isolated, as-built.** An ISO154x-series digital
+isolator sits between the Pi's GP2/GP3 (SDA/SCL) and the bus node board fan-out described below ---
+only the isolator's primary side is Pi-referenced; everything past it, including the bus node
+board and all 10 devices in the table, is on the isolated secondary side. An AMS1117 LDO regulates
+the isolated-side 3.3V rail independently of the Pi's own 3.3V supply, so a fault on any sensor/
+device rail can no longer pull down or inject noise onto the Pi's own I²C pins. Installed to
+target the 2026-08-06 noisy-bus/phantom-address fault (see [[project_rover_i2c_bus_fault]] in
+session memory); by the time this was confirmed installed, that fault's actual root causes had
+already been separately traced to two unrelated issues (arm PCA9685 VCC disconnect, BNO085
+reset-timing bug) --- the isolator is now in place as a hardening measure regardless.
+
 The Nano HAT Hacker exposes GP2/GP3 as one pin each, but 10 devices need
 each signal (as of the ADS1115 addition, §8.4) --- a bus node board
 (§5.6) fans SDA, SCL, 3V3, and GND out into four rails that every device

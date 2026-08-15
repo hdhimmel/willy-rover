@@ -36,6 +36,12 @@ class VoicePipeline:
         self._speak_queue=queue.Queue()
         self._running=False; self._thread=None; self._speaker_thread=None
         self._wakeword=None; self._whisper=None; self._local_ai=None
+        # No echo cancellation on this mic+speaker puck — TTS playback leaks straight back into
+        # capture, gets transcribed as a new "command", and self-triggers another AI round-trip
+        # forever (found 2026-08-15: "One moment, checking..." looping on its own echo, deaf to
+        # real wake words the whole time since predict() and utterance handling share this one
+        # thread). Gate wake-word scoring while speaking, plus a decay grace period after.
+        self._speaking=threading.Event()
         if self._enabled: self._load_models()
 
     def _load_models(self):
@@ -85,7 +91,11 @@ class VoicePipeline:
         while self._running:
             try: text=self._speak_queue.get(timeout=0.5)
             except queue.Empty: continue
-            self._synthesize_and_play(text)
+            self._speaking.set()
+            try: self._synthesize_and_play(text)
+            finally:
+                time.sleep(0.6)  # let speaker-to-mic echo decay before wake scoring resumes
+                self._speaking.clear()
 
     def _loop(self):
         import sounddevice as sd
@@ -97,6 +107,8 @@ class VoicePipeline:
                     if not privacy.mic_enabled():
                         time.sleep(1.0); continue  # FR-1800-005, re-checked continuously
                     frame,_=stream.read(frame_len)
+                    if self._speaking.is_set():
+                        continue  # still drain the buffer, just don't score our own echo
                     scores=self._wakeword.predict(frame.flatten())
                     if max(scores.values(),default=0.0)>=config.WAKEWORD_THRESHOLD:
                         self._handle_wake(stream,frame_len)
@@ -120,8 +132,9 @@ class VoicePipeline:
         segments,_=self._whisper.transcribe(pcm,language='en')
         text=' '.join(s.text for s in segments).strip()
         if not text:
-            self.speak("Sorry, I didn't catch that — could you say it again?"); return
+            self.speak("How can I help?"); return
         log.info(f'Heard: "{text}"')
+        if self.display: self.display.note_heard()
 
         # FR-1900-006: explicit teaching commands short-circuit interpretation, handled locally.
         if self.memory and self._maybe_learn(text): return
@@ -209,7 +222,11 @@ class VoicePipeline:
             piper_bin=os.path.join(os.path.dirname(sys.executable),'piper')
             subprocess.run([piper_bin,'--model',model,'--output_file',wav_path],
                             input=text.encode(),capture_output=True,timeout=10,check=True)
-            subprocess.run(['aplay','-q',wav_path],capture_output=True,timeout=15)
+            # aplay opens ALSA directly, which conflicts with pipewire holding the USB
+            # card exclusively under this user session (confirmed 2026-08-15: bare aplay
+            # fails with "Device or resource busy", caught here as a silent no-op).
+            # pw-play goes through pipewire instead and reaches the same default sink.
+            subprocess.run(['pw-play',wav_path],capture_output=True,timeout=15)
         except Exception as e:
             log.warning(f'TTS playback failed: {e}')
         finally:

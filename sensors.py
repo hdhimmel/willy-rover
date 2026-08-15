@@ -3,9 +3,25 @@ if not config.SIMULATE_HARDWARE:
     import smbus2
     import RPi.GPIO as GPIO
     import board, busio
+    import adafruit_bno08x
     from adafruit_bno08x.i2c import BNO08X_I2C
     from adafruit_bno08x import BNO_REPORT_ROTATION_VECTOR
     from adafruit_mcp230xx.mcp23017 import MCP23017
+
+    # adafruit_bno08x.hard_reset() only waits 10ms after releasing RST before the caller
+    # sends the first I2C command (soft_reset). The BNO085 needs longer than that to boot
+    # its SH-2 firmware and start ACKing on the bus -- with the stock 10ms delay, soft_reset's
+    # write NACKs every time (OSError: [Errno 121] Remote I/O error), even though a passive
+    # i2cdetect probe (which only checks ACK, sent at a different, non-deterministic moment)
+    # can show the chip present. Confirmed live 2026-08-14: raising this to 300ms fixed it.
+    def _bno08x_hard_reset(self):
+        if not self._reset: return
+        import digitalio
+        self._reset.direction=digitalio.Direction.OUTPUT
+        self._reset.value=True; time.sleep(0.01)
+        self._reset.value=False; time.sleep(0.01)
+        self._reset.value=True; time.sleep(0.3)
+    adafruit_bno08x.BNO08X.hard_reset=_bno08x_hard_reset
 
 log=logging.getLogger('sensors')
 

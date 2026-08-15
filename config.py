@@ -227,10 +227,9 @@ ENABLE_VOICE=True
 # custom training (synthetic TTS data + a large negative-audio corpus + a training run) — not a
 # download, and not attempted here (owner chose to defer it rather than run a multi-hour training
 # job on this Pi while it's also running the live rover service). Using openwakeword's bundled
-# "Hey Jarvis" model as a placeholder so the rest of the voice pipeline (STT/local LLM/TTS, all
-# already verified working) isn't blocked on it. Trigger phrase is literally "Hey Jarvis" until
-# swapped — update this path (and tell the owner the phrase changed) once real training is done.
-WAKEWORD_MODEL_PATH='models/hey_jarvis_v0.1.onnx'; WAKEWORD_THRESHOLD=0.5
+# Custom-trained "Hey Willie" model (models/hey_willie.onnx + .onnx.data, trained 2026-08-07,
+# deployed 2026-08-15 — see wakeword_data/hey_willie_model/ for training artifacts).
+WAKEWORD_MODEL_PATH='models/hey_willie.onnx'; WAKEWORD_THRESHOLD=0.5
 WHISPER_MODEL_SIZE='small.en'  # faster-whisper model name
 PIPER_VOICE_PATH='models/piper/en_US-amy-medium.onnx'
 LOCAL_LLM_MODEL_PATH='models/llama-3.2-3b-instruct-q4.gguf'  # llama.cpp gguf
