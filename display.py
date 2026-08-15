@@ -51,6 +51,21 @@ class WillyFace:
         with self._lock:
             self._personality=expr; self._personality_until=self._t+duration
 
+    def _wrap2(self,font,text,max_width):
+        # Greedy word-wrap capped at 2 lines — a 3rd line's worth of overflow gets folded into
+        # line 2 with a trailing ellipsis rather than silently disappearing off-screen.
+        words=text.split(' '); lines=['']
+        for w in words:
+            trial=(lines[-1]+' '+w).strip()
+            if not lines[-1] or font.size(trial)[0]<=max_width:
+                lines[-1]=trial
+            elif len(lines)==2:
+                while lines[-1] and font.size(lines[-1]+'…')[0]>max_width: lines[-1]=lines[-1][:-1]
+                lines[-1]+='…'; return lines
+            else:
+                lines.append(w)
+        return lines
+
     def note_interaction(self):
         # Resets the idle-personality cycle (FR-1600-007) so the silly idle animation doesn't
         # fire right after a real interaction just ended.
@@ -95,7 +110,7 @@ class WillyFace:
     def _draw(self):
         s=self.screen; t=self._t; s.fill(C_BG)
         with self._lock:
-            state=self._state; status=self._status[:44]
+            state=self._state; status=self._status
             dists=dict(self._dists); tilt=self._tilt; speed=self._speed
             personality=self._personality if self._t<self._personality_until else None
             heard=self._t<self._heard_until
@@ -155,8 +170,9 @@ class WillyFace:
         pygame.draw.rect(s,C_GREEN if speed>=0 else C_AMBER,pygame.Rect(HUD_X,444,sw,21))
         pygame.draw.rect(s,(12,12,22),pygame.Rect(0,STATUS_Y,W,H-STATUS_Y))
         pygame.draw.line(s,C_DIM,(0,STATUS_Y),(W,STATUS_Y),1)
-        s.blit(self.f_sm.render(status,True,C_TEXT),(12,STATUS_Y+10))
-        s.blit(self.f_sm.render(time.strftime('%H:%M:%S'),True,C_DIM),(W-100,STATUS_Y+10))
+        for i,ln in enumerate(self._wrap2(self.f_sm,status,W-24-100)):
+            s.blit(self.f_sm.render(ln,True,C_TEXT),(12,STATUS_Y+8+i*26))
+        s.blit(self.f_sm.render(time.strftime('%H:%M:%S'),True,C_DIM),(W-100,STATUS_Y+8))
         if heard:
             cx,cy=36,36
             pygame.draw.circle(s,C_GREEN,(cx,cy),22)

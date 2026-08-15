@@ -197,7 +197,7 @@ class VoicePipeline:
         # of what the caller asked for. Non-blocking — safe to call from brain.py's tick thread
         # (see module docstring); actual synthesis happens on _speaker_loop's own thread.
         if _SAFETY_PATTERN.search(text): tone='neutral'
-        if self.display: self.display.update_state(state='speak',status=text[:44])
+        if self.display: self.display.update_state(state='speak',status=text)
         if not self._enabled:
             log.info(f'(voice disabled) would say: {text}'); return
         self._speak_queue.put(text)
