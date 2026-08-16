@@ -486,6 +486,8 @@ class RoverBrain:
             # known-safe placeholder position until real per-joint poses are bench-calibrated.
             self.arm.center_all()
             if self.voice.available: self.voice.speak('Arm centered.')
+        elif cmd.get('intent')=='wave':
+            self._wave_hello()
         elif cmd.get('intent')=='diagnostics':
             # Deliberately does NOT touch self._motion_enabled either way afterward -- that's the
             # startup gate, and silently flipping it from a possibly-transient on-demand result is
@@ -533,6 +535,20 @@ class RoverBrain:
         if self.pursuit.state in('DONE','FAILED','ABORTED'):
             if self.pursuit.state=='DONE' and self.voice.available: self.voice.speak('Here I am!')
             self.pursuit.reset(); self._go('IDLE')
+
+    def _wave_hello(self):
+        # Fixed primitive sequence, not calibrated IK — same category of gap as
+        # retrieval_task.py's _grasp() (§20.6 pending, see its module docstring). wrist_rot
+        # oscillates +-300us off center, the same offset magnitude already trusted there, well
+        # inside ARM_SERVO_MIN/MAX_US. Blocks the tick thread for ~1.5s (3 back-and-forth swings)
+        # -- accepted, same tradeoff already made for _grasp() and the on-demand diagnostics
+        # intent: this only ever runs from IDLE.
+        if self.voice.available: self.voice.speak('Hello!')
+        center=config.ARM_SERVO_CENTER_US
+        for _ in range(3):
+            self.arm.set_pulse('wrist_rot',center-300); time.sleep(0.25)
+            self.arm.set_pulse('wrist_rot',center+300); time.sleep(0.25)
+        self.arm.set_pulse('wrist_rot',center)
 
     def _begin_shutdown(self):
         # FR-900-005: halt motion, stow arm, persist state, then `shutdown -h now`. Reuses

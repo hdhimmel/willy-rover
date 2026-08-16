@@ -188,6 +188,7 @@ class VoicePipeline:
                 f'"diagnostics" -- "run diagnostics", "self test"\n'
                 f'"where_are_you" -- "where are you?", "what room is this?"\n'
                 f'"what_do_you_see" -- "what do you see?", "what\'s in front of you?"\n'
+                f'"wave" -- "wave hello", "say hi", "give a wave"\n'
                 f'"stop" -- "stop", "halt", "freeze"\n'
                 f'Respond ONLY with JSON: '
                 f'{{"intent":"<short action name>","args":{{}},"reply":"<what to say back, <200 chars>",'
@@ -210,13 +211,14 @@ class VoicePipeline:
         # confirm_receipt doesn't move/reply anything itself, but still has to cross to the tick
         # thread via this same queue — retrieval_task.py's AWAIT_CONFIRM state (and brain.py's
         # new shutdown confirmation, see _drain_voice_commands) are the consumers. status/battery/
-        # where_are_you/what_do_you_see/diagnostics/arm_stow/arm_home/come_here/follow/shutdown all need
-        # state voice.py doesn't have (battery volts, FSM state, pose, camera) — brain.py is what
-        # answers them, same "queued, brain.py is the sole consumer" rule as every motion intent.
+        # where_are_you/what_do_you_see/diagnostics/arm_stow/arm_home/wave/come_here/follow/
+        # shutdown all need state voice.py doesn't have (battery volts, FSM state, pose, camera,
+        # arm) — brain.py is what answers/executes them, same "queued, brain.py is the sole
+        # consumer" rule as every motion intent.
         motion_intents={'forward','reverse','turn_left','turn_right','go_to','retrieve',
                          'confirm_receipt','map','stop_map','shutdown','status','battery',
-                         'arm_stow','arm_home','come_here','follow','diagnostics','where_are_you',
-                         'what_do_you_see'}
+                         'arm_stow','arm_home','wave','come_here','follow','diagnostics',
+                         'where_are_you','what_do_you_see'}
         if name in motion_intents:
             # FR-1500-007: queued only — brain.py applies full Directive 1-5 gating before this
             # is ever executed.
