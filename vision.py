@@ -36,7 +36,14 @@ class ObjectDetector:
             import cv2; from ultralytics import YOLO
             self._cv2=cv2
             self._model=YOLO(model_path)
-            self._cap=cv2.VideoCapture(config.CAMERA_DEVICE)
+            # cv2.VideoCapture's default backend fails to stream from the Arducam OV9281
+            # (VIDIOC_QBUF: Bad file descriptor) even though the device opens successfully —
+            # it only works with the V4L2 backend forced explicitly, plus an explicit MJPG
+            # request since the camera doesn't advertise a raw BGR/YUV mode OpenCV defaults to.
+            self._cap=cv2.VideoCapture(config.CAMERA_DEVICE,cv2.CAP_V4L2)
+            self._cap.set(cv2.CAP_PROP_FOURCC,cv2.VideoWriter_fourcc(*'MJPG'))
+            self._cap.set(cv2.CAP_PROP_FRAME_WIDTH,1280)
+            self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT,720)
             if not self._cap.isOpened():
                 raise RuntimeError(f'could not open {config.CAMERA_DEVICE}')
         except Exception as e:

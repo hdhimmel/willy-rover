@@ -244,13 +244,18 @@ VOICE_TONE_DEFAULT='neutral'  # 'neutral'|'funny'|'silly'|'bashful' — FR-1500-
 ENABLE_DISPLAY_EXPRESSIONS=True
 IDLE_PERSONALITY_CYCLE_S=90  # FR-1600-007: how often the idle 'silly' animation may recur
 
-# --- FR-1700 object detection/retrieval. Arducam OV9281 (USB, /dev/video0) confirmed present
-# 2026-08-06. No Hailo NPU is installed on this unit (checked: no /dev/hailo*, no hailortcli) —
-# YOLO_MODEL_PATH runs on CPU via ultralytics instead of the FRD's assumed Hailo-accelerated
-# path. Swap in a .hef path + hailo runtime later if the NPU is added; vision.py's detector
-# interface is written to make that a backend swap, not a rewrite.
+# --- FR-1700 object detection/retrieval. Arducam OV9281 (USB) confirmed present 2026-08-06.
+# CAMERA_DEVICE corrected 2026-08-16: /dev/video0 is actually the imx708 CSI camera
+# (rp1-cfe driver), not the Arducam — /dev/video8 is the Arducam's real capture node
+# (/dev/video9 on the same bus is metadata-only, no Video Capture capability). Device-node
+# assignment isn't stable across reboots/kernel changes; re-check with
+# `v4l2-ctl --list-devices` / `v4l2-ctl -d /dev/videoN --info` before trusting this again.
+# An AI HAT+2 (Hailo-10H) was installed and PCIe-bonded 2026-08-16 (see CLAUDE.md) but
+# vision.py has not been wired to use it yet — still CPU-only YOLOv8 via ultralytics.
+# Swap in a .hef path + hailo runtime later; vision.py's detector interface is written to
+# make that a backend swap, not a rewrite.
 ENABLE_OBJECT_RETRIEVAL=False
-CAMERA_DEVICE='/dev/video0'
+CAMERA_DEVICE='/dev/video8'
 YOLO_MODEL_PATH='models/yolov8n.pt'
 YOLO_CONF_THRESHOLD=0.5
 RETRIEVAL_APPROACH_STOP_CM=25   # distance from target to halt before attempting grasp

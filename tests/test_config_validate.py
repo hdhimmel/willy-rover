@@ -7,14 +7,12 @@ import config
 # config.validate() is pure (reads module globals, no hardware) -- tests monkeypatch those
 # globals to simulate a bad config and confirm each check actually fires.
 
-def test_validate_current_config_has_exactly_the_known_bat_full_v_issue():
-    # Documents a real finding, not a hypothetical: BAT_FULL_V (11.39) is below BAT_WARN_V (11.4)
-    # today, so battery_pct could report 100% right as the safety tier ladder escalates to 'warn'.
-    # If this test starts failing because the list is empty, the config was fixed -- update this
-    # test, don't just delete it. If it starts failing with *other* problems, something new broke.
-    problems=config.validate()
-    assert len(problems)==1
-    assert 'BAT_FULL_V' in problems[0] and 'BAT_WARN_V' in problems[0]
+def test_validate_current_config_is_clean():
+    # BAT_FULL_V was 11.39 (below BAT_WARN_V=11.4) from 2026-08-08 until fixed 2026-08-16 --
+    # owner measured the real post-fuse full-charge voltage (11.58V) and it's now above every
+    # threshold. This test documents current real state, not a hypothetical -- if it starts
+    # failing, something in the live config regressed; don't just update the assertion to match.
+    assert config.validate()==[]
 
 def test_validate_detects_duplicate_i2c_address(monkeypatch):
     monkeypatch.setattr(config,'ARM_PCA_ADDR',config.STEER_PCA_ADDR)
