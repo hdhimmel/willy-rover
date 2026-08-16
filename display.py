@@ -15,8 +15,8 @@ C_GREEN=(0,210,90);C_RED=(220,50,50);C_AMBER=(255,165,0)
 _PERSONALITY_SAFE_STATES={'idle','roam','slow','listening','processing','think','speak'}
 W,H=1280,720; FACE_CX=640; FACE_CY=360
 EYE_L=415;EYE_R=865;EYE_CY=340;EYE_RX=175;EYE_RY=130;IRIS_R=86;PUPIL_R=38
-MOUTH_CX=640;MOUTH_CY=580;MOUTH_W=475;MOUTH_H=110
-STATUS_Y=600;HUD_X=896
+MOUTH_CX=640;MOUTH_CY=535;MOUTH_W=475;MOUTH_H=110
+STATUS_Y=600
 
 class WillyFace:
     def __init__(self):
@@ -51,15 +51,15 @@ class WillyFace:
         with self._lock:
             self._personality=expr; self._personality_until=self._t+duration
 
-    def _wrap2(self,font,text,max_width):
-        # Greedy word-wrap capped at 2 lines — a 3rd line's worth of overflow gets folded into
-        # line 2 with a trailing ellipsis rather than silently disappearing off-screen.
+    def _wrap(self,font,text,max_width,max_lines=2):
+        # Greedy word-wrap capped at max_lines — overflow past the last line gets folded in
+        # with a trailing ellipsis rather than silently disappearing off-screen.
         words=text.split(' '); lines=['']
         for w in words:
             trial=(lines[-1]+' '+w).strip()
             if not lines[-1] or font.size(trial)[0]<=max_width:
                 lines[-1]=trial
-            elif len(lines)==2:
+            elif len(lines)==max_lines:
                 while lines[-1] and font.size(lines[-1]+'…')[0]>max_width: lines[-1]=lines[-1][:-1]
                 lines[-1]+='…'; return lines
             else:
@@ -149,30 +149,41 @@ class WillyFace:
             'think':0.1,'bashful':0.2,'stop':-0.3,'warn':-0.7,'stuck':-0.9,'fault':-1.0,'lowbatt':-0.5,
             }.get(vis,0.3)
         mr=pygame.Rect(MOUTH_CX-MOUTH_W//2,MOUTH_CY-MOUTH_H//2,MOUTH_W,MOUTH_H)
-        sa,ea=(math.pi*0.1,math.pi*0.9) if ms>=0 else (math.pi*1.1,math.pi*1.9)
+        # Bottom-half ellipse arc (apex at the bottom, corners raised) reads as a smile; the
+        # top-half arc (apex at the top, corners drooped) reads as a frown. ms>=0 is meant to
+        # mean "happy" states (roam/idle/speak/...), so it must map to the bottom-half arc —
+        # was previously inverted (happy states frowned, fault states smiled).
+        sa,ea=(math.pi*1.1,math.pi*1.9) if ms>=0 else (math.pi*0.1,math.pi*0.9)
         pygame.draw.arc(s,C_MOUTH,mr,sa,ea,7)
-        pygame.draw.line(s,C_DIM,(HUD_X-10,0),(HUD_X-10,STATUS_Y),1)
         # FR-1600-003/004: badge always reflects the true `state` (never `vis`/personality) so
         # fault/low-battery is always the unambiguous, non-decorated signal an operator sees.
         bc={'roam':C_GREEN,'slow':C_AMBER,'stop':C_RED,'warn':C_RED,'stuck':C_RED,'fault':C_RED,
             'lowbatt':C_AMBER,'listening':C_IDLE,'processing':C_IDLE,'idle':C_IDLE,'think':C_IDLE,
             'speak':C_GREEN}.get(state,C_DIM)
         if state in('fault','lowbatt') and math.sin(t*6)<0: bc=C_BG  # FR-1600-003/004: flash for attention
-        s.blit(self.f_md.render(f' {state.upper()} ',True,C_BG,bc),(HUD_X,27))
-        s.blit(self.f_xl.render('WILLY',True,C_ACCENT),(HUD_X,81))
-        for i,(lbl,key) in enumerate([('F','front'),('L','left'),('R','right')]):
-            d=dists.get(key,999); col=C_RED if d<config.DIST_STOP else C_AMBER if d<config.DIST_SLOW else C_GREEN
-            s.blit(self.f_md.render(f'{lbl} {d:3.0f}cm',True,col),(HUD_X,222+i*54))
-        tc=C_RED if tilt>config.IMU_TILT_LIMIT else C_AMBER if tilt>config.IMU_TILT_WARN else C_DIM
-        s.blit(self.f_sm.render(f'TILT {tilt:.1f}deg',True,tc),(HUD_X,402))
-        pygame.draw.rect(s,C_DIM,pygame.Rect(HUD_X,444,352,21),1)
-        sw=int(abs(speed)*352)
-        pygame.draw.rect(s,C_GREEN if speed>=0 else C_AMBER,pygame.Rect(HUD_X,444,sw,21))
         pygame.draw.rect(s,(12,12,22),pygame.Rect(0,STATUS_Y,W,H-STATUS_Y))
         pygame.draw.line(s,C_DIM,(0,STATUS_Y),(W,STATUS_Y),1)
-        for i,ln in enumerate(self._wrap2(self.f_sm,status,W-24-100)):
-            s.blit(self.f_sm.render(ln,True,C_TEXT),(12,STATUS_Y+8+i*26))
-        s.blit(self.f_sm.render(time.strftime('%H:%M:%S'),True,C_DIM),(W-100,STATUS_Y+8))
+        # Telemetry line: badge/title/sensors/tilt/speed/clock, all consolidated here so every
+        # piece of on-screen text lives in this 2-line footer rather than a separate HUD column.
+        x=12; y=STATUS_Y+8
+        def seg(text,color,bg=None):
+            nonlocal x
+            surf=self.f_sm.render(text,True,color,bg) if bg is not None else self.f_sm.render(text,True,color)
+            s.blit(surf,(x,y)); x+=surf.get_width()+14
+        seg(f' {state.upper()} ',C_BG,bc)
+        seg('WILLY',C_ACCENT)
+        for lbl,key in [('F','front'),('L','left'),('R','right')]:
+            d=dists.get(key,999); col=C_RED if d<config.DIST_STOP else C_AMBER if d<config.DIST_SLOW else C_GREEN
+            seg(f'{lbl}{d:3.0f}cm',col)
+        tc=C_RED if tilt>config.IMU_TILT_LIMIT else C_AMBER if tilt>config.IMU_TILT_WARN else C_DIM
+        seg(f'TILT{tilt:5.1f}',tc)
+        seg(f'SPD{speed:+.2f}',C_TEXT)
+        clock_surf=self.f_sm.render(time.strftime('%H:%M:%S'),True,C_DIM)
+        s.blit(clock_surf,(W-clock_surf.get_width()-12,y))
+        # Status line: single line now that telemetry owns the first line — still ellipsis-
+        # truncated (via _wrap with max_lines=1) rather than silently clipped off-screen.
+        status_ln=self._wrap(self.f_sm,status,W-24,max_lines=1)[0]
+        s.blit(self.f_sm.render(status_ln,True,C_TEXT),(12,STATUS_Y+34))
         if heard:
             cx,cy=36,36
             pygame.draw.circle(s,C_GREEN,(cx,cy),22)
