@@ -113,10 +113,12 @@ ESTOP_LOG_INTERVAL_S=5.0 # safety.py throttles emergency_stop()'s own log line t
 INA260_SERVO_ADDR=0x40; INA260_PI_ADDR=0x44; INA260_MOTOR_ADDR=0x45
 
 ADS_ADDR=0x48; ADS_CH_BATTERY=0  # AIN0 only; charge-sense divider not yet wired
-# Re-trimmed for the ADS1115 2026-08-02: AIN0 read 3.2749V while a multimeter
-# on the pack terminals read 11.43V (3.2749/11.43). Old MCP3008-era value was
-# 0.2481 — different chip loads the divider less, so this had to be redone.
-BATTERY_DIVIDER_SCALE=0.2865
+# Re-trimmed 2026-08-16: AIN0 read 2.9112V while a multimeter on the pack
+# terminals read 12.2V (2.9112/12.2). Previous value (0.2865, set 2026-08-02)
+# had drifted — direction of drift didn't fit simple aging (raw reading fell
+# while actual pack voltage rose), so if this disagrees with a meter again,
+# check the physical divider connection before just recalibrating again.
+BATTERY_DIVIDER_SCALE=0.2386
 
 # Battery threshold ladder (§13.2) — one-way toward safer states until voltage recovers above
 # the next threshold up + hysteresis. Supersedes the old flat BAT_LOW/BAT_CRITICAL pair.
@@ -128,7 +130,7 @@ BATTERY_DIVIDER_SCALE=0.2865
 # in brain.py compares raw measured voltage against BAT_WARN/RTH/SAFE/SHUTDOWN_V directly, never
 # battery_pct. Don't treat voltage-under-load as equivalent to open-circuit/rested voltage if
 # these thresholds are ever recalibrated from a bench (unloaded) reading.
-BAT_FULL_V=11.39      # display-only 100% anchor for battery_pct
+BAT_FULL_V=11.58      # display-only 100% anchor for battery_pct (post-fuse voltage)
 BAT_WARN_V=11.4       # -> warn
 BAT_RTH_V=10.8        # -> return-to-home / DOCK
 BAT_SAFE_V=10.5        # -> SAFE_MODE (motion stop, arm holds)
