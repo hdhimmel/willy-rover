@@ -106,7 +106,14 @@ silently pick one; flag them.
 
 ## Architecture constraint — keep the NPU out of the safety path
 
-An AI HAT+ 2 (Hailo-10H, 8GB on-board RAM) is on order. When integrating it:
+An AI HAT+ 2 (Hailo-10H) is installed and PCIe-bonded as of 2026-08-16 (`/dev/hailo0`,
+`hailortcli fw-control identify` reports firmware 5.1.1, architecture HAILO10H). This was a
+driver/package mismatch, not a hardware fault: the board had the Hailo-8-only package line
+(`hailo-all`) installed, whose driver's PCI ID table doesn't include the Hailo-10H's ID
+(`1e60:45c4`) — it loaded but silently never bound the device. Fixed by swapping to the
+`hailo-h10-all` package line (`h10-hailort`, `h10-hailort-pcie-driver`, `python3-h10-hailort`).
+`vision.py`/`ObjectDetector` has not yet been wired to use it — still CPU-only YOLOv8,
+`ENABLE_OBJECT_RETRIEVAL=False`. When integrating it:
 
 - **Reflex layer** — sonars, encoders, INA260 current monitors. Deterministic,
   drives the emergency stop. Must never wait on vision.

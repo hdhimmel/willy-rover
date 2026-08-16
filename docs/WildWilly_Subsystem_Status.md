@@ -41,7 +41,7 @@ modules below sound adjacent to them:
 | `mapping.py` | **PARTIALLY IMPLEMENTED** | Milestone 1. Room-identification not attempted. 11 tests. |
 | `navigation.py` | **PARTIALLY IMPLEMENTED** | Milestone 1. Straight-line fallback when no room graph known; obstacle avoidance is a self-contained reactive copy, not a global planner. 16 tests. |
 | `ai_provider.py` | **IMPLEMENTED** | Unified `CloudAIProvider`/`LocalAIProvider`, 27 tests, all off-network. Real Anthropic API connectivity is exercised in production (`ANTHROPIC_API_KEY`) but not by the automated test suite. |
-| `vision.py` (`ObjectDetector`) | **HARDWARE REQUIRED, disabled by default** | `ENABLE_OBJECT_RETRIEVAL=False` — CPU-only YOLOv8 (no Hailo NPU on this unit), bearing/range are explicitly heuristic, not calibrated. |
+| `vision.py` (`ObjectDetector`) | **HARDWARE REQUIRED, disabled by default** | `ENABLE_OBJECT_RETRIEVAL=False` — CPU-only YOLOv8. Hailo-10H AI HAT+2 driver/firmware bring-up completed 2026-08-16 (`/dev/hailo0` live, `hailortcli` confirms HAILO10H fw 5.1.1) — root cause was a Hailo-8-only package line installed instead of `hailo-h10-all`, not a hardware fault; see `CLAUDE.md`. `vision.py` itself not yet ported to use the NPU. Bearing/range are explicitly heuristic, not calibrated. |
 | `voice.py` (`VoicePipeline`) | **PLANNED / disabled** | `ENABLE_VOICE=False` — wake-word model is a temporary "Hey Jarvis" placeholder, not the real trained "Hey Willie" model (training was deferred, see wake-word memory tracking). Code is otherwise complete (STT/local-LLM/TTS all previously verified working). |
 | `retrieval_task.py` | **PARTIALLY IMPLEMENTED** | Best-covered subsystem in the whole plan per the gap analysis — grasp is a fixed primitive sequence (no per-joint IK calibration), hand-off confirmation is timeout-based (no tactile sensor). |
 | `memory_store.py` | **IMPLEMENTED** | Corrupted-database recovery added 2026-08-08 (verified against a real garbage file, not just unit tests). |
@@ -96,3 +96,15 @@ IMU `enable_feature` failure, then the arm's PCA9685@0x43 not answering, then th
 bug fixed today) that prevented running a real `RoverBrain.run()`. Update the per-row tags above
 the moment each subsystem gets its own live-verification pass — don't let this doc's tags drift
 stale in the optimistic direction.
+
+**2026-08-16 regression, not yet diagnosed:** `willy-rover.service` found crash-looping (91+
+restarts) since the prior night's boot (18:47 EDT 08-15), dying in `sensors.py IMU.__init__` with
+`ValueError: No I2C device at address: 0x4a` — the BNO085 does not ack at all on a fresh
+`i2cdetect -y 1` (0x27/0x40/0x42/0x43/0x44/0x45/0x48/0x60/0x61/0x70 all present, 0x4a missing).
+This is a different symptom from the reset-timing bug closed in
+[[project_rover_imu_reset_timing_fix]] (that one acked on `i2cdetect` but NACK'd the first write;
+this one doesn't ack at all) — the reset-timing patch in `sensors.py` was confirmed still present
+and unmodified, so this is not a regression of that fix. Not yet investigated further (found
+incidental to unrelated Hailo AI HAT work this session) — start from a physical power/connection
+check on the IMU's rail, same as the arm PCA9685 precedent in
+[[project_rover_i2c_bus_fault]], before re-chasing software.
