@@ -261,6 +261,8 @@ YOLO_CONF_THRESHOLD=0.5
 RETRIEVAL_APPROACH_STOP_CM=25   # distance from target to halt before attempting grasp
 RETRIEVAL_GRASP_RETRIES=2       # FR-1700-005
 RETRIEVAL_PERSON_MAX_RANGE_CM=150  # FR-1700-008: hand-off proximity gate
+PURSUIT_STANDOFF_CM=60          # FR-1000 come_here/follow: how close is "arrived" -- stop short of a person, not into them
+PURSUIT_RESUME_HYSTERESIS_CM=20 # FR-1000 follow: how far past standoff before FOLLOWING resumes closing the gap
 
 # --- FR-1800 privacy / retention. Presence of the flag file (not its content) disables mic+
 # camera, independent of and in addition to E-stop — deleting the file re-enables them.

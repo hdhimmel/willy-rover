@@ -34,6 +34,13 @@ class VoicePipeline:
         self.memory=memory; self.cloud_ai=cloud_ai; self.display=display; self.smart_home=smart_home
         self.pending_commands=queue.Queue()
         self._speak_queue=queue.Queue()
+        # 'stop' bypasses pending_commands entirely — every other queued intent only gets drained
+        # by brain.py from IDLE (Directive 6), so a spoken "stop" during an in-progress RETRIEVE/
+        # NAVIGATE/PURSUE task would otherwise never be picked up at all. brain.py's tick thread
+        # polls this Event at the very top of _tick(), before any Directive gating, and is the
+        # only thing that ever clears it or touches SafetyController — this stays a plain signal,
+        # not a second writer into motor control.
+        self.stop_requested=threading.Event()
         self._running=False; self._thread=None; self._speaker_thread=None
         self._wakeword=None; self._whisper=None; self._local_ai=None
         # No echo cancellation on this mic+speaker puck — TTS playback leaks straight back into
@@ -165,7 +172,24 @@ class VoicePipeline:
         # from whether the JSON happened to parse.
         ctx=self.memory.get_context_for(text) if self.memory else {}
         prompt=(f'You are Willie, a home-assistant rover. Known facts: {json.dumps(ctx)}\n'
-                f'User said: "{text}"\nRespond ONLY with JSON: '
+                f'User said: "{text}"\n'
+                f'If the user is asking you to fetch/bring/collect an object -- phrasings like '
+                f'"retrieve", "get", "pick up", "grab", or "bring me" the object -- use '
+                f'intent "retrieve" with args {{"object":"<the object>"}}, regardless of which '
+                f'of those words they used.\n'
+                f'Other recognized intents and example phrasings, always use exactly these names:\n'
+                f'"shutdown" -- "shut down", "power off", "go to sleep"\n'
+                f'"status" -- "how are you?", "status report", "are you okay?"\n'
+                f'"battery" -- "how\'s your battery?", "how much charge left?"\n'
+                f'"arm_stow" -- "stow the arm", "put your arm away"\n'
+                f'"arm_home" -- "arm home", "reset your arm"\n'
+                f'"come_here" -- "come here", "come over here"\n'
+                f'"follow" -- "follow me", "keep following me"\n'
+                f'"diagnostics" -- "run diagnostics", "self test"\n'
+                f'"where_are_you" -- "where are you?", "what room is this?"\n'
+                f'"what_do_you_see" -- "what do you see?", "what\'s in front of you?"\n'
+                f'"stop" -- "stop", "halt", "freeze"\n'
+                f'Respond ONLY with JSON: '
                 f'{{"intent":"<short action name>","args":{{}},"reply":"<what to say back, <200 chars>",'
                 f'"confidence":<0.0-1.0, how sure you are of this interpretation>}}')
         result=self._local_ai.ask_sync(prompt,schema=_INTENT_SCHEMA)
@@ -176,10 +200,23 @@ class VoicePipeline:
     def _act_on_intent(self,intent,original_text):
         reply=intent.get('reply','') if intent else ''
         name=(intent or {}).get('intent',''); args=(intent or {}).get('args',{})
-        # confirm_receipt doesn't move anything itself, but still has to cross to the tick
-        # thread via this same queue — retrieval_task.py's AWAIT_CONFIRM state is the consumer.
-        motion_intents={'forward','reverse','turn_left','turn_right','stop','go_to','retrieve',
-                         'confirm_receipt','map','stop_map'}
+        if name=='stop':
+            # Immediate, not queued — see stop_requested's docstring in __init__. brain.py's tick
+            # thread picks this up and does the actual emergency_stop()/task-abort work; nothing
+            # here touches SafetyController directly.
+            self.stop_requested.set()
+            if reply: self.speak(reply,tone=config.VOICE_TONE_DEFAULT)
+            return
+        # confirm_receipt doesn't move/reply anything itself, but still has to cross to the tick
+        # thread via this same queue — retrieval_task.py's AWAIT_CONFIRM state (and brain.py's
+        # new shutdown confirmation, see _drain_voice_commands) are the consumers. status/battery/
+        # where_are_you/what_do_you_see/diagnostics/arm_stow/arm_home/come_here/follow/shutdown all need
+        # state voice.py doesn't have (battery volts, FSM state, pose, camera) — brain.py is what
+        # answers them, same "queued, brain.py is the sole consumer" rule as every motion intent.
+        motion_intents={'forward','reverse','turn_left','turn_right','go_to','retrieve',
+                         'confirm_receipt','map','stop_map','shutdown','status','battery',
+                         'arm_stow','arm_home','come_here','follow','diagnostics','where_are_you',
+                         'what_do_you_see'}
         if name in motion_intents:
             # FR-1500-007: queued only — brain.py applies full Directive 1-5 gating before this
             # is ever executed.

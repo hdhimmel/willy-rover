@@ -1,11 +1,11 @@
-import json,time,socket,os,config,logsetup,storage
+import json,time,socket,os,subprocess,config,logsetup,storage
 from logsetup import log_event
 if not config.SIMULATE_HARDWARE: import board,busio
 from motors import DriveBase,Steering
 from sensors import SonarArray,IMU,ADC,Encoders,CurrentMonitor
 from display import WillyFace
 from ai_provider import CloudAIProvider,build_world_state
-from safety import SafetyController
+from safety import SafetyController,Rejected
 from odometry import Odometry
 from world_model import WorldModel,Observation,project_point
 from mapping import MappingSession
@@ -16,6 +16,7 @@ from smart_home import SmartHomeClient
 from voice import VoicePipeline
 from vision import ObjectDetector
 from retrieval_task import RetrievalTask
+from pursuit_task import PursuitTask
 from email_client import EmailClient
 log=logsetup.setup('brain')
 
@@ -80,8 +81,9 @@ class RoverBrain:
         self.mapping=MappingSession(self.world_model,self.detector)  # §10
         self.navigator=Navigator(self.safety,self.odometry,self.world_model)  # §11
         self.retrieval=RetrievalTask(self.safety,self.arm,self.detector,display=self.display,voice=self.voice)
+        self.pursuit=PursuitTask(self.safety,self.detector,display=self.display,voice=self.voice)  # FR-1000
         self.email=EmailClient()
-        self._state='INIT'; self._stuck_count=0; self._last_action='none'
+        self._state='INIT'; self._stuck_count=0; self._last_action='none'; self._manual_action=None
         self._idle_t=0.0; self._avoid_start=0.0; self._avoid_phase=None; self._running=False
         self._motion_enabled=False; self._init_fail_reason=''
         self._bat_tier='normal'; self._health={}; self._fault_since={}
@@ -95,6 +97,8 @@ class RoverBrain:
         self._claude_pending=False; self._claude_move_pending=False
         self._stuck_history=[]; self._last_stuck_prompt=''  # §14: caller-owned conversation history
         self._pose_log_t=0.0
+        self._shutdown_pending=False; self._shutdown_deadline=0.0  # FR-900-005 voice-commanded shutdown confirm
+        self._shutdown_after_stop=False  # set by _begin_shutdown() -- see stop()'s tail
 
     def start(self):
         log.info('Starting subsystems...')
@@ -165,11 +169,23 @@ class RoverBrain:
         if self.retrieval.active: self.retrieval.abort('shutdown')
         if self.mapping.active: self.mapping.abort('shutdown')
         if self.navigator.active: self.navigator.abort('shutdown')
+        if self.pursuit.active: self.pursuit.abort('shutdown')
         self.voice.stop(); self.email.stop(); self.detector.close()
         self.memory.close()  # FR-1900-011: persist any new/updated memory before power-off
         self.world_model.close()  # §9/§10: persist rooms/landmarks/objects/routes before power-off
         self.motors.cleanup(); self.sonars.stop(); self.imu.stop(); self.adc.stop()
         self.encoders.stop(); self.current.stop(); self.display.stop()
+        if self._shutdown_after_stop:
+            # FR-900-005's actual `shutdown -h now` -- deliberately only fires from here, gated on
+            # a flag only _begin_shutdown() ever sets, so a plain service restart/SIGTERM/Ctrl-C
+            # calling this same stop() never powers off the Pi. voice.stop() above already waited
+            # (join timeout=3.0) for the "Shutting down now" line queued in _begin_shutdown() to
+            # finish playing before we get here.
+            log_event(log,'COMMANDED_SHUTDOWN',severity='warning',subsystem='system',status='shutdown_h_now')
+            try:
+                subprocess.run(['sudo','shutdown','-h','now'],check=True,timeout=10)
+            except Exception as e:
+                log.error(f'shutdown -h now failed: {e}')
 
     def run(self):
         self.start()
@@ -248,6 +264,22 @@ class RoverBrain:
             self.cloud_ai.reset_async(); self._claude_pending=False; self._claude_move_pending=False
 
     def _tick(self):
+        if self.voice.stop_requested.is_set():
+            # Checked before any Directive gating below — see voice.py's stop_requested docstring.
+            # This is the only place that ever clears it, and this is the tick thread, so
+            # SafetyController still only ever has one caller.
+            self.voice.stop_requested.clear()
+            if self.retrieval.active: self.retrieval.abort('voice stop')
+            if self.mapping.active: self.mapping.abort('voice stop')
+            if self.navigator.active: self.navigator.abort('voice stop')
+            if self.pursuit.active: self.pursuit.abort('voice stop')
+            self._abandon_stuck_if_active()
+            self.safety.emergency_stop('voice stop')
+            log.info('Voice-triggered immediate stop')
+        if self._shutdown_pending and time.time()>self._shutdown_deadline:
+            self._shutdown_pending=False
+            log.info('Voice shutdown confirmation timed out — cancelled.')
+            if self.voice.available: self.voice.speak("Never mind, I won't shut down.")
         sustained_fault=self._check_health()
         # FR-000 Prime Directives, in order — Directive 2 (self-test gate) and Directive 4
         # (tilt/physical-limit fault) and Directive 3 (battery ladder) are checked here, each
@@ -285,6 +317,7 @@ class RoverBrain:
             if self.retrieval.active: self.retrieval.abort(f'sensor fault: {sustained_fault}')
             if self.mapping.active: self.mapping.abort(f'sensor fault: {sustained_fault}')
             if self.navigator.active: self.navigator.abort(f'sensor fault: {sustained_fault}')
+            if self.pursuit.active: self.pursuit.abort(f'sensor fault: {sustained_fault}')
             self._abandon_stuck_if_active()
             self.safety.emergency_stop(f'{sustained_fault} sensor fault')
             if self._state!='SENSOR_FAULT': log.warning(f'  {self._state}->SENSOR_FAULT ({sustained_fault})')
@@ -296,6 +329,7 @@ class RoverBrain:
             if self.retrieval.active: self.retrieval.abort(f'tilt fault {tilt:.1f}deg')  # FR-1700-007
             if self.mapping.active: self.mapping.abort(f'tilt fault {tilt:.1f}deg')
             if self.navigator.active: self.navigator.abort(f'tilt fault {tilt:.1f}deg')
+            if self.pursuit.active: self.pursuit.abort(f'tilt fault {tilt:.1f}deg')
             self._abandon_stuck_if_active()
             if self._state!='TILT_FAULT': log.warning(f'TILT_FAULT tilt={tilt:.1f}'); self._go('TILT_FAULT')
             self.safety.emergency_stop(f'tilt fault {tilt:.1f}deg')
@@ -307,6 +341,7 @@ class RoverBrain:
             if self.retrieval.active: self.retrieval.abort(f'battery shutdown {bat_v:.2f}V')  # FR-1700-007
             if self.mapping.active: self.mapping.abort(f'battery shutdown {bat_v:.2f}V')
             if self.navigator.active: self.navigator.abort(f'battery shutdown {bat_v:.2f}V')
+            if self.pursuit.active: self.pursuit.abort(f'battery shutdown {bat_v:.2f}V')
             self._abandon_stuck_if_active()
             self.safety.emergency_stop(f'battery shutdown {bat_v:.2f}V')
             if self._state!='SHUTDOWN':
@@ -322,6 +357,7 @@ class RoverBrain:
             if self.retrieval.active: self.retrieval.abort(f'battery safe mode {bat_v:.2f}V')  # FR-1700-007
             if self.mapping.active: self.mapping.abort(f'battery safe mode {bat_v:.2f}V')
             if self.navigator.active: self.navigator.abort(f'battery safe mode {bat_v:.2f}V')
+            if self.pursuit.active: self.pursuit.abort(f'battery safe mode {bat_v:.2f}V')
             self._abandon_stuck_if_active()
             if self._state!='SAFE_MODE':
                 log_event(log,'LOW_BATTERY',severity='warning',subsystem='battery',
@@ -333,6 +369,7 @@ class RoverBrain:
                 if self.retrieval.active: self.retrieval.abort(f'return-to-home {bat_v:.2f}V')  # FR-1700-007
                 if self.mapping.active: self.mapping.abort(f'return-to-home {bat_v:.2f}V')
                 if self.navigator.active: self.navigator.abort(f'return-to-home {bat_v:.2f}V')
+                if self.pursuit.active: self.pursuit.abort(f'return-to-home {bat_v:.2f}V')
                 self._abandon_stuck_if_active()
                 # FR-200-005/FR-1900-011: the GUARANTEED memory save happens here, at the earlier
                 # RTH threshold, while there's still time for a full graceful save — not at the
@@ -364,12 +401,12 @@ class RoverBrain:
         # the gate (§10) -- mapping never touches self._state (see mapping.py's module docstring),
         # so without this a voice-issued "stop mapping" could never be drained while ROAM/SLOW/
         # AVOID legitimately keeps running the whole session.
-        if (self._state=='IDLE' or self.mapping.active) and not self.retrieval.active:
+        if (self._state=='IDLE' or self.mapping.active) and not self.retrieval.active and not self.pursuit.active:
             self._drain_voice_commands()
 
         {'IDLE':self._idle,'ROAM':self._roam,'SLOW':self._slow,'AVOID':self._avoid,
          'STUCK':self._stuck,'DOCK':self._dock,'WARN':self._warn,'RETRIEVE':self._retrieve,
-         'NAVIGATE':self._navigate,
+         'NAVIGATE':self._navigate,'MANUAL':self._manual,'PURSUE':self._pursue,
          'TILT_FAULT':lambda d,t:None,'SAFE_MODE':lambda d,t:None,'SHUTDOWN':lambda d,t:None,
         }.get(self._state,lambda d,t:None)(d,tilt)
 
@@ -377,6 +414,18 @@ class RoverBrain:
         try:
             cmd=self.voice.pending_commands.get_nowait()
         except Exception:
+            return
+        if self._shutdown_pending:
+            # First queued command after a 'shutdown' intent is treated as the yes/no answer to
+            # that confirmation, not dispatched normally below -- see the 'shutdown' branch and
+            # _tick()'s timeout check for the other two ways out of this pending state.
+            self._shutdown_pending=False
+            text=cmd.get('text','').lower()
+            if cmd.get('intent')=='confirm_receipt' or 'confirm' in text or 'yes' in text:
+                self._begin_shutdown()
+            else:
+                log.info('Voice shutdown declined.')
+                if self.voice.available: self.voice.speak("Okay, I won't shut down.")
             return
         if cmd.get('intent')=='retrieve':
             target=cmd.get('args',{}).get('object','object')
@@ -400,11 +449,78 @@ class RoverBrain:
                 ok,msg=self.navigator.start(mission)
                 if ok: self._go('NAVIGATE')
                 log.info(f'Voice-triggered navigation: {mission} ({msg})')
-        # Other queued motion intents (forward/reverse/turn_*/stop) are logged but not wired to
-        # an executor this pass — free-form manual driving via voice was not part of the v2.2
-        # scope actually implemented here. Put back unhandled so nothing is silently swallowed.
+        elif cmd.get('intent') in('forward','reverse','turn_left','turn_right'):
+            # Manual nudge driving — timed move through the same safety.request()/tick() deadline
+            # mechanism ROAM/AVOID/STUCK already use (§25: nothing bypasses SafetyController).
+            # duration/speed default to a short conservative nudge; approve_motion() clamps both
+            # to MAX_COMMAND_DURATION_S/SPEED_MAX regardless of what's requested here or by the LLM.
+            action=cmd['intent']; args=cmd.get('args',{})
+            speed=args.get('speed',config.SPEED_ROAM); duration=args.get('duration',1.5)
+            method={'forward':self.safety.forward_for,'reverse':self.safety.reverse_for,
+                    'turn_left':self.safety.turn_left_for,'turn_right':self.safety.turn_right_for}[action]
+            result=method(duration,speed)
+            if isinstance(result,Rejected):
+                log.info(f'Voice-triggered {action} rejected: {result.reason}')
+                if self.voice.available: self.voice.speak(f"Can't do that — {result.reason}")
+            else:
+                self._manual_action=action; self._go('MANUAL')
+                log.info(f'Voice-triggered manual move: {action} speed={result.speed} duration={result.duration}')
+        elif cmd.get('intent') in('come_here','follow'):
+            if not self.detector.available:
+                if self.voice.available: self.voice.speak("My camera isn't available, I can't find you.")
+            else:
+                mode='follow' if cmd['intent']=='follow' else 'come_here'
+                ok,msg=self.pursuit.start(mode=mode)
+                if ok: self._go('PURSUE')
+                log.info(f'Voice-triggered pursuit: mode={mode} ({msg})')
+        elif cmd.get('intent')=='status':
+            bat_v=self.adc.battery_volts; bat_pct=self.adc.battery_pct
+            if self.voice.available:
+                self.voice.speak(f"I'm currently {self._state.lower()}, battery at {bat_v:.1f} volts, {bat_pct} percent.")
+        elif cmd.get('intent')=='battery':
+            bat_v=self.adc.battery_volts; bat_pct=self.adc.battery_pct
+            if self.voice.available:
+                self.voice.speak(f"Battery is at {bat_v:.1f} volts, about {bat_pct} percent.")
+        elif cmd.get('intent') in('arm_stow','arm_home'):
+            # No calibrated stow/home pose exists yet (§20.6) -- both alias to center_all() as a
+            # known-safe placeholder position until real per-joint poses are bench-calibrated.
+            self.arm.center_all()
+            if self.voice.available: self.voice.speak('Arm centered.')
+        elif cmd.get('intent')=='diagnostics':
+            # Deliberately does NOT touch self._motion_enabled either way afterward -- that's the
+            # startup gate, and silently flipping it from a possibly-transient on-demand result is
+            # an owner decision, not something to do automatically (same reasoning as
+            # config.validate() staying non-blocking in _self_test() above). Runs synchronously on
+            # the tick thread (~0.5s+, real I2C scan) -- accepted: this only ever runs from IDLE.
+            if self.voice.available: self.voice.speak('Running diagnostics now, one moment.')
+            ok,reason=self._self_test()
+            if self.voice.available:
+                self.voice.speak('Everything checks out.' if ok else f'Diagnostics found a problem: {reason}')
+        elif cmd.get('intent')=='where_are_you':
+            pose=self.world_model.get_robot_pose()
+            room=self.world_model.get_room(pose.x,pose.y)
+            if self.voice.available:
+                self.voice.speak(f"I'm in the {room.name}." if room else "I'm not sure which room I'm in.")
+        elif cmd.get('intent')=='what_do_you_see':
+            # v1: names detected object classes from the existing CPU-YOLO detector, not a real
+            # VLM caption (no Hailo-backed VLM wired into vision.py yet -- see its module docstring).
+            if not self.detector.available:
+                reply="My camera isn't available right now."
+            else:
+                classes=sorted({det['class'] for det in self.detector.detect()})
+                reply=f"I can see {', '.join(classes)}." if classes else "I don't see anything right now."
+            if self.voice.available: self.voice.speak(reply)
+        elif cmd.get('intent')=='shutdown':
+            if self.voice.available:
+                self.voice.speak('Are you sure you want me to shut down? Say confirm to proceed.')
+            self._shutdown_pending=True; self._shutdown_deadline=time.time()+15.0
         elif cmd.get('intent'):
             log.info(f'Voice intent "{cmd["intent"]}" received but not wired to an executor.')
+            # FR-800-004 principle applied to voice too: a command that can't be carried out
+            # should be reported, not silently absorbed -- the LLM's own free-form 'reply' already
+            # got spoken by voice.py's _act_on_intent when this was queued, which can sound like
+            # confident compliance even though nothing is wired here. This is the corrective.
+            if self.voice.available: self.voice.speak("I heard you, but I don't know how to do that yet.")
 
     def _retrieve(self,d,tilt):
         self.retrieval.tick(d,tilt)
@@ -412,11 +528,40 @@ class RoverBrain:
             if self.retrieval.state=='DONE' and self.voice.available: self.voice.speak('All done!')
             self.retrieval.reset(); self._go('IDLE')
 
+    def _pursue(self,d,tilt):
+        self.pursuit.tick(d,tilt)
+        if self.pursuit.state in('DONE','FAILED','ABORTED'):
+            if self.pursuit.state=='DONE' and self.voice.available: self.voice.speak('Here I am!')
+            self.pursuit.reset(); self._go('IDLE')
+
+    def _begin_shutdown(self):
+        # FR-900-005: halt motion, stow arm, persist state, then `shutdown -h now`. Reuses
+        # stop()'s existing graceful-cleanup sequence (task aborts, memory/world_model
+        # persistence, motor/sensor teardown) rather than duplicating it — that's already what
+        # run()'s `finally` calls on any exit. The actual OS shutdown call only ever fires from
+        # stop()'s tail, gated on _shutdown_after_stop, so this never risks a plain service
+        # restart/SIGTERM/Ctrl-C powering off the Pi.
+        log.warning('Voice-commanded shutdown confirmed.')
+        self.safety.emergency_stop('commanded shutdown')
+        self.arm.center_all()  # stow placeholder -- no calibrated stow pose exists yet (§20.6)
+        if self.voice.available: self.voice.speak('Shutting down now. Goodbye.')
+        self._shutdown_after_stop=True; self._running=False
+
     def _navigate(self,d,tilt):
         self.navigator.tick(d,tilt)
         if self.navigator.state in('DONE','FAILED','ABORTED'):
             if self.navigator.state=='DONE' and self.voice.available: self.voice.speak("I'm here.")
             self.navigator.reset(); self._go('IDLE')
+
+    def _manual(self,d,tilt):
+        # self.safety.tick() (called once centrally, see its own call site above) already
+        # services the deadline/obstacle re-check for the in-flight move started in
+        # _drain_voice_commands() — this just watches for it finishing and returns to IDLE,
+        # same pattern as _retrieve()/_navigate() above.
+        if self.safety.timed_move_active:
+            self._upd('manual',f'Manual: {self._manual_action}',d,tilt,config.SPEED_ROAM)
+        else:
+            self._go('IDLE')
 
     def _idle(self,d,tilt):
         self.safety.stop(); self._idle_t+=0.05
