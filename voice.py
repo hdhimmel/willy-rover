@@ -28,6 +28,34 @@ _SAFETY_PATTERN=re.compile(
     r'\b(e-?stop|estop|emergency|fault|shutdown|shutting down|battery critical|low battery|'
     r'safe mode|stall|tilt|obstacle detected|confirm.*(move|drive|forward|reverse))\b',re.I)
 
+# Voice latency handoff 2026-08-15, Fix 1: deterministic matcher for the small set of fixed-
+# phrasing commands, tried before the ~15-20s local LLM intent call. Whole-utterance match only
+# (not substring) -- a false match that starts motion is far worse than a miss that costs the
+# LLM's usual latency (doc's explicit conservatism requirement), so these are deliberately
+# narrow rather than broad. go_to/retrieve/smart_home take free-form args and stay LLM-only, per
+# the doc. Reply text is empty for shutdown/diagnostics because brain.py's own handler for those
+# speaks its own (required) message immediately on dispatch -- an extra ack here would either be
+# redundant or, for shutdown, actively confusing right before the confirmation prompt.
+_FAST_PATH_PATTERNS=[
+    (re.compile(r'stop|halt|freeze',re.I),'stop','Stopping.'),
+    (re.compile(r'(go |move |drive )?forward',re.I),'forward','Going forward.'),
+    (re.compile(r'(go |move |drive )?(reverse|backward|back up)',re.I),'reverse','Backing up.'),
+    (re.compile(r'turn left',re.I),'turn_left','Turning left.'),
+    (re.compile(r'turn right',re.I),'turn_right','Turning right.'),
+    (re.compile(r"how'?s your battery|battery status|battery level|how much charge( left)?",re.I),
+     'battery','Checking.'),
+    (re.compile(r'status report|how are you|are you (ok|okay)|status',re.I),'status','Checking.'),
+    (re.compile(r'where are you|what room (is this|are you in)',re.I),'where_are_you','Checking.'),
+    (re.compile(r'stow the arm|put your arm away|stow your arm',re.I),'arm_stow','Stowing the arm.'),
+    (re.compile(r'arm home|reset your arm|home your arm',re.I),'arm_home','Homing the arm.'),
+    (re.compile(r'start mapping|begin mapping|map this room|start the map',re.I),'map','Starting the map.'),
+    (re.compile(r'stop mapping|end mapping|finish mapping|stop the map',re.I),'stop_map','Stopping the map.'),
+    (re.compile(r'shut down|power off|go to sleep',re.I),'shutdown',''),
+    (re.compile(r'run diagnostics|self test|run a self test|run self test',re.I),'diagnostics',''),
+]
+
+_TIME_PATTERN=re.compile(r"what'?s the time|what is the time|what time is it|current time|do you (know|have) (what )?the time( it is)?",re.I)
+
 class VoicePipeline:
     def __init__(self,memory=None,cloud_ai=None,display=None,smart_home=None):
         self._enabled=config.ENABLE_VOICE
@@ -49,6 +77,13 @@ class VoicePipeline:
         # real wake words the whole time since predict() and utterance handling share this one
         # thread). Gate wake-word scoring while speaking, plus a decay grace period after.
         self._speaking=threading.Event()
+        # Set by _process_utterance just before the one speak() call each utterance-processing
+        # pass makes (every branch returns right after its single speak(), so at most one
+        # utterance's timing is ever in flight); speak() snapshots+clears it into the queued
+        # item so _speaker_loop can log the full wake->stt->intent->tts breakdown on its own
+        # thread once synthesis finishes. None for speak() calls with no wake-word origin
+        # (brain.py's direct calls, "How can I help?"/_maybe_learn early-return branches).
+        self._utterance_timing=None
         if self._enabled: self._load_models()
 
     def _load_models(self):
@@ -96,10 +131,10 @@ class VoicePipeline:
         # Sole consumer of _speak_queue — keeps every speak()/speak_safety() call (including
         # brain.py's, from the main tick thread) non-blocking regardless of caller.
         while self._running:
-            try: text=self._speak_queue.get(timeout=0.5)
+            try: text,timing=self._speak_queue.get(timeout=0.5)
             except queue.Empty: continue
             self._speaking.set()
-            try: self._synthesize_and_play(text)
+            try: self._synthesize_and_play(text,timing)
             finally:
                 time.sleep(0.6)  # let speaker-to-mic echo decay before wake scoring resumes
                 self._speaking.clear()
@@ -118,12 +153,12 @@ class VoicePipeline:
                         continue  # still drain the buffer, just don't score our own echo
                     scores=self._wakeword.predict(frame.flatten())
                     if max(scores.values(),default=0.0)>=config.WAKEWORD_THRESHOLD:
-                        self._handle_wake(stream,frame_len)
+                        self._handle_wake(stream,frame_len,time.time())
         except Exception as e:
             log.error(f'Voice input stream failed, pipeline stopping: {e}')
             self._running=False
 
-    def _handle_wake(self,stream,frame_len):
+    def _handle_wake(self,stream,frame_len,t_wake):
         # FR-1500-001 satisfied (wake word seen) — now capture an utterance and process it.
         # Kept simple: fixed-length capture window rather than VAD-based endpointing.
         if self.display: self.display.update_state(state='listening',status='Listening...')
@@ -132,12 +167,13 @@ class VoicePipeline:
             f,_=stream.read(frame_len); audio.append(f.flatten())
         pcm=np.concatenate(audio).astype(np.float32)/32768.0
         if self.display: self.display.update_state(state='processing',status='Thinking...')
-        self._process_utterance(pcm)
+        self._process_utterance(pcm,t_wake)
 
-    def _process_utterance(self,pcm):
+    def _process_utterance(self,pcm,t_wake):
         # FR-1500-002: onboard STT, no cloud dependency.
-        segments,_=self._whisper.transcribe(pcm,language='en')
+        segments,_=self._whisper.transcribe(pcm,language='en',beam_size=1,vad_filter=True)
         text=' '.join(s.text for s in segments).strip()
+        t_stt=time.time()
         if not text:
             self.speak("How can I help?"); return
         log.info(f'Heard: "{text}"')
@@ -146,7 +182,19 @@ class VoicePipeline:
         # FR-1900-006: explicit teaching commands short-circuit interpretation, handled locally.
         if self.memory and self._maybe_learn(text): return
 
+        fast=self._fast_path(text)
+        if fast is not None:
+            t_intent=time.time()
+            self._utterance_timing=(t_wake,t_stt,t_intent)
+            log.info(f'Fast-path matched: "{text}" -> {fast["intent"]}')
+            self._act_on_intent(fast,text); return
+
         intent,confidence=self._interpret_local(text)
+        t_intent=time.time()
+        # Voice latency handoff 2026-08-15 Step 0: timing captured through here regardless of
+        # which branch below fires — cloud fallback and the low-confidence reply both still went
+        # through STT+local-intent-parse, so their cost belongs in the same measurement.
+        self._utterance_timing=(t_wake,t_stt,t_intent)
         if confidence<config.LOCAL_LLM_CONFIDENCE_FLOOR:
             if self.cloud_ai and self.cloud_ai.available:
                 import privacy as _p; _p.note_cloud_send(self.display,self,'your request')
@@ -164,6 +212,18 @@ class VoicePipeline:
         if m: self.memory.add_instruction(m.group(1).strip(),m.group(2).strip())
         if m: self.speak(f"Understood — when you say '{m.group(1)}', I'll {m.group(2)}."); return True
         return False
+
+    def _fast_path(self,text):
+        # See _FAST_PATH_PATTERNS' module-level comment for the conservatism rationale.
+        # fullmatch, not search -- a command embedded in a longer sentence falls through to the
+        # LLM rather than risk matching on a fragment (e.g. "don't stop" must never hit 'stop').
+        norm=text.strip().rstrip('.!? ')
+        if _TIME_PATTERN.fullmatch(norm):
+            return {'intent':'time','args':{},'reply':f"It's {time.strftime('%I:%M %p').lstrip('0')}."}
+        for pattern,name,reply in _FAST_PATH_PATTERNS:
+            if pattern.fullmatch(norm):
+                return {'intent':name,'args':{},'reply':reply}
+        return None
 
     def _interpret_local(self,text):
         # FR-1500-003/§15: parse_success and intent_confidence are independent AIResult signals
@@ -239,16 +299,17 @@ class VoicePipeline:
         if self.display: self.display.update_state(state='speak',status=text)
         if not self._enabled:
             log.info(f'(voice disabled) would say: {text}'); return
-        self._speak_queue.put(text)
+        timing=self._utterance_timing; self._utterance_timing=None
+        self._speak_queue.put((text,timing))
 
     def speak_safety(self,text):
         # FR-1500-010: the only entry point brain.py's safety paths should use — always neutral,
         # never routed through personality logic at all. Also non-blocking, same as speak().
         if not self._enabled:
             log.info(f'(voice disabled) would say: {text}'); return
-        self._speak_queue.put(text)
+        self._speak_queue.put((text,None))
 
-    def _synthesize_and_play(self,text):
+    def _synthesize_and_play(self,text,timing=None):
         # Only ever called from _speaker_loop's own thread — never call this directly.
         try:
             with tempfile.NamedTemporaryFile(suffix='.wav',delete=False) as f: wav_path=f.name
@@ -261,6 +322,13 @@ class VoicePipeline:
             piper_bin=os.path.join(os.path.dirname(sys.executable),'piper')
             subprocess.run([piper_bin,'--model',model,'--output_file',wav_path],
                             input=text.encode(),capture_output=True,timeout=10,check=True)
+            if timing is not None:
+                # Voice latency handoff 2026-08-15 Step 0: logged right after synthesis, before
+                # aplay/pw-play, so this bucket reflects piper compute cost rather than the
+                # reply's spoken-audio duration (which scales with reply length, not latency).
+                t_wake,t_stt,t_intent=timing; t_tts=time.time()
+                log.info('voice timing: stt=%.1fs intent=%.1fs tts=%.1fs total=%.1fs',
+                          t_stt-t_wake,t_intent-t_stt,t_tts-t_intent,t_tts-t_wake)
             # aplay opens ALSA directly, which conflicts with pipewire holding the USB
             # card exclusively under this user session (confirmed 2026-08-15: bare aplay
             # fails with "Device or resource busy", caught here as a silent no-op).

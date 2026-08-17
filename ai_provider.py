@@ -218,7 +218,7 @@ class LocalAIProvider(AIProvider):
         if os.path.exists(model_path):
             try:
                 from llama_cpp import Llama
-                self._llm=Llama(model_path=model_path,n_ctx=2048,verbose=False)
+                self._llm=Llama(model_path=model_path,n_ctx=2048,n_threads=4,verbose=False)
                 self._enabled=True
             except Exception as e:
                 log.error(f'Local LLM load failed, staying disabled: {e}')
