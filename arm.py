@@ -5,6 +5,15 @@ if not config.SIMULATE_HARDWARE:
     from adafruit_pca9685 import PCA9685
     _i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
 
+# FR-700-002 (preset positions): NOT implemented -- no named poses exist, per this
+# class's own comment below (no per-joint safe limits, preset poses, or IK yet).
+# FR-700-003 (joint limits) -- PARTIAL: _drive() below clamps to manufacturer-default
+# ARM_SERVO_MIN_US/MAX_US, but real per-joint calibrated limits haven't been bench-set.
+# FR-700-004 (arm stops on E-stop) -- NOT implemented: safety.SafetyController only
+# holds a drive_base reference (see safety.py's __init__), never an Arm instance, and
+# emergency_stop() only calls self._drive.brake(). No code path stops arm motion on
+# E-stop; grep for 'self.arm.' in brain.py outside center_all/arm_stow/arm_home turns
+# up only the wave-hello gesture, nothing safety-related.
 class Arm:
     # PCA9685 @0x43, CH0-6, base->gripper order (§11.1). No per-joint safe limits, preset poses,
     # or IK exist yet — §20.6 bench calibration hasn't been run. This is a driver + primitive
@@ -23,6 +32,8 @@ class Arm:
         self._pca.channels[self._JOINTS[joint]].duty_cycle=int(us/self._PERIOD_US*65535)
         self._pulse[joint]=us
         return us
+    # FR-700-001 (control all arm joints): each joint on its own channel; the shoulder
+    # mirrored pair is handled here as J1b = 2*center - J1a, matching the FRD's spec.
     def set_pulse(self,joint,us):
         # J1a/J1b (shoulder) are a mirrored pair driving one physical pitch axis (§11.1/§11.4) —
         # command shoulder_a only; shoulder_b is derived, not independently addressable.

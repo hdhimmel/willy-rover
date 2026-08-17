@@ -18,6 +18,9 @@ class DriveBase:
         self._lock=threading.Lock(); self.current_speed=0.0
         self._running=True
         self._thread=threading.Thread(target=self._ramp_loop,daemon=True); self._thread.start()
+    # FR-500-004 (closed-loop speed) -- NOT implemented as closed-loop: this ramps the
+    # commanded target by a fixed rate/time step (open-loop), it does not read encoder
+    # counts_per_sec() to correct for a surface change. See sensors.py's Encoders class.
     def _ramp_loop(self):
         # FR-400-003: slew-rate limit so throttle changes smoothly rather than jumping instantly.
         dt=0.02; step=config.SPEED_RAMP_PER_S*dt
@@ -29,10 +32,16 @@ class DriveBase:
                     self._actual[w]=cur; self._motors[w].throttle=max(-1.0,min(1.0,cur))
                 self.current_speed=(self._actual['lf']+self._actual['rf'])/2
             time.sleep(dt)
+    # FR-400-001 (independent left/right control): six wheels individually targetable
+    # (lf/lm/lr vs rf/rm/rr), driver assignment fixed by as-built wiring (0x60 left,
+    # 0x61 right -- see CLAUDE.md).
     def _set(self,l,r):
         with self._lock:
             for w in ('lf','lm','lr'): self._target[w]=l
             for w in ('rf','rm','rr'): self._target[w]=r
+    # FR-400-002 (forward/reverse/turning) and FR-400-004 (enforce software speed
+    # limits): every method below clamps to config.SPEED_MAX before driving. Ramping
+    # to that target then happens in _ramp_loop() above (FR-400-003).
     def forward(self,speed=None):
         s=min(config.SPEED_MAX,speed or config.SPEED_ROAM); self._set(s,s)
     def reverse(self,speed=None):
@@ -57,6 +66,10 @@ class DriveBase:
         self._running=False; time.sleep(0.05)
         for m in self._motors.values(): m.throttle=None  # release — no holding current on exit
 
+# FR-600-001 (control steering servo) -- PARTIAL: set_angle()/center_all() below can
+# drive any corner, but brain.py only ever calls center_all() once at startup; nothing
+# commands per-corner steering angles during normal drive yet (crab/point-turn
+# kinematics are undefined in the master doc, per the comment below).
 class Steering:
     # PCA9685 @0x42, CH0-5 (§3.1/§10). Kinematics (crab/point-turn coordination, per-corner
     # clearance limits) are undesigned in the master doc — this class only centers/holds
@@ -70,6 +83,7 @@ class Steering:
     def _set_pulse(self,channel,us):
         us=max(config.SERVO_MIN_US,min(config.SERVO_MAX_US,us))
         self._pca.channels[channel].duty_cycle=int(us/self._PERIOD_US*65535)
+    # FR-600-003 (travel limits): clamped to half_span_us below before any pulse is sent.
     def set_angle(self,corner,degrees):
         # degrees relative to center, clamped to the conservative servo range's half-span
         half_span_us=(config.SERVO_MAX_US-config.SERVO_MIN_US)/2

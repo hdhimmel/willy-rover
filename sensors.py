@@ -25,6 +25,7 @@ if not config.SIMULATE_HARDWARE:
 
 log=logging.getLogger('sensors')
 
+# FR-800-002 (read sonar obstacle data): three independent units, see SonarArray below.
 class Sonar:
     def __init__(self,trig,echo):
         self.trig=trig; self.echo=echo
@@ -73,6 +74,9 @@ class SonarArray:
     def should_slow(self): return self.front.distance<config.DIST_SLOW
     def better_side(self): return 'left' if self.left.distance>=self.right.distance else 'right'
 
+# FR-800-001 (read IMU orientation data). tilt/is_safe below feed FR-800-003 (excessive
+# tilt halts motion) and FR-300 approve_motion()'s tilt check -- the halt itself lives in
+# safety.py/brain.py, this class only supplies the reading.
 class IMU:
     # BNO085 SH-2 fusion chip — quaternion already drift-free, no complementary filter needed.
     # Mounting-axis convention (which physical axis reads as pitch/roll) is unconfirmed —
@@ -126,10 +130,14 @@ class IMU:
     def tilt(self):
         with self._lock: return math.sqrt(self._pitch**2+self._roll**2)
     @property
+    # FR-800-004 (sensor health): a stalled read thread reports unhealthy rather than
+    # silently returning a stale cached value -- see brain.py's _check_health().
     def is_healthy(self): return (time.perf_counter()-self._last_ok)<max(0.5,4.0/config.IMU_POLL_HZ)
     def is_safe(self): return self.tilt<config.IMU_TILT_LIMIT
     def should_warn(self): return self.tilt>config.IMU_TILT_WARN
 
+# FR-200-001 (voltage/current/power monitoring): battery_volts below is the calibrated
+# reading brain.py's _bat_tier_for()/_update_bat_tier() threshold against (see brain.py).
 class ADC:
     _POINTER_CONFIG=0x01; _POINTER_CONVERT=0x00
     _CONFIG_BASE=0x8000|0x0200|0x0100|0x0080|0x0003  # single-shot start, PGA ±4.096V, single-shot mode, 128SPS, comparator off
@@ -248,11 +256,15 @@ class Encoders:
                 self._last_rate_t=now
             time.sleep(0.001)
     @property
+    # FR-500-001 (read wheel encoders): raw per-wheel quadrature counts.
     def counts(self):
         with self._lock: return dict(self._counts)
     @property
+    # FR-500-002 (speed and distance): rate here; distance-over-time conversion using
+    # wheel circumference happens in odometry.py, not this class.
     def counts_per_sec(self):
         with self._lock: return dict(self._rate)
+    # FR-500-003 (stall detection, Directive 5).
     def stalled(self,wheel,commanded):
         # §8.5 fault behavior: no counts while commanded -> caller should stop the affected drive.
         with self._lock: return commanded and abs(self._rate.get(wheel,0.0))<1.0
