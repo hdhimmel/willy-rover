@@ -98,6 +98,15 @@ class SafetyController:
         return True
 
     def emergency_stop(self,reason):
+        # FR-300-002 (immediate motion disable): hard brake + clears any queued/in-flight
+        # motion in the same call. brain.py's fault checks (sensor/tilt/battery) and voice
+        # 'stop' all funnel through here -- see brain.py's _check_health()/_tick() call sites.
+        # FR-300-001 (continuous physical E-stop monitoring) and FR-300-003 (explicit
+        # operator reset before resuming) are NOT implemented: no physical E-stop GPIO is
+        # polled anywhere in this codebase (grep for ESTOP finds only the log-throttle
+        # constant below), and every fault state this class enters is recovered from
+        # automatically once the triggering condition clears (see brain.py's SAFE_MODE/
+        # SENSOR_FAULT handling) rather than requiring an explicit operator action.
         # Immediate hard brake (not the ramped stop()) — for tilt/battery faults and sustained
         # sensor faults, where a 0.5s ramp-down is the wrong call. Also clears any in-flight timed
         # move so a stale deadline can't fire after recovery.

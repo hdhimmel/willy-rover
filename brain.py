@@ -102,6 +102,8 @@ class RoverBrain:
 
     def start(self):
         log.info('Starting subsystems...')
+        # FR-100-002 (initialize I2C bus and connected devices): bringing up every sensor
+        # and actuator subsystem is the whole point of start() below.
         self.display.start(); self.sonars.start(); self.imu.start(); self.adc.start()
         self.encoders.start(); self.current.start()
         self.steering.center_all(); self.arm.center_all()
@@ -111,7 +113,13 @@ class RoverBrain:
         # their ENABLE_* flag is off or credentials/models are missing (see each module).
         self.voice.start(); self.email.start()
         self._running=True
+        # FR-100-003 (run startup self-test): _self_test() below.
         ok,reason=self._self_test()
+        # FR-100-004 (prevent motion until startup checks pass): _motion_enabled gates
+        # every call into safety.approve_motion() -- see 'motion disabled (self-test
+        # failed)' there. Set once here; not touched again afterward (see safety.py's
+        # emergency_stop() for why that does NOT also cover FR-300-003's post-E-stop
+        # reset requirement, which is a different, unimplemented, gate).
         self._motion_enabled=ok; self._init_fail_reason=reason
         if ok:
             self._go('IDLE'); self.display.update_state('idle','WildWilly v2 ready')
@@ -211,6 +219,11 @@ class RoverBrain:
     @property
     def tick_overrun_count(self): return self._tick_overrun_count
 
+    # FR-200-002/003/004 (undervoltage/warning/critical-cutoff thresholds and shutdown):
+    # tiered against calibrated volts (see sensors.py's ADC for FR-200-001's raw-to-volts
+    # scaling), with hysteresis in _update_bat_tier() below so tier doesn't chatter at a
+    # boundary. 'shutdown' tier below triggers emergency_stop() + SAFE_MODE in the battery
+    # check further down this file.
     def _bat_tier_for(self,volts):
         for name,threshold in _BAT_TIERS:
             if volts<threshold: return name
@@ -240,6 +253,12 @@ class RoverBrain:
         # sharpest case — self.imu.tilt returns the last cached reading even after the read
         # thread dies, so a stale tilt can silently pass the TILT_FAULT check below forever
         # without this.
+        # FR-300-004 (controller failure halts motion) -- PARTIAL: this covers IMU,
+        # encoders, current sensor and battery ADC health, escalating to emergency_stop()
+        # below. It does NOT directly check the drive/arm PCA9685 controllers' own I2C
+        # reads/writes for failure -- a total bus dropout would likely show up here via
+        # the other devices going unhealthy, but an isolated motor-driver disconnect
+        # would not be caught by this check on its own.
         checks={'imu':self.imu.is_healthy,'encoders':self.encoders.is_healthy,
                 'current':self.current.is_healthy,'battery_adc':self.adc.battery_volts>0}
         now=time.time(); sustained_fault=None
