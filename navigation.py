@@ -44,6 +44,9 @@ class Navigator:
     @property
     def active(self): return self.state in('SEEKING','AVOIDING')
 
+    # FR-1000-001 (navigate unaided): reaches a commanded destination without operator
+    # intervention -- PARTIAL per Subsystem_Status.md: dead-reckoning odometry only
+    # (no SLAM, no IMU fusion, no obstacle-aware global path planning).
     def start(self,mission):
         if self.active: return False,'navigation already in progress'
         waypoints=self._resolve_route(mission)
@@ -55,6 +58,7 @@ class Navigator:
         log.info(f'Navigation started: {mission} -> {len(waypoints)} waypoint(s)')
         return True,'started'
 
+    # FR-1000-004 (handover): operator control regained on demand via Directive 1-4 preemption.
     def abort(self,reason):
         # Mirrors RetrievalTask.abort()'s shape -- brain.py calls this on a Directive 1-4
         # preemption, never decided internally.
@@ -110,6 +114,9 @@ class Navigator:
     def tick(self,d,tilt):
         {'SEEKING':self._seeking,'AVOIDING':self._avoiding}.get(self.state,lambda d,t:None)(d,tilt)
 
+    # FR-1000-003 (route maintenance): drives toward the next waypoint, arrival tolerance
+    # is config.NAV_ARRIVAL_RADIUS_M. Straight-line waypoint following, no obstacle-aware
+    # global replanning -- see world_model.py for the route-graph limits.
     def _seeking(self,d,tilt):
         if self.safety.timed_move_active: return
         f=d['front']
@@ -135,6 +142,7 @@ class Navigator:
         else:
             self.safety.forward(config.SPEED_SLOW)
 
+    # FR-1000-002 (obstacle avoidance): obstacles are detected (sonar) and avoided.
     def _avoiding(self,d,tilt):
         # Mirrors brain.py's _avoid() reverse-then-turn pattern -- see module docstring for why
         # this is a self-contained copy rather than a direct call into _avoid() itself.
