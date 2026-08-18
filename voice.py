@@ -170,7 +170,10 @@ class VoicePipeline:
         self._process_utterance(pcm,t_wake)
 
     def _process_utterance(self,pcm,t_wake):
-        # FR-1500-002: onboard STT, no cloud dependency.
+        # FR-1500-002: onboard STT, no cloud dependency. Also satisfies FR-1800-001 (raw
+        # audio never transmitted off-device): cloud_ai.ask_sync() below is only ever given
+        # already-transcribed text, never the PCM buffer, so no cloud fallback path exists that
+        # would need to send raw audio in the first place.
         segments,_=self._whisper.transcribe(pcm,language='en',beam_size=1,vad_filter=True)
         text=' '.join(s.text for s in segments).strip()
         t_stt=time.time()
