@@ -566,7 +566,7 @@ Status as of 2026-08-18.
 | Sonars connected | Connected, not range-tested | — |
 | Encoder counts on all six channels | Not tested | — |
 | BNO085 interrupt and fusion output | Not tested | INT on GP15 is unused by the driver; library polls over I²C |
-| Battery divider calibration | Not done | Blocks trusting the low-voltage cutoff |
+| Battery divider calibration | **DONE** (2026-08-16, owner-confirmed) | `BATTERY_DIVIDER_SCALE` re-trimmed 0.2865→0.2386 against a simultaneous ADC/multimeter reading (2.9112V ADC vs. 12.2V meter); `BAT_FULL_V` corrected to 11.58V, now above `BAT_WARN_V`. See `config.py`. |
 | Steering servo sweep | Not tested | — |
 | Arm servo range and per-joint limits | Not tested | §20.6 calibration; `arm_jog.py` is the tool |
 | Motor direction and mapping | Not tested | — |
@@ -581,8 +581,7 @@ measurement, not a construction task.
 
 1. **Motor crimps** — five of six unverified against the colour scheme in
    §7.1. Meter before first motion.
-2. **Battery divider calibration** — required before the low-voltage cutoff
-   can be trusted.
+2. ~~Battery divider calibration~~ — done 2026-08-16, owner-confirmed; see §13.
 3. **PCA9685 V+ current path** — servo current now flows through each board's
    V+ terminal, PCB trace and channel headers rather than signal current
    only. Worst-case steering draw is near 9A. Confirm against the board's

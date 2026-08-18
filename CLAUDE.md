@@ -84,19 +84,23 @@ front and right sonar read fine, left returns garbage.
 
 ---
 
-## Known contradictions — resolve before trusting either source
+## Contradictions from older docs — resolved by Master Hardware Design v2.0
 
-These are unresolved disagreements between the engineering docs. Do not
-silently pick one; flag them.
+These used to be genuine open disagreements between the engineering docs
+(flagged here 2026-08-14 against the old Master Engineering Package's
+internal inconsistencies). Master Hardware Design v2.0 gives each a single,
+unambiguous answer now — recorded here only so nobody re-opens them by
+citing the old, superseded wording:
 
-1. **Motor mapping.** §9.1 assigns 0x60 → LF/LM/LR and 0x61 → RF/RM/RR (one
-   board per side). The §17.4 row labels alternate sides. §9.1 is the
-   wiring-level table and should win. Wrong mapping means the rover turns the
-   wrong way rather than failing outright.
-2. **Arm shoulder channels.** §11.1's table gives J1a=CH1, J1b=CH2; the prose
-   below it says CH10/CH11, which is outside the CH0–CH6 range that section
-   defines. J1a/J1b are a mirrored pair driving one axis:
-   `J1b = 2×1500µs − J1a`.
+1. **Motor mapping — resolved.** 0x60 drives the LEFT side (LF/LM/LR),
+   0x61 drives the RIGHT side (RF/RM/RR), one board per side. See
+   `docs/WildWilly_Master_Hardware_Design_v2.0.md` §7.2.
+2. **Arm shoulder channels — resolved.** J1a=CH1, J1b=CH2, a mirrored pair
+   driving one physical axis: `J1b = 2×1500µs − J1a`. See §8.
+
+Still genuinely open (not a doc contradiction — a real unverified-hardware
+item, tracked in Master Hardware Design v2.0 §14):
+
 3. **Motor crimps unverified.** Five of six motors have not been checked
    against the corrected colour scheme (Red=Motor+, White=Motor−, Blue=Enc
    VCC, Black=Enc GND, Yellow=Phase A, Green=Phase B). Meter before trusting
@@ -132,6 +136,11 @@ informs navigation; it does not gate the stop.
   Floor is 4.85V. Do not let changes erode that margin.
 - Worst-case 5V draw is already near 9A against an 8A UBEC rating. The AI HAT
   draws from this same rail — budget before fitting.
+- Separately, worst-case steering draw is also near 9A, but through the
+  PCA9685 boards' own V+ terminal/PCB trace/channel-header path, not the Pi's
+  5V rail above — servo current now flows through the board itself, not just
+  signal current. Confirm against the board's ratings before running all six
+  steering servos under load simultaneously (Master Hardware Design v2.0 §14).
 - GPIO power bypasses the Pi's onboard input protection, so brownout
   protection is firmware-only via the 0x44 INA260. There is no hardware
   supervisor behind it.
@@ -144,6 +153,29 @@ informs navigation; it does not gate the stop.
 
 ## Reference documents
 
-The authoritative source is the **WildWilly Master Engineering Package
-rev 6.0.7** and the **Functional Requirements Document v3.0**. Section numbers
-cited above (§5.7, §9.1, §11.1, §17.4) refer to rev 6.0.7.
+The authoritative set, as of 2026-08-18, is three companion documents:
+
+- **WildWilly Master Hardware Design v2.0** — as-built hardware, BOM,
+  pin-to-pin connection schedule (§16). Section numbers cited elsewhere in
+  this file (§7.2 motor mapping, §8 arm, §14 open items) refer to this
+  document.
+- **Functional Requirements Document v3.1** — what the rover must do and how
+  each requirement is proven (§V verification register, §V.1 coverage,
+  §V.2 known gaps).
+- **WildWilly Software Design v1.0** — module architecture, control
+  layering, FSM, safety gate.
+
+**Do not cite the old Master Engineering Package (any revision) as
+authoritative.** `docs/archive/WildWilly_Master_Engineering_Package_rev6.0.7.md`
+is the oldest document in the repo — it predates the isolator orientation
+fix, the Seengreat breakout swap, channel-header servo power, the
+FeatherWings and the ADS1115, and its §5.7/§17.4 section numbers do not
+exist in it (they were only ever created in a later "rev 6.2.0" that was
+never committed to this repository — the historical record is a real
+document, it just isn't in git). If that history is wanted in-repo, commit
+it as its own file; don't treat citing its section numbers as equivalent to
+having it, and don't resurrect rev 6.0.7 as a stand-in for it (found and
+corrected 2026-08-18 — an earlier pass in this file wrongly did exactly
+that, pointing here at rev 6.0.7 instead of recognizing rev 6.2.0 as a real,
+newer, uncommitted document; see Master Hardware Design v2.0 §17.2 for the
+full finding).

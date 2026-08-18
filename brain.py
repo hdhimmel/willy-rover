@@ -88,11 +88,15 @@ class RoverBrain:
         self._idle_t=0.0; self._avoid_start=0.0; self._avoid_phase=None; self._running=False
         self._motion_enabled=False; self._init_fail_reason=''
         self._bat_tier='normal'; self._health={}; self._fault_since={}
-        # 2026-08-08 audit P1: no systemd WatchdogSec is actually configured (confirmed via
-        # `systemctl cat willy-rover.service` -- see docs/WildWilly_Master_Engineering_Package_
-        # rev6.0.7.md §14's as-built correction), so a hung (not crashed) tick loop has no OS-level
-        # backstop today. This is pure visibility, not a fix for that gap -- it doesn't do
-        # anything about an overrun, just makes one observable instead of silent.
+        # 2026-08-08 audit P1 found no systemd WatchdogSec configured, confirmed via `systemctl
+        # cat willy-rover.service` on the live unit -- but this repo's own willy-rover.service
+        # has specified WatchdogSec=500ms since 2026-08-02 (df24199, predates that audit). The
+        # audit was checking the live *installed* unit, not this file, so the likely explanation
+        # is a stale deploy (the live systemd unit hadn't picked up the repo's version yet), not
+        # a wrong repo file -- unreconciled since 08-08, needs a fresh `systemctl cat
+        # willy-rover.service` on the actual Pi to confirm which is currently true. Tick-overrun
+        # counting below is pure visibility either way -- it doesn't do anything about an
+        # overrun, just makes one observable instead of silent.
         self._last_tick_duration_s=0.0; self._max_tick_duration_s=0.0; self._tick_overrun_count=0
         self._stopped=False
         self._claude_pending=False; self._claude_move_pending=False

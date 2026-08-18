@@ -53,11 +53,12 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   IMU checks outstanding.
 
   FR-200 Power            PARTIAL --- rail        Pi rail 5.144V,
-                          measurement             throttled 0x0. Battery
-                          live-verified           divider not yet
-                                                  calibrated, so
-                                                  thresholds are not
-                                                  trustworthy.
+                          measurement and         throttled 0x0. Battery
+                          battery divider         divider calibrated
+                          live-verified           2026-08-16 (owner-
+                                                  confirmed; see Master
+                                                  Hardware Design v2.0
+                                                  Section 13).
 
   FR-300 Safety / E-stop  Not live-verified       Blocking for any motion
                                                   testing

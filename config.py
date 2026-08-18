@@ -87,8 +87,10 @@ TRACK_WIDTH_M=0.28      # UNCONFIRMED placeholder — center-to-center of left/r
 POSE_LOG_INTERVAL_S=5.0 # brain.py logs the current odometry pose at most this often
 TICK_OVERRUN_THRESHOLD_S=0.15 # brain.py::run() logs+counts a TICK_OVERRUN when a single _tick()
                               # call takes longer than this (loop targets ~50ms sleep + tick time) --
-                              # 2026-08-08 audit P1, pure visibility since no systemd WatchdogSec
-                              # is actually configured to catch a hung loop on its own.
+                              # 2026-08-08 audit P1, pure visibility regardless of whether systemd's
+                              # WatchdogSec ends up catching a hung loop on its own -- see brain.py's
+                              # RoverBrain.__init__ comment for the unreconciled repo-vs-live-unit
+                              # WatchdogSec=500ms discrepancy found 08-08, still unresolved.
                               # Raised from 0.1 2026-08-09 after this ran live for the first time:
                               # a sustained-brake state (battery shutdown/tilt/sensor fault) makes
                               # safety.py::emergency_stop() call motors.py::brake() every tick, which
