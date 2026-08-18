@@ -145,5 +145,5 @@ informs navigation; it does not gate the stop.
 ## Reference documents
 
 The authoritative source is the **WildWilly Master Engineering Package
-rev 6.2.0** and the **Functional Requirements Document v2.3**. Section numbers
-cited above (§5.7, §9.1, §11.1, §17.4) refer to rev 6.2.0.
+rev 6.0.7** and the **Functional Requirements Document v3.0**. Section numbers
+cited above (§5.7, §9.1, §11.1, §17.4) refer to rev 6.0.7.

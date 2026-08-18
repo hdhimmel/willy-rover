@@ -6,8 +6,8 @@ This is the software-architecture companion to `WildWilly_Claude_Fix_Gap_Analysi
 tracks status against the fix plan's own section numbers) — this doc instead organizes by actual
 Python module, for someone asking "what can this specific piece of code do today."
 
-**Snapshot date: 2026-08-08.** Update this table whenever a subsystem's status actually changes —
-stale tags here are worse than no tags.
+**Snapshot date: 2026-08-08, last updated 2026-08-16.** Update this table whenever a subsystem's
+status actually changes — stale tags here are worse than no tags.
 
 ## Capability caution (§22's own instruction)
 
@@ -34,7 +34,7 @@ modules below sound adjacent to them:
 | `brain.py` (core FSM) | **PARTIALLY IMPLEMENTED** | Phase 1 safety rewrite + all subsequent phases are code-complete and off-hardware tested, but not live-verified — see standing note below. |
 | `safety.py` (SafetyController) | **IMPLEMENTED** | Sole motion gate, unchanged since Phase 1. 25 tests (`test_safety.py`+`test_safety_controller.py`). Not live-verified. |
 | `motors.py`/`steering.py`-equiv (`motors.py`) | **PARTIALLY IMPLEMENTED** | Ran successfully during the 2026-08-02 baseline pass; not re-verified against this session's Phase 1+ rewrite on real hardware. |
-| `sensors.py` (Sonar/ADC/Encoders/CurrentMonitor) | **IMPLEMENTED** | IMU root-caused and fixed live 2026-08-14: `adafruit_bno08x.hard_reset()`'s stock 10ms post-RST-release delay was too short for the BNO085 to boot its SH-2 firmware, causing every `soft_reset()` I2C write to NACK (`OSError: Errno 121`) — patched in `sensors.py` to hold reset 300ms. Verified via standalone cold construction (service stopped) and again through the real `IMU`/`SonarArray`/`ADC` classes: quaternion streaming, sonars reading live distances, ADC reading live battery voltage. Not yet re-verified through a full `willy-rover.service` restart. |
+| `sensors.py` (Sonar/ADC/Encoders/CurrentMonitor) | **PARTIALLY IMPLEMENTED — open regression** | IMU reset-timing bug root-caused and fixed live 2026-08-14 (see below), verified via standalone construction and through the real `IMU`/`SonarArray`/`ADC` classes. **Since 2026-08-16, a different, undiagnosed fault has `willy-rover.service` crash-looping again**: BNO085 doesn't ack at all at 0x4a (vs. the 08-14 bug, which acked but NACK'd the first write) — the 08-14 patch is confirmed still present and unmodified, so this is a new fault, not a regression of that fix. Not yet diagnosed as of the last commit touching this doc; see the standing note at the bottom. Sonar/ADC portions unaffected by this fault. |
 | `arm.py` | **HARDWARE REQUIRED, not re-verified this session** | Resolved 2026-08-08 (arm PCA9685 VCC had been disconnected — power issue, not bus/software); `willy-rover.service` reached `active (running)` that day for the first time since Phase 1. Not touched again 2026-08-14 — session paused before restarting the service, pending battery charge (see standing note). |
 | `odometry.py` | **PARTIALLY IMPLEMENTED** | Dead-reckoning math is solid and unit-tested; `WHEEL_DIAMETER_M`/`TRACK_WIDTH_M` are unconfirmed placeholder measurements (flagged in `config.py`) — do not trust absolute distances. |
 | `world_model.py` | **PARTIALLY IMPLEMENTED** | Milestone 1 — see Capability caution above. 8 tests, fully off-hardware. |
