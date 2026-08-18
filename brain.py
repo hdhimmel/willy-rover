@@ -68,7 +68,8 @@ class RoverBrain:
         self.odometry=Odometry(self.encoders)
         self.world_model=WorldModel(self.odometry)  # §9: loads any previously saved map in __init__
         self._sd=_SdNotify()
-        # v2.2 subsystems (docs/WildWilly_Functional_Requirements_Document_v2.2.md) — each stays
+        # v2.2 subsystems (docs/archive/WildWilly_Functional_Requirements_Document_v2.2.md,
+        # superseded by v3.0 but kept for the v2.2-era subsystem notes) — each stays
         # inert unless its config.ENABLE_* flag is on and its assets/credentials are present; see
         # config.py's v2.2 block and docs/WildWilly_v2.2_Programming_Pass.md for what's open.
         # §14: one CloudAIProvider instance now serves both STUCK-state motion decisions (below)

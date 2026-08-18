@@ -177,7 +177,8 @@ SENSOR_FAULT_GRACE_S=1.0    # how long imu/encoders/current may report unhealthy
                             # forces a safe stopped state (SENSOR_FAULT) instead of just logging
 
 # ============================================================================
-# v2.2 subsystems (docs/WildWilly_Functional_Requirements_Document_v2.2.md).
+# v2.2 subsystems (docs/archive/WildWilly_Functional_Requirements_Document_v2.2.md,
+# superseded by v3.0 but kept for the v2.2-era subsystem notes).
 # Every flag below defaults OFF except the two with no external dependency
 # (display expressions, local memory) — FR-000 Directive 6 requires all
 # task-level behavior to stay inert unless explicitly enabled, and several of
