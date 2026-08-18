@@ -220,17 +220,13 @@ EMAIL_OUTBOUND_ALLOWLIST=('h.d.himmel@gmail.com',)
 EMAIL_INBOUND_ALLOWLIST_PATH='secrets/email_sender_allowlist.json'
 
 # --- FR-1500 voice pipeline. Hardware confirmed present 2026-08-06 (USB PnP Audio Device,
-# mic+speaker, card 2). Model files (models/ is gitignored, too large for git) confirmed present
-# 2026-08-09 (downloaded 2026-08-06, comment above previously said otherwise — stale). Enabled
-# 2026-08-09 on owner's go-ahead; not yet live-verified end-to-end on hardware. Wake phrase is
-# still the "Hey Jarvis" placeholder below, not "Hey Willie" — see that note.
+# mic+speaker, card 2). Enabled 2026-08-09 on owner's go-ahead. Audio I/O and the acoustic
+# feedback loop (TTS leaking into the mic and self-triggering) were fixed 2026-08-15 (b5ae067) —
+# see voice.py's own comments for both. Not yet live-verified end-to-end with real voice input.
 ENABLE_VOICE=True
-# TEMPORARY STAND-IN (2026-08-06): the real wake phrase is "Hey Willie", but that needs actual
-# custom training (synthetic TTS data + a large negative-audio corpus + a training run) — not a
-# download, and not attempted here (owner chose to defer it rather than run a multi-hour training
-# job on this Pi while it's also running the live rover service). Using openwakeword's bundled
 # Custom-trained "Hey Willie" model (models/hey_willie.onnx + .onnx.data, trained 2026-08-07,
-# deployed 2026-08-15 — see wakeword_data/hey_willie_model/ for training artifacts).
+# deployed 2026-08-15 — see wakeword_data/hey_willie_model/ for training artifacts) — replaced
+# the earlier "Hey Jarvis" placeholder; this is the real trained wake phrase, not a stand-in.
 WAKEWORD_MODEL_PATH='models/hey_willie.onnx'; WAKEWORD_THRESHOLD=0.5
 WHISPER_MODEL_SIZE='small.en'  # faster-whisper model name
 PIPER_VOICE_PATH='models/piper/en_US-amy-medium.onnx'
