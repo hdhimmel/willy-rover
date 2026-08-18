@@ -177,6 +177,12 @@ AI_NEARBY_RADIUS_M=3.0  # §14: how far counts as "nearby" when ai_provider.py's
 MAX_COMMAND_DURATION_S=3.0  # hard cap on any single timed move regardless of what was requested
 SENSOR_FAULT_GRACE_S=1.0    # how long imu/encoders/current may report unhealthy before _tick()
                             # forces a safe stopped state (SENSOR_FAULT) instead of just logging
+STALL_GRACE_S=1.0           # FR-500-003 (Directive 5): how long a commanded wheel may show near-zero
+                            # counts_per_sec before brain.py treats it as a real stall rather than
+                            # still ramping up. Must clear both SPEED_RAMP_PER_S's worst-case ramp
+                            # time (0.5s, full range) and Encoders' own 0.2s rate-sampling window —
+                            # 1.0s matches SENSOR_FAULT_GRACE_S's precedent with comfortable margin
+                            # over both. Unconfirmed against real hardware (no live drive test yet).
 
 # ============================================================================
 # v2.2 subsystems (docs/archive/WildWilly_Functional_Requirements_Document_v2.2.md,

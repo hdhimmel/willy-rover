@@ -381,23 +381,40 @@ sequence. `arm_jog.py` is the tool that closes this.
 **S-5 — Hand-off confirmation is timed, not sensed.** No tactile or force
 sensor on the gripper.
 
-**S-6 — Watchdog and overrun thresholds are inconsistent.**
-`willy-rover.service` sets `WatchdogSec=500ms`, requiring `WATCHDOG=1` at least
-every 250ms. The run loop is a tick plus a 50ms sleep, and
-`TICK_OVERRUN_THRESHOLD_S` is 0.15s. A 150ms tick merely logs an overrun; a
-200ms tick silently crosses the systemd deadline and the service is killed and
-restarted — possibly mid-motion. The warning threshold sits below the kill
-threshold. Either raise `WatchdogSec` or lower the overrun threshold.
+**S-6 — Watchdog and overrun thresholds are inconsistent.** *Partially
+addressed 2026-08-18.* `willy-rover.service` sets `WatchdogSec=500ms`,
+requiring `WATCHDOG=1` at least every 250ms. The run loop is a tick plus a
+50ms sleep, and `TICK_OVERRUN_THRESHOLD_S` is 0.15s — the concrete risk was
+never really about those two numbers directly (150ms and 0.15s both already
+sit safely under 500ms); it was that `brain.py` only calls `notify()` once per
+tick, so a single tick blocking anywhere *near* 500ms gets the process killed
+by systemd mid-tick, before that tick's own overrun-logging (which runs after
+`_tick()` returns) ever executes. The two known code paths that could push a
+tick that long — `retrieval_task.py`'s `_grasp()` (~1.1s) and the wave-hello
+gesture (~1.5s), both previously blocking via `time.sleep()` — are now
+non-blocking, tick-serviced step machines. No other per-tick blocking call is
+currently known, which closes the *known cause*, not the risk structurally.
+Raising `WatchdogSec` or lowering `TICK_OVERRUN_THRESHOLD_S` further is still
+sound general hygiene, just no longer urgent the same way. Unverified on live
+hardware, same as everything else in this document.
 
 Separately, `brain.py` carries a 2026-08-08 audit comment asserting no
 `WatchdogSec` is configured, confirmed at the time via `systemctl cat`. The
 repository unit file now sets one. Confirm which is true on the rover before
 relying on either.
 
-**S-7 — `Encoders.stalled()` has no caller.** The method exists but is never
-invoked in production code. Directive 5 (stalls halt rather than retry) is
-therefore not enforced by any live code path, and no `MOTOR_FAULT` event is
-ever emitted. There is also no overcurrent trip threshold defined.
+**S-7 — `Encoders.stalled()` has no caller.** *Addressed 2026-08-18.*
+`RoverBrain._check_stall()` now calls it every tick for each currently-
+commanded wheel (via `motors.py::DriveBase.commanded`), escalating to
+`emergency_stop()` and a new `STALL_FAULT` state after `config.STALL_GRACE_S`
+(1.0s, to clear the ramp-up window and the encoder's own 0.2s rate-sampling
+lag) — same sustained-past-a-grace-period shape as `_check_health()`'s
+IMU/encoder/current checks. Emits a `MOTOR_STALL` event (not `MOTOR_FAULT` —
+that name was always meant to cover both stall and overcurrent generically;
+this only implements the stall half). Directive 5 is enforced by code now;
+not yet live-verified, since it has never run against a real motor. There is
+still no overcurrent trip threshold defined — that half of the original
+`MOTOR_FAULT` concept remains open.
 
 **S-8 — Smart home direction is an unconfirmed assumption.** `smart_home.py`
 implements Willie sending commands *out* to devices via Home Assistant's REST
@@ -426,10 +443,13 @@ Tagged events currently emitted:
 | `NAVIGATION_ABORT` | `navigation.py::Navigator.abort()` |
 | `AI_TIMEOUT` | `ai_provider.py`, only on a real `TimeoutError` |
 | `TICK_OVERRUN` | `brain.py::_record_tick_duration()` |
+| `MOTOR_STALL` | `brain.py::_tick()`, via `_check_stall()` — added 2026-08-18, see S-7 |
 
 Deliberately untagged: `ESTOP_ACTIVE` (no sense pin to observe), and
 `WATCHDOG_FAULT` (by the time systemd's watchdog fires the process is being
-killed, so it cannot self-log). `MOTOR_FAULT` has no call site — see S-7.
+killed, so it cannot self-log). `MOTOR_FAULT`'s overcurrent half still has no
+call site (no trip threshold defined) — see S-7; its stall half is now
+`MOTOR_STALL` above.
 
 `diagnostics.py` is a standalone read-only self-test. It never imports
 `motors`, `steering` or `arm`, so it is safe to run at any time including
@@ -481,17 +501,19 @@ than left as accidental defaults: `ENABLE_CLOUD_AI` and `ENABLE_EMAIL`.
 
 ## 12. Open Actions
 
-1. **Repoint `CLAUDE.md`.** It names Master Engineering Package rev 6.0.7 as
-   authoritative and cites §5.7 and §17.4, which do not exist in that file.
-   See Master Hardware Design §17.2.
-2. **Resolve the watchdog threshold inconsistency (S-6).** This one can kill a
-   running service mid-motion and should be settled before live motion testing.
+1. ~~Repoint `CLAUDE.md`.~~ Done 2026-08-18 — points at the current trio now,
+   with an explicit note on the rev 6.2.0-is-real-but-uncommitted situation.
+2. **Watchdog threshold inconsistency (S-6) — partially addressed 2026-08-18.**
+   The two known tick-blocking culprits are fixed (see S-6); still needs a
+   live `systemctl cat willy-rover.service` check and live verification that
+   no tick now approaches the kill threshold.
 3. **Wire an E-stop sense line (S-1).** Blocks Directive 1 from being
    represented in software at all.
 4. **Run `arm_jog.py` and record real per-joint limits (S-4).** Nothing else
    unblocks retrieval.
-5. **Give `Encoders.stalled()` a caller (S-7).** Directive 5 is currently
-   unenforced in code.
+5. ~~Give `Encoders.stalled()` a caller (S-7).~~ Done 2026-08-18 for the stall
+   half (see S-7) — not yet live-verified. Overcurrent half still open (no
+   trip threshold defined).
 6. **Bench-confirm `ENCODER_COUNTS_PER_REV`, `WHEEL_DIAMETER_M`,
    `TRACK_WIDTH_M` (S-2, S-3).**
 7. **Confirm smart-home direction with the owner (S-8).**

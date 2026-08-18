@@ -200,6 +200,18 @@ not revised, or the installed unit on Willie differs from the repository copy.
 Confirm with `systemctl cat willy-rover.service` on the rover before relying on
 either.
 
+**Update 2026-08-18 (same day):** the two known code paths that could actually
+push a single tick anywhere near the 500ms/250ms figures above --- `retrieval_
+task.py`'s `_grasp()` and `brain.py`'s wave-hello gesture, both previously
+blocking via `time.sleep()` for roughly 1.1s and 1.5s respectively inside one
+tick call --- have been converted to non-blocking, tick-serviced step machines.
+No other per-tick blocking call is currently known. This closes the *known
+cause* of a mid-tick kill, not the risk structurally: nothing enforces that no
+future code path blocks a tick for hundreds of milliseconds, and this
+reconciliation itself is unverified on live hardware, same as everything else
+in this register. The threshold-ordering advice above (raise `WatchdogSec` or
+lower `TICK_OVERRUN_THRESHOLD_S`) still stands as general hygiene regardless.
+
 # 1. Purpose
 
 This Functional Requirements Document defines the required behavior,

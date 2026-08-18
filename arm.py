@@ -20,9 +20,10 @@ if not config.SIMULATE_HARDWARE:
 # still has no independent brake distinct from "stop commanding new pulses" (a PWM servo simply
 # holds its last position, unlike a spinning drive motor, so this is a smaller residual gap than
 # it looks), but the previous total blackout window is closed. brain.py's own wave-hello gesture
-# (_wave_hello()) still blocks the tick thread for ~1.5s -- left as-is, an explicitly accepted
-# tradeoff restricted to IDLE-only per that function's own comment, not the same risk class as
-# a mid-retrieval grasp.
+# was the other known blocking culprit (~1.5s via time.sleep()) -- also converted to a
+# non-blocking, tick-serviced step machine (_start_wave()/_wave()) the same day, once it became
+# clear the "IDLE-only, low risk" reasoning for leaving it alone assumed no systemd watchdog was
+# configured, which turned out to be wrong (WatchdogSec=500ms is real -- see FRD v3.1 G-5).
 class Arm:
     # PCA9685 @0x43, CH0-6, base->gripper order (§11.1). No per-joint safe limits, preset poses,
     # or IK exist yet — §20.6 bench calibration hasn't been run. This is a driver + primitive

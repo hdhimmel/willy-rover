@@ -87,16 +87,28 @@ class RoverBrain:
         self._state='INIT'; self._stuck_count=0; self._last_action='none'; self._manual_action=None
         self._idle_t=0.0; self._avoid_start=0.0; self._avoid_phase=None; self._running=False
         self._motion_enabled=False; self._init_fail_reason=''
-        self._bat_tier='normal'; self._health={}; self._fault_since={}
+        self._bat_tier='normal'; self._health={}; self._fault_since={}; self._stall_since={}
+        self._wave_step=0; self._wave_deadline=None
         # 2026-08-08 audit P1 found no systemd WatchdogSec configured, confirmed via `systemctl
         # cat willy-rover.service` on the live unit -- but this repo's own willy-rover.service
         # has specified WatchdogSec=500ms since 2026-08-02 (df24199, predates that audit). The
         # audit was checking the live *installed* unit, not this file, so the likely explanation
         # is a stale deploy (the live systemd unit hadn't picked up the repo's version yet), not
         # a wrong repo file -- unreconciled since 08-08, needs a fresh `systemctl cat
-        # willy-rover.service` on the actual Pi to confirm which is currently true. Tick-overrun
-        # counting below is pure visibility either way -- it doesn't do anything about an
-        # overrun, just makes one observable instead of silent.
+        # willy-rover.service` on the actual Pi to confirm which is currently true.
+        #
+        # FRD v3.1 G-5 (2026-08-18) sharpened the risk this WatchdogSec value actually poses:
+        # notify() below is called once per tick, so a single _tick() call blocking anywhere near
+        # 500ms gets the whole process killed by systemd *mid-tick*, before this tick's own
+        # overrun-logging (which only runs after _tick() returns, in run()'s loop) ever executes.
+        # The two known culprits that could push a tick that long -- retrieval_task.py's _grasp()
+        # and this file's wave-hello gesture, both previously blocking via time.sleep() -- were
+        # both converted to non-blocking, tick-serviced step machines the same day (see
+        # retrieval_task.py and _wave()/_start_wave() below). No other per-tick blocking call is
+        # known to remain. This closes the *known cause*, not the risk structurally -- nothing
+        # stops a future blocking call from reintroducing it, and this reconciliation itself is
+        # unverified on live hardware. Tick-overrun counting below is pure visibility regardless --
+        # it doesn't do anything about an overrun, just makes one observable instead of silent.
         self._last_tick_duration_s=0.0; self._max_tick_duration_s=0.0; self._tick_overrun_count=0
         self._stopped=False
         self._claude_pending=False; self._claude_move_pending=False
@@ -279,6 +291,22 @@ class RoverBrain:
                     sustained_fault=name
         return sustained_fault
 
+    def _check_stall(self):
+        # FR-500-003 (Directive 5): "a commanded motor showing no count change within the stall
+        # window triggers stop-and-report, not increased drive." sensors.py::Encoders.stalled()
+        # existed since the baseline pass but had no caller anywhere in the codebase (confirmed by
+        # grep — found 2026-08-18) — Directive 5 was documented but not actually enforced. Same
+        # sustained-past-a-grace-period shape as _check_health() above, so a wheel still ramping
+        # up right after a fresh command isn't mistaken for a stall.
+        now=time.time(); sustained=[]
+        for wheel,is_commanded in self.motors.commanded.items():
+            if is_commanded and self.encoders.stalled(wheel,True):
+                self._stall_since.setdefault(wheel,now)
+                if now-self._stall_since[wheel]>config.STALL_GRACE_S: sustained.append(wheel)
+            else:
+                self._stall_since.pop(wheel,None)
+        return sustained
+
     def _abandon_stuck_if_active(self):
         # Called alongside every retrieval.abort() at a Directive 1-4 preemption point (tilt,
         # battery, sensor fault). If STUCK was mid-flight — waiting on Claude, or executing a
@@ -408,6 +436,25 @@ class RoverBrain:
             # release here rather than only on DOCK, or SAFE_MODE/SHUTDOWN would never exit.
             self._go('IDLE')
 
+        # FR-000 Directive 5 (FR-500-003): stalls halt, not retry blindly. Checked after
+        # Directives 2-4 above and before Directive 6's task dispatch below, per the priority
+        # table's own ordering.
+        stalled_wheels=self._check_stall()
+        if stalled_wheels:
+            if self.retrieval.active: self.retrieval.abort(f'wheel stall: {stalled_wheels}')
+            if self.mapping.active: self.mapping.abort(f'wheel stall: {stalled_wheels}')
+            if self.navigator.active: self.navigator.abort(f'wheel stall: {stalled_wheels}')
+            if self.pursuit.active: self.pursuit.abort(f'wheel stall: {stalled_wheels}')
+            self._abandon_stuck_if_active()
+            if self._state!='STALL_FAULT':
+                log_event(log,'MOTOR_STALL',severity='warning',subsystem='motors',
+                          status='stalled',wheels=','.join(stalled_wheels))
+                log.warning(f'  {self._state}->STALL_FAULT ({stalled_wheels})')
+            self.safety.emergency_stop(f'wheel stall: {stalled_wheels}')
+            self._state='STALL_FAULT'
+            self._upd('fault',f'STALL {stalled_wheels} STOP',d,tilt); return
+        if self._state=='STALL_FAULT': self._go('IDLE')  # no longer commanded/stalled -> recovered
+
         self.safety.tick()  # services any in-flight timed move's deadline/obstacle re-check —
                              # must run every tick regardless of which state started the move
                              # (AVOID's reverse/turn or STUCK's Claude-issued action alike).
@@ -430,7 +477,7 @@ class RoverBrain:
 
         {'IDLE':self._idle,'ROAM':self._roam,'SLOW':self._slow,'AVOID':self._avoid,
          'STUCK':self._stuck,'DOCK':self._dock,'WARN':self._warn,'RETRIEVE':self._retrieve,
-         'NAVIGATE':self._navigate,'MANUAL':self._manual,'PURSUE':self._pursue,
+         'NAVIGATE':self._navigate,'MANUAL':self._manual,'PURSUE':self._pursue,'WAVE':self._wave,
          'TILT_FAULT':lambda d,t:None,'SAFE_MODE':lambda d,t:None,'SHUTDOWN':lambda d,t:None,
         }.get(self._state,lambda d,t:None)(d,tilt)
 
@@ -511,7 +558,7 @@ class RoverBrain:
             self.arm.center_all()
             if self.voice.available: self.voice.speak('Arm centered.')
         elif cmd.get('intent')=='wave':
-            self._wave_hello()
+            self._start_wave()
         elif cmd.get('intent')=='diagnostics':
             # Deliberately does NOT touch self._motion_enabled either way afterward -- that's the
             # startup gate, and silently flipping it from a possibly-transient on-demand result is
@@ -560,19 +607,36 @@ class RoverBrain:
             if self.pursuit.state=='DONE' and self.voice.available: self.voice.speak('Here I am!')
             self.pursuit.reset(); self._go('IDLE')
 
-    def _wave_hello(self):
-        # Fixed primitive sequence, not calibrated IK — same category of gap as
-        # retrieval_task.py's _grasp() (§20.6 pending, see its module docstring). wrist_rot
-        # oscillates +-300us off center, the same offset magnitude already trusted there, well
-        # inside ARM_SERVO_MIN/MAX_US. Blocks the tick thread for ~1.5s (3 back-and-forth swings)
-        # -- accepted, same tradeoff already made for _grasp() and the on-demand diagnostics
-        # intent: this only ever runs from IDLE.
+    # Fixed primitive sequence, not calibrated IK — same category of gap as
+    # retrieval_task.py's _grasp() (§20.6 pending, see its module docstring). wrist_rot
+    # oscillates +-300us off center, the same offset magnitude already trusted there, well
+    # inside ARM_SERVO_MIN/MAX_US.
+    #
+    # Used to block the tick thread for ~1.5s (3 back-and-forth swings via time.sleep()) —
+    # "accepted, this only ever runs from IDLE" was the reasoning at the time, but that
+    # reasoning assumed no systemd watchdog was actually configured. It is (WatchdogSec=500ms,
+    # confirmed 2026-08-18 — see brain.py's RoverBrain.__init__ comment): a single tick blocking
+    # ~1.5s gets the whole service killed and restarted by systemd mid-wave, every time, which
+    # is a real reliability bug once voice is enabled (ENABLE_VOICE=True since 2026-08-15/16),
+    # not an accepted tradeoff. Converted to the same non-blocking, tick-serviced step pattern as
+    # _grasp() — see 'WAVE' in the state dispatch table above.
+    _WAVE_OFFSETS_US=(-300,300,-300,300,-300,300,0)  # 3 swings then recenter; last step needs no delay
+    _WAVE_DELAY_S=0.25
+
+    def _start_wave(self):
         if self.voice.available: self.voice.speak('Hello!')
+        self._wave_step=0; self._wave_deadline=None; self._go('WAVE')
+
+    def _wave(self,d,tilt):
+        now=time.time()
+        if self._wave_deadline is not None:
+            if now<self._wave_deadline: return
+            self._wave_deadline=None
         center=config.ARM_SERVO_CENTER_US
-        for _ in range(3):
-            self.arm.set_pulse('wrist_rot',center-300); time.sleep(0.25)
-            self.arm.set_pulse('wrist_rot',center+300); time.sleep(0.25)
-        self.arm.set_pulse('wrist_rot',center)
+        self.arm.set_pulse('wrist_rot',center+self._WAVE_OFFSETS_US[self._wave_step])
+        self._wave_step+=1
+        if self._wave_step>=len(self._WAVE_OFFSETS_US): self._go('IDLE')
+        else: self._wave_deadline=now+self._WAVE_DELAY_S
 
     def _begin_shutdown(self):
         # FR-900-005: halt motion, stow arm, persist state, then `shutdown -h now`. Reuses

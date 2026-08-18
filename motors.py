@@ -65,6 +65,14 @@ class DriveBase:
     def cleanup(self):
         self._running=False; time.sleep(0.05)
         for m in self._motors.values(): m.throttle=None  # release — no holding current on exit
+    # FR-500-003 (stall detection, Directive 5): what brain.py's stall check needs to know
+    # "is this wheel currently commanded" -- target rather than actual/ramped value, since a
+    # wheel legitimately reads near-zero counts during the ramp-up window right after a fresh
+    # command starts (that is not a stall, just not-yet-moving) and the caller applies its own
+    # settle grace period before trusting a stalled() reading either way.
+    @property
+    def commanded(self):
+        with self._lock: return {w:self._target[w]!=0.0 for w in self._WHEELS}
 
 # FR-600-001 (control steering servo) -- PARTIAL: set_angle()/center_all() below can
 # drive any corner, but brain.py only ever calls center_all() once at startup; nothing
