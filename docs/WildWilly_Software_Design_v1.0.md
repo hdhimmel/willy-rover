@@ -362,11 +362,24 @@ implementing code itself.
 be logged, and FR-300-003's post-E-stop reset gate cannot be implemented. This
 needs a wiring change first.
 
-**S-2 — Encoder polling under-samples at speed.** `sensors.py` polls the
-MCP23017 over I²C at a practical ceiling near 1kHz against roughly 8.5kHz of
-edges per channel at the no-load speed spec. Odometry distance will read low
-and stall detection is unreliable at speed. Three options: interrupt-driven
-decode, a dedicated counter, or accepting the encoders as stall-detection only.
+**S-2 — Encoder polling under-samples at speed.** *Decision made 2026-08-18:
+interrupt-driven decode*, over a dedicated counter or accepting stall-only.
+`Encoders` now configures the MCP23017's `IOCON.MIRROR`/`INTCON`/`GPINTEN`
+registers and registers a `GPIO.add_event_detect()` callback on
+`config.ENCODER_INT_PIN`, so a real quadrature edge triggers an immediate
+read instead of waiting for the next scheduled poll — this closes the
+"multiple edges collapse into one polling window" failure mode specifically.
+It is not a claim that every edge at the full 8.5kHz/channel figure is now
+captured: the interrupt only changes *when* a read happens, not how long one
+I2C transaction takes, and that transaction cost is what set the ~1kHz
+ceiling in the first place. **Hardware prerequisite, not yet done**: the
+MCP23017's INTA pin needs a physical wire to the Pi GPIO named in
+`config.ENCODER_INT_PIN` (currently GP7) — until then this code path simply
+never fires and behavior is unchanged from before. `_loop()`'s own poll
+dropped from ~1kHz to a 0.1s heartbeat (only needed now to keep
+`is_healthy`/`counts_per_sec` fresh while stationary, not for decode
+accuracy). None of this is live-verified — only checked for syntax
+correctness and unchanged `WILLY_SIMULATE=1` behavior off-hardware.
 Bench-confirm `ENCODER_COUNTS_PER_REV` before acting on the arithmetic — it is
 taken from the motor listing, not measured.
 

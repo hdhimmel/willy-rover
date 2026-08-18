@@ -426,9 +426,10 @@ desoldering.
 | 33 | GP13 | Sonar LEFT TRIG |
 | 37 | GP26 | Sonar FRONT ECHO (÷) |
 | 40 | GP21 | Sonar RIGHT ECHO (÷) |
+| 26 | GP7 | **PLANNED, not yet wired** — MCP23017 encoder chip's INTA pin (physical chip pin 19), for interrupt-driven quadrature decode (decided 2026-08-18, see §14 item 10 and FRD v3.1 G-2). `IOCON.MIRROR` combines both ports' interrupts onto INTA/INTB identically, so only this one pin needs a wire — INTB can stay unconnected. |
 
-Free and unused: GP7, GP8–GP11, and the twelve pins formerly used for motor
-direction.
+Free and unused: GP8–GP11, and the twelve pins formerly used for motor
+direction. (GP7 above is earmarked, not yet wired.)
 
 **GP14 and GP15 are UART0 TXD/RXD.** The serial console must remain disabled
 or the kernel claims both pins — and drives GP14 as an output onto the left
@@ -602,6 +603,12 @@ measurement, not a construction task.
    against VCC and GND with the shaft held.
 9. **AI accelerator not yet in the software path** — the bond is proven, the
    integration is not started. See Software Design v1.0 §7.
+10. **Wire the MCP23017 encoder chip's INTA pin to GP7 (physical pin 26)** —
+    software for interrupt-driven quadrature decode is written and configures
+    the chip for it (§9's table, decided 2026-08-18), but the physical wire
+    doesn't exist yet. Until it does, decode falls back entirely to the
+    previous best-effort polling, not a regression, just not yet the
+    improvement. See Software Design v1.0 S-2.
 
 ---
 

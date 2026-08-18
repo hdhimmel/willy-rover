@@ -166,10 +166,21 @@ spec that is roughly 8.5 kHz per channel, while `sensors.py` polls the
 MCP23017 over I²C at a practical ceiling near 1 kHz. That under-samples by
 about an order of magnitude, so odometry distance will read low and stall
 detection is unreliable at speed. The code documents the limit honestly.
-Three options: interrupt-driven decode, a dedicated counter, or accepting
-encoders as stall-detection only and deriving distance another way. Note that
-`config.py` flags the counts/rev figure as taken from the motor listing and
-not bench-confirmed --- confirm it before acting on the arithmetic.
+Note that `config.py` flags the counts/rev figure as taken from the motor
+listing and not bench-confirmed --- confirm it before acting on the arithmetic.
+
+**Decision made 2026-08-18: interrupt-driven decode**, over a dedicated
+counter or accepting stall-only. `sensors.py::Encoders` now configures the
+MCP23017 for interrupt-on-change and registers a GPIO callback on
+`config.ENCODER_INT_PIN`, closing the "multiple edges collapse into one
+polling window" failure mode specifically --- not a claim that every edge at
+the full 8.5 kHz figure is now captured, since the interrupt changes *when*
+a read happens, not the I2C transaction cost that set the ~1kHz ceiling in
+the first place. **Hardware prerequisite, not yet done:** the MCP23017's
+INTA pin needs a physical wire to the Pi GPIO named in `config.
+ENCODER_INT_PIN` (currently GP7) --- until wired, this falls back entirely
+to the same best-effort polling as before. Not live-verified; see Software
+Design v1.0 S-2 for the full detail.
 
 **G-3 --- FR-1700-005, grasp is a fixed primitive sequence, not planning.**
 No per-joint arm calibration has been run (§20.6), so no reach-envelope model

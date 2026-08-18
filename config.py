@@ -67,13 +67,23 @@ ARM_BASE=0; ARM_SHOULDER_A=1; ARM_SHOULDER_B=2; ARM_ELBOW=3
 ARM_WRIST_ROT=4; ARM_WRIST_PITCH=5; ARM_GRIPPER=6
 ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
 
-# Wheel encoders — MCP23017 @0x27 (§9.1), quadrature A/B per wheel. No interrupt line runs to
-# the Pi (only the IMU has one) — Encoders (sensors.py) polls GPIOA/GPIOB best-effort, may miss
-# edges at speed. counts/rev is a "starting value" from the motor listing, not bench-confirmed.
+# Wheel encoders — MCP23017 @0x27 (§9.1), quadrature A/B per wheel. counts/rev is a "starting
+# value" from the motor listing, not bench-confirmed.
 ENCODER_ADDR=0x27
 ENCODER_PINS={'lf':('A',0,1),'lm':('A',2,3),'lr':('B',0,1),
               'rf':('A',4,5),'rm':('A',6,7),'rr':('B',2,3)}
 ENCODER_COUNTS_PER_REV=3292  # §9.2: 823.1 PPR x4 quadrature decode
+
+# G-2 (FRD v3.1 §V.2): interrupt-driven decode, chosen 2026-08-18 over a dedicated hardware
+# counter or accepting encoders as stall-only. HARDWARE PREREQUISITE, NOT YET WIRED: the
+# MCP23017's INTA pin (physical chip pin 19) must be connected to this Pi GPIO -- IOCON.MIRROR
+# (set in sensors.py::Encoders.__init__) combines both ports' interrupts onto INTA/INTB
+# identically, so only one of the two physical INT pins needs a wire; INTB can stay unconnected.
+# GP7 was chosen as the first of CLAUDE.md's documented free pins (GP7, GP8-11). Until this is
+# physically wired, the interrupt callback simply never fires and Encoders falls back entirely
+# on the periodic heartbeat poll -- same best-effort behavior as before this change, not a
+# regression while the wiring is pending.
+ENCODER_INT_PIN=7
 
 # Odometry (§8, WildWilly_Claude_Fix_Implementation_Plan.md). UNCONFIRMED: the master doc gives
 # only the overall chassis envelope (430x330x220mm, §2), never a wheel diameter or track (L/R
@@ -305,7 +315,8 @@ def validate():
 
     gpio_pins={'SONAR_FRONT_TRIG':SONAR_FRONT_TRIG,'SONAR_FRONT_ECHO':SONAR_FRONT_ECHO,
                'SONAR_LEFT_TRIG':SONAR_LEFT_TRIG,'SONAR_LEFT_ECHO':SONAR_LEFT_ECHO,
-               'SONAR_RIGHT_TRIG':SONAR_RIGHT_TRIG,'SONAR_RIGHT_ECHO':SONAR_RIGHT_ECHO}
+               'SONAR_RIGHT_TRIG':SONAR_RIGHT_TRIG,'SONAR_RIGHT_ECHO':SONAR_RIGHT_ECHO,
+               'ENCODER_INT_PIN':ENCODER_INT_PIN}
     seen={}
     for name,pin in gpio_pins.items():
         if pin in seen: problems.append(f'duplicate GPIO pin {pin}: {seen[pin]} and {name}')
