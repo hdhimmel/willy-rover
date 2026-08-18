@@ -157,6 +157,22 @@ class AIProvider(ABC):
         off the tick thread (voice.py)."""
         return self._call(prompt,system,schema,history)
 
+# FR-1400 note: the FRD (v1.3, 2026-08-01) specs this fallback against Gemini and marks
+# it 'NOT YET IN SCOPE for any CC session to date, verify priority with the owner before
+# implementation'. This class implements the same fallback role against Anthropic/Claude
+# instead -- a provider substitution the FRD does not document, built ahead of the
+# scope-gate it names. Confirm with the owner whether this was an intentional pivot.
+#
+# FR-1400-002/003 (route qualifying requests, fall back to onboard-only): callers gate on
+# .available below and fall back to LocalAIProvider when False -- see voice.py's
+# 'if self.cloud_ai and self.cloud_ai.available' and world_model.py's equivalent.
+# FR-1400-004 (never let cloud AI latency block FR-000 Directives 1-5): satisfied by
+# construction -- AIProvider.__init__ above runs a dedicated worker thread; brain.py's
+# own calls go through request_async()/poll_async() (never blocks the tick thread), and
+# voice.py's ask_sync() call blocks only voice.py's own thread, never brain.py's.
+# FR-1400-005 (authenticate to Gemini using the FR-1300-005 dedicated Google account):
+# NOT satisfied as specified -- this uses ANTHROPIC_API_KEY from the environment, not a
+# Google-account credential, consistent with the Anthropic/Gemini substitution above.
 class CloudAIProvider(AIProvider):
     # Unifies claude_client.py + cloud_ai.py's independent, duplicated Anthropic clients into one.
     # Conversation history (for the STUCK motion-decision use case) is deliberately NOT owned
