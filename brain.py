@@ -375,7 +375,9 @@ class RoverBrain:
             if self._state!='SENSOR_FAULT': log.warning(f'  {self._state}->SENSOR_FAULT ({sustained_fault})')
             self._state='SENSOR_FAULT'
             self._upd('fault',f'SENSOR FAULT: {sustained_fault}',d,tilt); return
-        if self._state=='SENSOR_FAULT': self._go('IDLE')  # sustained_fault cleared -> recovered
+        if self._state=='SENSOR_FAULT':
+            if not self._await_reset_or_resume('sensor fault',d,tilt,
+                    'SENSOR FAULT CLEARED — tap screen to resume'): return
 
         if tilt>config.IMU_TILT_LIMIT:
             if self.retrieval.active: self.retrieval.abort(f'tilt fault {tilt:.1f}deg')  # FR-1700-007
@@ -386,7 +388,9 @@ class RoverBrain:
             if self._state!='TILT_FAULT': log.warning(f'TILT_FAULT tilt={tilt:.1f}'); self._go('TILT_FAULT')
             self.safety.emergency_stop(f'tilt fault {tilt:.1f}deg')
             self._upd('fault',f'TILT {tilt:.1f}deg STOP',d,tilt); return  # FR-1600-003
-        if self._state=='TILT_FAULT' and tilt<config.IMU_TILT_WARN: self._go('IDLE')
+        if self._state=='TILT_FAULT' and tilt<config.IMU_TILT_WARN:
+            if not self._await_reset_or_resume('tilt fault',d,tilt,
+                    'TILT CLEARED — tap screen to resume'): return
 
         tier=self._update_bat_tier(bat_v); self.safety.update_context(bat_tier=tier)
         if tier=='shutdown':
@@ -453,7 +457,9 @@ class RoverBrain:
             self.safety.emergency_stop(f'wheel stall: {stalled_wheels}')
             self._state='STALL_FAULT'
             self._upd('fault',f'STALL {stalled_wheels} STOP',d,tilt); return
-        if self._state=='STALL_FAULT': self._go('IDLE')  # no longer commanded/stalled -> recovered
+        if self._state=='STALL_FAULT':
+            if not self._await_reset_or_resume('wheel stall',d,tilt,
+                    'STALL CLEARED — tap screen to resume'): return
 
         self.safety.tick()  # services any in-flight timed move's deadline/obstacle re-check —
                              # must run every tick regardless of which state started the move
@@ -784,5 +790,19 @@ class RoverBrain:
             if state=='AVOID': self._avoid_start=time.time(); self._avoid_phase=None
             if state=='IDLE': self._idle_t=0.0
 
-    def _upd(self,fs,st,d,tilt,spd=0.0):
-        self.display.update_state(state=fs,status=st,distances=d,tilt=tilt,speed=spd)
+    def _upd(self,fs,st,d,tilt,spd=0.0,awaiting_reset=False):
+        self.display.update_state(state=fs,status=st,distances=d,tilt=tilt,speed=spd,
+                                   awaiting_reset=awaiting_reset)
+
+    def _await_reset_or_resume(self,fault_desc,d,tilt,cleared_msg):
+        # FR-300-003, applied to all faults (owner decision 2026-08-18, not just a future
+        # E-stop): once the underlying fault condition has cleared, don't auto-resume -- keep
+        # braking and wait for an explicit screen tap. Shared by SENSOR_FAULT/TILT_FAULT/
+        # STALL_FAULT below rather than tripled per call site. Returns True if the tap arrived
+        # this tick (caller should fall through to normal dispatch); False if still waiting
+        # (caller should return without dispatching).
+        if self.display.reset_tapped():
+            self._go('IDLE'); return True
+        self.safety.emergency_stop(f'{fault_desc} cleared, awaiting operator reset')
+        self._upd('fault',cleared_msg,d,tilt,awaiting_reset=True)
+        return False

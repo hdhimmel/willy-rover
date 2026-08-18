@@ -76,8 +76,12 @@ class DriveBase:
 
 # FR-600-001 (control steering servo) -- PARTIAL: set_angle()/center_all() below can
 # drive any corner, but brain.py only ever calls center_all() once at startup; nothing
-# commands per-corner steering angles during normal drive yet (crab/point-turn
-# kinematics are undefined in the master doc, per the comment below).
+# commands per-corner steering angles during normal drive. Owner decision 2026-08-18
+# (decision item #2, alongside the G-2 encoder-architecture call): deliberately deferred,
+# not an oversight -- skid-steer (differential wheel speed only, wheels always centered)
+# stays the only turning mechanism for now. Revisit once basic drive is live-verified;
+# adding untested steering kinematics on top of a drive system that has never been
+# live-tested at all would stack two unverified things at once.
 class Steering:
     # PCA9685 @0x42, CH0-5 (§3.1/§10). Kinematics (crab/point-turn coordination, per-corner
     # clearance limits) are undesigned in the master doc — this class only centers/holds

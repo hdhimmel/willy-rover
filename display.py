@@ -35,6 +35,18 @@ class WillyFace:
         self._personality=None;self._personality_until=0.0
         self._idle_cycle_t=config.IDLE_PERSONALITY_CYCLE_S
         self._heard_until=0.0  # note_heard() flashes a small corner icon, separate from state='listening'
+        # FR-300-003, applied to all faults not just E-stop (owner decision 2026-08-18): once a
+        # fault condition clears, brain.py stops calling _go('IDLE') automatically and instead
+        # waits here for an operator screen-tap. _reset_event is the thread-safe handoff -- set
+        # by _loop() (the display thread) on a tap inside the button while awaiting_reset is
+        # true, consumed by reset_tapped() (called from brain.py's tick thread).
+        self._awaiting_reset=False; self._reset_event=threading.Event()
+        self._reset_button_rect=pygame.Rect(W//2-220,H//2+60,440,110)
+
+    def reset_tapped(self):
+        if self._reset_event.is_set():
+            self._reset_event.clear(); return True
+        return False
 
     def note_heard(self,duration=2.0):
         # Confirms a command was actually transcribed (non-empty STT text) — distinct from the
@@ -42,12 +54,12 @@ class WillyFace:
         # anything was understood as speech yet.
         with self._lock: self._heard_until=self._t+duration
 
-    def update_state(self,state,status='',distances=None,tilt=0.0,speed=0.0):
+    def update_state(self,state,status='',distances=None,tilt=0.0,speed=0.0,awaiting_reset=False):
         with self._lock:
             self._state=state
             if status: self._status=status
             if distances: self._dists=distances
-            self._tilt=tilt; self._speed=speed
+            self._tilt=tilt; self._speed=speed; self._awaiting_reset=awaiting_reset
 
     def set_expression(self,expr,duration=1.5):
         # FR-1600-006 (bashful) / ad-hoc silly triggers from voice.py. Recorded unconditionally;
@@ -100,6 +112,17 @@ class WillyFace:
             for e in pygame.event.get():
                 if e.type==pygame.QUIT or (e.type==pygame.KEYDOWN and e.key==pygame.K_ESCAPE):
                     self._running=False
+                # FINGERDOWN (native SDL touch) and MOUSEBUTTONDOWN (most Linux touch drivers
+                # also emit a synthetic mouse event) are both handled -- whichever this panel's
+                # driver actually produces, a tap on the reset button should register either way.
+                elif e.type==pygame.FINGERDOWN:
+                    with self._lock: awaiting=self._awaiting_reset
+                    if awaiting and self._reset_button_rect.collidepoint(e.x*W,e.y*H):
+                        self._reset_event.set()
+                elif e.type==pygame.MOUSEBUTTONDOWN:
+                    with self._lock: awaiting=self._awaiting_reset
+                    if awaiting and self._reset_button_rect.collidepoint(e.pos):
+                        self._reset_event.set()
             dt=1.0/config.DISPLAY_FPS; self._t+=dt
             if config.ENABLE_DISPLAY_EXPRESSIONS:
                 with self._lock:
@@ -120,6 +143,7 @@ class WillyFace:
             dists=dict(self._dists); tilt=self._tilt; speed=self._speed
             personality=self._personality if self._t<self._personality_until else None
             heard=self._t<self._heard_until
+            awaiting_reset=self._awaiting_reset
         # FR-1600-008: personality only ever substitutes the VISUAL state (vis), never the real
         # `state` used for the HUD badge/status text below — and only when `state` is itself in
         # _PERSONALITY_SAFE_STATES. A fault/lowbatt/warn/stuck state always draws as itself.
@@ -194,4 +218,14 @@ class WillyFace:
             cx,cy=36,36
             pygame.draw.circle(s,C_GREEN,(cx,cy),22)
             pygame.draw.lines(s,C_BG,False,[(cx-10,cy),(cx-3,cy+9),(cx+12,cy-11)],5)
+        # FR-300-003 (owner decision 2026-08-18): the fault condition has cleared but nothing
+        # resumes until this is tapped -- drawn only then, never during an active fault, so it
+        # can never be mistaken for a way to interrupt/skip past a fault that's still real.
+        if awaiting_reset:
+            r=self._reset_button_rect
+            pulse=0.5+0.5*math.sin(t*4)
+            pygame.draw.rect(s,tuple(int(c*(0.7+0.3*pulse)) for c in C_GREEN),r,border_radius=16)
+            pygame.draw.rect(s,C_BG,r,4,border_radius=16)
+            label=self.f_md.render('TAP TO RESUME',True,C_BG)
+            s.blit(label,(r.centerx-label.get_width()//2,r.centery-label.get_height()//2))
         pygame.display.flip()

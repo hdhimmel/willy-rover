@@ -455,6 +455,17 @@ FR-400 through FR-700 are live-tested at all.
     succeeds until an explicit operator reset. Verified by issuing drive and
     arm commands post-trigger and confirming all are refused.
 
+    **Owner decision 2026-08-18: a touchscreen "TAP TO RESUME" button, applied
+    to every fault, not only a future E-stop.** `TILT_FAULT`/`SENSOR_FAULT`/
+    `STALL_FAULT` no longer auto-resume the instant their underlying condition
+    clears — `brain.py::_await_reset_or_resume()` keeps braking and waits for
+    a tap on the button `display.py::WillyFace` now renders whenever any of
+    those three faults has cleared but not yet been acknowledged. The same
+    mechanism will cover E-stop once G-1's sense pin is wired; it is real,
+    live code today for the three faults that already fire, not placeholder
+    infrastructure. Verified off-hardware only (`tests/test_brain_reset_gate.
+    py`) — the actual touchscreen tap detection needs the physical panel.
+
 -   **FR-300-004 (controller failure).** Loss of the I²C bus, or a failed read
     from either motor driver, halts motion rather than continuing on stale
     state. Verified by disconnecting the bus mid-run.
@@ -601,6 +612,12 @@ Six steering servos on PCA9685 0x42, channels CH0--CH5.
 
 -   **FR-600-004 (manual override).** Override takes effect within one control
     cycle and is itself subject to the travel limits above.
+
+**Owner decision 2026-08-18:** per-corner steering kinematics during normal drive
+(crab-walk, point-turn, or coordinated arc turning) are deliberately deferred, not
+an oversight. Skid-steer (differential wheel speed only, wheels held centered) is
+the only turning mechanism for now, same as today. Revisit once basic drive is
+live-verified — see `motors.py::Steering`'s own comment.
 
 -   **Load precondition.** Servo current flows through the PCA9685's V+
     terminal, PCB trace and channel headers. Worst-case draw with all six

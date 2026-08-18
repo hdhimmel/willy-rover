@@ -31,7 +31,7 @@ modules below sound adjacent to them:
 
 | Module | Status | Note |
 |---|---|---|
-| `brain.py` (core FSM) | **PARTIALLY IMPLEMENTED** | Phase 1 safety rewrite + all subsequent phases are code-complete and off-hardware tested, but not live-verified — see standing note below. |
+| `brain.py` (core FSM) | **PARTIALLY IMPLEMENTED** | Phase 1 safety rewrite + all subsequent phases are code-complete and off-hardware tested, but not live-verified — see standing note below. Stall detection (`STALL_FAULT`, FR-500-003/Directive 5) and a touchscreen-gated fault-recovery step (FR-300-003, applied to all faults) both added 2026-08-18 — see FRD v3.1 §V.2/S-7 and S-1. |
 | `safety.py` (SafetyController) | **IMPLEMENTED** | Sole motion gate, unchanged since Phase 1. 25 tests (`test_safety.py`+`test_safety_controller.py`). Not live-verified. |
 | `motors.py`/`steering.py`-equiv (`motors.py`) | **PARTIALLY IMPLEMENTED** | Ran successfully during the 2026-08-02 baseline pass; not re-verified against this session's Phase 1+ rewrite on real hardware. |
 | `sensors.py` (Sonar/ADC/Encoders/CurrentMonitor) | **PARTIALLY IMPLEMENTED — open regression** | IMU reset-timing bug root-caused and fixed live 2026-08-14 (see below), verified via standalone construction and through the real `IMU`/`SonarArray`/`ADC` classes. **Since 2026-08-16, a different, undiagnosed fault has `willy-rover.service` crash-looping again**: BNO085 doesn't ack at all at 0x4a (vs. the 08-14 bug, which acked but NACK'd the first write) — the 08-14 patch is confirmed still present and unmodified, so this is a new fault, not a regression of that fix. Not yet diagnosed as of the last commit touching this doc; see the standing note at the bottom. Sonar/ADC portions unaffected by this fault. `Encoders` switched to interrupt-driven quadrature decode 2026-08-18 (FRD v3.1 G-2) — code-complete, checked off-hardware only; the MCP23017 INTA→GP7 wire it depends on isn't physically run yet, so it currently falls back to the same best-effort polling as before. |
@@ -49,7 +49,7 @@ modules below sound adjacent to them:
 | `storage.py` | **IMPLEMENTED** | Configurable roots exist and are tested; this unit has no physical SSD/SD split to actually tier across yet (confirmed via `df`/`mount`). |
 | `smart_home.py` | **PLANNED / disabled** | `ENABLE_SMART_HOME=False` — needs Willie's own Google account credentials, not yet provisioned. |
 | `email_client.py` | **IMPLEMENTED** | `ENABLE_EMAIL=True`, Gmail app-password login verified working 2026-08-06. |
-| `display.py` (`WillyFace`) | **PARTIALLY IMPLEMENTED** | Works live; known non-fatal pygame/Wayland init issue under `WILLY_SIMULATE=1` (daemon thread, doesn't block startup) — display hardware itself, not simulation, is out of scope for that gap. |
+| `display.py` (`WillyFace`) | **PARTIALLY IMPLEMENTED** | Works live; known non-fatal pygame/Wayland init issue under `WILLY_SIMULATE=1` (daemon thread, doesn't block startup) — display hardware itself, not simulation, is out of scope for that gap. Added 2026-08-18: a touch-detected "TAP TO RESUME" button (`reset_tapped()`/`FINGERDOWN`+`MOUSEBUTTONDOWN` handling), gating fault recovery — see FRD v3.1's FR-300-003 note. Not live-verified against the real 5" DSI touch panel. |
 | E-Stop | **PLANNED / HARDWARE REQUIRED** | No GPIO sense pin wired — software has no way to observe it. Not a code gap. |
 | Stair-climbing | **PLANNED** | Zero code, intentionally — per the plan's own instruction not to build this without hardware/testing support. |
 

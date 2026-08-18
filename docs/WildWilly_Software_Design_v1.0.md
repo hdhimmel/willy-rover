@@ -359,8 +359,20 @@ implementing code itself.
 
 **S-1 — E-stop is invisible to software.** No GPIO sense pin exists. Directive
 1 is enforced physically but has no representation in the control loop, cannot
-be logged, and FR-300-003's post-E-stop reset gate cannot be implemented. This
-needs a wiring change first.
+be logged, and FR-300-003's post-E-stop reset gate cannot be implemented
+*for E-stop specifically* — this needs a wiring change first.
+
+The reset-gate *mechanism* itself is no longer blocked on that wiring, though.
+Owner decision 2026-08-18: a touchscreen "TAP TO RESUME" button, applied now
+to `TILT_FAULT`/`SENSOR_FAULT`/`STALL_FAULT` — all three stop auto-resuming
+the instant their condition clears and instead keep braking until
+`display.py`'s new button is tapped (`brain.py::_await_reset_or_resume()`,
+`display.py`'s `_reset_event`/`reset_tapped()`). The same mechanism will
+gate E-stop once the sense pin exists; this is not a placeholder built ahead
+of the hardware, it's a real behavior change for the three faults that
+already fire today. `tests/test_brain_reset_gate.py` covers the brain.py-side
+logic off-hardware; the touchscreen's own tap detection needs the physical
+5" DSI panel (Master Hardware Design v2.0 §15.3) to verify.
 
 **S-2 — Encoder polling under-samples at speed.** *Decision made 2026-08-18:
 interrupt-driven decode*, over a dedicated counter or accepting stall-only.
