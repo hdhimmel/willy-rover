@@ -106,7 +106,11 @@ class SafetyController:
         # polled anywhere in this codebase (grep for ESTOP finds only the log-throttle
         # constant below), and every fault state this class enters is recovered from
         # automatically once the triggering condition clears (see brain.py's SAFE_MODE/
-        # SENSOR_FAULT handling) rather than requiring an explicit operator action.
+        # SENSOR_FAULT handling) rather than requiring an explicit operator action. FR-300-001
+        # is blocked on hardware (no sense pin wired, see CLAUDE.md); FR-300-003 is a real,
+        # fixable design decision -- deliberately not built here without product sign-off on
+        # what "explicit operator reset" should mean on this rover (a voice intent? a physical
+        # button that doesn't exist yet? something else?), see [[project_willy_rover_frd_closure]].
         # Immediate hard brake (not the ramped stop()) — for tilt/battery faults and sustained
         # sensor faults, where a 0.5s ramp-down is the wrong call. Also clears any in-flight timed
         # move so a stale deadline can't fire after recovery.

@@ -32,6 +32,7 @@ class RetrievalTask:
         self.state='IDLE'; self._target_class=None; self._requester_hint=None
         self._dist_cm=999.0; self._bearing_deg=0.0; self._lost_count=0; self._retries=0
         self._fail_reason=''; self._confirm_deadline=0.0
+        self._grasp_step=0; self._grasp_deadline=None
 
     @property
     def active(self): return self.state in _MOTION_STATES
@@ -50,6 +51,7 @@ class RetrievalTask:
             self.safety.stop()
             log.warning(f'Retrieval task ABORTED: {reason}')
         self.state='ABORTED'; self._fail_reason=reason
+        self._grasp_step=0; self._grasp_deadline=None
 
     def reset(self): self.state='IDLE'
 
@@ -100,22 +102,40 @@ class RetrievalTask:
         else:
             self.safety.stop(); self.state='GRASP'
 
+    # FR-1700-004 / FR-300-002 (E-stop must be able to preempt in-progress motion): each step
+    # below issues its pulses then returns — the *_S delay is served as a deadline polled on the
+    # next tick() call, never a time.sleep(). This was previously a single blocking call
+    # (open->sleep(0.3)->lower->sleep(0.5)->close->sleep(0.3)->raise, ~1.1s total) that blocked
+    # brain.py's tick thread for its whole duration; a tilt/battery/sensor fault firing mid-grasp
+    # had no way to reach abort() until the sleeps finished, which defeated the same non-blocking
+    # control-loop guarantee Phase 1 (§2) established for drive motion. Splitting it into steps
+    # serviced from the normal ~20Hz tick means abort() (called by brain.py's Directive 1-4 checks)
+    # can land between any two steps instead of only after all of them.
+    _GRASP_OPEN,_GRASP_LOWER,_GRASP_CLOSE,_GRASP_RAISE=range(4)
+    _GRASP_DELAY_S=(0.3,0.5,0.3,0.0)
+
     def _grasp(self,d,tilt):
-        # FR-1700-004 — see module docstring: fixed primitive sequence, not real IK.
-        log.info(f'Attempting grasp (retry {self._retries}/{config.RETRIEVAL_GRASP_RETRIES})')
-        half=(config.ARM_SERVO_MAX_US-config.ARM_SERVO_MIN_US)/2
-        base_us=config.ARM_SERVO_CENTER_US+(self._bearing_deg/90.0)*half
-        self.arm.set_pulse('base',base_us)
-        self.arm.set_pulse('gripper',config.ARM_SERVO_MIN_US)  # open
-        time.sleep(0.3)
-        self.arm.set_pulse('shoulder_a',config.ARM_SERVO_CENTER_US-300)  # rough "lower toward table"
-        self.arm.set_pulse('elbow',config.ARM_SERVO_CENTER_US-300)
-        time.sleep(0.5)
-        self.arm.set_pulse('gripper',config.ARM_SERVO_MAX_US)  # close
-        time.sleep(0.3)
-        self.arm.set_pulse('shoulder_a',config.ARM_SERVO_CENTER_US)
-        self.arm.set_pulse('elbow',config.ARM_SERVO_CENTER_US)
-        self.state='VERIFY'
+        now=time.time()
+        if self._grasp_deadline is not None:
+            if now<self._grasp_deadline: return
+            self._grasp_deadline=None
+        step=self._grasp_step
+        if step==self._GRASP_OPEN:
+            log.info(f'Attempting grasp (retry {self._retries}/{config.RETRIEVAL_GRASP_RETRIES})')
+            half=(config.ARM_SERVO_MAX_US-config.ARM_SERVO_MIN_US)/2
+            base_us=config.ARM_SERVO_CENTER_US+(self._bearing_deg/90.0)*half
+            self.arm.set_pulse('base',base_us)
+            self.arm.set_pulse('gripper',config.ARM_SERVO_MIN_US)  # open
+        elif step==self._GRASP_LOWER:
+            self.arm.set_pulse('shoulder_a',config.ARM_SERVO_CENTER_US-300)  # rough "lower toward table"
+            self.arm.set_pulse('elbow',config.ARM_SERVO_CENTER_US-300)
+        elif step==self._GRASP_CLOSE:
+            self.arm.set_pulse('gripper',config.ARM_SERVO_MAX_US)  # close
+        elif step==self._GRASP_RAISE:
+            self.arm.set_pulse('shoulder_a',config.ARM_SERVO_CENTER_US)
+            self.arm.set_pulse('elbow',config.ARM_SERVO_CENTER_US)
+            self._grasp_step=self._GRASP_OPEN; self.state='VERIFY'; return
+        self._grasp_deadline=now+self._GRASP_DELAY_S[step]; self._grasp_step=step+1
 
     def _verify(self,d,tilt):
         # FR-1700-005: if the target is still visible on the ground, the grasp didn't take —

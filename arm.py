@@ -9,11 +9,20 @@ if not config.SIMULATE_HARDWARE:
 # class's own comment below (no per-joint safe limits, preset poses, or IK yet).
 # FR-700-003 (joint limits) -- PARTIAL: _drive() below clamps to manufacturer-default
 # ARM_SERVO_MIN_US/MAX_US, but real per-joint calibrated limits haven't been bench-set.
-# FR-700-004 (arm stops on E-stop) -- NOT implemented: safety.SafetyController only
-# holds a drive_base reference (see safety.py's __init__), never an Arm instance, and
-# emergency_stop() only calls self._drive.brake(). No code path stops arm motion on
-# E-stop; grep for 'self.arm.' in brain.py outside center_all/arm_stow/arm_home turns
-# up only the wave-hello gesture, nothing safety-related.
+# FR-700-004 (arm stops on E-stop) -- PARTIAL: safety.SafetyController still only holds a
+# drive_base reference (see safety.py's __init__), never an Arm instance, and
+# emergency_stop() only calls self._drive.brake() -- there is no explicit "freeze the arm"
+# call anywhere. What was a bigger problem until this fixed (2026-08-18): retrieval_task.py's
+# _grasp() used to run its whole pulse sequence through blocking time.sleep() calls inside a
+# single tick, so a tilt/battery/sensor-fault abort() had no way to even run until the arm had
+# already finished moving. _grasp() is now a non-blocking, tick-serviced step sequence, so
+# brain.py's Directive 1-4 abort() calls can land between any two arm-motion steps -- the arm
+# still has no independent brake distinct from "stop commanding new pulses" (a PWM servo simply
+# holds its last position, unlike a spinning drive motor, so this is a smaller residual gap than
+# it looks), but the previous total blackout window is closed. brain.py's own wave-hello gesture
+# (_wave_hello()) still blocks the tick thread for ~1.5s -- left as-is, an explicitly accepted
+# tradeoff restricted to IDLE-only per that function's own comment, not the same risk class as
+# a mid-retrieval grasp.
 class Arm:
     # PCA9685 @0x43, CH0-6, base->gripper order (§11.1). No per-joint safe limits, preset poses,
     # or IK exist yet — §20.6 bench calibration hasn't been run. This is a driver + primitive
