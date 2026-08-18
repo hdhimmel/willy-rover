@@ -18,6 +18,12 @@ EYE_L=415;EYE_R=865;EYE_CY=340;EYE_RX=175;EYE_RY=130;IRIS_R=86;PUPIL_R=38
 MOUTH_CX=640;MOUTH_CY=535;MOUTH_W=475;MOUTH_H=110
 STATUS_Y=600
 
+# FR-1600-001/002 (distinct visual states for idle/listening/processing/speaking):
+# driven externally via update_state() below -- see voice.py's calls with
+# state='listening'/'processing'/'speak' and brain.py/privacy.py/*_task.py's others.
+# FR-1600-005 (rendering must never delay FR-000 Directives or the FR-100 self-test):
+# this class runs its own render loop on a dedicated daemon thread (see start() below),
+# never on brain.py's tick thread, so a slow frame here cannot block Directive checks.
 class WillyFace:
     def __init__(self):
         self._state='idle';self._status='Initialising...';self._dists={'front':999,'left':999,'right':999}
