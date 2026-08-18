@@ -874,12 +874,15 @@ separately under FR-1200.
 
 # FR-1300 Smart Home Integration (Google Home)
 
-ASSUMPTION (flag for review): direction is Willie sending commands OUT
-to existing Google Home devices (e.g. \"turn on the lights\"), not
-Willie being controlled BY Google Home/Assistant. This is the more
-common use case for a mobile assistant robot but has not been confirmed
-with the owner --- verify before implementation. Added 2026-08-01, v1.3.
-Not yet in scope for any CC session to date.
+DIRECTION CONFIRMED WITH OWNER 2026-08-18 (was an open assumption since
+2026-08-01, v1.3): Willie sends commands OUT to existing Google Home
+devices (e.g. \"turn on the lights\"), not Willie being controlled BY
+Google Home/Assistant. `smart_home.py`'s existing implementation already
+built this direction (via a Home Assistant REST API bridge, since Google's
+Home Graph API doesn't allow direct third-party control of another
+account's devices) --- that choice is now confirmed correct, not a guess.
+Still disabled (`ENABLE_SMART_HOME=False`) pending Willie's own Google
+account credentials, unrelated to this decision.
 
   -----------------------------------------------------------------------
   Requirement ID    Requirement       Priority          Verification

@@ -3,9 +3,11 @@ log=logsetup.setup('smart_home')
 
 # FR-1300 Smart Home Integration (Google Home).
 #
-# OPEN ASSUMPTION FLAGGED IN THE FRD ITSELF (not resolved by this pass): direction is Willie
-# sending commands OUT to existing Google Home devices, not Willie being controlled BY Google
-# Assistant — "not yet confirmed with the owner" per the FRD text. Verify before relying on this.
+# DIRECTION CONFIRMED WITH OWNER 2026-08-18: Willie sends commands OUT to existing Google Home
+# devices, not the reverse (Willie controlled BY Google Assistant, e.g. "Hey Google, ask Willy to
+# come here") — that would be a different, unbuilt capability (an Actions-on-Google integration),
+# not this class. The assumption the FRD flagged since 2026-08-01 is resolved; this is the
+# correct, intended direction, not a guess anymore.
 #
 # BACKEND SUBSTITUTION: Google does not expose a public API for a third-party script to send
 # on/off/dim/scene commands directly to another account's Google Home devices — that surface

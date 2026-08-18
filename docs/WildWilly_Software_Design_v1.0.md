@@ -441,14 +441,16 @@ not yet live-verified, since it has never run against a real motor. There is
 still no overcurrent trip threshold defined — that half of the original
 `MOTOR_FAULT` concept remains open.
 
-**S-8 — Smart home direction is an unconfirmed assumption.** `smart_home.py`
-implements Willie sending commands *out* to devices via Home Assistant's REST
-API. Whether the requirement actually meant the reverse — Willie controlled by
-Google Assistant — is recorded in the FRD as not yet confirmed with the owner.
-Google exposes no public API for a third-party script to command another
-account's Home devices, which is why Home Assistant is the backend; the
-`discover`/`send_command` interface is written so the backend can be swapped
-without touching callers.
+**S-8 — Smart home direction.** *Confirmed with owner 2026-08-18: outbound is
+correct.* `smart_home.py` implements Willie sending commands *out* to devices
+via Home Assistant's REST API — that is the intended direction, not a guess
+anymore (the reverse, Willie controlled by Google Assistant, would be a
+different, unbuilt capability). Google exposes no public API for a
+third-party script to command another account's Home devices, which is why
+Home Assistant is the backend; the `discover`/`send_command` interface is
+written so the backend can be swapped without touching callers. Still
+disabled (`ENABLE_SMART_HOME=False`) pending Willie's own Google account
+credentials — unrelated to this decision.
 
 ---
 
@@ -541,8 +543,13 @@ than left as accidental defaults: `ENABLE_CLOUD_AI` and `ENABLE_EMAIL`.
    trip threshold defined).
 6. **Bench-confirm `ENCODER_COUNTS_PER_REV`, `WHEEL_DIAMETER_M`,
    `TRACK_WIDTH_M` (S-2, S-3).**
-7. **Confirm smart-home direction with the owner (S-8).**
+7. ~~Confirm smart-home direction with the owner (S-8).~~ Done 2026-08-18 —
+   outbound (Willy sends commands out) confirmed correct.
 8. **Integrate the accelerator into `vision.py` (§7).**
+9. **Steering kinematics (crab/point-turn/arc turning).** Owner decision
+   2026-08-18: deliberately deferred until basic drive is live-verified.
+   Skid-steer stays the only turning mechanism — not an open question
+   anymore, a scheduled-later item. See `motors.py::Steering`'s comment.
 
 ---
 
