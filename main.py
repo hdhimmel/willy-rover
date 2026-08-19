@@ -42,6 +42,13 @@ if not os.environ.get('WILLY_SIMULATE'):
               'instead of crash-looping. Restart willy-rover.service once hardware is '
               'reconnected to re-check.',file=sys.stderr)
         os.environ['WILLY_SIMULATE']='1'; os.environ['WILLY_I2C_FORCED_SIMULATE']='1'
+        # Setting the env var alone is not enough: config.py already ran its module-level
+        # `SIMULATE_HARDWARE=os.environ.get('WILLY_SIMULATE','0')=='1'` assignment at the
+        # `import config` above, and Python caches that result in sys.modules -- every later
+        # `import config` elsewhere (motors.py, sensors.py, arm.py, brain.py itself) returns the
+        # same cached module object without re-running it, so it would otherwise keep seeing the
+        # stale False from before this branch ran. Patch the already-imported module directly.
+        config.SIMULATE_HARDWARE=True
 
 from brain import RoverBrain
 if __name__=='__main__':
