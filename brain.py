@@ -139,8 +139,20 @@ class RoverBrain:
         # reset requirement, which is a different, unimplemented, gate).
         self._motion_enabled=ok; self._init_fail_reason=reason
         if ok:
-            self._go('IDLE'); self.display.update_state('idle','WildWilly v2 ready')
-            log.info('WildWilly v2 ready.')
+            self._go('IDLE')
+            # main.py sets this when it force-enabled WILLY_SIMULATE because no I2C device
+            # acked at startup (bus physically offline) -- distinct from a developer
+            # deliberately running under WILLY_SIMULATE=1, which needs no special-casing here.
+            # Self-test genuinely passes either way (simulated sensors always report healthy),
+            # so this is purely an operator-visible label, not a different code path.
+            if os.environ.get('WILLY_I2C_FORCED_SIMULATE'):
+                self.display.update_state('idle','I2C OFFLINE — degraded mode, restart to recheck')
+                log.warning('WildWilly v2 ready, but I2C was offline at startup — running '
+                            'forced-simulate/degraded. Restart the service once hardware is '
+                            'reconnected.')
+            else:
+                self.display.update_state('idle','WildWilly v2 ready')
+                log.info('WildWilly v2 ready.')
         else:
             log.error(f'Startup self-test FAILED — motion disabled: {reason}')
             self.display.update_state('warn',f'SELF-TEST FAILED: {reason}')

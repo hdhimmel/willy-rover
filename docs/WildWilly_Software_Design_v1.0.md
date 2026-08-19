@@ -228,6 +228,23 @@ legitimately needs one where passive observation does not.
 
 ### 4.1 Startup sequence
 
+0. **Added 2026-08-19: `main.py` probes the I²C bus before importing `brain.py` at all.**
+   `RoverBrain.__init__` (step 1 below) constructs hardware objects unconditionally, and each
+   one's constructor raises immediately if its specific chip doesn't ack (e.g. `MotorKit`'s
+   `ValueError('No I2C device at address: 0x60')`) — crashing the whole process before
+   `_self_test()` (step 3) ever runs. Found live: this crash-loops `willy-rover.service`
+   indefinitely under systemd's `Restart=on-failure`, with no operator-visible signal beyond the
+   journal, whenever the Pi is physically disconnected from the rover harness (e.g. mid-HAT-
+   install). `main.py` now does a lightweight `smbus2` read against each expected address before
+   the `from brain import RoverBrain` import; if none ack, it sets `WILLY_SIMULATE=1` for the
+   run, reusing the existing `hw_sim` no-op hardware path instead of a new degraded-mode code
+   path. `RoverBrain._self_test()` genuinely passes in this state (simulated sensors always
+   report healthy) — `WILLY_I2C_FORCED_SIMULATE=1` is set alongside so `start()` can show a
+   distinct "I2C OFFLINE — degraded mode, restart to recheck" status instead of the normal ready
+   message, so this isn't silently indistinguishable from a developer deliberately running
+   `WILLY_SIMULATE=1`. One-time check at process start, not a background poller — restart the
+   service once hardware is reconnected to re-check, matching how `SIMULATE_HARDWARE` is read
+   once at import time everywhere else in this codebase.
 1. `RoverBrain.__init__` constructs every subsystem. Note that `motors.py` and
    `arm.py` construction calls `PCA9685.reset()`, which clears the MODE1
    ALLCALL bit — this is why 0x70 legitimately stops answering before the
