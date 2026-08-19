@@ -245,6 +245,19 @@ legitimately needs one where passive observation does not.
    `WILLY_SIMULATE=1`. One-time check at process start, not a background poller — restart the
    service once hardware is reconnected to re-check, matching how `SIMULATE_HARDWARE` is read
    once at import time everywhere else in this codebase.
+
+   **Gotcha found live-deploying this** (first attempt, commit `56f6bae`, didn't work; fixed in
+   `e6b71b1`): setting `os.environ['WILLY_SIMULATE']='1'` late in `main.py` is not enough by
+   itself if `config` was already imported earlier in the same function — `SIMULATE_HARDWARE` is
+   a plain module-level assignment evaluated once, at that import, and Python caches the module
+   in `sys.modules`; every later `import config` elsewhere (`motors.py`, `sensors.py`, `arm.py`)
+   returns the same cached object without re-running it, so those modules kept seeing the stale
+   `False` computed before the env var was set. Verified live on the assembled unit: with the
+   env-var-only version, the service still crashed on a real `MotorKit` construction despite the
+   bus-offline warning printing correctly first. Fix: patch `config.SIMULATE_HARDWARE=True`
+   directly on the already-imported module object. **`config.SIMULATE_HARDWARE` is frozen at
+   first import everywhere in this codebase, not a live re-read — don't assume setting the env
+   var later in the same process affects code that already imported `config`.**
 1. `RoverBrain.__init__` constructs every subsystem. Note that `motors.py` and
    `arm.py` construction calls `PCA9685.reset()`, which clears the MODE1
    ALLCALL bit — this is why 0x70 legitimately stops answering before the
