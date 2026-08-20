@@ -283,7 +283,10 @@ IDLE_PERSONALITY_CYCLE_S=90  # FR-1600-007: how often the idle 'silly' animation
 # vision.py has not been wired to use it yet — still CPU-only YOLOv8 via ultralytics.
 # Swap in a .hef path + hailo runtime later; vision.py's detector interface is written to
 # make that a backend swap, not a rewrite.
-ENABLE_OBJECT_RETRIEVAL=False
+ENABLE_OBJECT_RETRIEVAL=True  # 2026-08-20: model file, Arducam (/dev/video8), cv2 5.0.0 and
+                               # ultralytics 8.4.115 all confirmed present on Willie — flipping
+                               # on to live-verify. Fails safe to disabled via vision.py::_load()'s
+                               # own try/except if anything doesn't actually work end-to-end.
 CAMERA_DEVICE='/dev/video8'
 YOLO_MODEL_PATH='models/yolov8n.pt'
 YOLO_CONF_THRESHOLD=0.5
