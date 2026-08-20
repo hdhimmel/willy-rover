@@ -258,6 +258,35 @@ legitimately needs one where passive observation does not.
    directly on the already-imported module object. **`config.SIMULATE_HARDWARE` is frozen at
    first import everywhere in this codebase, not a live re-read — don't assume setting the env
    var later in the same process affects code that already imported `config`.**
+
+   **Added 2026-08-20: Witty Pi 5 HAT+ (RTC and power management), software prepared ahead of
+   physical installation — not yet on the unit as of this commit.** Per its own user manual
+   (UUGear, rev 1.03), it's an I²C-only device at 0x51 (`config.WITTY_PI_ADDR`) using no other
+   GPIO. Two integration points, deliberately scoped narrow:
+   - **Vendor software handles almost everything.** The `.deb` install (`wp5` CLI + `wp5d`
+     daemon, auto-starts) already handles RTC sync, scheduled power on/off, the low-voltage
+     cutoff, and — critically — reacting to its own shutdown-request register. No custom code
+     was written for any of that; `wp5d` already watches for it.
+   - **`witty_pi.py`'s one job**: feed Willy's own per-tick liveness into Witty Pi 5's
+     *independent* hardware watchdog (register #70), alongside the existing systemd
+     `WATCHDOG=1` notify in `brain.py`'s tick loop (`self._sd.notify('WATCHDOG=1');
+     self.witty.heartbeat()`, same call site). The reason for a second, independent watchdog:
+     systemd's own watchdog can't help if the kernel itself is what's hung — systemd is part of
+     that same hung kernel. Witty Pi 5's watchdog lives on a completely separate MCU and can
+     force a real power cycle regardless of what the Pi's OS is doing. The heartbeat protocol
+     (a register *read*, per the manual's literal "the software periodically polls a register"
+     wording, not a write) is best-effort against the documentation — **not independently
+     confirmed, since the hardware doesn't exist on this unit yet.**
+   - `config.ENABLE_WITTY_PI` stays `False`, and 0x51 stays out of `_EXPECTED_I2C` (§4.1 step 3),
+     until the hardware is actually installed — flip both on then, not before, or the self-test
+     will report a real device as missing every single run.
+   - **Open, unresolved**: the battery is wired via VUSB (USB-C), not the VIN screw terminal —
+     the manual documents the configurable low-voltage-threshold registers (#22/#23) as
+     monitoring VIN specifically. Whether an equivalent threshold usefully applies to a dropping
+     VUSB isn't confirmed either way. This doesn't reduce safety regardless of how it resolves —
+     `config.BAT_SHUTDOWN_V` et al. (via the real battery-voltage ADC) remain the primary,
+     already-working safety mechanism; Witty Pi 5's low-voltage cutoff would only ever be an
+     *additional* backstop, not a replacement.
 1. `RoverBrain.__init__` constructs every subsystem. Note that `motors.py` and
    `arm.py` construction calls `PCA9685.reset()`, which clears the MODE1
    ALLCALL bit — this is why 0x70 legitimately stops answering before the

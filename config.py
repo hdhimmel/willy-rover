@@ -124,6 +124,20 @@ ESTOP_LOG_INTERVAL_S=5.0 # safety.py throttles emergency_stop()'s own log line t
 # overcurrent trip thresholds exist anywhere in the documentation to hardcode a cutoff against.
 INA260_SERVO_ADDR=0x40; INA260_PI_ADDR=0x44; INA260_MOTOR_ADDR=0x45
 
+# Witty Pi 5 HAT+ (UUGear) — RTC and power management, 2026-08-20. Uses only SDA/SCL (per its own
+# user manual), no other GPIO — confirmed no conflict with anything else on this bus. NOT YET
+# PHYSICALLY INSTALLED as of this commit — ENABLE_WITTY_PI stays False (and WITTY_PI_ADDR is
+# excluded from brain.py's _EXPECTED_I2C self-test set) until the hardware is actually present;
+# flip it on then, not before, or startup self-test will report a real device as missing.
+# Wired via VUSB (USB-C, off the existing 5V/INA260_PI_ADDR-monitored rail), not VIN — the
+# manual documents its configurable low-voltage-threshold registers (#22/#23) as monitoring VIN
+# specifically; whether an equivalent threshold usefully applies to a dropping VUSB is NOT
+# confirmed and needs live testing, not an assumed number. The existing software battery-tier
+# system (config.BAT_SHUTDOWN_V et al., via the real battery-voltage ADC) remains the primary
+# safety mechanism regardless of how that resolves.
+ENABLE_WITTY_PI=False
+WITTY_PI_ADDR=0x51
+
 ADS_ADDR=0x48; ADS_CH_BATTERY=0  # AIN0 only; charge-sense divider not yet wired
 # Re-trimmed 2026-08-16: AIN0 read 2.9112V while a multimeter on the pack
 # terminals read 12.2V (2.9112/12.2). Previous value (0.2865, set 2026-08-02)

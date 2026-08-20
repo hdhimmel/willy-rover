@@ -18,6 +18,7 @@ from vision import ObjectDetector
 from retrieval_task import RetrievalTask
 from pursuit_task import PursuitTask
 from email_client import EmailClient
+from witty_pi import WittyPi
 log=logsetup.setup('brain')
 
 class _SdNotify:
@@ -41,6 +42,10 @@ class _SdNotify:
 _EXPECTED_I2C={config.ENCODER_ADDR,config.INA260_SERVO_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
                config.INA260_PI_ADDR,config.INA260_MOTOR_ADDR,config.ADS_ADDR,config.IMU_ADDR,
                config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR}
+# Witty Pi 5 only joins the expected-device set once it's actually installed and enabled --
+# adding it unconditionally now (hardware doesn't exist on this unit yet) would make the
+# self-test report a real device as missing every single run.
+if config.ENABLE_WITTY_PI: _EXPECTED_I2C.add(config.WITTY_PI_ADDR)
 
 # Battery ladder (§13.2), most severe first. Each entry's threshold is the "below this" boundary;
 # recovering to a less severe tier requires climbing BAT_HYSTERESIS_V above that boundary, not
@@ -84,6 +89,7 @@ class RoverBrain:
         self.retrieval=RetrievalTask(self.safety,self.arm,self.detector,display=self.display,voice=self.voice)
         self.pursuit=PursuitTask(self.safety,self.detector,display=self.display,voice=self.voice)  # FR-1000
         self.email=EmailClient()
+        self.witty=WittyPi()
         self._state='INIT'; self._stuck_count=0; self._last_action='none'; self._manual_action=None
         self._idle_t=0.0; self._avoid_start=0.0; self._avoid_phase=None; self._running=False
         self._motion_enabled=False; self._init_fail_reason=''
@@ -352,6 +358,8 @@ class RoverBrain:
         # software has no way to observe it — the hardware-only latching cut has no documented
         # GPIO sense pin, so there is no check for it here, same gap as the baseline pass.
         self._sd.notify('WATCHDOG=1')
+        self.witty.heartbeat()  # independent hardware watchdog (Witty Pi 5), no-op if not
+                                 # installed/enabled -- see witty_pi.py's own module docstring
         pose=self.odometry.update()  # §8: passive dead-reckoning, runs regardless of motion_enabled
                                       # — no motor consequence, just keeps the estimate current for
                                       # logging/diagnostics (nothing consumes it for navigation yet).

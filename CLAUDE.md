@@ -36,6 +36,29 @@ device. Expect ten, not eleven.
 not answer. If `config.py` names 0x46, the brownout trip reads nothing and
 fails silently.
 
+**Witty Pi 5 HAT+ (0x51) — NOT YET PHYSICALLY INSTALLED, software prepared ahead of it
+(2026-08-20).** Per its own user manual, it uses only SDA/SCL — confirmed no conflict with
+anything above. Wired via VUSB (USB-C, off the existing 5V/0x44-monitored rail), not the VIN
+screw terminal. `config.ENABLE_WITTY_PI` stays `False` (and 0x51 stays out of `brain.py`'s
+self-test expected-device set) until it's actually connected — flip it on then, not before.
+See `docs/WildWilly_Software_Design_v1.0.md` §4.1 for the integration story and the open
+VIN-vs-VUSB low-voltage-threshold question that needs live testing, not a guessed number.
+
+**Witty Pi 5 install/config runbook — not yet run, execute once the HAT is physically on:**
+```
+wget https://www.uugear.com/repo/WittyPi5/wp5_latest.deb
+sudo apt install ./wp5_latest.deb
+wp5   # interactive menu:
+      #   Other settings... -> Power source priority -> V-USB first (matches actual wiring)
+      #   Other settings... -> Watchdog -> Enabled, pick a missed-heartbeat count once
+      #     witty_pi.py's heartbeat cadence is live-observed (don't guess a number blind)
+      #   Do NOT set the low-voltage threshold (options 7/8) yet -- confirmed VIN-specific
+      #     behavior per the manual; verify it does something sane on VUSB before relying on it
+i2cdetect -y 1   # confirm 0x51 answers
+```
+Then in the repo: set `config.ENABLE_WITTY_PI=True`, `git commit`/push/pull-on-rover, restart
+`willy-rover.service`, and confirm the self-test still passes with 0x51 now in the expected set.
+
 ---
 
 ## Pin assignments (BCM)
@@ -143,7 +166,10 @@ informs navigation; it does not gate the stop.
   steering servos under load simultaneously (Master Hardware Design v2.0 §14).
 - GPIO power bypasses the Pi's onboard input protection, so brownout
   protection is firmware-only via the 0x44 INA260. There is no hardware
-  supervisor behind it.
+  supervisor behind it. **The Witty Pi 5 HAT+ (above) is the intended fix for
+  this** — its own MCU can force a real power cycle independent of whatever
+  the Pi's own OS/kernel is doing — but it isn't installed yet; don't treat
+  this gap as closed until it is, live-verified.
 - A hard cut at the main switch or E-stop with the OS running risks filesystem
   corruption. The graceful path is `shutdown -h now` followed by Switch 2.
   Bulk capacitance cannot hold a Pi 5 up long enough to shut down — that would
