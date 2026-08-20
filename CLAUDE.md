@@ -79,7 +79,22 @@ driven directly. Sonar VCC is 5V, not 3V3.
 - GP2 / GP3 — I²C, via ISO1540 isolator to the whole device bus
 - GP15 — BNO085 interrupt
 - GP0 / GP1 — RESERVED for AI HAT EEPROM, do not use
-- GP7, GP8–GP11 — free (retired SPI/MCP3008)
+- GP7 — encoder interrupt (`config.ENCODER_INT_PIN`), interrupt-driven quadrature decode.
+  Hardware prerequisite: MCP23017 INTA must be wired to this pin — not yet done, falls back
+  to polling until it is.
+- GP8–GP11 — free (retired SPI/MCP3008)
+
+**SPI0 must stay disabled (`dtparam=spi=off` in `/boot/firmware/config.txt`).** Found and
+fixed 2026-08-20: even with the MCP3008 physically removed, `dtparam=spi=on` still made the
+kernel unconditionally reserve GP7/CE1, GP8/CE0, GP9/MISO, GP10/MOSI, GP11/SCLK as SPI0
+hardware pins at boot — regardless of whether anything used the bus. This crash-looped
+`willy-rover.service` on every single restart: `Encoders.start()`'s `GPIO.setup(config.
+ENCODER_INT_PIN, ...)` hit `lgpio.error: 'GPIO busy'` deterministically (confirmed even with
+the service fully stopped, via a standalone script — not a restart race), and the uncaught
+exception's native unwind then crashed the process with a different signal each time (SIGABRT/
+SIGSEGV/SIGBUS), which is why it initially looked like two unrelated bugs. Verify with
+`sudo cat /sys/kernel/debug/gpio | grep spi0` before reusing any of GP7–GP11 — it should show
+nothing if SPI0 is genuinely off.
 
 **Serial console must stay disabled.** GP14 and GP15 are UART0 TXD/RXD. With
 the console enabled the kernel drives GP14 as an output onto the left sonar's
