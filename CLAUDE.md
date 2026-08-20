@@ -44,20 +44,26 @@ self-test expected-device set) until it's actually connected — flip it on then
 See `docs/WildWilly_Software_Design_v1.0.md` §4.1 for the integration story and the open
 VIN-vs-VUSB low-voltage-threshold question that needs live testing, not a guessed number.
 
-**Witty Pi 5 install/config runbook — not yet run, execute once the HAT is physically on:**
+**Witty Pi 5 install/config runbook — install done 2026-08-20, interactive config still not
+run.** `wp5` (CLI) + `wp5d` (daemon, `systemctl status wp5d.service`) are installed and the
+daemon is running, confirmed talking to the HAT (`/var/log/wp5d.log`: "Connected to Witty Pi
+5", firmware v1.4). RTC has been synced (it read invalid time on first daemon start; now set
+from system/network time). **Still default/unconfigured**: power source priority, watchdog,
+and low-voltage threshold below have deliberately not been touched yet — the interactive menu
+(`wp5`, options 1-14) can view live status (temp/V-USB/V-OUT/I-OUT) just by launching it, before
+selecting anything, which is safe; committing to any of options 4-13 is not.
 ```
-wget https://www.uugear.com/repo/WittyPi5/wp5_latest.deb
-sudo apt install ./wp5_latest.deb
-wp5   # interactive menu:
+wp5   # interactive menu, still to run:
       #   Other settings... -> Power source priority -> V-USB first (matches actual wiring)
       #   Other settings... -> Watchdog -> Enabled, pick a missed-heartbeat count once
       #     witty_pi.py's heartbeat cadence is live-observed (don't guess a number blind)
       #   Do NOT set the low-voltage threshold (options 7/8) yet -- confirmed VIN-specific
       #     behavior per the manual; verify it does something sane on VUSB before relying on it
-i2cdetect -y 1   # confirm 0x51 answers
 ```
 Then in the repo: set `config.ENABLE_WITTY_PI=True`, `git commit`/push/pull-on-rover, restart
 `willy-rover.service`, and confirm the self-test still passes with 0x51 now in the expected set.
+See the Power section below for a live under-voltage issue found the same day — resolve that
+(likely a physical cable/connector check) before trusting any threshold configured here.
 
 ---
 
@@ -157,6 +163,20 @@ driver/package mismatch, not a hardware fault: the board had the Hailo-8-only pa
 `vision.py`/`ObjectDetector` has not yet been wired to use it — still CPU-only YOLOv8,
 `ENABLE_OBJECT_RETRIEVAL=False`. When integrating it:
 
+**Camera orientation — corrected 2026-08-20, was wrong in code.** There are two physical
+cameras: the Arducam OV9281 (USB, `config.CAMERA_DEVICE=/dev/video8`) and a Pi Camera Module
+(CSI, imx708, `rp1-cfe` driver, `/dev/video0`-`7`). Owner confirmed **the Arducam is mounted
+REAR-facing and the CSI camera is FRONT-facing** — the opposite of what `vision.py`'s
+`_CAMERA_ID='front'` label and `retrieval_task.py`'s detect-then-drive-forward logic both
+assume. `ENABLE_OBJECT_RETRIEVAL` was briefly flipped True and live-verified working end-to-end
+(model, cv2 5.0.0, ultralytics 8.4.115, real frame captured, mean brightness confirmed non-zero
+— the full pipeline genuinely works), then reverted immediately once the orientation was
+flagged, since driving toward what a rear camera sees would misdirect retrieval/pursuit. Do not
+re-enable until `config.CAMERA_DEVICE` points at the CSI camera instead and that capture path
+is verified — **untested**, and likely needs a different approach than the Arducam's cv2 V4L2+
+MJPG path, since CSI cameras via `rp1-cfe` often need libcamera/picamera2 rather than plain
+V4L2. When integrating it:
+
 - **Reflex layer** — sonars, encoders, INA260 current monitors. Deterministic,
   drives the emergency stop. Must never wait on vision.
 - **Deliberative layer** — the NPU. Frame-rate at best, variable latency,
@@ -165,6 +185,15 @@ driver/package mismatch, not a hardware fault: the board had the Hailo-8-only pa
 
 An obstacle stop must never depend on a detection frame arriving. Vision
 informs navigation; it does not gate the stop.
+
+**Autonomous ROAM gated off pending vision — added 2026-08-20.** `brain.py::_idle()`'s
+idle-timeout auto-wander and the post-charging auto-resume (`_tick()`'s `DOCK` handling) both
+now check `config.ENABLE_AUTONOMOUS_ROAM` (default `False`) before calling `_go('ROAM')`.
+Found live: with only sonar for obstacle sensing (no vision yet), Willy was wandering
+unprompted and tripping repeated `STALL_FAULT`s against things sonar didn't catch — sometimes
+5 of 6 wheels at once. Owner decision: no unprompted autonomous driving until vision is live-
+verified working (see the camera-orientation note above — not there yet). Manual/voice-
+commanded driving is unaffected; this only blocks the unprompted idle/post-charge wander.
 
 ---
 
@@ -183,8 +212,28 @@ informs navigation; it does not gate the stop.
   protection is firmware-only via the 0x44 INA260. There is no hardware
   supervisor behind it. **The Witty Pi 5 HAT+ (above) is the intended fix for
   this** — its own MCU can force a real power cycle independent of whatever
-  the Pi's own OS/kernel is doing — but it isn't installed yet; don't treat
-  this gap as closed until it is, live-verified.
+  the Pi's own OS/kernel is doing — now installed and software-configured
+  (see below), but the underlying undervoltage gap itself is still open.
+
+**Live under-voltage found 2026-08-20 — open, not yet root-caused to a physical fix.**
+`dmesg -T | grep -i voltage` shows `hwmon3: Under-voltage detected!` / `Voltage normalised`
+cycling every 15-30s continuously, confirmed present even with `willy-rover.service` fully
+stopped (owner caught this independently; not driven by rover software/CPU load). Yet Witty Pi
+5's own live telemetry (`wp5`'s status header, safe to read without changing any setting) shows
+healthy steady-state readings both times checked: `V-USB: 5.13V / 5.10V`, `V-OUT: 5.113V /
+5.131V`, well above the Pi's 4.85V brownout floor. That combination — healthy point-in-time
+snapshots but a continuously-firing kernel detector — means either brief sub-second sags too
+fast for `wp5`'s polling to catch, or a marginal physical connection upstream of the HAT (the
+USB-C cable/power source feeding V-USB, or the connector seating). **Needs physical
+inspection, not more software** — this is where the "Worst-case 5V draw already near 9A
+against an 8A UBEC rating" item above may be materializing in practice, notably even at idle
+baseline (no motors, no vision, no LLM load), suggesting the rail has little to no headroom
+left at all now that the AI HAT+2 shares it. Correlates directly with abnormally slow local-LLM
+voice responses (`intent=40.9s` vs. this repo's own documented ~15-20s expectation from the
+2026-08-15 voice latency work) — a throttled CPU from repeated under-voltage is the leading
+explanation; `vcgencmd get_throttled` reads `0x50000` (bits 16+18: under-voltage and throttling
+have occurred since boot — check the "currently active" bits 0-3 too before assuming this is
+fully historical).
 - A hard cut at the main switch or E-stop with the OS running risks filesystem
   corruption. The graceful path is `shutdown -h now` followed by Switch 2.
   Bulk capacitance cannot hold a Pi 5 up long enough to shut down — that would
