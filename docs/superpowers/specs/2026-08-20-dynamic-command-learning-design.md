@@ -51,6 +51,29 @@ Willy confirms back ("I'll remember that as 'clean sweep': go to the kitchen, th
 you. Say 'confirm' to save it.") before persisting — no macro is saved from a single ambiguous
 utterance.
 
+### 2.3.1 Reconciling with the existing FR-1900-006 teaching feature (found 2026-08-20)
+
+`voice.py::_maybe_learn()` already has a similar-sounding, already-shipped mechanism: saying
+*"when I say X, do Y"* today calls `memory_store.py::add_instruction(X, Y)`, storing `Y` as raw
+text with no structure, no validation, and no confirmation step. Later, when the trigger phrase
+recurs, that raw text is fed back into the local LLM as extra context (`get_context_for()`),
+which must freshly reinterpret what `Y` means *at that moment* — nothing guarantees it resolves
+to a real or safe intent. This predates this spec and is a materially less safe mechanism than
+§2's macro system (structured steps, confirmed once, replayed deterministically forever after by
+calling the same dispatch path — never re-interpreted).
+
+Both mechanisms currently listen for the identical phrasing (`"when I say ..., do ..."`), and
+`_maybe_learn()` runs *before* the local-LLM intent interpretation in `voice.py`'s handling order
+— so as written today, it would short-circuit and swallow every attempt to define a macro before
+the new `define_macro` intent (§2.3) ever saw it. **The implementation must replace
+`_maybe_learn()`'s instruction-teaching branch with a call into the new macro system**, keeping
+the same trigger phrasing so nothing changes from the owner's side, but switching the underlying
+behavior from "store raw text, reinterpret later" to "decompose into a structured, validated,
+confirmed step list once, then replay deterministically." `_maybe_learn()`'s *other* branch
+(`"remember that X"` → `add_fact()`, general fact memory) is unrelated and stays untouched.
+Any instructions already stored via the old mechanism should be left alone (not silently
+migrated/executed as macros without the owner re-confirming them under the new, safer flow).
+
 ### 2.4 Running a macro
 
 A new `MacroRunner` (small, in `brain.py` or its own `macro_runner.py`) is invoked when a spoken
