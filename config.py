@@ -305,6 +305,13 @@ MEMORY_DB_PATH='memory.db'
 MEMORY_REPLAY_SIMILARITY_FLOOR=0.6  # FR-1900-003: below this, report mismatch rather than replay
 STUCK_TIMEOUT=3.0; BACK_UP_TIME=0.8; TURN_TIME_90=1.2; IDLE_TIMEOUT=30.0
 
+# Owner decision 2026-08-20: autonomous ROAM relies on sonar alone for obstacle avoidance (no
+# vision yet, ENABLE_OBJECT_RETRIEVAL above is still False) and was wandering into things it
+# couldn't sense, tripping repeated STALL_FAULTs. Gate _idle()'s auto-ROAM behind this flag —
+# default off — until vision is live-verified; flip to True then. Manual/voice-commanded
+# driving is unaffected, this only blocks the unprompted idle-timeout wander.
+ENABLE_AUTONOMOUS_ROAM=False
+
 def validate():
     """Configuration self-test (2026-08-08 external code audit's P2 item): config.py has grown
     into the central hardware/software contract, large enough that a copy-paste or typo drift

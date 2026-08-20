@@ -488,7 +488,7 @@ class RoverBrain:
         if self._state=='DOCK':
             if self.adc.is_charging:
                 self.safety.stop(); self._upd('idle',f'Charging {bat}%',d,tilt)
-                if bat>=95: self._go('ROAM')
+                if config.ENABLE_AUTONOMOUS_ROAM and bat>=95: self._go('ROAM')
                 return
 
         # FR-000 Directive 6 (v2.2): voice-queued task-level commands are only ever picked up
@@ -701,7 +701,8 @@ class RoverBrain:
             msg=f'New email from {s["from"]}: {s["subject"]}'
             log.info(msg)
             if self.voice.available: self.voice.speak(msg)  # FR-2000-003: surfaced, never acted on
-        if self._idle_t>=config.IDLE_TIMEOUT: self._idle_t=0.0; self._go('ROAM')
+        if config.ENABLE_AUTONOMOUS_ROAM and self._idle_t>=config.IDLE_TIMEOUT:
+            self._idle_t=0.0; self._go('ROAM')
 
     def _roam(self,d,tilt):
         f=d['front']
