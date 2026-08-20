@@ -111,6 +111,16 @@ front and right sonar read fine, left returns garbage.
 
 ## Hardware pitfalls that have already cost time
 
+- **Arm servo connector(s) found disconnected under the cover, 2026-08-20 — unresolved,
+  physical fix needed.** Voice-triggered `arm_home`/`wave` both dispatched correctly in
+  software (heard, matched, `brain.py::_drain_voice_commands()` called `arm.center_all()`/
+  `_start_wave()`, TTS ack played) but produced zero physical motion. Owner felt the wrist
+  joint resist manual movement (taut, consistent with a powered/holding servo elsewhere on the
+  chain), then opened the cover and found some servo connector(s) actually unplugged — this is
+  the real cause, not the live under-voltage issue investigated the same day (that remains a
+  separate, still-open item — see Power section). Re-seat the disconnected connector(s) and
+  retest with a voice `arm_home` before assuming this is closed; which specific joint(s) were
+  disconnected was not identified before stopping for the day.
 - **Motor− (white) never lands on an MCP23017 GPIO.** It goes to a FeatherWing
   motor terminal. A motor lead on a logic pin destroyed the first MCP23017.
 - **ADS1115 A0 must read 2.76–3.06V before the ADC is powered.** It sits on a
