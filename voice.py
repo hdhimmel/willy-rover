@@ -36,27 +36,67 @@ _SAFETY_PATTERN=re.compile(
 # the doc. Reply text is empty for shutdown/diagnostics because brain.py's own handler for those
 # speaks its own (required) message immediately on dispatch -- an extra ack here would either be
 # redundant or, for shutdown, actively confusing right before the confirmation prompt.
+# Real speech carries filler the original patterns rejected: "Willie, stop", "can you stow the
+# arm", "what's the battery at please". Because _fast_path() uses fullmatch (deliberately -- see
+# above), every one of those missed and fell through to the local LLM. That was an acceptable
+# trade when this was written against an assumed 15-20s LLM; the LLM was measured live on this
+# rover 2026-08-21 at 74.2s for a single intent (total round trip 84.9s), so a miss is now roughly
+# 15x worse than assumed and widening coverage matters far more than it did.
+_ADDRESS=r'(?:(?:hey |ok |okay )?willie(?:[,]? )|please |can you |could you |would you |'\
+          r'i want you to |go ahead and |lets |let\'s )*'
+_TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
+
+def _fp(core):
+    # fullmatch still: the whole utterance must be address + command + trailer and nothing else,
+    # so "don't stop" and "we should stop soon" still fall through rather than firing motion.
+    return re.compile(_ADDRESS+r'(?:'+core+r')'+_TRAILER,re.I)
+
+# TIER 1 -- consequence-free if mis-fired (he speaks, nothing moves). Widened aggressively:
+# the worst case is an unwanted spoken answer, versus 84.9s of silence for a miss.
+# TIER 2 -- motion/destructive. Cores deliberately left as narrow as they were; only the address
+# and trailer wrappers are new, so "Willie, turn left" works while "don't turn left" does not.
+# 'stop' sits in tier 2 by topic but is fail-safe in the same direction as a false positive
+# (stopping when not asked is harmless), so its core is widened too.
 _FAST_PATH_PATTERNS=[
-    (re.compile(r'stop|halt|freeze',re.I),'stop','Stopping.'),
-    (re.compile(r'(go |move |drive )?forward',re.I),'forward','Going forward.'),
-    (re.compile(r'(go |move |drive )?(reverse|backward|back up)',re.I),'reverse','Backing up.'),
-    (re.compile(r'turn left',re.I),'turn_left','Turning left.'),
-    (re.compile(r'turn right',re.I),'turn_right','Turning right.'),
-    (re.compile(r"how'?s your battery|battery status|battery level|how much charge( left)?",re.I),
-     'battery','Checking.'),
-    (re.compile(r'status report|how are you|are you (ok|okay)|status',re.I),'status','Checking.'),
-    (re.compile(r'where are you|what room (is this|are you in)',re.I),'where_are_you','Checking.'),
-    (re.compile(r'stow the arm|put your arm away|stow your arm',re.I),'arm_stow','Stowing the arm.'),
-    (re.compile(r'arm home|reset your arm|home your arm',re.I),'arm_home','Homing the arm.'),
-    (re.compile(r'start mapping|begin mapping|map this room|start the map',re.I),'map','Starting the map.'),
-    (re.compile(r'stop mapping|end mapping|finish mapping|stop the map',re.I),'stop_map','Stopping the map.'),
-    (re.compile(r'shut down|power off|go to sleep',re.I),'shutdown',''),
-    (re.compile(r'run diagnostics|self test|run a self test|run self test',re.I),'diagnostics',''),
+    # --- tier 2: motion / destructive, narrow cores ---
+    (_fp(r'stop|halt|freeze|hold (it|on|up)|stop moving|stand still|whoa'),'stop','Stopping.'),
+    (_fp(r'(?:go |move |drive )?forward'),'forward','Going forward.'),
+    (_fp(r'(?:go |move |drive )?(?:reverse|backward|back up)'),'reverse','Backing up.'),
+    (_fp(r'turn left'),'turn_left','Turning left.'),
+    (_fp(r'turn right'),'turn_right','Turning right.'),
+    (_fp(r'shut down|power off|go to sleep'),'shutdown',''),
+    # --- tier 1: speech-only, widened ---
+    (_fp(r"(?:how'?s|hows|what'?s|whats|check) (?:your |the )?battery(?: (?:level|status|at|doing))?|"
+         r"battery (?:status|level|check)|how much (?:charge|battery|power)(?: (?:left|is left|do you have))?|"
+         r"are you charged"),'battery','Checking.'),
+    (_fp(r'status(?: report)?|how are you(?: doing| feeling)?|are you (?:ok|okay|alright|good)|'
+         r"what'?s your status|report"),'status','Checking.'),
+    (_fp(r'where are you|what room (?:is this|are you in)|which room (?:is this|are you in)|'
+         r"where(?:'?s| is) this|do you know where you are"),'where_are_you','Checking.'),
+    (_fp(r'what (?:do|can) you see|what'r"'"r's (?:in front of you|out there|there)|'
+         r'look around|describe what you see|tell me what you see'),'what_do_you_see','Looking.'),
+    (_fp(r'wave(?: hello| hi| at me)?|say (?:hi|hello)|give (?:me )?a wave'),'wave',''),
+    (_fp(r'stow (?:the|your) arm|put your arm away|arm away'),'arm_stow','Stowing the arm.'),
+    (_fp(r'arm home|reset your arm|home (?:the|your) arm'),'arm_home','Homing the arm.'),
+    (_fp(r'(?:start|begin) (?:mapping|the map)|map this room|start mapping this room'),
+     'map','Starting the map.'),
+    (_fp(r'(?:stop|end|finish) (?:mapping|the map)'),'stop_map','Stopping the map.'),
+    (_fp(r'run (?:a )?diagnostics?|(?:run )?(?:a )?self test|diagnostics|check yourself'),
+     'diagnostics',''),
 ]
 
 _ACK_TONE_S=0.18      # wake-chirp duration. NOT skipped from capture -- see _handle_wake()
 
-_TIME_PATTERN=re.compile(r"what'?s the time|what is the time|what time is it|current time|do you (know|have) (what )?the time( it is)?",re.I)
+# Widened 2026-08-21 for the same reason as _FAST_PATH_PATTERNS, plus one real failure: a clipped
+# first word turned "what time is it" into "time is it", missed here, and cost 84.9s via the LLM.
+# The clipping is fixed, but tolerating a dropped leading word is cheap insurance -- worst case
+# for a false positive is that he tells you the time.
+_TIME_PATTERN=re.compile(
+    _ADDRESS+r"(?:"
+    r"(?:what'?s|whats|what is) the time|(?:what )?time is it|what time is it|"
+    r"(?:the )?current time|do you (?:know|have) (?:what )?the time(?: it is)?|"
+    r"(?:got|have) the time|tell me the time|time check|what hour is it"
+    r")"+_TRAILER,re.I)
 
 class VoicePipeline:
     def __init__(self,memory=None,cloud_ai=None,display=None,smart_home=None):
