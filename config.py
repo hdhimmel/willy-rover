@@ -308,7 +308,8 @@ YOLO_CONF_THRESHOLD=0.5
 # ENABLE_OBJECT_RETRIEVAL/CAMERA_DEVICE above -- those stay as the (currently-wrong-facing,
 # disabled) CPU/Arducam fallback path. This is a separate backend selector: when True, detect()
 # uses the CSI front camera (imx708) + Hailo NPU instead of the Arducam + CPU.
-ENABLE_HAILO_VISION=False
+ENABLE_HAILO_VISION=True  # 2026-08-21: live-verified working end-to-end: Hailo backend loads
+                          # correctly, real detection round-trip confirmed with camera_id='front'
 HAILO_YOLO_MODEL_PATH='/usr/share/hailo-models/yolov8m_h10.hef'
 HAILO_COCO_LABELS_PATH='models/coco.txt'
 RETRIEVAL_APPROACH_STOP_CM=25   # distance from target to halt before attempting grasp

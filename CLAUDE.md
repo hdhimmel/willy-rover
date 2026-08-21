@@ -179,11 +179,14 @@ REAR-facing and the CSI camera is FRONT-facing** — the opposite of what `visio
 assume. `ENABLE_OBJECT_RETRIEVAL` was briefly flipped True and live-verified working end-to-end
 (model, cv2 5.0.0, ultralytics 8.4.115, real frame captured, mean brightness confirmed non-zero
 — the full pipeline genuinely works), then reverted immediately once the orientation was
-flagged, since driving toward what a rear camera sees would misdirect retrieval/pursuit. Do not
-re-enable until `config.CAMERA_DEVICE` points at the CSI camera instead and that capture path
-is verified — **untested**, and likely needs a different approach than the Arducam's cv2 V4L2+
-MJPG path, since CSI cameras via `rp1-cfe` often need libcamera/picamera2 rather than plain
-V4L2. When integrating it:
+flagged, since driving toward what a rear camera sees would misdirect retrieval/pursuit.
+
+**CSI/Hailo vision backend — live-verified working 2026-08-21.** The orientation correction above
+led to CSI front camera + Hailo-10H backend integration (using picamera2.devices.Hailo for NPU
+access, CSI imx708 for capture). Integration complete and live-verified end-to-end.
+`config.ENABLE_HAILO_VISION=True` (enabled 2026-08-21). Hailo backend loads correctly at startup;
+real detection round-trips confirmed working with `camera_id='front'` on the CSI camera.
+Reflex/deliberative layer separation still applies:
 
 - **Reflex layer** — sonars, encoders, INA260 current monitors. Deterministic,
   drives the emergency stop. Must never wait on vision.
