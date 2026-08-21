@@ -266,7 +266,12 @@ ENABLE_VOICE=True
 # deployed 2026-08-15 — see wakeword_data/hey_willie_model/ for training artifacts) — replaced
 # the earlier "Hey Jarvis" placeholder; this is the real trained wake phrase, not a stand-in.
 WAKEWORD_MODEL_PATH='models/hey_willie.onnx'; WAKEWORD_THRESHOLD=0.5
-WHISPER_MODEL_SIZE='small.en'  # faster-whisper model name. NOTE voice.py loads this with
+WHISPER_MODEL_SIZE='base.en'   # 2026-08-21: was 'small.en'. Benchmarked on this rover against a
+                               # real 1.21s "what time is it" clip, service stopped: small.en
+                               # 5.71s vs base.en 1.88s -- 3x faster for an identical, correct
+                               # transcription. Pre-downloaded into ~/.cache/huggingface/hub
+                               # before flipping (see the local_files_only note below).
+                               # faster-whisper model name. NOTE voice.py loads this with
                                # local_files_only=True, so changing it to a size that is not
                                # already in ~/.cache/huggingface/hub RAISES, gets caught by
                                # _load_models()'s except, and silently disables voice entirely.
