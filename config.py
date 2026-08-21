@@ -266,7 +266,17 @@ ENABLE_VOICE=True
 # deployed 2026-08-15 — see wakeword_data/hey_willie_model/ for training artifacts) — replaced
 # the earlier "Hey Jarvis" placeholder; this is the real trained wake phrase, not a stand-in.
 WAKEWORD_MODEL_PATH='models/hey_willie.onnx'; WAKEWORD_THRESHOLD=0.5
-WHISPER_MODEL_SIZE='small.en'  # faster-whisper model name
+WHISPER_MODEL_SIZE='small.en'  # faster-whisper model name. NOTE voice.py loads this with
+                               # local_files_only=True, so changing it to a size that is not
+                               # already in ~/.cache/huggingface/hub RAISES, gets caught by
+                               # _load_models()'s except, and silently disables voice entirely.
+                               # Pre-download on the rover first, then change this.
+WHISPER_CPU_THREADS=3          # 2026-08-21: was unset, so faster-whisper took all 4 cores. That
+                               # all-core burst is the largest current spike this rover makes and
+                               # it was browning the 5V rail out mid-utterance (EXT5V dipping past
+                               # the Witty Pi cutoff -> hard power-off, reproducible by asking him
+                               # the time). Leaving a core free trades a little STT latency for a
+                               # smaller peak draw. Raise back to 4 once the rail is fixed.
 PIPER_VOICE_PATH='models/piper/en_US-amy-medium.onnx'
 LOCAL_LLM_MODEL_PATH='models/llama-3.2-3b-instruct-q4.gguf'  # llama.cpp gguf
 LOCAL_LLM_CONFIDENCE_FLOOR=0.55  # FR-1400-001: below this, offer cloud AI fallback if enabled

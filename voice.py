@@ -107,8 +107,10 @@ class VoicePipeline:
             # revision every time, violating FR-1500-002's "no cloud dependency for basic STT"
             # and adding a startup network dependency. Cache already exists at
             # ~/.cache/huggingface/hub/models--Systran--faster-whisper-small.en (found 2026-08-09).
+            # cpu_threads: unset used to mean "take all 4 cores", whose current spike was browning
+            # out the 5V rail mid-utterance and hard-killing the rover (2026-08-21). See config.
             self._whisper=WhisperModel(config.WHISPER_MODEL_SIZE,device='cpu',compute_type='int8',
-                                        local_files_only=True)
+                                        local_files_only=True,cpu_threads=config.WHISPER_CPU_THREADS)
             self._local_ai=LocalAIProvider()  # §14 -- was a bare Llama(...) instance here
             if not self._local_ai.available: raise RuntimeError('local LLM failed to load')
         except Exception as e:
