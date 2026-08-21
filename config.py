@@ -57,7 +57,7 @@ STEER_LF=0; STEER_RF=1; STEER_LM=2; STEER_RM=3; STEER_LR=4; STEER_RR=5
 SERVO_CENTER_US=1500; SERVO_MIN_US=1000; SERVO_MAX_US=2000
 SERVO_PWM_FREQ=50
 
-# Arm — PCA9685 @0x43, CH0-6, base->gripper order (§11.1). J1a/J1b (shoulder) are a mirrored
+# Arm — PCA9685 @0x43, CH1-7 (CH0 unused), base->gripper order (§11.1). J1a/J1b (shoulder) are a mirrored
 # pair driving one physical axis — see arm.py. Wider nominal range than steering (manufacturer
 # spec 500-2500us) though §11.5/§20.6 flag cheap-clone units may bind before the full sweep.
 # No per-joint safe limits, presets, or IK exist yet pending §20.6 bench calibration — arm.py is
@@ -126,18 +126,21 @@ ESTOP_LOG_INTERVAL_S=5.0 # safety.py throttles emergency_stop()'s own log line t
 # overcurrent trip thresholds exist anywhere in the documentation to hardcode a cutoff against.
 INA260_SERVO_ADDR=0x40; INA260_PI_ADDR=0x44; INA260_MOTOR_ADDR=0x45
 
-# Witty Pi 5 HAT+ (UUGear) — RTC and power management, 2026-08-20. Uses only SDA/SCL (per its own
-# user manual), no other GPIO — confirmed no conflict with anything else on this bus. NOT YET
-# PHYSICALLY INSTALLED as of this commit — ENABLE_WITTY_PI stays False (and WITTY_PI_ADDR is
-# excluded from brain.py's _EXPECTED_I2C self-test set) until the hardware is actually present;
-# flip it on then, not before, or startup self-test will report a real device as missing.
+# Witty Pi 5 HAT+ (UUGear) — RTC and power management. Uses only SDA/SCL (per its own user
+# manual), no other GPIO — confirmed no conflict with anything else on this bus. Physically
+# installed, `wp5`/`wp5d` software installed and configured 2026-08-21: power source priority
+# V-USB first (matches wiring), "default state when powered" set to ON with a 2s delay (so Willy
+# boots when power is connected rather than needing the HAT's physical button pressed), hardware
+# watchdog enabled at 200 missed heartbeats (~10-20s at brain.py's tick's ~50-100ms heartbeat
+# cadence — tolerant of ordinary hiccups, still catches a genuinely wedged kernel; see CLAUDE.md).
+# ENABLE_WITTY_PI now True — 0x51 is included in brain.py's _EXPECTED_I2C self-test set.
 # Wired via VUSB (USB-C, off the existing 5V/INA260_PI_ADDR-monitored rail), not VIN — the
 # manual documents its configurable low-voltage-threshold registers (#22/#23) as monitoring VIN
 # specifically; whether an equivalent threshold usefully applies to a dropping VUSB is NOT
 # confirmed and needs live testing, not an assumed number. The existing software battery-tier
 # system (config.BAT_SHUTDOWN_V et al., via the real battery-voltage ADC) remains the primary
 # safety mechanism regardless of how that resolves.
-ENABLE_WITTY_PI=False
+ENABLE_WITTY_PI=True
 WITTY_PI_ADDR=0x51
 
 ADS_ADDR=0x48; ADS_CH_BATTERY=0  # AIN0 only; charge-sense divider not yet wired

@@ -44,26 +44,23 @@ self-test expected-device set) until it's actually connected — flip it on then
 See `docs/WildWilly_Software_Design_v1.0.md` §4.1 for the integration story and the open
 VIN-vs-VUSB low-voltage-threshold question that needs live testing, not a guessed number.
 
-**Witty Pi 5 install/config runbook — install done 2026-08-20, interactive config still not
-run.** `wp5` (CLI) + `wp5d` (daemon, `systemctl status wp5d.service`) are installed and the
-daemon is running, confirmed talking to the HAT (`/var/log/wp5d.log`: "Connected to Witty Pi
-5", firmware v1.4). RTC has been synced (it read invalid time on first daemon start; now set
-from system/network time). **Still default/unconfigured**: power source priority, watchdog,
-and low-voltage threshold below have deliberately not been touched yet — the interactive menu
-(`wp5`, options 1-14) can view live status (temp/V-USB/V-OUT/I-OUT) just by launching it, before
-selecting anything, which is safe; committing to any of options 4-13 is not.
-```
-wp5   # interactive menu, still to run:
-      #   Other settings... -> Power source priority -> V-USB first (matches actual wiring)
-      #   Other settings... -> Watchdog -> Enabled, pick a missed-heartbeat count once
-      #     witty_pi.py's heartbeat cadence is live-observed (don't guess a number blind)
-      #   Do NOT set the low-voltage threshold (options 7/8) yet -- confirmed VIN-specific
-      #     behavior per the manual; verify it does something sane on VUSB before relying on it
-```
-Then in the repo: set `config.ENABLE_WITTY_PI=True`, `git commit`/push/pull-on-rover, restart
-`willy-rover.service`, and confirm the self-test still passes with 0x51 now in the expected set.
-See the Power section below for a live under-voltage issue found the same day — resolve that
-(likely a physical cable/connector check) before trusting any threshold configured here.
+**Witty Pi 5 install/config runbook — install + config both done, 2026-08-20/21.** `wp5` (CLI)
++ `wp5d` (daemon, `systemctl status wp5d.service`) are installed and running, confirmed talking
+to the HAT (`/var/log/wp5d.log`: "Connected to Witty Pi 5", firmware v1.4). RTC synced. Via
+`wp5`'s "Other settings..." submenu, configured 2026-08-21:
+- **Default state when powered → ON, 2s delay** — Willy now boots when power is connected
+  rather than requiring the HAT's physical button; the 2s delay is just a debounce against a
+  brief power blip triggering a full boot.
+- **Power source priority → V-USB first** (matches actual wiring).
+- **Watchdog → Enabled, 200 missed heartbeats** (~10-20s at `brain.py`'s tick's ~50-100ms
+  heartbeat cadence — tolerant of ordinary hiccups, still catches a genuinely wedged kernel).
+- **Low-voltage threshold (options 7/8) deliberately left untouched** — still confirmed
+  VIN-specific behavior per the manual; don't set this until it's verified to do something sane
+  on VUSB. The existing software battery-tier system (real ADC) remains primary regardless.
+
+`config.ENABLE_WITTY_PI=True` is now set, 0x51 is in `brain.py`'s self-test expected-device set.
+See the Power section below for a live under-voltage issue found 2026-08-20 — still open, needs
+a physical cable/connector check, independent of the above.
 
 ---
 
