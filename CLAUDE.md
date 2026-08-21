@@ -19,7 +19,7 @@ code needs fixing — every line below was confirmed on the bench.
 | 0x27 | MCP23017 | Encoder expander, 6 channels |
 | 0x40 | INA260 | Servo/steering 5V rail current |
 | 0x42 | PCA9685 | Steering servos, CH0–CH5 |
-| 0x43 | PCA9685 | Arm servos, CH0–CH6 |
+| 0x43 | PCA9685 | Arm servos, CH1–CH7 (CH0 unused, shifted 2026-08-21) |
 | 0x44 | INA260 | **Pi 5V rail** — SAFE_MODE brownout trip reads this |
 | 0x45 | INA260 | Motor 12V rail current |
 | 0x48 | ADS1115 | Battery voltage ADC, A0 |
@@ -149,8 +149,9 @@ citing the old, superseded wording:
 1. **Motor mapping — resolved.** 0x60 drives the LEFT side (LF/LM/LR),
    0x61 drives the RIGHT side (RF/RM/RR), one board per side. See
    `docs/WildWilly_Master_Hardware_Design_v2.0.md` §7.2.
-2. **Arm shoulder channels — resolved.** J1a=CH1, J1b=CH2, a mirrored pair
-   driving one physical axis: `J1b = 2×1500µs − J1a`. See §8.
+2. **Arm shoulder channels — resolved.** J1a=CH2, J1b=CH3 (channels shifted +1 on
+   2026-08-21 — was CH1/CH2 before), a mirrored pair driving one physical axis:
+   `J1b = 2×1500µs − J1a`. See §8.
 
 Still genuinely open (not a doc contradiction — a real unverified-hardware
 item, tracked in Master Hardware Design v2.0 §14):

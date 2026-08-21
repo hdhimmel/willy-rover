@@ -25,7 +25,8 @@ if not config.SIMULATE_HARDWARE:
 # clear the "IDLE-only, low risk" reasoning for leaving it alone assumed no systemd watchdog was
 # configured, which turned out to be wrong (WatchdogSec=500ms is real -- see FRD v3.1 G-5).
 class Arm:
-    # PCA9685 @0x43, CH0-6, base->gripper order (§11.1). No per-joint safe limits, preset poses,
+    # PCA9685 @0x43, CH1-7 (CH0 unused, shifted 2026-08-21), base->gripper order (§11.1). No
+    # per-joint safe limits, preset poses,
     # or IK exist yet — §20.6 bench calibration hasn't been run. This is a driver + primitive
     # set_pulse interface only, clamped to manufacturer defaults; arm_jog.py is the tool for
     # producing real calibration numbers. No autonomous motion is wired to this class anywhere.
