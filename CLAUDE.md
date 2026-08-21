@@ -223,25 +223,37 @@ commanded driving is unaffected; this only blocks the unprompted idle/post-charg
   the Pi's own OS/kernel is doing — now installed and software-configured
   (see below), but the underlying undervoltage gap itself is still open.
 
-**Live under-voltage found 2026-08-20 — open, not yet root-caused to a physical fix.**
-`dmesg -T | grep -i voltage` shows `hwmon3: Under-voltage detected!` / `Voltage normalised`
+**Live under-voltage found 2026-08-20, root-caused and fixed 2026-08-21 — degraded AMS1117-3.3.**
+`dmesg -T | grep -i voltage` showed `hwmon3: Under-voltage detected!` / `Voltage normalised`
 cycling every 15-30s continuously, confirmed present even with `willy-rover.service` fully
-stopped (owner caught this independently; not driven by rover software/CPU load). Yet Witty Pi
-5's own live telemetry (`wp5`'s status header, safe to read without changing any setting) shows
-healthy steady-state readings both times checked: `V-USB: 5.13V / 5.10V`, `V-OUT: 5.113V /
-5.131V`, well above the Pi's 4.85V brownout floor. That combination — healthy point-in-time
-snapshots but a continuously-firing kernel detector — means either brief sub-second sags too
-fast for `wp5`'s polling to catch, or a marginal physical connection upstream of the HAT (the
-USB-C cable/power source feeding V-USB, or the connector seating). **Needs physical
-inspection, not more software** — this is where the "Worst-case 5V draw already near 9A
-against an 8A UBEC rating" item above may be materializing in practice, notably even at idle
-baseline (no motors, no vision, no LLM load), suggesting the rail has little to no headroom
-left at all now that the AI HAT+2 shares it. Correlates directly with abnormally slow local-LLM
-voice responses (`intent=40.9s` vs. this repo's own documented ~15-20s expectation from the
-2026-08-15 voice latency work) — a throttled CPU from repeated under-voltage is the leading
-explanation; `vcgencmd get_throttled` reads `0x50000` (bits 16+18: under-voltage and throttling
-have occurred since boot — check the "currently active" bits 0-3 too before assuming this is
-fully historical).
+stopped (owner caught this independently; not driven by rover software/CPU load). The next day
+this had escalated into the isolated I2C bus itself flickering — repeated `i2cdetect -y 1`
+scans one second apart showed *different devices* dropping in and out unpredictably (0x27,
+0x42, 0x43, 0x44 flickering; 0x45/0x48/0x4a not appearing at all for a stretch), not a clean
+single-device failure. Owner found and reconnected two separate loose connectors along the way
+(a servo connector, then a "base side" power connector) — real issues, but neither one fully
+stabilized the bus. **Root cause**: the AMS1117-3.3 regulator (VCC2, feeding the isolated bus
+side) had degraded — the same failure category already documented above (fed the wrong
+voltage, or just failed from that historical stress), pulling down its shared upstream supply
+enough to also trip the Pi's own brownout detector, which is why both symptoms tracked
+together. **Fixed by physically swapping the part** — confirmed with 18 consecutive
+`i2cdetect -y 1` scans (10 before + 8 after reinstalling the ADS1115), one second apart, **zero
+flicker**, full 11-device set present every single time. The `hwmon3` under-voltage messages
+also stopped recurring the same moment (40+ min clean afterward, vs. cycling every 15-30s
+before) — one root cause explains both symptoms, not two separate issues.
+
+**Planned upgrade, not yet done**: replacing the AMS1117-3.3 (linear regulator, prone to this
+exact thermal-foldback failure mode) with a **TI TPSM84203EAB** integrated buck power module —
+4.5-28V input (would have tolerated the original 12V-miswiring failure mode instead of cooking
+itself), fixed 3.3V/1.5A output, ~95% efficiency, 3-pin TO-220 footprint confirmed by the owner
+as a direct drop-in for the current part, no rewiring needed. Do this before the replacement
+linear part fails the same way a third time.
+
+The abnormally slow local-LLM voice latency measured 2026-08-20 (`intent=40.9s` vs. this repo's
+own documented ~15-20s expectation from the 2026-08-15 voice latency work, `vcgencmd
+get_throttled` reading `0x50000`) was measured *before* this fix — likely explained by CPU
+throttling from the same under-voltage condition. Not yet re-measured post-fix; do that before
+any further voice-latency software work (see owner's 2026-08-20 "needs to be immediate" ask).
 - A hard cut at the main switch or E-stop with the OS running risks filesystem
   corruption. The graceful path is `shutdown -h now` followed by Switch 2.
   Bulk capacitance cannot hold a Pi 5 up long enough to shut down — that would
