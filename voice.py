@@ -54,7 +54,7 @@ _FAST_PATH_PATTERNS=[
     (re.compile(r'run diagnostics|self test|run a self test|run self test',re.I),'diagnostics',''),
 ]
 
-_ACK_SKIP_S=0.30      # wake-chirp duration + margin; capture frames inside this are discarded
+_ACK_TONE_S=0.18      # wake-chirp duration. NOT skipped from capture -- see _handle_wake()
 
 _TIME_PATTERN=re.compile(r"what'?s the time|what is the time|what time is it|current time|do you (know|have) (what )?the time( it is)?",re.I)
 
@@ -181,7 +181,7 @@ class VoicePipeline:
         path=os.path.join(os.path.dirname(os.path.abspath(__file__)),config.VOICE_ACK_PATH)
         if not os.path.exists(path):
             import wave
-            sr=16000; dur=_ACK_SKIP_S*0.6
+            sr=16000; dur=_ACK_TONE_S
             t=np.linspace(0,dur,int(sr*dur),endpoint=False)
             env=np.minimum(1.0,np.minimum(t,dur-t)*40.0)  # fade both ends, else it clicks
             tone=0.22*env*np.sin(2*np.pi*880*t)
@@ -210,9 +210,14 @@ class VoicePipeline:
         if self.display: self.display.update_state(state='listening',status='Listening...')
         self._play_ack()
         fps=16000.0/frame_len
-        # Discard the frames the chirp plays over: no echo cancellation on this puck, so they'd
-        # be captured and handed to Whisper as part of the command.
-        for _ in range(int(_ACK_SKIP_S*fps)): stream.read(frame_len)
+        # NOTE: capture starts immediately. An earlier version discarded _ACK_SKIP_S of frames
+        # here so the chirp wouldn't be recorded (no echo cancellation on this puck) -- that was
+        # wrong and shipped a real regression: people start speaking the instant the wake word
+        # fires, so those frames hold the first word. Live 2026-08-21 it turned "what time is it"
+        # into "Time is it.", which then missed _fast_path()'s fullmatch and fell through to the
+        # local LLM: 84.9s total (intent=74.2s) instead of a sub-second regex hit. The chirp is a
+        # short 880Hz tone, not speech -- Whisper's vad_filter drops it, and a pure tone cannot
+        # transcribe into words, so letting it into the buffer is much safer than losing audio.
         max_frames=int(config.VOICE_CAPTURE_MAX_S*fps)
         min_frames=int(config.VOICE_CAPTURE_MIN_S*fps)
         end_frames=max(1,int(config.VOICE_ENDPOINT_SILENCE_S*fps))
