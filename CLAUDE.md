@@ -184,9 +184,23 @@ flagged, since driving toward what a rear camera sees would misdirect retrieval/
 
 **CSI/Hailo vision backend — live-verified working 2026-08-21.** The orientation correction above
 led to CSI front camera + Hailo-10H backend integration (using picamera2.devices.Hailo for NPU
-access, CSI imx708 for capture). Integration complete and live-verified end-to-end.
-`config.ENABLE_HAILO_VISION=True` (enabled 2026-08-21). Hailo backend loads correctly at startup;
-real detection round-trips confirmed working with `camera_id='front'` on the CSI camera.
+access, CSI imx708 for capture). `config.ENABLE_HAILO_VISION=True` (enabled 2026-08-21).
+Verified by a standalone run on the rover (`venv/bin/python3`, **service stopped**): backend
+loads (`available: True`, 80 labels, `(640,640)` input shape) and a real detection round-trip
+succeeded with `camera_id='front'`. Not yet covered by that: startup under the live
+`willy-rover.service` (alongside the pygame/SDL display and voice audio stack) and per-tick
+timing against `WatchdogSec=500ms` — `detect()` runs synchronously on the tick thread, so watch
+for `TICK_OVERRUN` during the first mapping/pursuit session.
+
+**This flag does more than swap backends.** `_enabled` is `ENABLE_HAILO_VISION or
+ENABLE_OBJECT_RETRIEVAL`, so `detector.available` is now True in production for the first time —
+which activates vision-gated behaviour that was previously dead: voice `come_here`/`follow`
+(`PursuitTask`) and `retrieve` (`RetrievalTask`, which is not gated on `available` at all) now
+genuinely drive the rover. Both steer on `vision.py::localize()`, whose `_ASSUMED_HFOV_DEG`/
+`_FOCAL_PX_ESTIMATE` are still uncalibrated Arducam-era estimates against a 1280-wide frame, so
+ranges read short — conservative for stopping, but a grasp can fire while still out of reach.
+Worth a bench check against the imx708 before trusting a distance.
+
 Reflex/deliberative layer separation still applies:
 
 - **Reflex layer** — sonars, encoders, INA260 current monitors. Deterministic,

@@ -307,8 +307,15 @@ YOLO_CONF_THRESHOLD=0.5
 # ENABLE_OBJECT_RETRIEVAL/CAMERA_DEVICE above -- those stay as the (currently-wrong-facing,
 # disabled) CPU/Arducam fallback path. This is a separate backend selector: when True, detect()
 # uses the CSI front camera (imx708) + Hailo NPU instead of the Arducam + CPU.
-ENABLE_HAILO_VISION=True  # 2026-08-21: live-verified working end-to-end: Hailo backend loads
-                          # correctly, real detection round-trip confirmed with camera_id='front'
+# NOT ONLY a backend selector in effect, though: vision.py's _enabled is (this OR
+# ENABLE_OBJECT_RETRIEVAL), so turning this on also makes detector.available True for the first
+# time -- which arms the vision-gated behaviours that were dead while both flags were False:
+# voice come_here/follow (PursuitTask) and retrieve (RetrievalTask, not gated on available at
+# all) will now actually drive the rover, steering on vision.py::localize()'s uncalibrated
+# distance/bearing estimates. See CLAUDE.md's CSI/Hailo note before trusting a range.
+ENABLE_HAILO_VISION=True  # 2026-08-21: live-verified end-to-end by a standalone run with the
+                          # service STOPPED: backend loads, real detection round-trip confirmed
+                          # with camera_id='front'. Startup under the live service not yet covered.
 HAILO_YOLO_MODEL_PATH='/usr/share/hailo-models/yolov8m_h10.hef'
 HAILO_COCO_LABELS_PATH='models/coco.txt'
 RETRIEVAL_APPROACH_STOP_CM=25   # distance from target to halt before attempting grasp
