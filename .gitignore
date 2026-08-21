@@ -30,6 +30,9 @@ venv/
 # AI model weights (too big for git)
 
 models/
+# ...except small static reference/label files that must ship with the code, not be separately
+# provisioned on the rover like the actual weight files above.
+!models/coco.txt
 
 *.gguf
 
@@ -47,3 +50,6 @@ logs/
 
 .lgd-nfy0
 
+
+# Worktrees (subagent-driven-development isolated workspaces)
+.worktrees/
