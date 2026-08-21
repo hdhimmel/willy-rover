@@ -36,7 +36,18 @@ if not os.environ.get('WILLY_SIMULATE'):
         except (FileNotFoundError,OSError):
             pass  # no /dev/i2c-1 at all -- also offline
         return False
-    if not _i2c_bus_online():
+    # Found 2026-08-21: a single pass through every address can transiently miss all of them at
+    # once during a brief startup-inrush moment even when the bus is genuinely healthy (this same
+    # session root-caused a real under-voltage issue separately -- fixed, but some residual
+    # transient sensitivity remains). A single unlucky check shouldn't be enough to declare the
+    # bus offline and silently degrade a fully-working rover -- retry a few times with a short
+    # gap first.
+    import time
+    _bus_online=False
+    for _attempt in range(3):
+        if _i2c_bus_online(): _bus_online=True; break
+        time.sleep(0.3)
+    if not _bus_online:
         print('I2C bus offline at startup (no expected device acked on bus 1) -- forcing '
               'WILLY_SIMULATE=1 for this run so the service comes up in a safe no-op state '
               'instead of crash-looping. Restart willy-rover.service once hardware is '
