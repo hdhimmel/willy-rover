@@ -301,6 +301,16 @@ ENABLE_OBJECT_RETRIEVAL=False  # 2026-08-20: briefly flipped True and live-verif
 CAMERA_DEVICE='/dev/video8'
 YOLO_MODEL_PATH='models/yolov8n.pt'
 YOLO_CONF_THRESHOLD=0.5
+# --- Hailo-10H vision backend, 2026-08-21. Pre-installed HEF confirmed present on this exact
+# rover (/usr/share/hailo-models/yolov8m_h10.hef, compiled for HAILO10H specifically -- verify
+# with `python3 -c "from picamera2.devices import hailo_architecture; print(hailo_architecture())"`
+# before trusting this path again if the OS image ever changes). Does NOT replace
+# ENABLE_OBJECT_RETRIEVAL/CAMERA_DEVICE above -- those stay as the (currently-wrong-facing,
+# disabled) CPU/Arducam fallback path. This is a separate backend selector: when True, detect()
+# uses the CSI front camera (imx708) + Hailo NPU instead of the Arducam + CPU.
+ENABLE_HAILO_VISION=False
+HAILO_YOLO_MODEL_PATH='/usr/share/hailo-models/yolov8m_h10.hef'
+HAILO_COCO_LABELS_PATH='models/coco.txt'
 RETRIEVAL_APPROACH_STOP_CM=25   # distance from target to halt before attempting grasp
 RETRIEVAL_GRASP_RETRIES=2       # FR-1700-005
 RETRIEVAL_PERSON_MAX_RANGE_CM=150  # FR-1700-008: hand-off proximity gate
