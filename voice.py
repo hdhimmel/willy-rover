@@ -262,12 +262,25 @@ class VoicePipeline:
         min_frames=int(config.VOICE_CAPTURE_MIN_S*fps)
         end_frames=max(1,int(config.VOICE_ENDPOINT_SILENCE_S*fps))
         thresh=max(config.VOICE_VAD_FLOOR,(self._noise_rms or 0.0)*config.VOICE_VAD_NOISE_MULT)
-        audio=[]; heard=False; silent=0
+        # The chirp is audible to our own mic (no echo cancellation). It must NOT be allowed to
+        # latch `heard`, or the speaker's natural pause right after it reads as end-of-utterance
+        # and capture cuts at min_frames while they are still talking -- live 2026-08-21 that
+        # truncated every command to 0.9s and Whisper returned nothing at all ("How can I help?").
+        # Its audio is still kept; only the endpoint decision ignores this window.
+        deaf_frames=int((_ACK_TONE_S+0.14)*fps) if config.VOICE_ACK_ENABLED else 0
+        # Two consecutive loud frames to latch, so a click or a single transient can't arm the
+        # endpointer either.
+        audio=[]; heard=False; silent=0; loud=0
         for i in range(max_frames):
             f,_=stream.read(frame_len); s=f.flatten(); audio.append(s)
             rms=float(np.sqrt(np.mean((s.astype(np.float32)/32768.0)**2)))
-            if rms>=thresh: heard=True; silent=0
-            elif heard: silent+=1
+            if i<deaf_frames: continue
+            if rms>=thresh:
+                loud+=1; silent=0
+                if loud>=2: heard=True
+            else:
+                loud=0
+                if heard: silent+=1
             if heard and silent>=end_frames and i>=min_frames: break
         pcm=np.concatenate(audio).astype(np.float32)/32768.0
         log.info('capture: %.1fs of %.1fs max (endpointed=%s)',

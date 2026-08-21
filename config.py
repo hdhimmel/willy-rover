@@ -295,7 +295,10 @@ VOICE_TONE_DEFAULT='neutral'  # 'neutral'|'funny'|'silly'|'bashful' — FR-1500-
 # power/throttling artifact the NPU spec (SS1) guessed at.
 VOICE_CAPTURE_MAX_S=4.0       # hard cap -- unchanged from the old fixed window, so a noisy room
                               # that never endpoints behaves exactly as before, never worse
-VOICE_CAPTURE_MIN_S=0.8       # never endpoint before this, covers a slow starter
+VOICE_CAPTURE_MIN_S=1.2       # never endpoint before this. Was 0.8, which live turned out to be
+                              # short enough that a premature endpoint cut mid-command and Whisper
+                              # returned nothing. Real commands ("what time is it") run ~1.2s of
+                              # speech, so this is a floor under the whole utterance, not padding.
 VOICE_ENDPOINT_SILENCE_S=0.6  # trailing silence that ends capture, once speech has been heard.
                               # Set >= VOICE_CAPTURE_MAX_S to disable endpointing entirely.
 VOICE_VAD_NOISE_MULT=2.5      # speech threshold = measured ambient floor x this
