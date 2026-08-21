@@ -54,6 +54,8 @@ _FAST_PATH_PATTERNS=[
     (re.compile(r'run diagnostics|self test|run a self test|run self test',re.I),'diagnostics',''),
 ]
 
+_ACK_SKIP_S=0.30      # wake-chirp duration + margin; capture frames inside this are discarded
+
 _TIME_PATTERN=re.compile(r"what'?s the time|what is the time|what time is it|current time|do you (know|have) (what )?the time( it is)?",re.I)
 
 class VoicePipeline:
@@ -71,6 +73,7 @@ class VoicePipeline:
         self.stop_requested=threading.Event()
         self._running=False; self._thread=None; self._speaker_thread=None
         self._wakeword=None; self._whisper=None; self._local_ai=None
+        self._noise_rms=None  # ambient floor, maintained by _update_noise() on the wake loop
         # No echo cancellation on this mic+speaker puck — TTS playback leaks straight back into
         # capture, gets transcribed as a new "command", and self-triggers another AI round-trip
         # forever (found 2026-08-15: "One moment, checking..." looping on its own echo, deaf to
@@ -151,21 +154,77 @@ class VoicePipeline:
                     frame,_=stream.read(frame_len)
                     if self._speaking.is_set():
                         continue  # still drain the buffer, just don't score our own echo
-                    scores=self._wakeword.predict(frame.flatten())
+                    flat=frame.flatten()
+                    self._update_noise(flat)
+                    scores=self._wakeword.predict(flat)
                     if max(scores.values(),default=0.0)>=config.WAKEWORD_THRESHOLD:
                         self._handle_wake(stream,frame_len,time.time())
         except Exception as e:
             log.error(f'Voice input stream failed, pipeline stopping: {e}')
             self._running=False
 
+    def _update_noise(self,samples):
+        # Ambient floor for endpointing, tracked continuously on the wake-scoring loop rather
+        # than sampled at capture start: by then the speaker is usually already talking, which
+        # would set the threshold above their own voice and silently disable endpointing (found
+        # in simulation 2026-08-21 before this ever ran on hardware). Asymmetric EMA -- rises
+        # slowly, falls fast -- so it tracks the room's floor, not speech peaks.
+        rms=float(np.sqrt(np.mean((samples.astype(np.float32)/32768.0)**2)))
+        if self._noise_rms is None: self._noise_rms=rms
+        else: self._noise_rms+=(0.02 if rms>self._noise_rms else 0.25)*(rms-self._noise_rms)
+
+    def _ensure_ack_wav(self):
+        # Generated rather than provisioned: models/ is gitignored, and a 4KB tone doesn't belong
+        # in git anyway. Written once, then reused.
+        path=os.path.join(os.path.dirname(os.path.abspath(__file__)),config.VOICE_ACK_PATH)
+        if not os.path.exists(path):
+            import wave
+            sr=16000; dur=_ACK_SKIP_S*0.6
+            t=np.linspace(0,dur,int(sr*dur),endpoint=False)
+            env=np.minimum(1.0,np.minimum(t,dur-t)*40.0)  # fade both ends, else it clicks
+            tone=0.22*env*np.sin(2*np.pi*880*t)
+            os.makedirs(os.path.dirname(path),exist_ok=True)
+            with wave.open(path,'wb') as w:
+                w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
+                w.writeframes((tone*32767).astype(np.int16).tobytes())
+        return path
+
+    def _play_ack(self):
+        # FR-1500 perceived latency. Popen, not run: this must never delay the capture it
+        # precedes. Failure here is cosmetic only, so it's logged at info and swallowed.
+        if not config.VOICE_ACK_ENABLED: return
+        try:
+            subprocess.Popen(['pw-play',self._ensure_ack_wav()],
+                              stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        except Exception as e:
+            log.info(f'Wake ack skipped: {e}')
+
     def _handle_wake(self,stream,frame_len,t_wake):
         # FR-1500-001 satisfied (wake word seen) — now capture an utterance and process it.
-        # Kept simple: fixed-length capture window rather than VAD-based endpointing.
+        # Endpointed capture (2026-08-21, was a fixed 4s window): ends once the speaker stops,
+        # so a short command no longer pays a long command's latency. Falls back to the old
+        # behaviour exactly -- a full VOICE_CAPTURE_MAX_S window -- whenever endpointing can't
+        # decide (nothing above threshold, or a room noisy enough that nothing reads as silence).
         if self.display: self.display.update_state(state='listening',status='Listening...')
-        audio=[]
-        for _ in range(int(4.0*16000/frame_len)):  # ~4s window
-            f,_=stream.read(frame_len); audio.append(f.flatten())
+        self._play_ack()
+        fps=16000.0/frame_len
+        # Discard the frames the chirp plays over: no echo cancellation on this puck, so they'd
+        # be captured and handed to Whisper as part of the command.
+        for _ in range(int(_ACK_SKIP_S*fps)): stream.read(frame_len)
+        max_frames=int(config.VOICE_CAPTURE_MAX_S*fps)
+        min_frames=int(config.VOICE_CAPTURE_MIN_S*fps)
+        end_frames=max(1,int(config.VOICE_ENDPOINT_SILENCE_S*fps))
+        thresh=max(config.VOICE_VAD_FLOOR,(self._noise_rms or 0.0)*config.VOICE_VAD_NOISE_MULT)
+        audio=[]; heard=False; silent=0
+        for i in range(max_frames):
+            f,_=stream.read(frame_len); s=f.flatten(); audio.append(s)
+            rms=float(np.sqrt(np.mean((s.astype(np.float32)/32768.0)**2)))
+            if rms>=thresh: heard=True; silent=0
+            elif heard: silent+=1
+            if heard and silent>=end_frames and i>=min_frames: break
         pcm=np.concatenate(audio).astype(np.float32)/32768.0
+        log.info('capture: %.1fs of %.1fs max (endpointed=%s)',
+                  len(audio)/fps,config.VOICE_CAPTURE_MAX_S,heard and silent>=end_frames)
         if self.display: self.display.update_state(state='processing',status='Thinking...')
         self._process_utterance(pcm,t_wake)
 

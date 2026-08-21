@@ -272,6 +272,27 @@ LOCAL_LLM_MODEL_PATH='models/llama-3.2-3b-instruct-q4.gguf'  # llama.cpp gguf
 LOCAL_LLM_CONFIDENCE_FLOOR=0.55  # FR-1400-001: below this, offer cloud AI fallback if enabled
 AUDIO_INPUT_DEVICE=None; AUDIO_OUTPUT_DEVICE=None  # None = system default
 VOICE_TONE_DEFAULT='neutral'  # 'neutral'|'funny'|'silly'|'bashful' — FR-1500-008/009/010
+# --- Voice latency, 2026-08-21. Measured live on this rover, "What time is it?":
+# stt=12.1s intent=0.0s tts=4.6s total=16.7s. ~4.0s of that stt bucket was the old fixed capture
+# window sitting in silence long after the speaker had stopped -- a 1.3s command paid the same
+# 4s as a 4s one. Endpointing ends capture on trailing silence instead. NOTE the CPU was at a
+# full un-throttled 2.4GHz for that measurement, so the remaining cost is real compute, not the
+# power/throttling artifact the NPU spec (SS1) guessed at.
+VOICE_CAPTURE_MAX_S=4.0       # hard cap -- unchanged from the old fixed window, so a noisy room
+                              # that never endpoints behaves exactly as before, never worse
+VOICE_CAPTURE_MIN_S=0.8       # never endpoint before this, covers a slow starter
+VOICE_ENDPOINT_SILENCE_S=0.6  # trailing silence that ends capture, once speech has been heard.
+                              # Set >= VOICE_CAPTURE_MAX_S to disable endpointing entirely.
+VOICE_VAD_NOISE_MULT=2.5      # speech threshold = measured ambient floor x this
+VOICE_VAD_FLOOR=0.004         # absolute minimum threshold (RMS, 0-1) so a silent room can't set
+                              # a threshold low enough for its own noise to read as speech
+# Perceived latency: a short chirp the instant the wake word fires, so the interaction *starts*
+# immediately even though STT/TTS still take seconds behind it. This is the "Gotcha" idea the
+# Hailo NPU spec (SS6) deferred rather than rejected. Deliberately a tone and NOT speech: this
+# mic+speaker puck has no echo cancellation (see voice.py), so a spoken ack would be recorded
+# and transcribed as part of the command.
+VOICE_ACK_ENABLED=True
+VOICE_ACK_PATH='models/ack.wav'  # generated on first use, not provisioned -- models/ is gitignored
 
 # --- FR-1600 display expressions. Pure software, layered on the existing WillyFace state
 # machine (display.py) — no new hardware/model dependency, safe to default on.
