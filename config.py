@@ -284,10 +284,9 @@ IDLE_PERSONALITY_CYCLE_S=90  # FR-1600-007: how often the idle 'silly' animation
 # (/dev/video9 on the same bus is metadata-only, no Video Capture capability). Device-node
 # assignment isn't stable across reboots/kernel changes; re-check with
 # `v4l2-ctl --list-devices` / `v4l2-ctl -d /dev/videoN --info` before trusting this again.
-# An AI HAT+2 (Hailo-10H) was installed and PCIe-bonded 2026-08-16 (see CLAUDE.md) but
-# vision.py has not been wired to use it yet — still CPU-only YOLOv8 via ultralytics.
-# Swap in a .hef path + hailo runtime later; vision.py's detector interface is written to
-# make that a backend swap, not a rewrite.
+# An AI HAT+2 (Hailo-10H) was installed and PCIe-bonded 2026-08-16 (see CLAUDE.md) and vision.py
+# IS now wired to use it — see ENABLE_HAILO_VISION below (2026-08-21). The flags in this block
+# describe only the older CPU/Arducam fallback path, which that swap left untouched.
 ENABLE_OBJECT_RETRIEVAL=False  # 2026-08-20: briefly flipped True and live-verified the capture/
                                # inference pipeline works end-to-end (model, cv2 5.0.0,
                                # ultralytics 8.4.115, Arducam all confirmed present + a real
@@ -330,11 +329,15 @@ MEMORY_DB_PATH='memory.db'
 MEMORY_REPLAY_SIMILARITY_FLOOR=0.6  # FR-1900-003: below this, report mismatch rather than replay
 STUCK_TIMEOUT=3.0; BACK_UP_TIME=0.8; TURN_TIME_90=1.2; IDLE_TIMEOUT=30.0
 
-# Owner decision 2026-08-20: autonomous ROAM relies on sonar alone for obstacle avoidance (no
-# vision yet, ENABLE_OBJECT_RETRIEVAL above is still False) and was wandering into things it
-# couldn't sense, tripping repeated STALL_FAULTs. Gate _idle()'s auto-ROAM behind this flag —
-# default off — until vision is live-verified; flip to True then. Manual/voice-commanded
-# driving is unaffected, this only blocks the unprompted idle-timeout wander.
+# Owner decision 2026-08-20: autonomous ROAM relies on sonar alone for obstacle avoidance and was
+# wandering into things it couldn't sense, tripping repeated STALL_FAULTs. Gate _idle()'s
+# auto-ROAM behind this flag — default off. Manual/voice-commanded driving is unaffected, this
+# only blocks the unprompted idle-timeout wander.
+# NOTE 2026-08-21: the original note said "until vision is live-verified; flip to True then".
+# Vision now IS live-verified (ENABLE_HAILO_VISION above) — but that does NOT satisfy this gate
+# and this stays False. Vision feeds world_model.py for planning/classification only; it is
+# deliberately kept out of the reflex/obstacle path (see CLAUDE.md's "keep the NPU out of the
+# safety path"), so ROAM is still sonar-only for avoidance and the original reason is unchanged.
 ENABLE_AUTONOMOUS_ROAM=False
 
 def validate():

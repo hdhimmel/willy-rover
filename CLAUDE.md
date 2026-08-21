@@ -168,8 +168,9 @@ driver/package mismatch, not a hardware fault: the board had the Hailo-8-only pa
 (`hailo-all`) installed, whose driver's PCI ID table doesn't include the Hailo-10H's ID
 (`1e60:45c4`) — it loaded but silently never bound the device. Fixed by swapping to the
 `hailo-h10-all` package line (`h10-hailort`, `h10-hailort-pcie-driver`, `python3-h10-hailort`).
-`vision.py`/`ObjectDetector` has not yet been wired to use it — still CPU-only YOLOv8,
-`ENABLE_OBJECT_RETRIEVAL=False`. When integrating it:
+`vision.py`/`ObjectDetector` is now wired to use it (2026-08-21, `ENABLE_HAILO_VISION=True` —
+see the CSI/Hailo note below). The older CPU/ultralytics path against the Arducam remains in
+place as an unconditional fallback and stays off (`ENABLE_OBJECT_RETRIEVAL=False`).
 
 **Camera orientation — corrected 2026-08-20, was wrong in code.** There are two physical
 cameras: the Arducam OV9281 (USB, `config.CAMERA_DEVICE=/dev/video8`) and a Pi Camera Module

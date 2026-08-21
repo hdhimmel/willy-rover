@@ -1,11 +1,13 @@
 import time,config,logsetup,privacy
 log=logsetup.setup('vision')
 
-# FR-1700/FR-1800 object detection. BACKEND NOTE: the FRD assumes Hailo-accelerated YOLOv8;
-# this unit has no Hailo NPU installed (checked 2026-08-06: no /dev/hailo*, no hailortcli), so
-# this runs YOLOv8 on CPU via ultralytics against the Arducam OV9281 (USB, /dev/video0,
-# confirmed present). detect() is the swap point — replace _load()/detect()'s internals with a
-# Hailo runtime call later without touching callers (retrieval_task.py, brain.py).
+# FR-1700/FR-1800 object detection. TWO BACKENDS, selected by config.ENABLE_HAILO_VISION:
+# when on, picamera2 + the Hailo-10H NPU against the CSI imx708 — the actual FRONT camera
+# (live-verified 2026-08-21); when off, the original CPU/ultralytics path against the Arducam
+# OV9281 (USB, config.CAMERA_DEVICE), which is REAR-facing and stays disabled via
+# ENABLE_OBJECT_RETRIEVAL=False. detect() branches internally — callers (retrieval_task.py,
+# pursuit_task.py, mapping.py, brain.py) see one unchanged interface either way, which is what
+# this module's original docstring anticipated when it called detect() "the swap point".
 #
 # LOCALIZATION IS A HEURISTIC, NOT A CALIBRATED MEASUREMENT: there is no depth sensor and no
 # camera calibration has been run on this unit (no focal-length/lens-distortion bench check,
@@ -16,9 +18,11 @@ log=logsetup.setup('vision')
 _ASSUMED_OBJECT_WIDTH_CM=8.0   # generic small handheld object — no real per-class size table
 _ASSUMED_HFOV_DEG=70.0         # typical USB webcam-class FOV, not bench-measured for the OV9281
 _FOCAL_PX_ESTIMATE=600.0       # rough: focal_px = (frame_w/2) / tan(HFOV/2) at 640px width
-_CAMERA_ID='front'             # §12: this unit has one camera (config.CAMERA_DEVICE) — named
-                                # rather than a bare magic string so a second camera later is an
-                                # obvious addition here, not a silent inconsistency.
+_CAMERA_ID='front'             # §12: accurate for the Hailo/CSI backend (imx708, front-facing).
+                                # The CPU/Arducam fallback is REAR-facing — which is exactly why
+                                # it stays disabled rather than being relabelled. Named rather
+                                # than a bare magic string so a second camera later is an obvious
+                                # addition here, not a silent inconsistency.
 
 class ObjectDetector:
     def __init__(self):
@@ -55,6 +59,12 @@ class ObjectDetector:
 
     def _load_hailo(self):
         import os
+        # Unlike the CPU path (inert regardless, since ENABLE_OBJECT_RETRIEVAL is False), this
+        # backend's flag is ON — so without this guard `WILLY_SIMULATE=1` on the rover itself,
+        # including main.py's I2C-offline degraded fallback, would still claim the NPU and start
+        # the CSI camera. Simulate mode has to stay inert w.r.t. real hardware here like it does
+        # in motors.py/sensors.py/arm.py.
+        if config.SIMULATE_HARDWARE: self._enabled=False; return
         if not os.path.exists(config.HAILO_YOLO_MODEL_PATH):
             log.warning(f'Hailo model missing at {config.HAILO_YOLO_MODEL_PATH} — vision stays disabled.')
             self._enabled=False; return
@@ -102,21 +112,29 @@ class ObjectDetector:
         return out
 
     def _detect_hailo(self,classes=None):
-        w,h=1280,720  # matches _load_hailo()'s 'main' stream config
-        frame=self._picam2.capture_array('lores')
-        results=self._hailo.run(frame)  # postprocessed by the HEF itself -- no manual NMS/decode
-        out=[]
-        for class_id,dets in enumerate(results):
-            cls_name=self._hailo_labels[class_id]
-            if classes and cls_name not in classes: continue
-            for det in dets:
-                score=det[4]
-                if score<config.YOLO_CONF_THRESHOLD: continue
-                y0,x0,y1,x1=det[:4]
-                out.append({'class':cls_name,'conf':float(score),
-                            'bbox':(x0*w,y0*h,x1*w,y1*h),'frame_w':w,'frame_h':h,
-                            'timestamp':time.time(),'camera_id':_CAMERA_ID})
-        return out
+        # detect()'s contract above is "never raise", and this runs on brain.py's tick thread —
+        # whose run() loop catches only KeyboardInterrupt, so an escaping camera/HailoRT error
+        # would end the control loop and (Restart=on-failure) restart-loop the service. The CPU
+        # path gets this for free: cap.read() returns False rather than raising. This one doesn't.
+        try:
+            w,h=1280,720  # matches _load_hailo()'s 'main' stream config
+            frame=self._picam2.capture_array('lores')
+            results=self._hailo.run(frame)  # postprocessed by the HEF itself -- no manual NMS/decode
+            out=[]
+            for class_id,dets in enumerate(results):
+                cls_name=self._hailo_labels[class_id]
+                if classes and cls_name not in classes: continue
+                for det in dets:
+                    score=det[4]
+                    if score<config.YOLO_CONF_THRESHOLD: continue
+                    y0,x0,y1,x1=det[:4]
+                    out.append({'class':cls_name,'conf':float(score),
+                                'bbox':(x0*w,y0*h,x1*w,y1*h),'frame_w':w,'frame_h':h,
+                                'timestamp':time.time(),'camera_id':_CAMERA_ID})  # §12
+            return out
+        except Exception as e:
+            log.error(f'Hailo detect failed, reporting no detections this frame: {e}')
+            return []
 
     def localize(self,detection):
         # FR-1700-002. See module docstring — heuristic, not calibrated.
@@ -128,6 +146,17 @@ class ObjectDetector:
         return distance_cm,bearing_deg
 
     def close(self):
-        if self._cap is not None: self._cap.release()
-        if self._picam2 is not None: self._picam2.stop()
-        if self._hailo is not None: self._hailo.close()
+        # brain.py::stop() runs memory.close()/world_model.close()/motors.cleanup() and every
+        # sensor stop() AFTER this call, so an exception escaping here would silently skip all of
+        # them — the same failure class as the 2026-08-08 memory.close() bug documented in
+        # brain.py::stop(). Each release is independent so one failing backend can't block the
+        # other, and none of them can block the caller.
+        try:
+            if self._cap is not None: self._cap.release()
+        except Exception as e: log.warning(f'Arducam release failed during close(): {e}')
+        try:
+            if self._picam2 is not None: self._picam2.stop()
+        except Exception as e: log.warning(f'Picamera2 teardown failed during close(): {e}')
+        try:
+            if self._hailo is not None: self._hailo.close()
+        except Exception as e: log.warning(f'Hailo close failed during close(): {e}')
