@@ -64,7 +64,8 @@ class ObjectDetector:
             self._hailo=Hailo(config.HAILO_YOLO_MODEL_PATH)
             model_h,model_w,_=self._hailo.get_input_shape()
             self._hailo_input_hw=(model_h,model_w)
-            with open(config.HAILO_COCO_LABELS_PATH,encoding='utf-8') as f:
+            labels_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),config.HAILO_COCO_LABELS_PATH)
+            with open(labels_path,encoding='utf-8') as f:
                 self._hailo_labels=f.read().splitlines()
             self._picam2=Picamera2()
             main={'size':(1280,720),'format':'XRGB8888'}
