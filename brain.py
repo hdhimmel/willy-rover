@@ -63,13 +63,33 @@ _MOTION_SYSTEM=("You are the brain of WildWilly, a 6-wheel autonomous rover.\n"
                 "Safety: never forward if front<15cm. Stop if tilt>22deg.")
 _MOTION_SCHEMA={'action':str,'duration':(int,float),'speed':(int,float)}
 
+# Found 2026-08-21: constructing this many I2C devices back-to-back at startup with zero
+# spacing can draw enough simultaneous inrush current to transiently sag the bus below what a
+# slow, one-at-a-time i2cdetect probe ever sees -- a device's OWN construction (e.g.
+# MotorKit's first PWM write) then hits 'OSError: [Errno 121] Remote I/O error' even though the
+# bus is otherwise healthy moments later. Not a substitute for real hardware margin -- just
+# resilience against a demonstrated transient at process startup specifically.
+def _init_device(ctor,name,attempts=4,delay_s=0.3):
+    for attempt in range(attempts):
+        try: return ctor()
+        except OSError as e:
+            if attempt==attempts-1: raise
+            log.warning(f'{name} init failed ({e}), retrying in {delay_s}s (attempt {attempt+1}/{attempts})')
+            time.sleep(delay_s)
+
 class RoverBrain:
     def __init__(self):
         log.info('Initialising WildWilly v2...')
-        self.display=WillyFace(); self.motors=DriveBase(); self.steering=Steering()
+        self.display=_init_device(WillyFace,'display')
+        self.motors=_init_device(DriveBase,'motors')
+        self.steering=_init_device(Steering,'steering')
         self.safety=SafetyController(self.motors)
-        self.sonars=SonarArray(); self.imu=IMU(); self.adc=ADC()
-        self.encoders=Encoders(); self.current=CurrentMonitor(); self.arm=Arm()
+        self.sonars=_init_device(SonarArray,'sonars')
+        self.imu=_init_device(IMU,'imu')
+        self.adc=_init_device(ADC,'adc')
+        self.encoders=_init_device(Encoders,'encoders')
+        self.current=_init_device(CurrentMonitor,'current')
+        self.arm=_init_device(Arm,'arm')
         self.odometry=Odometry(self.encoders)
         self.world_model=WorldModel(self.odometry)  # §9: loads any previously saved map in __init__
         self._sd=_SdNotify()
