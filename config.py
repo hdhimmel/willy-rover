@@ -313,7 +313,7 @@ YOLO_CONF_THRESHOLD=0.5
 # voice come_here/follow (PursuitTask) and retrieve (RetrievalTask, not gated on available at
 # all) will now actually drive the rover, steering on vision.py::localize()'s uncalibrated
 # distance/bearing estimates. See CLAUDE.md's CSI/Hailo note before trusting a range.
-ENABLE_HAILO_VISION=True  # 2026-08-21: live-verified end-to-end by a standalone run with the
+ENABLE_HAILO_VISION=False  # 2026-08-21: live-verified end-to-end by a standalone run with the
                           # service STOPPED: backend loads, real detection round-trip confirmed
                           # with camera_id='front'. Startup under the live service not yet covered.
 HAILO_YOLO_MODEL_PATH='/usr/share/hailo-models/yolov8m_h10.hef'
