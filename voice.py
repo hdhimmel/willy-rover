@@ -98,6 +98,19 @@ _TIME_PATTERN=re.compile(
     r"(?:got|have) the time|tell me the time|time check|what hour is it"
     r")"+_TRAILER,re.I)
 
+# Same shape as _TIME_PATTERN: answered inline in _fast_path() and spoken by _act_on_intent()'s
+# tail, so 'date' never reaches brain.py and needs no handler there. Coverage is deliberately
+# generous -- 'date' is NOT in _interpret_local()'s prompt, so anything that misses here goes to
+# the local LLM, which has no clock and would cheerfully invent a date.
+_DATE_PATTERN=re.compile(
+    _ADDRESS+r"(?:"
+    r"(?:what'?s|whats|what is) (?:the |today'?s )?date|"
+    r"(?:what|which) (?:date|day) is it(?: today)?|"
+    r"(?:what'?s|whats) (?:it |the day )?today|what day is today|"
+    r"today'?s date|(?:tell me|do you know) (?:the|what) date(?: it is)?|"
+    r"date check|what'?s the day"
+    r")"+_TRAILER,re.I)
+
 class VoicePipeline:
     def __init__(self,memory=None,cloud_ai=None,display=None,smart_home=None):
         self._enabled=config.ENABLE_VOICE
@@ -342,6 +355,11 @@ class VoicePipeline:
         norm=text.strip().rstrip('.!? ')
         if _TIME_PATTERN.fullmatch(norm):
             return {'intent':'time','args':{},'reply':f"It's {time.strftime('%I:%M %p').lstrip('0')}."}
+        if _DATE_PATTERN.fullmatch(norm):
+            # tm_mday rather than %-d: that flag is glibc-only, and %d would speak "August oh two".
+            d=time.localtime()
+            return {'intent':'date','args':{},
+                    'reply':f"It's {time.strftime('%A, %B ',d)}{d.tm_mday}."}
         for pattern,name,reply in _FAST_PATH_PATTERNS:
             if pattern.fullmatch(norm):
                 return {'intent':name,'args':{},'reply':reply}
