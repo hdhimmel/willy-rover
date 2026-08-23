@@ -87,6 +87,26 @@ distribution, bus node board and motor drivers in the body tray.
 Set the Pi buck to 5.0–5.1V and the DZS to 6.0V off-load before connecting
 anything downstream.
 
+**Witty Pi 5 power feed — reworked 2026-08-23.** Witty Pi 5 (real-time
+clock + power management HAT, sits between the +12V/battery side and the Pi's
+own 5V input; see §15.6 for physical placement) was originally fed via its
+USB-C VUSB input at ~5V. That path measured a real, consistent ~0.3V loss
+between Witty Pi's own output and the Pi's PMIC input (`vcgencmd
+pmic_read_adc EXT5V_V`), enough to trip under-voltage during a voice-command
+current spike. **Re-fed via Witty Pi's VIN screw terminal (KF350-2P,
+documented 6–30V input, 5A output) from a DROK adjustable buck set to ~9V**
+instead — a separate unit from the Pi-rail buck in item 7 of §14's Open
+Items list; do not conflate the two without physically confirming they're
+the same part. Higher input voltage means proportionally lower input
+current for the same power draw, which reduces the same-resistance voltage
+loss. Witty Pi's low-voltage cutoff (`wp5` menu option 7) was moved from
+4.5V to **8.0V** to match — the old value was set against a ~5V input and
+was effectively inert against a 9V one. Live-measured after the change:
+V-IN ~9.0–9.2V, V-OUT ~5.4V (up from the USB-fed path's mid-4V range at the
+Pi's own input). Effectiveness of this change in isolation is not yet fully
+confirmed independent of the I²C fault below, which was found and partially
+addressed around the same time.
+
 ### 2.3 Protection
 
 - **F1** 30A ATC main fuse, off-board. **F2–F5** branch fuses.
@@ -145,6 +165,20 @@ GND       ──────────>  Side 1 ‖ Side 2  ──────
 
 GND2 has exactly one star reference, at the AMS1117 ground pin. The two
 ground domains must show no DC path between them.
+
+**Fault found and partially fixed, 2026-08-23.** The power wire to this
+isolated-side 3V3 rail (VCC2, from the AMS1117 above) had come loose,
+taking down the entire isolated bus — every device on it (encoders, IMU,
+ADC, both PCA9685s, all three INA260 current monitors) stopped responding
+simultaneously, while Witty Pi (a separate power domain via its own VIN
+feed, not on this isolated 3V3 rail) kept working throughout, which is what
+made the fault pattern legible. Reseated; `i2cdetect` confirmed the full bus
+enumerating again (`0x27, 0x40/0x42/0x43/0x44/0x45, 0x48, 0x4a, 0x51, 0x60,
+0x61, 0x70`) after the reseat. **Permanent fix (hot glue on the connection)
+still pending** as of this checkpoint — the connection worked its way loose
+once already and should be treated as provisional until secured. One
+current monitor (`0x40`) was still intermittently failing self-test after
+the reseat; worth confirming it holds before calling this fully closed.
 
 ### 3.2 Pull-ups
 
@@ -601,14 +635,25 @@ measurement, not a construction task.
    unknown, and no official datasheet exists for this motor family. This
    decides whether external pull-ups are needed at all. Meter one output
    against VCC and GND with the shaft held.
-9. **AI accelerator not yet in the software path** — the bond is proven, the
-   integration is not started. See Software Design v1.0 §7.
+9. ~~AI accelerator not yet in the software path~~ — done 2026-08-21 for
+   vision (Hailo YOLOv8, live-verified, enabled). Voice LLM attempted but not
+   enabled — see item 11 below. See Software Design v1.0 §7.
 10. **Wire the MCP23017 encoder chip's INTA pin to GP7 (physical pin 26)** —
     software for interrupt-driven quadrature decode is written and configures
     the chip for it (§9's table, decided 2026-08-18), but the physical wire
     doesn't exist yet. Until it does, decode falls back entirely to the
     previous best-effort polling, not a regression, just not yet the
     improvement. See Software Design v1.0 S-2.
+11. **Hailo NPU intent-parsing LLM (`qwen2:1.5b`) scored 0% on a 32-case
+    reliability batch** (2026-08-23) — real, not a config issue. Needs
+    investigation before `ENABLE_HAILO_LLM` can be enabled. See Software
+    Design v1.0 §7 and `docs/superpowers/plans/2026-08-23-hailo-voice-
+    offload.md` Task 4.
+12. **§3.1's I²C 3.3V connector needs a permanent fix (hot glue), not just a
+    reseat** (2026-08-23) — worked loose once already, taking the entire
+    isolated bus down. One current monitor (`0x40`) was still intermittently
+    failing self-test after the reseat; confirm it holds before treating
+    this as closed.
 
 ---
 
