@@ -46,23 +46,30 @@ separate.
 
 ### 1.1 Module inventory
 
+Line counts below for `brain.py`, `config.py`, `voice.py`, `vision.py`, and
+`ai_provider.py` are current as of 2026-08-23 (all five changed materially
+this session — Hailo vision/voice work, Witty Pi, arm remap). Everything else
+in this table is carried over from the prior revision and due a fuller
+refresh; treat those as approximate.
+
 | Module | Lines | Responsibility |
 |--------|-------|----------------|
-| `brain.py` | 720 | Top-level FSM, tick loop, directive arbitration |
-| `config.py` | 347 | All tunables, addresses, pin maps; `validate()` self-check |
-| `voice.py` | 344 | Wake word, STT, intent parsing, TTS |
+| `brain.py` | 849 | Top-level FSM, tick loop, directive arbitration |
+| `voice.py` | 507 | Wake word, STT, intent parsing, TTS, fast-path matching |
+| `config.py` | 482 | All tunables, addresses, pin maps; `validate()` self-check |
 | `sensors.py` | 320 | Sonar, IMU, ADC, encoders, current monitors |
 | `world_model.py` | 282 | Persistent spatial model — obstacles, rooms, objects, routes |
 | `ai_provider.py` | 272 | Unified cloud/local LLM abstraction |
 | `display.py` | 197 | Face rendering and status overlay |
 | `email_client.py` | 184 | IMAP/SMTP with allowlist and confirm gates |
 | `retrieval_task.py` | 181 | Object retrieval sub-FSM |
+| `vision.py` | 162 | Object detection (CPU + Hailo NPU backends) and bearing/range heuristics |
 | `memory_store.py` | 173 | Conversational and episodic memory (SQLite) |
 | `navigation.py` | 165 | Route resolution and local planning |
 | `safety.py` | 124 | The motion authority — sole gate to the motors |
 | `pursuit_task.py` | 101 | Come-here and follow-me sub-FSM |
+| `hailo_llm.py` | 88 | Hailo NPU intent-parsing LLM (`ENABLE_HAILO_LLM`, not currently enabled — see §7) |
 | `motors.py` | 93 | Drive base and steering primitives |
-| `vision.py` | 84 | Object detection and bearing/range heuristics |
 | `smart_home.py` | 82 | Home Assistant REST client |
 | `odometry.py` | 74 | Dead-reckoning pose integration |
 | `mapping.py` | 68 | Learning-mode map recording session |
@@ -72,6 +79,8 @@ separate.
 | `storage.py` | 53 | Data root resolution and availability check |
 | `logsetup.py` | 42 | Logging config and `log_event` structured tags |
 | `arm_jog.py` | 39 | Interactive bench-calibration jog tool |
+| `witty_pi.py` | 33 | Witty Pi 5 hardware-watchdog heartbeat (`ENABLE_WITTY_PI`) |
+| `hailo_stt.py` | 28 | Hailo NPU STT scaffolding (`ENABLE_HAILO_STT`, blocked — see §7) |
 | `hw_sim.py` | 22 | Simulation mocks for motors and servo banks |
 | `main.py` | 9 | Entry point and signal routing |
 
@@ -397,17 +406,54 @@ response, world-state summarisation.
 
 ## 7. Perception and the Accelerator
 
-`vision.py`'s `ObjectDetector` is **CPU-only YOLOv8** with
-`ENABLE_OBJECT_RETRIEVAL=False`. The AI HAT+ 2 is PCIe-bonded and enumerating
-(Master Hardware Design §5.2) but is not yet in the software path.
+**Vision — shipped on the Hailo-10H NPU, 2026-08-21.** `vision.py`'s
+`ObjectDetector` gets a Hailo YOLOv8 backend alongside its original CPU
+`ultralytics` path, selected by `config.ENABLE_HAILO_VISION` (currently
+`True` on the rover). `_load_hailo()` constructs a `picamera2.devices.Hailo`
+instance against `HAILO_YOLO_MODEL_PATH` (`yolov8m_h10.hef`) and captures
+from the CSI imx708 front camera via `picamera2`, replacing the earlier
+rear-facing Arducam USB path for this backend — the CPU path (Arducam) is
+unchanged and remains the fallback if the Hailo backend fails to load
+(`SIMULATE_HARDWARE`, missing model file, or any load exception all fall
+back to `self._enabled=False`, same fail-safe shape the CPU path already
+used). Live-verified end-to-end with the service stopped before enabling.
+
+**Device sharing.** The Hailo-10H `VDevice` is exclusive to one process.
+`picamera2.devices.Hailo` maintains its own class-level `Hailo.TARGET`
+singleton, set on first construction and reused by any later `Hailo(...)`
+call in the same process — confirmed live 2026-08-23 (see
+`docs/superpowers/plans/2026-08-23-hailo-voice-offload.md` Task 1) that a
+*separately*-constructed `hailo_platform.genai.VDevice()` collides with it
+(`HAILO_OUT_OF_PHYSICAL_DEVICES(74)`), while reusing `Hailo.TARGET` directly
+does not. Anything that needs the NPU outside `willy-rover.service` —
+`hailortcli`, standalone verification scripts — requires the service stopped
+first; this is load-bearing, not just a precaution.
 
 `detect()` returns class, confidence, bounding box, frame dimensions, timestamp
 and camera id. Bearing and range come from a separate `localize()` call and are
-documented in-code as heuristic, not calibrated ranging.
+documented in-code as heuristic, not calibrated ranging — this remains true
+for the Hailo backend too; the accuracy improvement is detection quality/speed,
+not ranging calibration. Per Master Hardware Design §12 rule 18: perception
+feeds `world_model.py` for planning and classification only. It does not gate
+a stop.
 
-When the accelerator is integrated, the constraint from Master Hardware Design
-§12 rule 18 governs: it feeds `world_model.py` for planning and classification
-only. It does not gate a stop.
+**Voice LLM — attempted, not enabled.** `hailo_llm.py::HailoIntentModel`
+(gated on `config.ENABLE_HAILO_LLM`, default `False`) is a drop-in
+`AIProvider` alternative to `LocalAIProvider`, sharing the NPU with vision the
+same way (`Hailo.TARGET`). It loads and runs (`hailo_platform.genai.LLM`,
+model `qwen2:1.5b` — Phi-2 is not obtainable on this rover's delivery path),
+but a 32-case intent-reliability batch
+(`experiments/llm_reliability_batch.py`) scored **0% (0/32)** against it,
+versus 75% (24/32) for the existing CPU `LocalAIProvider` on the same batch.
+Failure modes: a recurring identical JSON-truncation position across
+unrelated prompts, and repeated literal echoing of the prompt's own
+angle-bracket placeholder syntax (`'<the object>'`) instead of substituting
+real values. **Recommendation: keep `ENABLE_HAILO_LLM=False`** until this is
+understood — see the plan doc's Task 4 for the full investigation and
+suggested next steps. Voice STT (`hailo_stt.py::HailoWhisper`) is scaffolded
+behind `ENABLE_HAILO_STT` but not implementable yet — needs a Whisper HEF
+compiled on a separate x86 Ubuntu machine (the Hailo Dataflow Compiler does
+not run on ARM), which is not available.
 
 ---
 
@@ -604,11 +650,30 @@ than left as accidental defaults: `ENABLE_CLOUD_AI` and `ENABLE_EMAIL`.
    `TRACK_WIDTH_M` (S-2, S-3).**
 7. ~~Confirm smart-home direction with the owner (S-8).~~ Done 2026-08-18 —
    outbound (Willy sends commands out) confirmed correct.
-8. **Integrate the accelerator into `vision.py` (§7).**
+8. ~~Integrate the accelerator into `vision.py` (§7).~~ Done 2026-08-21 —
+   Hailo YOLOv8 backend shipped, live-verified, enabled (`ENABLE_HAILO_VISION`).
 9. **Steering kinematics (crab/point-turn/arc turning).** Owner decision
    2026-08-18: deliberately deferred until basic drive is live-verified.
    Skid-steer stays the only turning mechanism — not an open question
    anymore, a scheduled-later item. See `motors.py::Steering`'s comment.
+10. **Understand why the Hailo LLM (`qwen2:1.5b`) scored 0% on the intent-
+    reliability batch (§7).** Not a quick fix — needs investigation into
+    whether `clear_context()` is fully resetting state, whether a simplified
+    prompt/schema helps (the model is echoing the prompt's own placeholder
+    syntax literally), or whether this model/path is not viable for this
+    task. `ENABLE_HAILO_LLM` stays off until this is understood.
+11. **A real, separate I2C hardware fault found 2026-08-23** — a loose
+    3.3V wire to the encoder/IMU/PCA9685 peripheral bus (reseated, root
+    cause identified; permanent fix — hot glue — pending). One current
+    monitor (I2C `0x40`) still not responding as of this checkpoint;
+    self-test fails on it and motion is disabled as a safety response.
+    Needs physical inspection.
+12. **Power delivery reworked 2026-08-23.** Witty Pi now fed via its VIN
+    screw terminal from a DROK buck converter set to ~9V (was USB-C at 5V),
+    intended to reduce the voltage drop that was causing under-voltage
+    brownouts during voice commands. Witty Pi's low-voltage cutoff moved
+    from 4.5V (meaningless against a 9V input) to 8.0V. Effectiveness not
+    yet fully confirmed independent of item 11's I2C fault.
 
 ---
 
