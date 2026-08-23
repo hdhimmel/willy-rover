@@ -68,10 +68,10 @@ distribution, bus node board and motor drivers in the body tray.
 |----|------|-------|------------|
 | P1 | 2 × 3S 8000mAh → hard parallel, per-pack BMS | 12–14 AWG | BMS per pack |
 | P2 | Battery+ → F1 → KCD4 switch → Q1 FET → +12V bus | 12 AWG | F1 30A ATC |
-| P3 | +12V bus → F2 → INA260 0x45 → both FeatherWing VIN | 16 AWG | F2 |
+| P3 | +12V bus → F2 → **SW-M** → INA260 0x45 → both FeatherWing VIN | 16 AWG | F2 |
 | P4 | +12V bus → F3 → Pi buck input | 16 AWG | F3 |
 | P5 | +12V bus → F4 → FEICHAO UBEC input | 16 AWG | F4 10A |
-| P6 | +12V bus → F5 → DZS buck input | 16 AWG | F5 |
+| P6 | +12V bus → F5 → **SW-A** → DZS buck input | 16 AWG | F5 |
 | P7 | Charge Y-cable (main + balance) → battery side of KCD4 | 14 AWG | — |
 
 ### 2.2 Regulated rails
@@ -115,6 +115,19 @@ addressed around the same time.
 - **D1** P6KE15A TVS for transients.
 - Dual 3S BMS, one per pack.
 - Latching mushroom E-stop cuts motors and arm.
+- **SW-M and SW-A — added 2026-08-23, closing FRD v3.1 G-1.** Two dedicated
+  physical switches, placed directly in the distribution tree (§2.1): **SW-M**
+  in P3, between F2 and INA260 0x45 (both FeatherWing motor drivers); **SW-A**
+  in P6, between F5 and the DZS buck input (arm servo supply, R3). Relationship
+  to the existing latching mushroom E-stop above — **replaces it, is driven by
+  it, or is fully independent — not yet confirmed, owner to specify.**
+  SW-M's placement upstream of INA260 0x45 is deliberate: it makes the motor
+  side of G-1 observable through the *existing* current monitor (0A downstream
+  while a drive command is active is now a real, intentional signal, not an
+  inferred side-effect) — likely removing the need for a separate GPIO/
+  optoisolator sense line on that side. SW-A's side (P6/R3) still has no
+  current monitor, so it needs either a new INA260 or a direct switch-state
+  sense to be observable in software.
 - **Switch 2** in the Pi buck input line — de-powers the Pi and the 3V3 bus
   after a software shutdown.
 
