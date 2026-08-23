@@ -191,6 +191,20 @@ a sense line into a spare GPIO is required before any software can be written
 against it. Directive 1 is enforced physically but is not represented in the
 control loop.
 
+**Design update 2026-08-23:** two dedicated physical cut switches, SW-M and
+SW-A, added to the distribution tree (Master Hardware Design v2.0 Section
+2.1/2.3) -- SW-M in P3, upstream of the existing INA260 0x45 current monitor
+on the motor supply; SW-A in P6, on the arm servo supply (DZS buck input),
+which has no current monitor. SW-M's placement means the motor side of this
+gap can likely be closed by reading the *existing* 0x45 monitor in software
+(0A while a drive command is active, rather than a new sense wire) --
+`sensors.py::CurrentMonitor` already reads this address for FR-200. The arm
+side (SW-A) still needs either a new INA260 or a direct switch-state sense.
+Relationship between SW-M/SW-A and the previously-documented latching
+mushroom E-stop is **not yet confirmed** -- whether these replace it, are
+driven by it, or are independent. Do not close this gap in code until that's
+settled, since it changes what "E-stop fired" actually means in the wiring.
+
 **G-2 --- FR-500-002/004, encoder counts are under-sampled at speed.**
 `ENCODER_COUNTS_PER_REV` is 3292 (823.1 PPR × 4). At the 620 RPM no-load
 spec that is roughly 8.5 kHz per channel, while `sensors.py` polls the
