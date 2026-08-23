@@ -414,6 +414,36 @@ service's own instance otherwise). Confirm the harness itself works
 end-to-end and the CPU baseline passes close to 100% — that's the control
 that proves the harness logic is correct before pointing it at Hailo.
 
+#### RESULT (2026-08-23, run live on the rover, service stopped)
+
+First run: **0/32 (0%)**, every case identically `parse failed: substring
+not found`. This was a harness bug, not a finding — the harness passed the
+bare utterance as the prompt with no JSON-format instruction, so the CPU
+model (Llama-3.2-3B, needs an explicit instruct-style prompt per
+`ai_provider.py`'s own comments) replied conversationally with no `{` in it
+at all, and `_parse_response()`'s `txt.index('{')` had nothing to find.
+Fixed by adding `_build_prompt()`, mirroring `_interpret_local()`'s real
+prompt construction exactly (voice.py:374-395) — committed as `b57f379`.
+
+Second run (harness fixed): **24/32 (75%)** on the CPU `LocalAIProvider`
+baseline. This is the control number — **not yet a Hailo result**, since
+Task 4 (`HailoIntentModel`) doesn't exist yet. Failure breakdown, useful for
+judging Task 4's eventual pass rate against:
+- 2 failures were **intent-correct, args-empty** (`retrieve` phrasings where
+  the model didn't populate `args.object`, though its `reply` text still
+  named the object correctly) — arguably partial credit, not full misses.
+- 6 failures were **genuine intent misclassification**: `battery` phrasings
+  going to `status` (×3), `arm_stow` going to `retrieve`, `what_do_you_see`
+  going to `status`, and one case where the model **hallucinated an intent
+  name not in its own instruction list** (`"hi"` instead of `wave`).
+
+So the real baseline to beat is **75% strict / ~81% if intent-correct-args-
+empty counts as a pass** — not "close to 100%" as originally hoped. Per
+spec §6/§10.1, this is now the number Task 4's `qwen2:1.5b` pass rate has to
+be judged against, not an assumed-good CPU control. If the Hailo pass rate
+comes in meaningfully below ~75%, treat §6's mitigation (prompt
+simplification) as necessary, not optional.
+
 - [ ] **Step 4: Commit**
 
 ```bash
