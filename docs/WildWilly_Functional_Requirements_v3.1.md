@@ -205,27 +205,62 @@ mushroom E-stop is **not yet confirmed** -- whether these replace it, are
 driven by it, or are independent. Do not close this gap in code until that's
 settled, since it changes what "E-stop fired" actually means in the wiring.
 
-**G-2 --- FR-500-002/004, encoder counts are under-sampled at speed.**
-`ENCODER_COUNTS_PER_REV` is 3292 (823.1 PPR × 4). At the 620 RPM no-load
-spec that is roughly 8.5 kHz per channel, while `sensors.py` polls the
-MCP23017 over I²C at a practical ceiling near 1 kHz. That under-samples by
-about an order of magnitude, so odometry distance will read low and stall
-detection is unreliable at speed. The code documents the limit honestly.
-Note that `config.py` flags the counts/rev figure as taken from the motor
-listing and not bench-confirmed --- confirm it before acting on the arithmetic.
+**G-2 --- FR-500-002/004, encoder counts are possibly under-sampled at
+speed --- the "~8.5 kHz per channel" figure this doc previously stated is
+wrong, corrected 2026-08-23.** `ENCODER_COUNTS_PER_REV` is 3292 (823.1 PPR
+× 4), and 823.1 PPR is itself already the geared-down figure (11 PPR at the
+motor shaft × roughly a 74.8:1 gearbox, per `sensors.py`'s own encoder
+math). The previous "~8.5 kHz" multiplied that already-geared count by 620
+RPM taken as *output-shaft* RPM --- for both numbers to be true
+simultaneously the motor would need to spin at roughly 46,000 RPM, which is
+not physically the case. The real edge rate depends on which shaft 620 RPM
+actually refers to, and the gearbox ratio is not recorded anywhere in this
+project's documentation as a bench-confirmed value. Depending on that,
+per-wheel quadrature edges land somewhere in **roughly 450-4,400 Hz**, not
+8.5 kHz --- a wide enough range that whether `sensors.py`'s ~1 kHz I²C poll
+ceiling is even a real problem is genuinely unresolved, not established.
 
-**Decision made 2026-08-18: interrupt-driven decode**, over a dedicated
-counter or accepting stall-only. `sensors.py::Encoders` now configures the
-MCP23017 for interrupt-on-change and registers a GPIO callback on
-`config.ENCODER_INT_PIN`, closing the "multiple edges collapse into one
-polling window" failure mode specifically --- not a claim that every edge at
-the full 8.5 kHz figure is now captured, since the interrupt changes *when*
-a read happens, not the I2C transaction cost that set the ~1kHz ceiling in
-the first place. **Hardware prerequisite, not yet done:** the MCP23017's
-INTA pin needs a physical wire to the Pi GPIO named in `config.
-ENCODER_INT_PIN` (currently GP7) --- until wired, this falls back entirely
-to the same best-effort polling as before. Not live-verified; see Software
-Design v1.0 S-2 for the full detail.
+**Resolution:** bench test, not more arithmetic --- mark one wheel, jog it a
+known number of turns, read the counts. This settles counts/rev and the
+gearbox ratio together, and is the same bench session already needed to
+confirm `WHEEL_DIAMETER_M` (see the encoder/odometry open item elsewhere in
+this register). Do this before deciding whether under-sampling is a real
+problem at all.
+
+**If polling does turn out to be too slow: raise the I²C bus speed, not
+interrupt-driven decode.** `dtparam=i2c_arm_baudrate=400000` (~4x the
+current rate) is a software-only fix with no wiring, and the bus already
+carries an LTC4311 specifically to make higher speeds viable across this
+bus's capacitance. Test it against a full ten-device roll-call first, given
+this session's history of real I²C fragility on this bus.
+
+**Interrupt-driven decode (decided 2026-08-18) --- retracted 2026-08-23, do
+not implement as designed.** Three independent problems, not one:
+
+1. **Breaks galvanic isolation.** The MCP23017 lives on the isolated side of
+   the ISO1540 (Master Hardware Design §3.1); its INTA pin is referenced to
+   that isolated 3.3V domain. Wiring it straight to the Pi's GP7 runs a
+   conductor directly across the barrier that isolator exists to maintain
+   --- the same barrier this session's own I²C fault-finding relied on
+   staying intact. Doing it correctly would need another isolator channel,
+   adding a part and a failure mode for no net gain (see next point).
+2. **Saves no I²C transactions.** INTA only reports "something on port A
+   changed" --- actually learning what changed still requires an I²C read
+   (`INTCAP` or `GPIO`). Every edge costs a bus transaction either way, so
+   interrupt-driven is not cheaper than the current code, which already
+   decodes all twelve channels from two register reads per poll. It is
+   arguably *worse*: one transaction per edge versus one transaction per
+   poll interval covering everything.
+3. **Incomplete even on its own terms.** INTA covers port A only; LR and RR
+   live on port B (`GPB0-GPB3`), so INTB would also be needed --- but GP7
+   was the only free pin identified for this. There is also a stuck-
+   interrupt failure mode: if edges arrive faster than userspace services
+   them, INT never deasserts.
+
+`config.ENCODER_INT_PIN` (GP7) and the `IOCON.MIRROR`/`INTCON`/`GPINTEN`
+configuration in `sensors.py::Encoders` reflect this retracted design and
+need to be reverted along with this doc change --- see Software Design v1.0
+S-2. GP7 reverts to free/unused pending a different use.
 
 **G-3 --- FR-1700-005, grasp is a fixed primitive sequence, not planning.**
 No per-joint arm calibration has been run (§20.6), so no reach-envelope model

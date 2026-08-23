@@ -479,26 +479,39 @@ already fire today. `tests/test_brain_reset_gate.py` covers the brain.py-side
 logic off-hardware; the touchscreen's own tap detection needs the physical
 5" DSI panel (Master Hardware Design v2.0 §15.3) to verify.
 
-**S-2 — Encoder polling under-samples at speed.** *Decision made 2026-08-18:
-interrupt-driven decode*, over a dedicated counter or accepting stall-only.
-`Encoders` now configures the MCP23017's `IOCON.MIRROR`/`INTCON`/`GPINTEN`
-registers and registers a `GPIO.add_event_detect()` callback on
-`config.ENCODER_INT_PIN`, so a real quadrature edge triggers an immediate
-read instead of waiting for the next scheduled poll — this closes the
-"multiple edges collapse into one polling window" failure mode specifically.
-It is not a claim that every edge at the full 8.5kHz/channel figure is now
-captured: the interrupt only changes *when* a read happens, not how long one
-I2C transaction takes, and that transaction cost is what set the ~1kHz
-ceiling in the first place. **Hardware prerequisite, not yet done**: the
-MCP23017's INTA pin needs a physical wire to the Pi GPIO named in
-`config.ENCODER_INT_PIN` (currently GP7) — until then this code path simply
-never fires and behavior is unchanged from before. `_loop()`'s own poll
-dropped from ~1kHz to a 0.1s heartbeat (only needed now to keep
-`is_healthy`/`counts_per_sec` fresh while stationary, not for decode
-accuracy). None of this is live-verified — only checked for syntax
-correctness and unchanged `WILLY_SIMULATE=1` behavior off-hardware.
-Bench-confirm `ENCODER_COUNTS_PER_REV` before acting on the arithmetic — it is
-taken from the motor listing, not measured.
+**S-2 — Encoder polling may under-sample at speed; the "~8.5kHz/channel"
+figure was wrong, corrected 2026-08-23.** `ENCODER_COUNTS_PER_REV` (3292 =
+823.1 PPR × 4) is already the geared-down figure — 823.1 PPR is 11 PPR at
+the motor shaft times roughly a 74.8:1 gearbox. Multiplying that
+already-geared count by 620 RPM as *output-shaft* RPM (the earlier
+arithmetic) implies a ~46,000 RPM motor, which isn't physical. The real
+per-wheel edge rate depends on which shaft 620 RPM refers to and the actual
+gear ratio, neither bench-confirmed — landing somewhere in **roughly
+450-4,400 Hz**, not 8.5kHz. Whether the ~1kHz I²C poll ceiling is even a
+real problem is genuinely open, not established. Resolve by bench test
+(mark a wheel, jog known turns, read counts — same session as confirming
+`WHEEL_DIAMETER_M`), not more arithmetic. If it does turn out too slow, the
+fix is `dtparam=i2c_arm_baudrate=400000` (~4x, no wiring — this bus already
+carries an LTC4311 for exactly this), tested against a full roll-call first
+given this session's I²C fragility history.
+
+*Interrupt-driven decode (decided 2026-08-18) — retracted 2026-08-23.*
+Reverted for three reasons: (1) the MCP23017 lives on the isolated side of
+the ISO1540 (§3.1); wiring its INTA pin to a bare Pi GPIO runs a conductor
+straight across the isolation barrier, which needs its own isolator channel
+to do safely — a part and a failure mode added for the gain described in
+(2); (2) INTA only signals "something on port A changed" — learning what
+still costs an I²C read (`INTCAP`/`GPIO`), so every edge costs a bus
+transaction regardless, same as today's polling, which already decodes all
+twelve channels in two reads per cycle; interrupt-driven is not cheaper and
+plausibly worse (one transaction per edge vs. one per poll for everything);
+(3) INTA covers port A only — LR/RR are on port B, so INTB would also be
+needed, and GP7 was the only free pin earmarked. There's also a stuck-
+interrupt failure mode if edges outrun userspace servicing. The
+`IOCON.MIRROR`/`INTCON`/`GPINTEN` configuration and `GPIO.add_event_detect()`
+callback this entry previously described need to be reverted in
+`sensors.py::Encoders`; polling remains the actual mechanism. GP7 reverts to
+free/unused.
 
 **S-3 — Odometry rests on two unmeasured constants.** `WHEEL_DIAMETER_M` and
 `TRACK_WIDTH_M` are both marked UNCONFIRMED placeholders in `config.py`. Every
