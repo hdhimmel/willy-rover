@@ -265,7 +265,13 @@ ENABLE_VOICE=True
 # Custom-trained "Hey Willie" model (models/hey_willie.onnx + .onnx.data, trained 2026-08-07,
 # deployed 2026-08-15 — see wakeword_data/hey_willie_model/ for training artifacts) — replaced
 # the earlier "Hey Jarvis" placeholder; this is the real trained wake phrase, not a stand-in.
-WAKEWORD_MODEL_PATH='models/hey_willie.onnx'; WAKEWORD_THRESHOLD=0.5
+WAKEWORD_MODEL_PATH='models/hey_willie.onnx'; WAKEWORD_THRESHOLD=0.65
+# 2026-08-23: was 0.5. Live symptom traced to a dehumidifier's continuous background noise
+# false-triggering the wake word, not echo (ruled that out first -- raising the post-speech
+# decay window 0.6s->2.0s, see VOICE_ECHO_DECAY_S, didn't stop it; the trigger fired 8s after
+# the reply ended, well outside any speech-adjacent window). 0.65 is a first, untested-live
+# guess at cutting ambient-noise false positives without also missing real "Hey Willie" -- if
+# it still false-triggers, go higher; if it stops responding to real wake attempts, go lower.
 WHISPER_MODEL_SIZE='base.en'   # 2026-08-21: was 'small.en'. Benchmarked on this rover against a
                                # real 1.21s "what time is it" clip, service stopped: small.en
                                # 5.71s vs base.en 1.88s -- 3x faster for an identical, correct
