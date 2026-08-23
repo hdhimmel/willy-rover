@@ -884,6 +884,15 @@ Convention: yellow to the even-numbered pin, green to the odd.
 
 **No motor power lead ever lands here.**
 
+**Connector note (owner-confirmed 2026-08-23, physical inspection):** the
+connector style at this end is the **same physical connector style** as the
+motor-side JST-PH plug (§7.1) — not Dupont as previously assumed here from
+the BOM's separate listing of "JST-PH 6-pin motor connectors" and "Dupont
+connectors" (§15.7). The two ends differ in **wire-color assignment**, not
+connector type. Do not use the earlier Dupont assumption when sourcing
+replacement connectors or planning the G-2 interrupt wire (§14 item 10) —
+match the actual JST-PH style in hand.
+
 ### 16.8 FeatherWing #2927 × 2 — rows 11–12
 
 | Addr | Row | VIN | Logic | Motor terminals |
