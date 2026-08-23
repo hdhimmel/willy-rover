@@ -223,6 +223,7 @@ class VoicePipeline:
             self._speaking.set()
             try: self._synthesize_and_play(text,timing)
             finally:
+                self._play_done()  # owner-requested: signals Willy has finished and is listening
                 # 2026-08-23: was hardcoded 0.6s. Live symptom: 2-3 spurious wake-word triggers
                 # firing ~8s after a real reply, each producing an empty transcript ("How can I
                 # help?" spoken each time). Raising this to 2.0s and separately raising
@@ -297,6 +298,35 @@ class VoicePipeline:
                               stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         except Exception as e:
             log.info(f'Wake ack skipped: {e}')
+
+    def _ensure_done_wav(self):
+        # Two short 660Hz pulses, not one -- audibly distinct from the single 880Hz wake chirp
+        # so the two can never be confused by ear. Generated once, then reused, same as
+        # _ensure_ack_wav().
+        path=os.path.join(os.path.dirname(os.path.abspath(__file__)),config.VOICE_DONE_PATH)
+        if not os.path.exists(path):
+            import wave
+            sr=16000; pulse=0.12; gap=0.08
+            t=np.linspace(0,pulse,int(sr*pulse),endpoint=False)
+            env=np.minimum(1.0,np.minimum(t,pulse-t)*40.0)  # fade both ends, else it clicks
+            one=0.22*env*np.sin(2*np.pi*660*t)
+            silence=np.zeros(int(sr*gap))
+            tone=np.concatenate([one,silence,one])
+            os.makedirs(os.path.dirname(path),exist_ok=True)
+            with wave.open(path,'wb') as w:
+                w.setnchannels(1); w.setsampwidth(2); w.setframerate(sr)
+                w.writeframes((tone*32767).astype(np.int16).tobytes())
+        return path
+
+    def _play_done(self):
+        # Blocking (subprocess.run, not Popen) -- _speaker_loop must wait for this to finish
+        # before it clears _speaking/resets the wake model, so this chirp's own sound is muted
+        # the same way the wake chirp's is, not left to self-trigger the bug just fixed above.
+        if not config.VOICE_DONE_CHIRP_ENABLED: return
+        try:
+            subprocess.run(['pw-play',self._ensure_done_wav()],capture_output=True,timeout=5)
+        except Exception as e:
+            log.info(f'Done chirp skipped: {e}')
 
     def _handle_wake(self,stream,frame_len,t_wake):
         # FR-1500-001 satisfied (wake word seen) — now capture an utterance and process it.

@@ -345,6 +345,12 @@ VOICE_ECHO_DECAY_S=2.0        # 2026-08-23: was hardcoded 0.6s in voice.py::_spe
 # and transcribed as part of the command.
 VOICE_ACK_ENABLED=True
 VOICE_ACK_PATH='models/ack.wav'  # generated on first use, not provisioned -- models/ is gitignored
+# 2026-08-23: owner-requested -- a second, audibly distinct chirp signalling Willy has finished
+# speaking and is listening again. Two 660Hz pulses (vs. the single 880Hz wake chirp) so the two
+# are never confused by ear. Plays while still muted (_speaking held) so its own sound can't
+# self-trigger the wake word, same defensive shape as the wake chirp's deaf_frames handling.
+VOICE_DONE_CHIRP_ENABLED=True
+VOICE_DONE_PATH='models/done.wav'  # generated on first use, not provisioned
 
 # --- FR-1600 display expressions. Pure software, layered on the existing WillyFace state
 # machine (display.py) — no new hardware/model dependency, safe to default on.
