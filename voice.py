@@ -221,11 +221,22 @@ class VoicePipeline:
             try: self._synthesize_and_play(text,timing)
             finally:
                 # 2026-08-23: was hardcoded 0.6s. Live symptom: 2-3 spurious wake-word triggers
-                # firing right after a real reply, each producing an empty transcript ("How can
-                # I help?" spoken each time) -- a self-sustaining echo loop, since that fallback
-                # reply's own audio then re-triggers the next cycle. See config.VOICE_ECHO_DECAY_S.
+                # firing ~8s after a real reply, each producing an empty transcript ("How can I
+                # help?" spoken each time). Raising this to 2.0s and separately raising
+                # WAKEWORD_THRESHOLD 0.5->0.65 (a live-suspected dehumidifier as the noise
+                # source) neither one stopped it -- ruling out both "echo hasn't decayed yet"
+                # and "threshold too permissive for ambient noise". The real cause: predict()
+                # is never called while _speaking is set (the `continue` in _loop() skips it
+                # entirely), so openwakeword's Model keeps whatever internal smoothing-window
+                # state it had from just before muting -- including the elevated state from the
+                # genuine wake event that started this reply. Model.reset() (confirmed present
+                # on this installed version) clears that, so scoring resumes cold instead of
+                # picking up mid-decay from a stale, already-elevated internal buffer.
                 time.sleep(config.VOICE_ECHO_DECAY_S)
                 self._speaking.clear()
+                if self._wakeword is not None:
+                    try: self._wakeword.reset()
+                    except Exception as e: log.warning(f'Wake model reset failed: {e}')
 
     def _loop(self):
         import sounddevice as sd
