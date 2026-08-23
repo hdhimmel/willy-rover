@@ -108,7 +108,10 @@ _DATE_PATTERN=re.compile(
     r"(?:what|which) (?:date|day) is it(?: today)?|"
     r"(?:what'?s|whats) (?:it |the day )?today|what day is today|"
     r"today'?s date|(?:tell me|do you know) (?:the|what) date(?: it is)?|"
-    r"date check|what'?s the day"
+    r"date check|what'?s the day|"
+    # 2026-08-23: "what's today's day" missed every alternative above -- none of them have
+    # "today's" placed before "day". Real live miss, not a hypothetical.
+    r"(?:what'?s|whats|what is) today'?s day"
     r")"+_TRAILER,re.I)
 
 class VoicePipeline:
