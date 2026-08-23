@@ -7,14 +7,14 @@ already-shipped vision backend, sharing the NPU in-process; leave STT scaffolded
 but blocked until an x86 compilation machine is available.
 
 **Architecture:** Option A from the spec's §10.3 — one Hailo device shared
-in-process by vision and the voice LLM, no separate device-manager daemon. The
-open question this plan resolves first (Task 1) is whether that sharing needs a
-bespoke `VDevice`-injection rework of `vision.py::_load_hailo()`, or whether
-`picamera2.devices.Hailo`'s own class-level `TARGET`/`TARGET_REF_COUNT` singleton
-(confirmed present in `picamera2/devices/hailo.py`, already relied on implicitly
-by the shipped vision code) already shares correctly across two different HEFs
-in one process, with zero rework needed. Task 2 only exists if Task 1 finds
-rework is required.
+in-process by vision and the voice LLM, no separate device-manager daemon.
+**Resolved live on the rover 2026-08-23 (Task 1's finding, full detail
+below):** no rework of `vision.py::_load_hailo()` is needed at all.
+`picamera2.devices.Hailo`'s class-level `Hailo.TARGET` singleton already
+shares correctly — the LLM wrapper (`hailo_platform.genai.LLM`) just needs to
+be constructed with `Hailo.TARGET` instead of building its own device. This
+is cheaper than the spec's §10.3 anticipated; Task 2 (originally "rework
+`_load_hailo()`") is superseded and folded into Task 4.
 
 **Tech Stack:** `picamera2.devices.Hailo` (already a project dependency via the
 shipped vision backend), `hailo_platform`/HailoRT Python bindings, existing
@@ -155,13 +155,89 @@ output, and which branch (skip Task 2 / do Task 2) applies. Delete
 throwaway script, not part of the deployed codebase, so it should not survive
 in `~/rover/` past this investigation.
 
+#### FINDING (2026-08-23, run live on the rover via SSH, service stopped both times)
+
+**HailoRT installed: 5.1.1** (`h10-hailort`/`python3-h10-hailort`, apt-capped,
+matches earlier session findings). No GenAI HEF or `hailo-ollama` present on
+the device beforehand.
+
+**Real HEF obtained without any auth or version upgrade:**
+`https://dev-public.hailo.ai/v5.3.0/blob/Qwen2-1.5B-Instruct.hef` — public,
+no login needed, downloaded successfully (1.7GB) despite the URL's `v5.3.0`
+path segment. (Raspberry Pi Forums thread cross-checked first: HEF loading via
+the Python API is not gated on HailoRT 5.3.0 — that requirement is specific to
+the separate `hailo-ollama` binary's `OLLAMA_HOST` behavior change, not to
+loading a HEF via `hailo_platform`.)
+
+**First attempt — wrong API, not the real answer.** Tried loading the LLM HEF
+via `picamera2.devices.Hailo` (the same convenience wrapper vision.py already
+uses). Failed immediately with `CHECK failed - Model has more than one input!`
+/ `HailoRTInvalidOperationException` — before the device-sharing question was
+even reachable. **This wrapper class only supports single-input (vision-style)
+models; it cannot load a multi-input GenAI model at all, regardless of who
+else holds the device.** Superseded by the next finding — do not use this
+class for the LLM.
+
+**Real API found:** `hailo_platform.genai` — present and importable on the
+*currently installed* 5.1.1 package (`from hailo_platform.genai import LLM,
+VDevice, Speech2Text, VLM`). `LLM.__init__(self, vdevice, model_path,
+lora_name='', optimize_memory_on_device=False)` takes an explicit `VDevice`
+argument — this class is built for the injected-shared-device pattern Option A
+already calls for; nothing to invent here.
+
+**Second attempt — the real test.** With vision's `picamera2.devices.Hailo()`
+handle open, constructed `hailo_platform.genai.VDevice()` and
+`LLM(vd, 'qwen2-1.5b.hef')`. **FAILED**, immediately and cleanly:
+```
+[HailoRT] [error] Failed to create vdevice. there are not enough free devices. requested: 1, found: 0
+[HailoRT] [error] CHECK_SUCCESS failed with status=HAILO_OUT_OF_PHYSICAL_DEVICES(74)
+```
+
+**Third attempt — the real answer, and it's much cheaper than Option A assumed.**
+Read `picamera2/devices/hailo/hailo.py`'s actual source
+(`inspect.getsource(Hailo.__init__)`) rather than guessing further:
+`picamera2.devices.Hailo` already maintains a **class-level** `Hailo.TARGET`
+(the `VDevice` instance) and `Hailo.TARGET_REF_COUNT`, set on first
+construction and reused by any later `Hailo(...)` instance in the same
+process. The second attempt's failure was never about device exclusivity —
+it was a fresh, unrelated `genai.VDevice()` construction that never touched
+`Hailo.TARGET` at all, so of course it collided.
+
+Tested directly: with vision's `Hailo(VISION_HEF)` open (which sets
+`Hailo.TARGET`), constructed `LLM(Hailo.TARGET, LLM_HEF)` — i.e. handed the
+*already-shared* class-level `VDevice` straight to `genai.LLM` instead of
+building a new one. **Result: `LLM LOADED OK using the shared vision VDevice
+-- true in-process sharing confirmed.`**
+
+**REVISED CONCLUSION: no rework of `vision.py::_load_hailo()` is needed at
+all.** It already produces the shared device as a side effect of its existing,
+unmodified construction (`Hailo.TARGET`). The only new code needed is on the
+LLM side: `HailoIntentModel` reads the class attribute `Hailo.TARGET` (from
+`picamera2.devices.Hailo`, imported for this one attribute — no vision code
+touched) and passes it into `genai.LLM(Hailo.TARGET, hef_path)`. If vision is
+disabled (`ENABLE_HAILO_VISION=False`) so `Hailo.TARGET` is still `None` when
+the LLM loads, `HailoIntentModel` needs its own fallback path — see Task 2's
+revised Step 1 below.
+
+**Task 2 is replaced** by this much smaller change and folded into what was
+Task 4. The task numbering below is kept as originally written for traceability,
+but Task 2's original "rework `_load_hailo()` for injection" scope is now
+**not applicable** — skip it. Task 4 absorbs the one real piece of new work
+(`HailoIntentModel` reading `Hailo.TARGET`).
+
 ---
 
-### Task 2: Rework `_load_hailo()` for shared device injection
+### Task 2: NOT APPLICABLE — superseded by Task 1's finding
 
-**Only do this task if Task 1 found sharing fails without it.** If Task 1
-found the second `Hailo()` load succeeds unmodified, skip straight to Task 3
-and delete this task's checkbox as not-applicable in the ledger.
+Task 1's actual experiment (see its finding write-up above) found
+`vision.py::_load_hailo()` needs **no changes at all** — its existing
+class-level `Hailo.TARGET` singleton already is the shared device. The one
+piece of new code this originally described (reading a shared device handle)
+is folded into Task 4 instead. Skip this task entirely; kept here only so the
+task numbering below matches the ledger.
+
+<details>
+<summary>Original (superseded) plan for this task, kept for history</summary>
 
 **Files:**
 - Modify: `vision.py:60-88` (`ObjectDetector._load_hailo()`)
@@ -248,6 +324,8 @@ deployed code — do not skip this because the change looks small.
 git add vision.py brain.py
 git commit -m "Rework ObjectDetector to accept an injected shared Hailo device"
 ```
+
+</details>
 
 ---
 
@@ -376,50 +454,68 @@ upgrade, if Task 1 found the GenAI HEF path needs ≥5.3.0).
   a drop-in replacement for `LocalAIProvider` wherever `voice.py` holds
   `self._local_ai`.
 
-The exact HailoRT/`picamera2.devices.Hailo` inference call for a GenAI-style
-LLM HEF (prompt in, token stream or completed text out) is the one genuinely
-open item from spec §9 bullet 1 — everything around it (the class shape, the
-`AIResult` construction, the config gating, the fallback wiring) is fully
-determined by the existing `ai_provider.py` interface and does not need to
-wait.
+Device sharing is resolved (Task 1's finding: use `picamera2.devices.Hailo`'s
+class-level `Hailo.TARGET`, no `_load_hailo()` changes needed). The one
+remaining open item is the exact GenAI *generation* call shape (prompt in,
+text out — `generate_all()` was named in early research but not yet called
+live) — narrower than originally scoped, and resolved in Step 0 below before
+writing the real class.
 
-- [ ] **Step 0 (prerequisite): extend Task 1's script to run one real inference call**
+- [ ] **Step 0 (prerequisite): confirm the real generation call shape live, using the confirmed sharing approach**
 
-Before writing this task's real code, add one more block to
-`~/rover/experiments/hailo_dual_load.py` (or a copy of it) that runs
-`llm.run(...)` or whatever the actual GenAI inference call turns out to be —
-consult the HailoRT Python API docs/examples for GenAI-style models at
-implementation time, since §9 bullet 1 explicitly flags this as needing "a
-closer read" rather than being knowable in advance. Record the exact call
-signature and output shape (raw tokens? decoded string? does it stream?) in
-this task's write-up before Step 1 below.
+```python
+# ~/rover/experiments/hailo_llm_generate_test.py -- throwaway, delete after this step
+from picamera2.devices import Hailo
+from hailo_platform.genai import LLM
 
-- [ ] **Step 1: Write `hailo_llm.py`'s class shape (inference call itself filled in from Step 0's finding)**
+vision = Hailo('/usr/share/hailo-models/yolov8m_h10.hef')  # sets Hailo.TARGET
+llm = LLM(Hailo.TARGET, 'experiments/qwen2-1.5b.hef')       # confirmed sharing approach
+result = llm.generate_all('Say hello in one short sentence.')
+print(type(result), repr(result))
+vision.close()
+```
+
+Run with the service stopped (same as Task 1). Record the exact return type
+(string? object with `.text`? does it block until complete, matching
+`ask_sync`'s synchronous contract, or does it need wrapping?) before writing
+Step 1. Delete the throwaway script afterward.
+
+- [ ] **Step 1: Write `hailo_llm.py`, using Task 1's confirmed `Hailo.TARGET` sharing approach**
 
 ```python
 # hailo_llm.py
 import os
 import config
+from picamera2.devices import Hailo
+from hailo_platform.genai import LLM
 from ai_provider import AIResult
 
 class HailoIntentModel:
-    """Drop-in replacement for LocalAIProvider (ai_provider.py) once Step 0's
-    real inference call shape is confirmed on-device. ask_sync's signature and
-    AIResult construction match ai_provider.py:27-32,155-158 exactly so
-    voice.py::_interpret_local() does not need to know which backend it's
-    talking to."""
-    def __init__(self,hailo_device=None):
+    """Drop-in replacement for LocalAIProvider (ai_provider.py). ask_sync's
+    signature and AIResult construction match ai_provider.py:27-32,155-158
+    exactly so voice.py::_interpret_local() does not need to know which
+    backend it's talking to. Shares vision's device via Hailo.TARGET (Task 1
+    finding, 2026-08-23) -- constructs its own if vision hasn't run yet
+    (ENABLE_HAILO_VISION=False), using the same VDevice() params Hailo.__init__
+    uses internally, so the class-level singleton stays consistent either way."""
+    def __init__(self):
         model_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),config.HAILO_LLM_MODEL_PATH)
         if not os.path.exists(model_path):
             raise RuntimeError(f'Hailo LLM HEF not found at {model_path}')
-        # TODO(Step 0 finding): construct the model handle here, using
-        # hailo_device if provided (Task 2's injection) else constructing its
-        # own via picamera2.devices.Hailo(model_path) if Task 1 found that
-        # works standalone. Use Task 1/Task 2's exact confirmed construction
-        # call -- do not re-derive it here.
+        if Hailo.TARGET is None:
+            # Vision hasn't constructed a device yet (disabled, or LLM loads first).
+            # Match Hailo.__init__'s own construction exactly so later Hailo(...)
+            # calls (e.g. vision loading afterward) correctly reuse this one.
+            from hailo_platform import VDevice, HailoSchedulingAlgorithm
+            params=VDevice.create_params()
+            params.scheduling_algorithm=HailoSchedulingAlgorithm.ROUND_ROBIN
+            Hailo.TARGET=VDevice(params)
+        Hailo.TARGET_REF_COUNT+=1
+        self._llm=LLM(Hailo.TARGET,model_path)
 
     def ask_sync(self,prompt,system=None,schema=None,history=None):
-        # TODO(Step 0 finding): the real inference call. Must return an
+        # TODO(Step 0 finding): fill in the exact generate_all()/equivalent call
+        # and its return shape once Step 0 confirms it live. Must return an
         # AIResult built the same way ai_provider.py's other providers do --
         # see ai_provider.py:27-32 for the exact fields (parse_success,
         # intent_confidence, action_confidence, safety_validation, payload,
@@ -431,10 +527,9 @@ class HailoIntentModel:
         raise NotImplementedError('Fill in from Step 0 finding before this task ships.')
 ```
 
-The two `TODO(Step 0 finding)` blocks are the plan's only remaining
-placeholders, and they are placeholders on purpose: Step 0 is the actual
-investigation that resolves them, run immediately before this step, not left
-open-ended. Do not commit this file with either TODO still in it.
+The one remaining `TODO(Step 0 finding)` is a placeholder on purpose — Step 0
+resolves it immediately before this step, not left open-ended. Do not commit
+this file with the TODO still in it.
 
 - [ ] **Step 2: gate behind `config.ENABLE_HAILO_LLM`, same fail-safe pattern as `ENABLE_HAILO_VISION`**
 
