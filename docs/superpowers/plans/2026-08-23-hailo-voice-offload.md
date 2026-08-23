@@ -656,6 +656,80 @@ git add hailo_llm.py config.py voice.py
 git commit -m "Add HailoIntentModel, wire ENABLE_HAILO_LLM with CPU fallback"
 ```
 
+#### G-6 follow-up investigation (2026-08-23, live on the rover)
+
+Three experiments run after the original 0%/50%/0% results (see Task 4's
+RESULT block above) to find the actual root cause, per FRD v3.1 G-6:
+
+**Ruled out: context-clearing bug.** `get_context_usage_size()` (real
+introspection method, not previously used) confirmed `clear_context()`
+genuinely resets to 0 every time — went 0 → 60 (after a call) → 0 (after
+`clear_context()`) exactly as expected. Not the cause.
+
+**Ruled out (partially): a fixed generation-length cutoff.** Raising
+`max_generated_tokens` did not fix anything, and greedy decoding
+(`do_sample=False`) is confirmed deterministic (3 identical trials on the
+same prompt). `max_context_capacity()` is 2048 tokens, not a factor at this
+scale.
+
+**Found: the model does not reliably stop generating after one valid
+answer.** With greedy decoding, a *complete, schema-valid* JSON object was
+produced first, immediately followed by extensive hallucinated fake
+multi-turn conversation continuation (`{"intent":"status",...} {"intent":
+"status","args":{"text":"I am fine"}} ...` and similar), running until an
+arbitrary token budget or the model's own eventual `<|im_end|>`.
+`set_stop_tokens(['<|im_end|>','<|endoftext|>'])` does not fix this --
+those tokens are real, but the model generates a lot of unwanted content
+*before* reaching them, so a valid answer (when produced) gets buried
+mid-output rather than immediately terminating. `ai_provider.py::
+_parse_response()`'s `txt[txt.index('{'):txt.rindex('}')+1]` slicing
+(shared with the CPU path) assumes one JSON document and breaks on this --
+grabs from the first `{` to the *last* `}` across the whole runaway output,
+producing invalid concatenated-object garbage.
+
+**Found: the model echoes template placeholder words literally, regardless
+of convention.** Tested three different placeholder styles across
+experiments -- angle brackets (`<the object>`), ellipsis (`"..."`), and an
+all-caps word (`"NAME"`). All three got echoed back literally in a
+meaningful fraction of outputs (`"intent":"NAME"` appeared repeatedly in the
+32-case run below). This is not a placeholder-syntax problem to work around
+with different punctuation -- the model does not reliably understand "this
+example value should be replaced," independent of how the fill-in-the-blank
+is denoted.
+
+**A dramatically simplified prompt (short instruction, real 13-intent list,
+no angle brackets) was tested on the full 32-case batch: still 0% (0/32),
+`182.3s` total, `~5.7s/case`.** A small 4-case pilot of a similarly simple
+*generic* prompt had looked promising (4/4 clean JSON) -- the full run with
+the *real* intent list did not replicate that. The earlier pilot's apparent
+success was not representative; simplification alone does not fix either of
+the two root causes above.
+
+**Conclusion:** this is not a prompt-wording problem, and further iteration
+within "JSON output with a fill-in-the-blank schema" is unlikely to close
+it -- two independent, compounding failure modes (doesn't stop generating,
+doesn't understand placeholders) both live at the output-format level, not
+the instruction-wording level. Two remaining real options, neither tried
+yet:
+1. **Experiment C (not yet run):** constrain the model to a minimal,
+   single-token-style output (e.g. a bare intent ID with no surrounding
+   JSON, no fill-in-the-blank field) and have deterministic Python handle
+   extraction/reply-text generation instead of asking the model to do
+   everything at once. This avoids the placeholder-echo failure mode
+   entirely (nothing to echo) and may make a short stop-token sequence
+   actually effective (a bare word is far more likely to be followed
+   immediately by a real stop token than a JSON object is).
+2. **Accept CPU as the production intent-parsing path.** 75% (24/32) on
+   `LocalAIProvider` remains the working baseline; nothing about tonight's
+   investigation threatens that path. `ENABLE_HAILO_LLM` stays `False`.
+
+**Recommendation:** try Experiment C once, since it's cheap (a few more
+live test cycles, no new hardware/prerequisite) and directly targets both
+confirmed failure modes rather than working around them. If it doesn't
+clear a meaningfully higher bar than 0%, close G-6 as "not viable on this
+model/hardware path for this task" rather than continuing to iterate on
+prompt wording.
+
 ---
 
 ### Task 5: STT scaffolding (blocked on prerequisite 1 — x86 compilation machine)
