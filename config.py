@@ -285,6 +285,20 @@ WHISPER_CPU_THREADS=3          # 2026-08-21: was unset, so faster-whisper took a
 PIPER_VOICE_PATH='models/piper/en_US-amy-medium.onnx'
 LOCAL_LLM_MODEL_PATH='models/llama-3.2-3b-instruct-q4.gguf'  # llama.cpp gguf
 LOCAL_LLM_CONFIDENCE_FLOOR=0.55  # FR-1400-001: below this, offer cloud AI fallback if enabled
+# --- Hailo NPU intent-parsing LLM, 2026-08-23. See docs/superpowers/plans/2026-08-23-hailo-
+# voice-offload-design.md Task 4 for the full investigation trail. Shares vision's Hailo device
+# via picamera2.devices.Hailo.TARGET (confirmed live on the rover -- a separately-constructed
+# VDevice collides with vision's, HAILO_OUT_OF_PHYSICAL_DEVICES(74); reusing the existing one
+# does not). CPU LocalAIProvider baseline on voice.py's real prompt: 75% (24/32) on a 32-case
+# intent-reliability batch (experiments/llm_reliability_batch.py) -- that is the number this
+# backend's own pass rate needs to be judged against before treating it as safe to leave on,
+# not an assumed-good ~100%.
+ENABLE_HAILO_LLM=False  # default off -- flip only after experiments/llm_reliability_batch.py
+                        # (run with `hailo` as the arg) shows an acceptable pass rate live
+HAILO_LLM_MODEL_PATH='models/hailo_qwen2_1_5b.hef'  # qwen2:1.5b, the real Hailo GenAI Model
+                                                     # Zoo model for this rover's delivery path
+                                                     # (Phi-2 is not obtainable here -- see spec
+                                                     # section 10.1). ~1.6GB, not tracked in git.
 AUDIO_INPUT_DEVICE=None; AUDIO_OUTPUT_DEVICE=None  # None = system default
 VOICE_TONE_DEFAULT='neutral'  # 'neutral'|'funny'|'silly'|'bashful' — FR-1500-008/009/010
 # --- Voice latency, 2026-08-21. Measured live on this rover, "What time is it?":

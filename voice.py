@@ -164,7 +164,20 @@ class VoicePipeline:
             # out the 5V rail mid-utterance and hard-killing the rover (2026-08-21). See config.
             self._whisper=WhisperModel(config.WHISPER_MODEL_SIZE,device='cpu',compute_type='int8',
                                         local_files_only=True,cpu_threads=config.WHISPER_CPU_THREADS)
-            self._local_ai=LocalAIProvider()  # §14 -- was a bare Llama(...) instance here
+            # §14 -- was a bare Llama(...) instance here. 2026-08-23: Hailo NPU backend added
+            # alongside it, same fail-safe pattern as the Hailo vision backend (config.py).
+            if config.ENABLE_HAILO_LLM:
+                try:
+                    from hailo_llm import HailoIntentModel
+                    self._local_ai=HailoIntentModel()
+                    if not self._local_ai.available: raise RuntimeError('Hailo LLM load reported unavailable')
+                except Exception as e:
+                    log.warning(f'Hailo LLM unavailable, falling back to CPU: {e}')
+                    self._local_ai=None
+            else:
+                self._local_ai=None
+            if self._local_ai is None:
+                self._local_ai=LocalAIProvider()
             if not self._local_ai.available: raise RuntimeError('local LLM failed to load')
         except Exception as e:
             log.error(f'Voice model load failed, staying disabled: {e}')
