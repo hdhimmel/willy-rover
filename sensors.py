@@ -197,35 +197,21 @@ class ADC:
             time.sleep(1.0)
 
 class Encoders:
-    # MCP23017 @0x27 (§9.1), quadrature A/B per wheel. G-2 (FRD v3.1 §V.2): interrupt-driven
-    # decode, chosen 2026-08-18 over a dedicated hardware counter or stall-only, to close the gap
-    # between the ~1kHz practical polling ceiling and the ~8.5kHz/channel edge rate at the
-    # documented 620rpm no-load spec. IOCON.MIRROR combines both ports' interrupts onto one line
-    # (config.ENCODER_INT_PIN, a Pi GPIO — HARDWARE PREREQUISITE, NOT YET WIRED, see config.py's
-    # comment); until that wire exists, _on_interrupt() below simply never fires and behavior
-    # falls back to the periodic heartbeat poll in _loop() alone — same best-effort behavior as
-    # before this change, not a regression while the wiring is pending.
-    #
-    # Honest limit even once wired: an interrupt only tells the Pi *when* to read; the actual
-    # read is still one MCP23017 I2C transaction, whose overhead (bus + smbus2/kernel driver +
-    # CPython) is what set the ~1kHz ceiling in the first place, not spare CPU cycles spent
-    # polling. At the full 8.5kHz/channel figure, a single edge lasts ~118us — almost certainly
-    # faster than one Python-level I2C read completes on this stack. This closes the "collapsing
-    # multiple edges into one polling window" failure mode (each real transition now gets its own
-    # read instead of only whatever state happens to be latched at the next poll), which directly
-    # addresses the documented "odometry distance reads low" symptom, but it is not a claim that
-    # every single edge at maximum commanded speed is now guaranteed captured — that needs a real
-    # bench test once the interrupt line is wired, not an assumption from this change alone.
-    #
-    # GPINTENB deliberately excludes bit 4 (0x0F, not 0xFF): that bit is IMU_RST_MCP_PIN (see
-    # sensors.py's IMU class and config.py), driven as an output by a separate MCP23017 Python
-    # object during BNO085 hard_reset() — enabling interrupt-on-change there would fire on every
-    # IMU reset pulse, unrelated to wheel motion.
+    # MCP23017 @0x27 (§9.1), quadrature A/B per wheel, polled. G-2 (FRD v3.1 §V.2): interrupt-
+    # driven decode was decided 2026-08-18 and retracted 2026-08-23 -- it would have wired the
+    # MCP23017's INTA pin (isolated side of ISO1540, §3.1) straight to a bare Pi GPIO, running a
+    # conductor across the isolation barrier, and would not actually have reduced I2C transaction
+    # count anyway (an interrupt only says "something changed"; learning what still costs a
+    # register read, same as polling). The "~8.5kHz/channel" figure that motivated it was also
+    # wrong -- it double-counted the gearbox reduction already baked into ENCODER_COUNTS_PER_REV.
+    # Real edge rate is unresolved, roughly 450-4400 Hz depending on an unconfirmed gear ratio;
+    # resolve by bench test (mark a wheel, jog known turns), not more arithmetic. If polling turns
+    # out to be too slow, raise dtparam=i2c_arm_baudrate (this bus carries an LTC4311 for exactly
+    # that), not interrupt-driven decode.
     #
     # Sign convention (forward=+) is asserted here, not yet confirmed against a physical dry-test
     # per §9.3 — flip per-wheel in config.py if a corner reads backwards once tested.
     _IODIRA=0x00; _IODIRB=0x01; _GPPUA=0x0C; _GPPUB=0x0D
-    _IOCON=0x0A; _INTCONA=0x08; _INTCONB=0x09; _GPINTENA=0x04; _GPINTENB=0x05
     _GPIOA=0x12; _GPIOB=0x13
     _QTABLE=[0,-1,1,0, 1,0,0,-1, -1,0,0,1, 0,1,-1,0]  # [old_state<<2|new_state] -> delta
     def __init__(self,bus=1):
@@ -237,15 +223,6 @@ class Encoders:
             self._bus.write_byte_data(config.ENCODER_ADDR,self._IODIRB,0xFF)
             self._bus.write_byte_data(config.ENCODER_ADDR,self._GPPUA,0xFF)
             self._bus.write_byte_data(config.ENCODER_ADDR,self._GPPUB,0xFF)
-            # MIRROR=1 (bit6): combine port A/B interrupts onto both INTA/INTB identically, so
-            # only one physical INT pin needs wiring. ODR=0 (bit2): push-pull, not open-drain.
-            # INTPOL=1 (bit1): active-high, so the Pi side can use an internal pull-down instead
-            # of needing an external pull-up resistor.
-            self._bus.write_byte_data(config.ENCODER_ADDR,self._IOCON,0x42)
-            self._bus.write_byte_data(config.ENCODER_ADDR,self._INTCONA,0x00)  # compare-to-
-            self._bus.write_byte_data(config.ENCODER_ADDR,self._INTCONB,0x00)  # -previous, not DEFVAL
-            self._bus.write_byte_data(config.ENCODER_ADDR,self._GPINTENA,0xFF)  # all 8 A bits used
-            self._bus.write_byte_data(config.ENCODER_ADDR,self._GPINTENB,0x0F)  # only lr/rr, see above
         self._counts=dict.fromkeys(config.ENCODER_PINS,0)
         self._rate=dict.fromkeys(config.ENCODER_PINS,0.0)
         self._state=dict.fromkeys(config.ENCODER_PINS,0)
@@ -255,8 +232,7 @@ class Encoders:
             # Seed real initial state instead of assuming 0 for every wheel (would otherwise
             # register a spurious first-count delta on whichever wheel's real resting state isn't
             # 0b00) -- deliberately does not go through _update()/_QTABLE, just captures the
-            # starting point. Reading GPIOA/GPIOB also clears any interrupt latched by the
-            # register writes above.
+            # starting point.
             a=self._bus.read_byte_data(config.ENCODER_ADDR,self._GPIOA)
             b=self._bus.read_byte_data(config.ENCODER_ADDR,self._GPIOB)
             for w,(bank,bitA,bitB) in config.ENCODER_PINS.items():
@@ -280,30 +256,16 @@ class Encoders:
         self._last_ok=time.perf_counter()
     def start(self):
         self._running=True
-        if not config.SIMULATE_HARDWARE:
-            GPIO.setup(config.ENCODER_INT_PIN,GPIO.IN,pull_up_down=GPIO.PUD_DOWN)
-            GPIO.add_event_detect(config.ENCODER_INT_PIN,GPIO.RISING,callback=self._on_interrupt)
         self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
     def stop(self):
         self._running=False
-        if not config.SIMULATE_HARDWARE:
-            GPIO.remove_event_detect(config.ENCODER_INT_PIN)
         if self._thread is not None: self._thread.join(timeout=2.0)
-    def _on_interrupt(self,channel):
-        # RPi.GPIO invokes this on its own internal thread whenever the MCP23017's mirrored INT
-        # line rises -- i.e. on every real quadrature edge on any encoder pin (once the interrupt
-        # line is physically wired -- see config.ENCODER_INT_PIN's comment), not just whatever
-        # state happens to be latched at _loop()'s next scheduled poll. _update() already locks
-        # around the actual counts/state mutation, so this is safe to run concurrently with
-        # _loop()'s own calls to the same method.
-        try: self._update()
-        except Exception:
-            log.warning('MCP23017 encoder interrupt read failed', exc_info=True)
     def _loop(self):
-        # No longer a tight decode-rate poll -- real-time decode happens via _on_interrupt()
-        # now. This is just a heartbeat: keeps is_healthy/counts_per_sec fresh even while the
-        # rover is stationary and producing no edges at all (a pure interrupt-driven design would
-        # let is_healthy go stale during a legitimate idle period, which would be wrong).
+        # Tight polling loop -- practical ceiling near 1kHz, set by the I2C transaction cost
+        # (bus + smbus2/kernel driver + CPython), not by this loop's own overhead. No deliberate
+        # throttling sleep: decode accuracy at speed depends on polling as fast as the bus allows.
+        # See this class's docstring (G-2/S-2) for the real edge-rate question and how it's
+        # actually resolved (bench test), and dtparam=i2c_arm_baudrate as the fix if it's needed.
         while self._running:
             try: self._update()
             except Exception:
@@ -316,7 +278,6 @@ class Encoders:
                         self._rate[w]=(self._counts[w]-self._last_counts[w])/dt
                         self._last_counts[w]=self._counts[w]
                 self._last_rate_t=now
-            time.sleep(0.1)
     @property
     # FR-500-001 (read wheel encoders): raw per-wheel quadrature counts.
     def counts(self):

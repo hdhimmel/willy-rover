@@ -473,10 +473,13 @@ desoldering.
 | 33 | GP13 | Sonar LEFT TRIG |
 | 37 | GP26 | Sonar FRONT ECHO (÷) |
 | 40 | GP21 | Sonar RIGHT ECHO (÷) |
-| 26 | GP7 | **PLANNED, not yet wired** — MCP23017 encoder chip's INTA pin (physical chip pin 19), for interrupt-driven quadrature decode (decided 2026-08-18, see §14 item 10 and FRD v3.1 G-2). `IOCON.MIRROR` combines both ports' interrupts onto INTA/INTB identically, so only this one pin needs a wire — INTB can stay unconnected. |
-
-Free and unused: GP8–GP11, and the twelve pins formerly used for motor
-direction. (GP7 above is earmarked, not yet wired.)
+Free and unused: **GP7–GP11**, and the twelve pins formerly used for motor
+direction. (GP7 was briefly earmarked for MCP23017 INTA/interrupt-driven
+quadrature decode, decided 2026-08-18 — **retracted 2026-08-23**: that wire
+would have run directly across the ISO1540 galvanic isolation barrier
+[§3.1], the MCP23017 being on the isolated side, and interrupt-driven decode
+would not actually have reduced I²C transaction count anyway. See FRD v3.1
+G-2 and Software Design v1.0 S-2 for the full reasoning. GP7 is free again.)
 
 **GP14 and GP15 are UART0 TXD/RXD.** The serial console must remain disabled
 or the kernel claims both pins — and drives GP14 as an output onto the left
@@ -651,12 +654,12 @@ measurement, not a construction task.
 9. ~~AI accelerator not yet in the software path~~ — done 2026-08-21 for
    vision (Hailo YOLOv8, live-verified, enabled). Voice LLM attempted but not
    enabled — see item 11 below. See Software Design v1.0 §7.
-10. **Wire the MCP23017 encoder chip's INTA pin to GP7 (physical pin 26)** —
-    software for interrupt-driven quadrature decode is written and configures
-    the chip for it (§9's table, decided 2026-08-18), but the physical wire
-    doesn't exist yet. Until it does, decode falls back entirely to the
-    previous best-effort polling, not a regression, just not yet the
-    improvement. See Software Design v1.0 S-2.
+10. ~~Wire the MCP23017 encoder chip's INTA pin to GP7~~ — **retracted
+    2026-08-23**, not just deferred. Would have run a conductor across the
+    ISO1540 isolation barrier (MCP23017 is on its isolated side, §3.1) and
+    would not have reduced I²C transaction count regardless. Bench-testing
+    the actual edge rate (mark a wheel, jog known turns) replaces this as
+    the real next step — see Software Design v1.0 S-2 and FRD v3.1 G-2.
 11. **Hailo NPU intent-parsing LLM (`qwen2:1.5b`) scored 0% on a 32-case
     reliability batch** (2026-08-23) — real, not a config issue. Needs
     investigation before `ENABLE_HAILO_LLM` can be enabled. See Software
