@@ -55,10 +55,42 @@ TEST_CASES = [
 ]
 
 
+# Mirrors voice.py::_interpret_local()'s exact prompt construction (voice.py:374-395) --
+# without this, the model has no instruction to respond in JSON at all and just replies
+# conversationally, which is what happened on the first (buggy) run of this harness: every
+# case failed identically with "substring not found" because the raw model output contained
+# no '{' for ai_provider.py::_parse_response() to find. Keep this in sync with voice.py's
+# real prompt if that prompt ever changes -- it's duplicated rather than imported so this
+# harness stays decoupled from voice.py's VoicePipeline construction (which needs a live mic).
+def _build_prompt(text):
+    return (f'You are Willie, a home-assistant rover. Known facts: {{}}\n'
+            f'User said: "{text}"\n'
+            f'If the user is asking you to fetch/bring/collect an object -- phrasings like '
+            f'"retrieve", "get", "pick up", "grab", or "bring me" the object -- use '
+            f'intent "retrieve" with args {{"object":"<the object>"}}, regardless of which '
+            f'of those words they used.\n'
+            f'Other recognized intents and example phrasings, always use exactly these names:\n'
+            f'"shutdown" -- "shut down", "power off", "go to sleep"\n'
+            f'"status" -- "how are you?", "status report", "are you okay?"\n'
+            f'"battery" -- "how\'s your battery?", "how much charge left?"\n'
+            f'"arm_stow" -- "stow the arm", "put your arm away"\n'
+            f'"arm_home" -- "arm home", "reset your arm"\n'
+            f'"come_here" -- "come here", "come over here"\n'
+            f'"follow" -- "follow me", "keep following me"\n'
+            f'"diagnostics" -- "run diagnostics", "self test"\n'
+            f'"where_are_you" -- "where are you?", "what room is this?"\n'
+            f'"what_do_you_see" -- "what do you see?", "what\'s in front of you?"\n'
+            f'"wave" -- "wave hello", "say hi", "give a wave"\n'
+            f'"stop" -- "stop", "halt", "freeze"\n'
+            f'Respond ONLY with JSON: '
+            f'{{"intent":"<short action name>","args":{{}},"reply":"<what to say back, <200 chars>",'
+            f'"confidence":<0.0-1.0, how sure you are of this interpretation>}}')
+
+
 def run_batch(provider, cases):
     results = []
     for utterance, expected_intent, expects_args in cases:
-        result = provider.ask_sync(utterance, schema={'intent': str, 'args': dict, 'reply': str})
+        result = provider.ask_sync(_build_prompt(utterance), schema={'intent': str, 'args': dict, 'reply': str})
         ok = (result.parse_success
               and result.payload.get('intent') == expected_intent
               and (bool(result.payload.get('args')) == expects_args))
