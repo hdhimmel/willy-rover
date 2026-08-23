@@ -282,6 +282,12 @@ WHISPER_CPU_THREADS=3          # 2026-08-21: was unset, so faster-whisper took a
                                # the Witty Pi cutoff -> hard power-off, reproducible by asking him
                                # the time). Leaving a core free trades a little STT latency for a
                                # smaller peak draw. Raise back to 4 once the rail is fixed.
+# --- Hailo NPU STT, 2026-08-23. Scaffolding only -- see docs/superpowers/plans/2026-08-23-
+# hailo-voice-offload-design.md Task 5. Blocked on compiling a Whisper HEF via Hailo's Dataflow
+# Compiler on a separate x86 Ubuntu machine -- ARM (this rover) cannot run the compiler, and no
+# such machine is available yet. Do not enable until HAILO_STT_MODEL_PATH points at a real HEF.
+ENABLE_HAILO_STT=False
+HAILO_STT_MODEL_PATH='models/hailo_whisper.hef'  # does not exist yet
 PIPER_VOICE_PATH='models/piper/en_US-amy-medium.onnx'
 LOCAL_LLM_MODEL_PATH='models/llama-3.2-3b-instruct-q4.gguf'  # llama.cpp gguf
 LOCAL_LLM_CONFIDENCE_FLOOR=0.55  # FR-1400-001: below this, offer cloud AI fallback if enabled

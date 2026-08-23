@@ -162,8 +162,21 @@ class VoicePipeline:
             # ~/.cache/huggingface/hub/models--Systran--faster-whisper-small.en (found 2026-08-09).
             # cpu_threads: unset used to mean "take all 4 cores", whose current spike was browning
             # out the 5V rail mid-utterance and hard-killing the rover (2026-08-21). See config.
-            self._whisper=WhisperModel(config.WHISPER_MODEL_SIZE,device='cpu',compute_type='int8',
-                                        local_files_only=True,cpu_threads=config.WHISPER_CPU_THREADS)
+            # 2026-08-23: Hailo NPU STT scaffolded alongside the LLM/vision backends, same
+            # fail-safe pattern -- HailoWhisper always raises today (no HEF exists yet, see
+            # hailo_stt.py), so this falls straight through to the CPU faster_whisper path below.
+            if config.ENABLE_HAILO_STT:
+                try:
+                    from hailo_stt import HailoWhisper
+                    self._whisper=HailoWhisper()
+                except Exception as e:
+                    log.warning(f'Hailo STT unavailable, falling back to CPU: {e}')
+                    self._whisper=None
+            else:
+                self._whisper=None
+            if self._whisper is None:
+                self._whisper=WhisperModel(config.WHISPER_MODEL_SIZE,device='cpu',compute_type='int8',
+                                            local_files_only=True,cpu_threads=config.WHISPER_CPU_THREADS)
             # §14 -- was a bare Llama(...) instance here. 2026-08-23: Hailo NPU backend added
             # alongside it, same fail-safe pattern as the Hailo vision backend (config.py).
             if config.ENABLE_HAILO_LLM:
