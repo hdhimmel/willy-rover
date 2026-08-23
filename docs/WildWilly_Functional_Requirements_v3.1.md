@@ -77,8 +77,39 @@ Requirements are implemented and unit-tested off-hardware unless noted.
   FR-800 Sensors          PARTIAL --- sonars      Range test and IMU
                           connected               output outstanding
 
-  FR-900 onwards          Implemented, off-       
-                          hardware tested only    
+  FR-1500 Voice           PARTIAL --- live-       Wake word/STT/fast-path
+                          verified repeatedly,    live-verified and
+                          latency real-measured   tuned across several
+                                                  sessions (endpointing,
+                                                  base.en model, widened
+                                                  fast-path matching).
+                                                  Local-LLM intent
+                                                  parsing (non-fast-path)
+                                                  is live-verified on
+                                                  CPU only, 75% pass on
+                                                  a 32-case reliability
+                                                  batch --- see FR-1500
+                                                  section and Software
+                                                  Design v1.0 Section 7.
+
+  FR-1600 Display         Live-verified           Fault-state expressions
+                                                  (frown/red-eyes on
+                                                  self-test failure)
+                                                  directly observed
+                                                  2026-08-23.
+
+  FR-1700 Object          PARTIAL --- detection   Hailo YOLOv8 backend
+  Detection/Retrieval     live-verified,          shipped and enabled
+                          approach/grasp not      2026-08-21 (FR-1700-001).
+                                                  FR-1700-002's range/
+                                                  bearing remains
+                                                  uncalibrated heuristic.
+                                                  FR-1700-003/004 (approach
+                                                  planning, grasp) not
+                                                  live-verified.
+
+  FR-900 through FR-1400, Implemented, off-       
+  FR-1800 onwards         hardware tested only    
   -----------------------------------------------------------------------
 
 Motion-related groups (FR-400 through FR-700) must not be live-tested until
@@ -222,6 +253,19 @@ future code path blocks a tick for hundreds of milliseconds, and this
 reconciliation itself is unverified on live hardware, same as everything else
 in this register. The threshold-ordering advice above (raise `WatchdogSec` or
 lower `TICK_OVERRUN_THRESHOLD_S`) still stands as general hygiene regardless.
+
+**G-6 --- FR-1500, Hailo NPU intent-parsing LLM is not usable as tested.**
+`hailo_llm.py::HailoIntentModel` (`config.ENABLE_HAILO_LLM`, default `False`)
+loads and runs on the shared Hailo device, but scored 0% on a 32-case
+intent-reliability batch (`experiments/llm_reliability_batch.py`)
+2026-08-23, versus 75% for the existing CPU `LocalAIProvider` on the same
+batch. This is not a wiring/config gap like G-1 through G-5 --- the code
+path works end-to-end, the model's own output quality is the problem
+(recurring JSON truncation, literal echoing of the prompt's placeholder
+syntax). Real investigation needed before this can be enabled; see Software
+Design v1.0 Section 7 and `docs/superpowers/plans/2026-08-23-hailo-voice-
+offload.md` Task 4. Voice continues to run on the CPU LLM path in the
+meantime, which this gap does not affect.
 
 # 1. Purpose
 
