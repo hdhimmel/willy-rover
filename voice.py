@@ -220,7 +220,11 @@ class VoicePipeline:
             self._speaking.set()
             try: self._synthesize_and_play(text,timing)
             finally:
-                time.sleep(0.6)  # let speaker-to-mic echo decay before wake scoring resumes
+                # 2026-08-23: was hardcoded 0.6s. Live symptom: 2-3 spurious wake-word triggers
+                # firing right after a real reply, each producing an empty transcript ("How can
+                # I help?" spoken each time) -- a self-sustaining echo loop, since that fallback
+                # reply's own audio then re-triggers the next cycle. See config.VOICE_ECHO_DECAY_S.
+                time.sleep(config.VOICE_ECHO_DECAY_S)
                 self._speaking.clear()
 
     def _loop(self):

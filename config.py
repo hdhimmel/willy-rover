@@ -324,6 +324,14 @@ VOICE_ENDPOINT_SILENCE_S=0.6  # trailing silence that ends capture, once speech 
 VOICE_VAD_NOISE_MULT=2.5      # speech threshold = measured ambient floor x this
 VOICE_VAD_FLOOR=0.004         # absolute minimum threshold (RMS, 0-1) so a silent room can't set
                               # a threshold low enough for its own noise to read as speech
+VOICE_ECHO_DECAY_S=2.0        # 2026-08-23: was hardcoded 0.6s in voice.py::_speaker_loop. Live
+                              # symptom: after a real reply, 2-3 more wake-word triggers fired in
+                              # a row, each with an empty transcript ("How can I help?" spoken
+                              # each time) -- classic self-triggering-on-own-echo loop (see the
+                              # no-echo-cancellation note above _SAFETY_PATTERN), just not fully
+                              # closed by the existing 0.6s gap in this room's actual acoustics.
+                              # Raised as a first, testable mitigation -- not confirmed sufficient
+                              # yet, re-tune from a live retest.
 # Perceived latency: a short chirp the instant the wake word fires, so the interaction *starts*
 # immediately even though STT/TTS still take seconds behind it. This is the "Gotcha" idea the
 # Hailo NPU spec (SS6) deferred rather than rejected. Deliberately a tone and NOT speech: this
