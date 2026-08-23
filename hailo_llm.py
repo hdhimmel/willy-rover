@@ -65,6 +65,15 @@ class HailoIntentModel(AIProvider):
         except Exception as e:
             log.info(f'Hailo LLM call failed: {type(e).__name__}: {e}')
             return AIResult(False,0.0,None,False,None,f'{type(e).__name__}: {e}')
+        finally:
+            # Confirmed live 2026-08-23: generate_all() is stateful -- it keeps accumulating
+            # conversation context across calls (real symptom hit during testing: "[HailoRT]
+            # [warning] Conversation context is full", followed by every subsequent call failing
+            # to parse). Each call here is meant to be single-turn, same as LocalAIProvider's
+            # history-unused contract, so clear context after every call regardless of outcome --
+            # in `finally` so a failed/exception call doesn't leave stale context for the next one.
+            try: self._llm.clear_context()
+            except Exception as e: log.warning(f'Hailo LLM clear_context failed: {e}')
         # Confirmed live: real output can carry leading junk before the JSON and a trailing
         # <|endoftext|> token after it (e.g. ".\n\n{...}\n<|endoftext|>"). _parse_response()'s
         # existing txt[txt.index('{'):txt.rindex('}')+1] slicing already handles both --
