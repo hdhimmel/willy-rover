@@ -588,6 +588,31 @@ if not config.ENABLE_HAILO_LLM:
 if not self._local_ai.available: raise RuntimeError('local LLM failed to load')
 ```
 
+#### RESULT (2026-08-23, run live on the rover)
+
+**First full-batch attempt (32 cases) hit a real bug and effectively hung/timed out.**
+Every case failed to parse, and per-case latency grew across the run. Root cause,
+confirmed via `dir(LLM)`: `generate_all()` is **stateful** — it accumulates
+conversation context across calls. The harness constructs one `HailoIntentModel`
+and loops all 32 cases through it (matching how `voice.py` would actually use a
+long-lived instance), so context filled up mid-run: `[HailoRT] [warning]
+Conversation context is full. It is adivsable to clear context as cache size
+was reached`, after which every subsequent call returned garbled,
+unparseable output. **Fixed** — `_call()` now calls `self._llm.clear_context()`
+in a `finally` block after every call, since each call is meant to be
+single-turn (same contract `LocalAIProvider._call()` already documents).
+Committed as `07dd58c`.
+
+**Re-tested a 4-case subset with the fix**: **50% (2/4)**, ~24s/case (so a
+full 32-case run is ~13 minutes, not the runaway the first attempt was).
+One pass was a real, separately concerning bug — the model echoed the
+prompt's own placeholder text literally instead of substituting: `'args':
+{'object': '<the object>'}` for "could you pick up the remote from the
+couch" (should have been `{'object': 'remote'}`). Small sample, but combined
+with the 75% CPU baseline, this Hailo backend is not yet close to that bar.
+**Full 32-case run not yet done** — next step, budgeting ~15 minutes with
+the service stopped.
+
 - [ ] **Step 4: live-verify via Task 3's harness before flipping the flag on for real use**
 
 Run Task 3 Step 5 (the harness re-pointed at `HailoIntentModel`) and confirm
