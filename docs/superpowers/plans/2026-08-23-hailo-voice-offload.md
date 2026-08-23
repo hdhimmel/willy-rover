@@ -610,8 +610,36 @@ prompt's own placeholder text literally instead of substituting: `'args':
 {'object': '<the object>'}` for "could you pick up the remote from the
 couch" (should have been `{'object': 'remote'}`). Small sample, but combined
 with the 75% CPU baseline, this Hailo backend is not yet close to that bar.
-**Full 32-case run not yet done** — next step, budgeting ~15 minutes with
-the service stopped.
+**Full 32-case run completed (2026-08-23, ~15 minutes, service stopped):
+0% (0/32).** Worse than the 4-case subset, not better — this is a real,
+concerning result, not a fluke in one direction. Two failure shapes:
+
+1. Many parse failures at the identical position — `Expecting value: line 1
+   column 97 (char 96)` recurs verbatim across unrelated prompts — suggesting
+   a systematic truncation/generation artifact, not prompt-specific
+   confusion.
+2. Several cases *did* produce syntactically valid, parseable JSON but still
+   failed the strict check: hallucinated intent names outside the schema
+   (`"pickup"` instead of `"retrieve"`), and repeated literal template-
+   placeholder leakage (`'object': '<the object>'`, `'<the remote>'`,
+   `'<percentage of battery left>'`) — the model echoing the prompt's own
+   angle-bracket placeholder syntax instead of substituting real values,
+   the same bug the 4-case subset first surfaced, now clearly recurring
+   rather than a one-off.
+
+**RECOMMENDATION: do not enable `ENABLE_HAILO_LLM`.** This is far below the
+75% CPU baseline and below even the small-sample 50%. Per spec §6/§10.1 this
+was flagged as the primary risk, not a contingency, and the result confirms
+it: `qwen2:1.5b` on this path is not currently reliable enough for intent
+parsing. Possible next investigation steps, not yet done: (a) confirm
+`clear_context()` is actually fully resetting state between calls rather
+than partially leaking; (b) try a substantially simplified prompt/schema
+(fewer intents, no angle-bracket placeholder syntax in the instructions,
+since the model appears to be echoing that syntax literally); (c) check
+whether performance degrades further over a long-running process (thermal,
+memory) versus staying at this level fresh from Task 4's short subset test.
+None of these are quick — this is a real open problem, not a config
+tweak away from working.
 
 - [ ] **Step 4: live-verify via Task 3's harness before flipping the flag on for real use**
 
