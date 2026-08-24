@@ -35,8 +35,11 @@ class HailoIntentModel(AIProvider):
                 params=VDevice.create_params()
                 params.scheduling_algorithm=HailoSchedulingAlgorithm.ROUND_ROBIN
                 Hailo.TARGET=VDevice(params)
-            Hailo.TARGET_REF_COUNT+=1
+            # Increment only AFTER LLM() succeeds. Incrementing first leaks the refcount on a
+            # load failure -- nothing owns it, so picamera2's vision close() can never drive the
+            # count to 0 and release the shared VDevice.
             self._llm=LLM(Hailo.TARGET,model_path)
+            Hailo.TARGET_REF_COUNT+=1
             self._enabled=True
         except Exception as e:
             log.error(f'Hailo LLM load failed, staying disabled: {e}')

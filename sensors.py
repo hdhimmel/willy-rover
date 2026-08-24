@@ -261,11 +261,20 @@ class Encoders:
         self._running=False
         if self._thread is not None: self._thread.join(timeout=2.0)
     def _loop(self):
-        # Tight polling loop -- practical ceiling near 1kHz, set by the I2C transaction cost
-        # (bus + smbus2/kernel driver + CPython), not by this loop's own overhead. No deliberate
-        # throttling sleep: decode accuracy at speed depends on polling as fast as the bus allows.
-        # See this class's docstring (G-2/S-2) for the real edge-rate question and how it's
-        # actually resolved (bench test), and dtparam=i2c_arm_baudrate as the fix if it's needed.
+        # Polling loop -- practical ceiling near 1kHz, set by the I2C transaction cost (bus +
+        # smbus2/kernel driver + CPython), not by this loop's own overhead. See this class's
+        # docstring (G-2/S-2) for the real edge-rate question and how it gets resolved (bench
+        # test), and dtparam=i2c_arm_baudrate as the fix if polling proves too slow.
+        #
+        # The 1ms sleep is NOT optional throttling -- it is what keeps this thread from
+        # saturating I2C bus 1, which is shared with everything safety-relevant: both MotorKits
+        # (0x60/0x61, i.e. stop commands), the ADS1115 battery ADC feeding the brownout logic,
+        # and the BNO085 IMU. Without it every one of those transactions queues behind a
+        # back-to-back encoder read stream. It also holds continuous CPU/GIL pressure on a Pi
+        # where WHISPER_CPU_THREADS=3 was chosen specifically to keep peak draw off the 5V rail.
+        # Restored 2026-08-23 after the interrupt-decode revert dropped it by accident (the
+        # pre-interrupt code had it; the revert produced a sleepless loop that had never run
+        # in this form). Do not remove without measuring bus occupancy against motor latency.
         while self._running:
             try: self._update()
             except Exception:
@@ -278,6 +287,7 @@ class Encoders:
                         self._rate[w]=(self._counts[w]-self._last_counts[w])/dt
                         self._last_counts[w]=self._counts[w]
                 self._last_rate_t=now
+            time.sleep(0.001)
     @property
     # FR-500-001 (read wheel encoders): raw per-wheel quadrature counts.
     def counts(self):

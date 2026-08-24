@@ -259,12 +259,17 @@ ENABLE_VOICE=True
 # deployed 2026-08-15 — see wakeword_data/hey_willie_model/ for training artifacts) — replaced
 # the earlier "Hey Jarvis" placeholder; this is the real trained wake phrase, not a stand-in.
 WAKEWORD_MODEL_PATH='models/hey_willie.onnx'; WAKEWORD_THRESHOLD=0.65
-# 2026-08-23: was 0.5. Live symptom traced to a dehumidifier's continuous background noise
-# false-triggering the wake word, not echo (ruled that out first -- raising the post-speech
-# decay window 0.6s->2.0s, see VOICE_ECHO_DECAY_S, didn't stop it; the trigger fired 8s after
-# the reply ended, well outside any speech-adjacent window). 0.65 is a first, untested-live
-# guess at cutting ambient-noise false positives without also missing real "Hey Willie" -- if
-# it still false-triggers, go higher; if it stops responding to real wake attempts, go lower.
+# 2026-08-23: was 0.5, raised to 0.65 mid-investigation on a theory that was then RULED OUT.
+# Corrected note: raising this did NOT stop the false wakes. Neither did raising
+# VOICE_ECHO_DECAY_S 0.6->2.0. The actual root cause was stale openwakeword smoothing state
+# surviving the muted window -- fixed by calling Model.reset() in voice.py::_speaker_loop().
+# See that function's comment for the real story; an earlier version of this comment asserted
+# the dehumidifier-noise theory as established fact, which contradicted voice.py and would
+# mislead whoever tunes this next.
+# A dehumidifier IS genuinely running in the room, so some elevated threshold may still be
+# worth keeping on its own merits -- but 0.65 is an untested-live guess that was never
+# validated as necessary, and a higher threshold risks missing a real "Hey Willie", including
+# the one preceding a spoken "stop". Revisit against 0.5 now that reset() is in place.
 WHISPER_MODEL_SIZE='base.en'   # 2026-08-21: was 'small.en'. Benchmarked on this rover against a
                                # real 1.21s "what time is it" clip, service stopped: small.en
                                # 5.71s vs base.en 1.88s -- 3x faster for an identical, correct
@@ -323,14 +328,20 @@ VOICE_ENDPOINT_SILENCE_S=0.6  # trailing silence that ends capture, once speech 
 VOICE_VAD_NOISE_MULT=2.5      # speech threshold = measured ambient floor x this
 VOICE_VAD_FLOOR=0.004         # absolute minimum threshold (RMS, 0-1) so a silent room can't set
                               # a threshold low enough for its own noise to read as speech
-VOICE_ECHO_DECAY_S=2.0        # 2026-08-23: was hardcoded 0.6s in voice.py::_speaker_loop. Live
-                              # symptom: after a real reply, 2-3 more wake-word triggers fired in
-                              # a row, each with an empty transcript ("How can I help?" spoken
-                              # each time) -- classic self-triggering-on-own-echo loop (see the
-                              # no-echo-cancellation note above _SAFETY_PATTERN), just not fully
-                              # closed by the existing 0.6s gap in this room's actual acoustics.
-                              # Raised as a first, testable mitigation -- not confirmed sufficient
-                              # yet, re-tune from a live retest.
+VOICE_ECHO_DECAY_S=2.0        # 2026-08-23: was hardcoded 0.6s in voice.py::_speaker_loop, raised
+                              # to 2.0 mid-investigation on a theory that was then RULED OUT --
+                              # raising it did NOT stop the false wakes. The real fix was
+                              # Model.reset() (see voice.py::_speaker_loop).
+                              # COST OF LEAVING IT AT 2.0: this is a hard deaf window. Willy
+                              # cannot hear "Hey Willie, stop" for VOICE_ECHO_DECAY_S plus the
+                              # ~0.3s blocking done-chirp after EVERY spoken reply -- ~2.4s now
+                              # vs ~0.9s before tonight. Voice stop is a real safety path
+                              # (voice.py's stop_requested deliberately bypasses the command
+                              # queue so it works mid-task), and ENABLE_HAILO_VISION=True now
+                              # arms come_here/follow/retrieve to actually drive the rover.
+                              # Recommend returning to 0.6 now that reset() is the actual fix;
+                              # kept at 2.0 pending a live retest since 0.6+reset() has never
+                              # been run together.
 # Perceived latency: a short chirp the instant the wake word fires, so the interaction *starts*
 # immediately even though STT/TTS still take seconds behind it. This is the "Gotcha" idea the
 # Hailo NPU spec (SS6) deferred rather than rejected. Deliberately a tone and NOT speech: this

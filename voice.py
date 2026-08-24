@@ -237,10 +237,15 @@ class VoicePipeline:
                 # on this installed version) clears that, so scoring resumes cold instead of
                 # picking up mid-decay from a stale, already-elevated internal buffer.
                 time.sleep(config.VOICE_ECHO_DECAY_S)
-                self._speaking.clear()
+                # Reset BEFORE clearing _speaking, not after: _loop() resumes scoring the
+                # instant _speaking clears, so clearing first leaves a window where predict()
+                # runs against the stale buffer this reset exists to clear -- or runs
+                # concurrently with reset() mutating openwakeword's internals, which makes no
+                # thread-safety promise. Narrow (80ms frame cadence) but free to close.
                 if self._wakeword is not None:
                     try: self._wakeword.reset()
                     except Exception as e: log.warning(f'Wake model reset failed: {e}')
+                self._speaking.clear()
 
     def _loop(self):
         import sounddevice as sd
