@@ -1,0 +1,23 @@
+[Unit]
+# Rail trace across power events. Independent of willy-rover.service on purpose:
+# the shutdowns under investigation (Witty Pi "Vin < Vlow", 2026-08-24) happen
+# regardless of whether the brain is running, faulted, or stopped, so this must
+# not share its lifecycle. Starts early and stays up for the whole boot.
+Description=Willy rail power trace (INA260 0x40/0x44/0x45)
+After=local-fs.target
+DefaultDependencies=no
+
+[Service]
+Type=simple
+User=root
+ExecStart=/home/hhimmel/rover/venv/bin/python3 /home/hhimmel/rover/scripts/power_logger.py
+Restart=always
+RestartSec=5
+# The logger's whole job is to still be writing at the instant power is pulled,
+# so it must not be killed early in the shutdown sequence. systemd stops it with
+# everything else; rows are fsync'd individually, so whatever landed survives.
+KillSignal=SIGTERM
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target
