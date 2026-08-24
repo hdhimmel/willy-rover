@@ -315,6 +315,7 @@ class CurrentMonitor:
         self._bus=None if config.SIMULATE_HARDWARE else smbus2.SMBus(bus)
         self._data={r:{'current_a':0.0,'voltage_v':0.0,'power_w':0.0} for r in self._RAILS}
         self._lock=threading.Lock(); self._running=False; self._thread=None; self._last_ok=0.0
+        self._fail_counts={r:0 for r in self._RAILS}  # consecutive per-rail read failures
     def _be16(self,addr,reg):
         d=self._bus.read_i2c_block_data(addr,reg,2)
         v=(d[0]<<8)|d[1]
@@ -328,10 +329,36 @@ class CurrentMonitor:
             with self._lock:
                 for rail in self._RAILS: self._data[rail]={'current_a':0.5,'voltage_v':12.0,'power_w':6.0}
             self._last_ok=time.perf_counter(); return
+        # Per-rail isolation. This loop used to let the first failing rail's exception propagate
+        # out of _update() entirely, so a single absent INA260 meant the *other* rails were never
+        # read at all and every rail's data went stale -- which is how one dead device (0x40)
+        # produced a self-test verdict of "current monitors not reporting", plural, and blinded
+        # the motor-rail reading that diagnostics actually want. Found live 2026-08-24.
+        all_ok=True
         for rail,addr in self._RAILS.items():
-            cur,volt,pwr=self._read_rail(addr)
+            try:
+                cur,volt,pwr=self._read_rail(addr)
+            except OSError:
+                all_ok=False
+                n=self._fail_counts[rail]=self._fail_counts[rail]+1
+                # Throttled: this runs at 10Hz, and a permanently-absent device previously
+                # emitted a full traceback every single iteration (measured: ~13k journal lines
+                # in 2 minutes). Log the first failure with a traceback, then once a minute.
+                if n==1:
+                    log.warning(f'INA260 {rail} rail (0x{addr:02x}) read failed '
+                                f'(§8.5: log, hold last; sustained fail -> SAFE_MODE)',exc_info=True)
+                elif n%600==0:
+                    log.warning(f'INA260 {rail} rail (0x{addr:02x}) still failing ({n} consecutive)')
+                continue
+            if self._fail_counts[rail]:
+                log.info(f'INA260 {rail} rail (0x{addr:02x}) recovered after {self._fail_counts[rail]} failures')
+                self._fail_counts[rail]=0
             with self._lock: self._data[rail]={'current_a':cur,'voltage_v':volt,'power_w':pwr}
-        self._last_ok=time.perf_counter()
+        # Deliberately strict: _last_ok (and therefore is_healthy, which brain.py::_check_health
+        # escalates on) still requires ALL rails to read. A missing monitor is a real fault and
+        # should keep failing the self-test -- this fix restores the other rails' *data*, it does
+        # not mask the fault.
+        if all_ok: self._last_ok=time.perf_counter()
     def start(self):
         self._running=True
         self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
@@ -342,7 +369,9 @@ class CurrentMonitor:
         while self._running:
             try: self._update()
             except Exception:
-                log.warning('INA260 read failed (§8.5: log, hold last; sustained fail -> SAFE_MODE)', exc_info=True)
+                # Per-rail OSErrors are handled and throttled inside _update(); this only catches
+                # anything unexpected that escapes it, so a traceback here is genuinely notable.
+                log.warning('INA260 monitor loop failed unexpectedly', exc_info=True)
             time.sleep(0.1)  # 10Hz per §8.5
     def rail(self,name):
         with self._lock: return dict(self._data[name])
