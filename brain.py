@@ -40,7 +40,7 @@ class _SdNotify:
 # construction in RoverBrain.__init__, which runs before this self-test, so 0x70 legitimately
 # never answers by the time we scan; it was never a real device to begin with.
 _EXPECTED_I2C={config.ENCODER_ADDR,config.INA260_SERVO_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
-               config.INA260_PI_ADDR,config.INA260_WITTY_ADDR,config.ADS_ADDR,config.IMU_ADDR,
+               config.INA260_PI_ADDR,config.INA260_MOTOR_ADDR,config.ADS_ADDR,config.IMU_ADDR,
                config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR}
 # Witty Pi 5 only joins the expected-device set once it's actually installed and enabled --
 # adding it unconditionally now (hardware doesn't exist on this unit yet) would make the

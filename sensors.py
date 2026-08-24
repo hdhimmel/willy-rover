@@ -310,7 +310,7 @@ class CurrentMonitor:
     # in the documentation to hardcode an automatic cutoff against (§14.1 uses "threshold" as a
     # literal placeholder with no value attached).
     _REG_CURRENT=0x01; _REG_VOLTAGE=0x02; _REG_POWER=0x03  # 1.25mA/bit, 1.25mV/bit, 10mW/bit
-    _RAILS={'servo':config.INA260_SERVO_ADDR,'pi':config.INA260_PI_ADDR,'witty':config.INA260_WITTY_ADDR}
+    _RAILS={'servo':config.INA260_SERVO_ADDR,'pi':config.INA260_PI_ADDR,'motor':config.INA260_MOTOR_ADDR}
     def __init__(self,bus=1):
         self._bus=None if config.SIMULATE_HARDWARE else smbus2.SMBus(bus)
         self._data={r:{'current_a':0.0,'voltage_v':0.0,'power_w':0.0} for r in self._RAILS}

@@ -13,7 +13,7 @@ log=logsetup.setup('diagnostics')
 # construction in RoverBrain.__init__, which runs before this self-test, so 0x70 legitimately
 # never answers by the time we scan; it was never a real device to begin with. See brain.py.
 _EXPECTED_I2C={config.ENCODER_ADDR,config.INA260_SERVO_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
-               config.INA260_PI_ADDR,config.INA260_WITTY_ADDR,config.ADS_ADDR,config.IMU_ADDR,
+               config.INA260_PI_ADDR,config.INA260_MOTOR_ADDR,config.ADS_ADDR,config.IMU_ADDR,
                config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR}
 
 def scan_i2c():

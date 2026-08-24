@@ -78,11 +78,18 @@ distribution, bus node board and motor drivers in the body tray.
 
 | ID | Rail | Source | Feeds | Monitor |
 |----|------|--------|-------|---------|
-| R1 | 5.0–5.1V | Pi buck | Pi header pins 2/4, GND 6/9 | INA260 0x44 |
-| R2 | 5V | FEICHAO 8A UBEC | Steering servo distribution, AMS1117 input | INA260 0x40 |
+| R1 | 9V | DROK buck | Witty Pi VIN → Pi (2026-08-23 rework) | INA260 **0x45** |
+| R2 | 5V | FEICHAO 8A UBEC | Steering servo distribution, AMS1117 input, Pi screen | INA260 0x40 |
 | R3 | 6V | DZS buck | Arm servo distribution | — |
 | R4 | 3V3 | Pi header pin 1 | Encoder distribution, ISO1540 Side 1 | — |
 | — | 3V3 (VCC2) | AMS1117-3.3 | Entire isolated I²C bus | — |
+| — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | INA260 **0x44** |
+
+**R1 changed 2026-08-23/24.** It was "5.0–5.1V, Pi buck → Pi header pins 2/4,
+monitored by INA260 0x44." The Pi is no longer fed that way: the DROK buck now
+supplies 9V into Witty Pi's VIN terminal, and Witty Pi supplies the Pi. Its
+monitor is 0x45, not 0x44 — see §16.4 for the live measurements confirming this
+and the 0x44/0x45 transposition that was corrected at the same time.
 
 Set the Pi buck to 5.0–5.1V and the DZS to 6.0V off-load before connecting
 anything downstream.
@@ -845,8 +852,22 @@ it is not a parallel tap.
 | Addr | Row | VIN+ from | VIN− to |
 |---|---|---|---|
 | 0x40 | 5 | FEICHAO UBEC 5V output | Servo/steering distribution + AMS1117 Vin |
-| 0x44 | 6 | Pi rail buck output | Pi header pins 2 and 4 |
-| 0x45 | 7 | +12V bus via F2 | Both FeatherWing VIN terminals |
+| 0x44 | 6 | +12V bus via F2 | Both FeatherWing VIN terminals |
+| 0x45 | 7 | DROK 9V buck output | Witty Pi VIN terminal → Pi |
+
+**0x44/0x45 corrected 2026-08-24 — they were transposed in this table.** All three
+measured live off the bus with base power on and the self-test passing:
+`0x40 → 5.148 V @ 0.136 A`, `0x44 → 11.373 V @ 0.112 A`, `0x45 → 9.068 V @ 0.002 A`.
+0x40 matched its entry exactly. The other two did not: this table had the Pi's
+monitor on 0x44 as a 5.0–5.1V Pi-buck rail and the motor bus on 0x45, but 0x44
+reads ~11.4V and 0x45 reads 9V. The 2026-08-23 power rework is why — the Pi is no
+longer fed 5V from the Pi buck, it is fed 9V via DROK → Witty Pi VIN, so its
+monitor moved to 0x45 and the +12V motor bus moved to 0x44. Owner-confirmed.
+`config.py`'s `INA260_MOTOR_ADDR`/`INA260_PI_ADDR` were corrected to match (the
+names were always right; only the two address values were swapped).
+
+0x45 reads ~0A whenever the Pi is running on AC rather than battery — that is
+correct behaviour, not a fault: the DROK feed is simply unloaded.
 
 Logic pins on each: VCC, GND, SDA, SCL from that device's own row.
 
