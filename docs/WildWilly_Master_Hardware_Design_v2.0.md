@@ -414,14 +414,36 @@ Meter each crimp before trusting wire colour — batch variation is documented.
 
 Each FeatherWing drives one side.
 
+**As-built port order is M1 = MIDDLE, M2 = FRONT, M3 = REAR** — not the
+front/middle/rear order the port numbers suggest. Verified 2026-08-24 by
+driving one wheel at a time with the rover on a block and recording which
+wheel physically turned (M2-left → left front, M1-right → right middle,
+M2-right → right front; the rest follow by elimination, and the convention is
+symmetric across both kits). `config.MOTOR_PORT` was corrected to match.
+
 | Motor | Position | Driver | Encoder A/B |
 |-------|----------|--------|-------------|
-| LF | Left front | 0x60 M1 | GPA0 / GPA1 |
-| LM | Left middle | 0x60 M2 | GPA2 / GPA3 |
+| LF | Left front | 0x60 **M2** | GPA0 / GPA1 |
+| LM | Left middle | 0x60 **M1** | GPA2 / GPA3 |
 | LR | Left rear | 0x60 M3 | GPB0 / GPB1 |
-| RF | Right front | 0x61 M1 | GPA4 / GPA5 |
-| RM | Right middle | 0x61 M2 | GPA6 / GPA7 |
+| RF | Right front | 0x61 **M2** | GPA4 / GPA5 |
+| RM | Right middle | 0x61 **M1** | GPA6 / GPA7 |
 | RR | Right rear | 0x61 M3 | GPB2 / GPB3 |
+
+⚠ **The Encoder A/B column is NOT verified.** Only the driver ports were
+tested. The motor ports turned out not to follow position order, so the
+encoder channel assignment cannot be assumed to either — it may follow the
+physical wheels, or the same M1/M2 swap, or neither. This affects per-wheel
+odometry attribution only; whole-side drive is unaffected. Settle it the same
+way: turn one wheel by hand and read which encoder channel counts.
+
+**Open fault (2026-08-24): the LEFT MIDDLE motor on 0x60 M1 is an open
+circuit.** Zero current draw at 0.35/0.60/0.80/0.90 duty, both directions,
+against ~0.11 A for every healthy motor free-running. Twelve consecutive
+pulses gave identical near-zero readings, which points to the wiring rather
+than a commutator dead spot (a dead spot varies between attempts). One slight
+tick was observed early, so contact existed momentarily. Check the crimp and
+the M1 screw terminal before suspecting the motor.
 
 Adafruit FeatherWing #2927, used standalone with no Feather host board.
 Direction and PWM are handled internally over I²C — there are no direction
