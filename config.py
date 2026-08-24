@@ -244,6 +244,18 @@ SELFTEST_OVERRIDE_AFTER=3
 # ever send to EMAIL_OUTBOUND_ALLOWLIST[0], and it reports -- it never acts.
 # Both limits below are load-bearing, not boilerplate: _go('STUCK') can recur, and this codebase
 # has already been bitten once by an unthrottled per-tick action spinning at ~9Hz for an hour.
+# Motor-power-loss detection (2026-08-24). G-1 (FRD v3.1) is that the E-stop is invisible to
+# software -- it cuts motors and arm with no GPIO sense line, so the control loop keeps issuing
+# drive commands into dead motor controllers with no idea anything happened. A sense wire is
+# still the real fix, but INA260 0x44 already sits inline on the +12V motor bus, so a cut there
+# IS observable today with no new hardware: bus voltage collapses toward zero.
+# Deliberately DETECTION-ONLY for now -- it logs and shows on the face, it does NOT stop or
+# fault. Adding a brand-new automatic halt path on the eve of first driving is how you get a
+# rover that refuses to move for reasons nobody understands; prove the signal is clean first,
+# then decide about escalation. Threshold is well below any real operating voltage (the bus
+# measured 11.3-11.4V) but above the ~0V a genuine cut produces.
+MOTOR_RAIL_MIN_V=6.0
+MOTOR_RAIL_GRACE_S=1.0            # sustained below threshold before it's reported, not a blip
 ENABLE_STUCK_ALERT_EMAIL=True
 STUCK_ALERT_COOLDOWN_S=600.0      # min seconds between stuck alerts (10 min)
 STUCK_ALERT_MAX_PER_SESSION=5     # hard cap per service run, regardless of cooldown
@@ -306,8 +318,8 @@ ENABLE_VOICE=True
 # Custom-trained "Hey Willie" model (models/hey_willie.onnx + .onnx.data, trained 2026-08-07,
 # deployed 2026-08-15 — see wakeword_data/hey_willie_model/ for training artifacts) — replaced
 # the earlier "Hey Jarvis" placeholder; this is the real trained wake phrase, not a stand-in.
-WAKEWORD_MODEL_PATH='models/hey_willie.onnx'; WAKEWORD_THRESHOLD=0.65
-# 2026-08-23: was 0.5, raised to 0.65 mid-investigation on a theory that was then RULED OUT.
+WAKEWORD_MODEL_PATH='models/hey_willie.onnx'; WAKEWORD_THRESHOLD=0.5
+# 2026-08-24: back to 0.5. It was briefly raised to 0.65 on a theory that was then RULED OUT --
 # Corrected note: raising this did NOT stop the false wakes. Neither did raising
 # VOICE_ECHO_DECAY_S 0.6->2.0. The actual root cause was stale openwakeword smoothing state
 # surviving the muted window -- fixed by calling Model.reset() in voice.py::_speaker_loop().
@@ -376,20 +388,14 @@ VOICE_ENDPOINT_SILENCE_S=0.6  # trailing silence that ends capture, once speech 
 VOICE_VAD_NOISE_MULT=2.5      # speech threshold = measured ambient floor x this
 VOICE_VAD_FLOOR=0.004         # absolute minimum threshold (RMS, 0-1) so a silent room can't set
                               # a threshold low enough for its own noise to read as speech
-VOICE_ECHO_DECAY_S=2.0        # 2026-08-23: was hardcoded 0.6s in voice.py::_speaker_loop, raised
+VOICE_ECHO_DECAY_S=0.6        # 2026-08-24: back at 0.6 (its original value). It was raised
                               # to 2.0 mid-investigation on a theory that was then RULED OUT --
                               # raising it did NOT stop the false wakes. The real fix was
-                              # Model.reset() (see voice.py::_speaker_loop).
-                              # COST OF LEAVING IT AT 2.0: this is a hard deaf window. Willy
-                              # cannot hear "Hey Willie, stop" for VOICE_ECHO_DECAY_S plus the
-                              # ~0.3s blocking done-chirp after EVERY spoken reply -- ~2.4s now
-                              # vs ~0.9s before tonight. Voice stop is a real safety path
-                              # (voice.py's stop_requested deliberately bypasses the command
-                              # queue so it works mid-task), and ENABLE_HAILO_VISION=True now
-                              # arms come_here/follow/retrieve to actually drive the rover.
-                              # Recommend returning to 0.6 now that reset() is the actual fix;
-                              # kept at 2.0 pending a live retest since 0.6+reset() has never
-                              # been run together.
+                              # Model.reset() (see voice.py::_speaker_loop). Reverted because at
+                              # 2.0 this was a ~2.4s window (decay + blocking done-chirp) where
+                              # Willy could not hear "Hey Willie, stop" after every reply. That
+                              # was tolerable while he could not move; with motion enabled and
+                              # vision arming come_here/follow/retrieve, it is not.
 # Perceived latency: a short chirp the instant the wake word fires, so the interaction *starts*
 # immediately even though STT/TTS still take seconds behind it. This is the "Gotcha" idea the
 # Hailo NPU spec (SS6) deferred rather than rejected. Deliberately a tone and NOT speech: this

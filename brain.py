@@ -125,6 +125,8 @@ class RoverBrain:
         self._selftest_overridden=False
         # STUCK help-photo throttling (owner request 2026-08-24) -- see _send_stuck_alert().
         self._stuck_alert_t=0.0; self._stuck_alert_count=0
+        # Motor-power-loss detection (2026-08-24) -- see _check_motor_rail().
+        self._motor_rail_low_since=None; self._motor_rail_lost=False
         self._bat_tier='normal'; self._health={}; self._fault_since={}; self._stall_since={}
         self._wave_step=0; self._wave_deadline=None
         # 2026-08-08 audit P1 found no systemd WatchdogSec configured, confirmed via `systemctl
@@ -494,6 +496,10 @@ class RoverBrain:
             if not self._await_reset_or_resume('tilt fault',d,tilt,
                     'TILT CLEARED — tap screen to resume'): return
 
+        # Motor-power observability (detection only -- never changes state, see _check_motor_rail).
+        # Runs every tick regardless of FSM state so a cut is noticed while parked, not just
+        # while driving.
+        motor_rail_msg=self._check_motor_rail()
         # Only advance the battery tier on a reading we actually got. A stale value must not
         # drive the ladder toward 'shutdown' -- that is exactly the silent self-power-off this
         # was changed to prevent (2026-08-24). _check_health() above is what reacts to staleness,
@@ -905,6 +911,37 @@ class RoverBrain:
             # _stuck() runs every tick while stuck, which would be ~20Hz of email.
             if state=='STUCK': self._send_stuck_alert()
 
+    def _check_motor_rail(self):
+        """Partial software observability for a motor-power cut (E-stop / SW-M). Returns a short
+        status string when power looks lost, else ''.
+
+        G-1 says the E-stop is invisible to software because there's no sense line. That's true
+        for the arm rail, but NOT for motors: INA260 0x44 is wired inline on the +12V motor bus
+        (Master Hardware Design §16.4), so a cut collapses the voltage it reads. This turns a
+        silent failure -- commanding motors into dead controllers -- into a logged, visible one.
+
+        DETECTION ONLY by deliberate choice: no stop, no fault, no state change. See
+        config.MOTOR_RAIL_MIN_V for why escalation is not wired up yet."""
+        try:
+            v=self.current.rail('motor')['voltage_v']
+        except Exception:
+            return ''  # monitor itself unreadable -- _check_health() owns that, not this
+        now=time.time()
+        if v>=config.MOTOR_RAIL_MIN_V:
+            if self._motor_rail_lost:
+                log.warning(f'Motor rail power RESTORED ({v:.2f}V)')
+            self._motor_rail_low_since=None; self._motor_rail_lost=False
+            return ''
+        if self._motor_rail_low_since is None:
+            self._motor_rail_low_since=now; return ''
+        if now-self._motor_rail_low_since<config.MOTOR_RAIL_GRACE_S:
+            return ''
+        if not self._motor_rail_lost:
+            self._motor_rail_lost=True
+            log.error(f'MOTOR POWER LOST — +12V motor bus reads {v:.2f}V (E-stop or SW-M cut?). '
+                      f'Motion commands will have no effect until power returns.')
+        return f'MOTOR POWER LOST ({v:.2f}V)'
+
     def _send_stuck_alert(self):
         # STUCK help-photo (owner request 2026-08-24). Best-effort and fully swallowed: a failed
         # alert must never disturb the fault handling that triggered it.
@@ -938,6 +975,10 @@ class RoverBrain:
             log.warning('STUCK alert email failed',exc_info=True)
 
     def _upd(self,fs,st,d,tilt,spd=0.0,awaiting_reset=False,offer_override=False):
+        # Motor-power loss is prepended to whatever status the caller wanted, rather than given
+        # its own state: it is information, not a state change (see _check_motor_rail). Doing it
+        # here means every call site surfaces it without each one having to remember to.
+        if self._motor_rail_lost: st=f'⚡MOTOR POWER LOST — {st}'
         self.display.update_state(state=fs,status=st,distances=d,tilt=tilt,speed=spd,
                                    awaiting_reset=awaiting_reset,offer_override=offer_override)
 
