@@ -220,6 +220,21 @@ AI_NEARBY_RADIUS_M=3.0  # §14: how far counts as "nearby" when ai_provider.py's
 MAX_COMMAND_DURATION_S=3.0  # hard cap on any single timed move regardless of what was requested
 SENSOR_FAULT_GRACE_S=1.0    # how long imu/encoders/current may report unhealthy before _tick()
                             # forces a safe stopped state (SENSOR_FAULT) instead of just logging
+BAT_ADC_STALE_S=5.0         # 2026-08-24: how long ADC.battery_volts may go without a successful
+                            # read before is_healthy reports the value as stale. The ADC polls at
+                            # 1.0s, so this tolerates ~4 consecutive misses -- long enough to ride
+                            # out a transient I2C glitch, short enough that a genuinely dead bus is
+                            # caught within a few seconds. Before this existed, a failed read was
+                            # forced to 0.00V and read as a flat pack, silently powering the rover
+                            # off (happened for real: a loose I2C wire self-terminated Willy with
+                            # no warning). Staleness now escalates via SENSOR_FAULT instead.
+# Self-test override (owner request 2026-08-24). While motion is gated off by a failed startup
+# self-test, brain.py re-runs the test every SELFTEST_RETRY_S; after SELFTEST_OVERRIDE_AFTER
+# consecutive failures for the SAME reason it offers an on-screen button to enable motion anyway.
+# In-memory only -- a service restart clears it, so an override never outlives its session.
+# Deliberately scoped to the startup self-test: TILT/STALL/SENSOR faults are NOT overridable.
+SELFTEST_RETRY_S=30.0
+SELFTEST_OVERRIDE_AFTER=3
 STALL_GRACE_S=1.0           # FR-500-003 (Directive 5): how long a commanded wheel may show near-zero
                             # counts_per_sec before brain.py treats it as a real stall rather than
                             # still ramping up. Must clear both SPEED_RAMP_PER_S's worst-case ramp

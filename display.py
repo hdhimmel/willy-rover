@@ -58,6 +58,20 @@ class WillyFace:
         # from the face whether he thought he was connected.
         self._net_text='NET ...'; self._net_color=C_DIM
         self._net_thread=None
+        # Power/throttle indicator (owner request 2026-08-24). wf-panel-pi's lightning bolt reads
+        # get_throttled and lights for the STICKY "has occurred since boot" bits, so after a
+        # single power-on inrush transient it stays lit forever and stops meaning anything --
+        # and avoid_warnings=1 does not suppress it. This distinguishes the two: red only while
+        # under-voltage/throttling is ACTUALLY happening, dim amber for "happened earlier this
+        # boot", dim for clean. Sampled on the same background thread as the network status.
+        self._pwr_text=''; self._pwr_color=C_DIM
+        # Self-test override button (owner request 2026-08-24). Offered by brain.py only after
+        # the startup self-test has failed SELFTEST_OVERRIDE_AFTER times for the same reason.
+        # Two-step like the stop button -- this enables motion on a rover that failed its own
+        # safety check, so a single stray tap must never be able to do it.
+        self._offer_override=False
+        self._override_event=threading.Event(); self._override_armed_until=0.0
+        self._override_button_rect=pygame.Rect(W//2-230,H//2+185,460,84)
 
     def reset_tapped(self):
         if self._reset_event.is_set():
@@ -70,6 +84,26 @@ class WillyFace:
         if self._stop_event.is_set():
             self._stop_event.clear(); return True
         return False
+
+    def override_tapped(self):
+        if self._override_event.is_set():
+            self._override_event.clear(); return True
+        return False
+
+    def _handle_override_tap(self,x,y):
+        # Two-step, same shape as _handle_stop_tap(). Only ever reachable while brain.py is
+        # actively offering the override -- _offer_override gates it.
+        with self._lock:
+            if not self._offer_override: return
+            inside=self._override_button_rect.collidepoint(x,y)
+            armed=self._t<self._override_armed_until
+            if inside and armed:
+                self._override_armed_until=0.0; fire=True
+            elif inside:
+                self._override_armed_until=self._t+_STOP_ARM_S; fire=False
+            else:
+                self._override_armed_until=0.0; fire=False
+        if fire: self._override_event.set()
 
     def _handle_stop_tap(self,x,y):
         # Two-step confirm. First tap inside the button arms it; a second tap inside _STOP_ARM_S
@@ -112,8 +146,21 @@ class WillyFace:
                     color=C_GREEN
             except Exception:
                 text,color='NET ?',C_AMBER  # couldn't determine -- distinct from a known-down link
+            # Power/throttle. Bits 0-3 are live conditions, bits 16-19 are sticky "since boot".
+            ptext,pcolor='',C_DIM
+            try:
+                raw=subprocess.run(['vcgencmd','get_throttled'],capture_output=True,text=True,
+                                    timeout=4).stdout.strip()
+                val=int(raw.split('=')[1],16)
+                if val&0x1:      ptext,pcolor='UNDERVOLT NOW',C_RED
+                elif val&0x4:    ptext,pcolor='THROTTLED NOW',C_RED
+                elif val&0x2:    ptext,pcolor='FREQ CAPPED',C_AMBER
+                elif val&0x50000: ptext,pcolor='pwr dip @boot',C_DIM  # sticky only -- informational
+            except Exception:
+                ptext,pcolor='PWR ?',C_AMBER
             with self._lock:
                 self._net_text=text; self._net_color=color
+                self._pwr_text=ptext; self._pwr_color=pcolor
             for _ in range(int(_NET_POLL_S*2)):
                 if not self._running: return
                 time.sleep(0.5)
@@ -124,12 +171,15 @@ class WillyFace:
         # anything was understood as speech yet.
         with self._lock: self._heard_until=self._t+duration
 
-    def update_state(self,state,status='',distances=None,tilt=0.0,speed=0.0,awaiting_reset=False):
+    def update_state(self,state,status='',distances=None,tilt=0.0,speed=0.0,awaiting_reset=False,
+                     offer_override=False):
         with self._lock:
             self._state=state
             if status: self._status=status
             if distances: self._dists=distances
             self._tilt=tilt; self._speed=speed; self._awaiting_reset=awaiting_reset
+            if not offer_override: self._override_armed_until=0.0  # disarm when no longer offered
+            self._offer_override=offer_override
 
     def set_expression(self,expr,duration=1.5):
         # FR-1600-006 (bashful) / ad-hoc silly triggers from voice.py. Recorded unconditionally;
@@ -192,11 +242,13 @@ class WillyFace:
                     if awaiting and self._reset_button_rect.collidepoint(e.x*W,e.y*H):
                         self._reset_event.set()
                     self._handle_stop_tap(e.x*W,e.y*H)
+                    self._handle_override_tap(e.x*W,e.y*H)
                 elif e.type==pygame.MOUSEBUTTONDOWN:
                     with self._lock: awaiting=self._awaiting_reset
                     if awaiting and self._reset_button_rect.collidepoint(e.pos):
                         self._reset_event.set()
                     self._handle_stop_tap(*e.pos)
+                    self._handle_override_tap(*e.pos)
             dt=1.0/config.DISPLAY_FPS; self._t+=dt
             if config.ENABLE_DISPLAY_EXPRESSIONS:
                 with self._lock:
@@ -218,6 +270,9 @@ class WillyFace:
             personality=self._personality if self._t<self._personality_until else None
             heard=self._t<self._heard_until
             net_text=self._net_text; net_color=self._net_color
+            pwr_text=self._pwr_text; pwr_color=self._pwr_color
+            offer_override=self._offer_override
+            override_armed=self._t<self._override_armed_until
             stop_armed=self._t<self._stop_armed_until
             awaiting_reset=self._awaiting_reset
         # FR-1600-008: personality only ever substitutes the VISUAL state (vis), never the real
@@ -299,6 +354,28 @@ class WillyFace:
         # not determine. Sampled by _net_loop(), never computed here.
         net_surf=self.f_sm.render(net_text,True,net_color)
         s.blit(net_surf,(W-net_surf.get_width()-12,self._stop_button_rect.bottom+8))
+        # Power/throttle line, directly under the network line. Empty string when the rail is
+        # clean and nothing has happened this boot -- silence is the healthy state, so this only
+        # takes screen space when it has something to say.
+        if pwr_text:
+            pwr_surf=self.f_sm.render(pwr_text,True,pwr_color)
+            s.blit(pwr_surf,(W-pwr_surf.get_width()-12,self._stop_button_rect.bottom+30))
+        # Self-test override button. Only drawn once brain.py has actually offered it (repeated
+        # failures, same reason) -- never during a normal fault, so it can't be mistaken for a
+        # general "dismiss this" control. Amber not green: this enables motion on a rover that
+        # failed its own safety check, and it should not look reassuring.
+        if offer_override:
+            r2=self._override_button_rect
+            if override_armed:
+                pulse=0.5+0.5*math.sin(t*8)
+                pygame.draw.rect(s,tuple(int(c*(0.6+0.4*pulse)) for c in C_RED),r2,border_radius=14)
+                pygame.draw.rect(s,C_BG,r2,4,border_radius=14)
+                lbl2=self.f_md.render('CONFIRM OVERRIDE',True,C_EYE_W)
+            else:
+                pygame.draw.rect(s,C_AMBER,r2,border_radius=14)
+                pygame.draw.rect(s,C_BG,r2,3,border_radius=14)
+                lbl2=self.f_md.render('OVERRIDE SELF-TEST',True,C_BG)
+            s.blit(lbl2,(r2.centerx-lbl2.get_width()//2,r2.centery-lbl2.get_height()//2))
         # Stop-service button (owner request 2026-08-24): small, red, top-right corner. Two-step
         # -- see _handle_stop_tap(). Drawn last so nothing can overdraw it.
         r=self._stop_button_rect

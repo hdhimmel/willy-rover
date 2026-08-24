@@ -113,6 +113,16 @@ class RoverBrain:
         self._state='INIT'; self._stuck_count=0; self._last_action='none'; self._manual_action=None
         self._idle_t=0.0; self._avoid_start=0.0; self._avoid_phase=None; self._running=False
         self._motion_enabled=False; self._init_fail_reason=''
+        # Self-test override (owner request 2026-08-24). While motion is gated off by a failed
+        # startup self-test, retry the test periodically; after SELFTEST_OVERRIDE_AFTER
+        # consecutive failures for the SAME reason, offer an on-screen button letting the
+        # operator accept the risk and enable motion anyway. In-memory only -- a restart clears
+        # it, deliberately, so an override can never outlive the session it was granted in.
+        # Scoped to the startup self-test only: TILT/STALL/SENSOR faults keep their own reset
+        # gate and are NOT overridable, since those represent live physical danger rather than
+        # a missing diagnostic device.
+        self._selftest_retry_t=0.0; self._selftest_fail_count=0
+        self._selftest_overridden=False
         self._bat_tier='normal'; self._health={}; self._fault_since={}; self._stall_since={}
         self._wave_step=0; self._wave_deadline=None
         # 2026-08-08 audit P1 found no systemd WatchdogSec configured, confirmed via `systemctl
@@ -302,9 +312,14 @@ class RoverBrain:
         #
         # §4 watchdog (docs/WildWilly_Claude_Fix_Implementation_Plan.md): logging alone isn't
         # enough — a fault sustained past SENSOR_FAULT_GRACE_S must force a safe stopped state.
-        # battery_adc is excluded from that escalation: a failed read already defaults
-        # battery_volts to 0, which _update_bat_tier() correctly treats as 'shutdown' on its own,
-        # so this would be a redundant/less-informative path to the same outcome. imu is the
+        # battery_adc WAS excluded from that escalation until 2026-08-24, on the reasoning that a
+        # failed read defaulted battery_volts to 0 and _update_bat_tier() would treat that as
+        # 'shutdown' anyway. That reasoning was wrong in practice: it made a bus glitch
+        # indistinguishable from a flat pack and produced a SILENT power-off with no fault state
+        # and no low-battery warning — which fired for real when a loose I2C wire took the bus
+        # down. sensors.py::ADC now holds its last good value and reports is_healthy=False
+        # instead, so staleness escalates here like every other sensor: grace period, visible
+        # fault, operator reset. imu is the
         # sharpest case — self.imu.tilt returns the last cached reading even after the read
         # thread dies, so a stale tilt can silently pass the TILT_FAULT check below forever
         # without this.
@@ -315,7 +330,7 @@ class RoverBrain:
         # the other devices going unhealthy, but an isolated motor-driver disconnect
         # would not be caught by this check on its own.
         checks={'imu':self.imu.is_healthy,'encoders':self.encoders.is_healthy,
-                'current':self.current.is_healthy,'battery_adc':self.adc.battery_volts>0}
+                'current':self.current.is_healthy,'battery_adc':self.adc.is_healthy}
         now=time.time(); sustained_fault=None
         for name,healthy in checks.items():
             was=self._health.get(name,True)
@@ -325,7 +340,7 @@ class RoverBrain:
             self._health[name]=healthy
             if not healthy:
                 self._fault_since.setdefault(name,now)
-                if name!='battery_adc' and now-self._fault_since[name]>config.SENSOR_FAULT_GRACE_S:
+                if now-self._fault_since[name]>config.SENSOR_FAULT_GRACE_S:
                     sustained_fault=name
         return sustained_fault
 
@@ -403,8 +418,36 @@ class RoverBrain:
         if time.time()-self._pose_log_t>config.POSE_LOG_INTERVAL_S:
             self._pose_log_t=time.time(); log.info(f'pose: {pose}')
         if not self._motion_enabled:
+            now=time.time()
+            # Retry the self-test on a timer. Without this nothing ever re-runs it, so a fault
+            # that clears on its own (e.g. the loose I2C wire reseating) would keep motion
+            # disabled until a manual restart -- and the failure count below would never reach
+            # the threshold that offers the override.
+            if now-self._selftest_retry_t>=config.SELFTEST_RETRY_S:
+                self._selftest_retry_t=now
+                ok,reason=self._self_test()
+                if ok:
+                    log.info('Self-test now passes on retry — motion enabled.')
+                    self._motion_enabled=True; self._init_fail_reason=''
+                    self._selftest_fail_count=0; self._go('IDLE')
+                    self._upd('idle','Self-test recovered — ready',{'front':999,'left':999,'right':999},0.0)
+                    return
+                # Count consecutive failures for the SAME reason. A new/different reason resets
+                # the count, so an override is never offered for a fault the operator hasn't
+                # actually seen repeated.
+                if reason!=self._init_fail_reason:
+                    self._init_fail_reason=reason; self._selftest_fail_count=1
+                else:
+                    self._selftest_fail_count+=1
+                log.warning(f'Self-test retry failed ({self._selftest_fail_count}x): {reason}')
+            if self.display.override_tapped():
+                log.error(f'SELF-TEST OVERRIDDEN by operator — motion enabled despite: '
+                          f'{self._init_fail_reason}')
+                self._motion_enabled=True; self._selftest_overridden=True
+                self._go('IDLE'); return
+            offer=self._selftest_fail_count>=config.SELFTEST_OVERRIDE_AFTER
             self._upd('fault',f'SELF-TEST FAILED: {self._init_fail_reason}',
-                       {'front':999,'left':999,'right':999},0.0)
+                       {'front':999,'left':999,'right':999},0.0,offer_override=offer)
             return
         d=self.sonars.distances; tilt=self.imu.tilt; bat_v=self.adc.battery_volts; bat=self.adc.battery_pct
         self.safety.update_context(front_cm=d['front'],tilt_deg=tilt,motion_enabled=self._motion_enabled)
@@ -449,7 +492,16 @@ class RoverBrain:
             if not self._await_reset_or_resume('tilt fault',d,tilt,
                     'TILT CLEARED — tap screen to resume'): return
 
-        tier=self._update_bat_tier(bat_v); self.safety.update_context(bat_tier=tier)
+        # Only advance the battery tier on a reading we actually got. A stale value must not
+        # drive the ladder toward 'shutdown' -- that is exactly the silent self-power-off this
+        # was changed to prevent (2026-08-24). _check_health() above is what reacts to staleness,
+        # via SENSOR_FAULT, and it has already run this tick. Holding the tier here means a
+        # transient glitch changes nothing and a sustained one surfaces as a visible fault.
+        if self.adc.is_healthy:
+            tier=self._update_bat_tier(bat_v)
+        else:
+            tier=self._bat_tier
+        self.safety.update_context(bat_tier=tier)
         if tier=='shutdown':
             if self.retrieval.active: self.retrieval.abort(f'battery shutdown {bat_v:.2f}V')  # FR-1700-007
             if self.mapping.active: self.mapping.abort(f'battery shutdown {bat_v:.2f}V')
@@ -848,9 +900,9 @@ class RoverBrain:
             if state=='AVOID': self._avoid_start=time.time(); self._avoid_phase=None
             if state=='IDLE': self._idle_t=0.0
 
-    def _upd(self,fs,st,d,tilt,spd=0.0,awaiting_reset=False):
+    def _upd(self,fs,st,d,tilt,spd=0.0,awaiting_reset=False,offer_override=False):
         self.display.update_state(state=fs,status=st,distances=d,tilt=tilt,speed=spd,
-                                   awaiting_reset=awaiting_reset)
+                                   awaiting_reset=awaiting_reset,offer_override=offer_override)
 
     def _await_reset_or_resume(self,fault_desc,d,tilt,cleared_msg):
         # FR-300-003, applied to all faults (owner decision 2026-08-18, not just a future

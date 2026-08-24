@@ -147,6 +147,15 @@ class ADC:
         self._bus=None if config.SIMULATE_HARDWARE else smbus2.SMBus(bus)
         self._lock=threading.Lock(); self._bat_raw=0
         self._running=False; self._thread=None
+        # 2026-08-24: a failed read used to set _bat_raw=0, which brain.py's tier ladder read as
+        # 0.00V -> below BAT_SHUTDOWN_V -> silent controlled shutdown. That made "the I2C bus
+        # hiccupped" indistinguishable from "the pack is flat", and it fired for real: a loose
+        # I2C wire took the bus down and Willy powered himself off believing the battery was
+        # empty, with no low-battery warning and no fault state -- destroying the evidence and,
+        # with WiFi as the only link, taking him fully offline. Now a failed read HOLDS the last
+        # good value and marks the reading stale; brain.py escalates staleness through the normal
+        # SENSOR_FAULT path (grace period, visible fault state, operator reset) instead.
+        self._bat_last_ok=0.0; self._bat_fail_count=0
     def read_channel(self,ch):
         if config.SIMULATE_HARDWARE:
             # simulated healthy mid-charge pack (§18: not a real 100%/full-charge claim, just a
@@ -176,6 +185,14 @@ class ADC:
         if v<=config.BAT_SHUTDOWN_V: return 0
         return int((v-config.BAT_SHUTDOWN_V)/(config.BAT_FULL_V-config.BAT_SHUTDOWN_V)*100)
     @property
+    def is_healthy(self):
+        # Same contract as IMU.is_healthy/Encoders.is_healthy: False means the value being
+        # returned is stale, not that the battery is low. Poll interval is 1.0s, so allow a few
+        # missed reads before declaring staleness. In SIMULATE_HARDWARE read_channel() never
+        # raises, so this is always True off-hardware.
+        if config.SIMULATE_HARDWARE: return True
+        return (time.perf_counter()-self._bat_last_ok)<config.BAT_ADC_STALE_S
+    @property
     def is_charging(self): return False  # charge-sense divider not wired yet (AIN0 = battery only)
     @property
     def battery_low(self): return self.battery_volts<config.BAT_WARN_V
@@ -191,9 +208,22 @@ class ADC:
         while self._running:
             try:
                 self._bat_raw=self.read_channel(config.ADS_CH_BATTERY)
+                if self._bat_fail_count:
+                    log.info(f'ADS1115 battery read recovered after {self._bat_fail_count} failures')
+                    self._bat_fail_count=0
+                self._bat_last_ok=time.perf_counter()
             except Exception:
-                log.warning('ADS1115 read failed — assuming worst-case battery state (§8.5)', exc_info=True)
-                self._bat_raw=0
+                # Deliberately does NOT zero _bat_raw -- see __init__. Holding the last good
+                # value keeps a transient bus glitch from reading as a flat pack; is_healthy
+                # going False is what tells brain.py the number is stale, and brain.py escalates
+                # that through SENSOR_FAULT (grace period + visible fault + operator reset)
+                # rather than silently shutting down.
+                self._bat_fail_count+=1
+                if self._bat_fail_count==1:
+                    log.warning('ADS1115 battery read failed — holding last good value, '
+                                'marking stale (§8.5)',exc_info=True)
+                elif self._bat_fail_count%60==0:
+                    log.warning(f'ADS1115 battery read still failing ({self._bat_fail_count} consecutive)')
             time.sleep(1.0)
 
 class Encoders:
