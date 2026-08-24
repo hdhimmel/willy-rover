@@ -869,6 +869,13 @@ names were always right; only the two address values were swapped).
 0x45 reads ~0A whenever the Pi is running on AC rather than battery — that is
 correct behaviour, not a fault: the DROK feed is simply unloaded.
 
+**Physical placement (owner, 2026-08-24).** Viewed from the **front** of Willy,
+**0x45 (the 9V DROK → Witty Pi feed) is the leftmost of the three.** Positions of
+0x40 and 0x44 relative to it are not yet recorded — fill in when known. This
+matters for troubleshooting: the leading cause of an INA260 dropping off the bus
+on this build is a loose logic-side wire (see 0x40, 2026-08-24), so being able to
+go straight to the right physical board without tracing addresses is worth having.
+
 Logic pins on each: VCC, GND, SDA, SCL from that device's own row.
 
 ### 16.5 LTC4311 — no address, row 8
