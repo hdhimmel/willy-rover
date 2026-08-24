@@ -27,7 +27,12 @@ DISPLAY_W=800; DISPLAY_H=480; DISPLAY_FPS=30; DISPLAY_ROTATE=0
 MOTORKIT_LEFT_ADDR=0x60; MOTORKIT_RIGHT_ADDR=0x61
 MOTOR_PORT={'lf':(MOTORKIT_LEFT_ADDR,1),'lm':(MOTORKIT_LEFT_ADDR,2),'lr':(MOTORKIT_LEFT_ADDR,3),
             'rf':(MOTORKIT_RIGHT_ADDR,1),'rm':(MOTORKIT_RIGHT_ADDR,2),'rr':(MOTORKIT_RIGHT_ADDR,3)}
-SPEED_ROAM=0.55; SPEED_TURN=0.50; SPEED_SLOW=0.35; SPEED_MAX=0.80
+# Raised 2026-08-24. The previous set (ROAM .55 / TURN .50 / SLOW .35 / MAX .80)
+# was below breakaway torque for this chassis: commanded motion produced an
+# audible hum with no rotation. Measured per-wheel on the bench that day, a
+# JGA25-370 on this base needs roughly 0.5+ duty to start turning at all, so
+# SLOW=0.35 could never move him -- it only ever stalled the motors.
+SPEED_ROAM=0.75; SPEED_TURN=0.70; SPEED_SLOW=0.55; SPEED_MAX=1.00
 SPEED_RAMP_PER_S=2.0  # FR-400-003: max throttle change per second (slew rate), full range in 0.5s
 TURN_INNER_SCALE=0.0
 
