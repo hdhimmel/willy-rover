@@ -25,8 +25,22 @@ DISPLAY_W=800; DISPLAY_H=480; DISPLAY_FPS=30; DISPLAY_ROTATE=0
 # Drive — 2x Adafruit FeatherWing #2927 MotorKit boards over I2C (§9, §1.3 master doc).
 # Replaces the old GPIO H-bridge pins (freed — no discrete driver chip, no direction/PWM GPIO).
 MOTORKIT_LEFT_ADDR=0x60; MOTORKIT_RIGHT_ADDR=0x61
-MOTOR_PORT={'lf':(MOTORKIT_LEFT_ADDR,1),'lm':(MOTORKIT_LEFT_ADDR,2),'lr':(MOTORKIT_LEFT_ADDR,3),
-            'rf':(MOTORKIT_RIGHT_ADDR,1),'rm':(MOTORKIT_RIGHT_ADDR,2),'rr':(MOTORKIT_RIGHT_ADDR,3)}
+# As-built port order is M1=MIDDLE, M2=FRONT, M3=REAR on both kits -- NOT the
+# front/middle/rear order the port numbers suggest. Established 2026-08-24 by
+# driving one wheel at a time on a block and having the owner name the wheel
+# that actually turned: M2-left moved the left front, M1-right moved the right
+# middle, M2-right moved the right front. The remaining two follow by
+# elimination, and the convention is symmetric across both kits.
+#
+# The previous mapping was wrong in exactly the way that hides itself: _set()
+# commands all three wheels of a side to the same value, so forward, reverse
+# and skid turns behaved correctly regardless. It only surfaced during
+# per-wheel diagnostics, where "lf is dead" pointed at the wrong physical
+# wheel -- the dead leg on 0x60 M1 is the left MIDDLE motor, not the front.
+# Anything per-wheel (odometry attribution, crab/differential steering, a
+# future stall trace) needs this correct.
+MOTOR_PORT={'lf':(MOTORKIT_LEFT_ADDR,2),'lm':(MOTORKIT_LEFT_ADDR,1),'lr':(MOTORKIT_LEFT_ADDR,3),
+            'rf':(MOTORKIT_RIGHT_ADDR,2),'rm':(MOTORKIT_RIGHT_ADDR,1),'rr':(MOTORKIT_RIGHT_ADDR,3)}
 # Raised 2026-08-24. The previous set (ROAM .55 / TURN .50 / SLOW .35 / MAX .80)
 # was below breakaway torque for this chassis: commanded motion produced an
 # audible hum with no rotation. Measured per-wheel on the bench that day, a
