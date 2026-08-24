@@ -123,6 +123,8 @@ class RoverBrain:
         # a missing diagnostic device.
         self._selftest_retry_t=0.0; self._selftest_fail_count=0
         self._selftest_overridden=False
+        # STUCK help-photo throttling (owner request 2026-08-24) -- see _send_stuck_alert().
+        self._stuck_alert_t=0.0; self._stuck_alert_count=0
         self._bat_tier='normal'; self._health={}; self._fault_since={}; self._stall_since={}
         self._wave_step=0; self._wave_deadline=None
         # 2026-08-08 audit P1 found no systemd WatchdogSec configured, confirmed via `systemctl
@@ -899,6 +901,41 @@ class RoverBrain:
             log.info(f'  {self._state}->{state}'); self._state=state
             if state=='AVOID': self._avoid_start=time.time(); self._avoid_phase=None
             if state=='IDLE': self._idle_t=0.0
+            # Hooked here rather than in _stuck() because _go() fires exactly once on entry --
+            # _stuck() runs every tick while stuck, which would be ~20Hz of email.
+            if state=='STUCK': self._send_stuck_alert()
+
+    def _send_stuck_alert(self):
+        # STUCK help-photo (owner request 2026-08-24). Best-effort and fully swallowed: a failed
+        # alert must never disturb the fault handling that triggered it.
+        if not config.ENABLE_STUCK_ALERT_EMAIL: return
+        if not self.email.available: return
+        now=time.time()
+        # Two independent limits. The cooldown stops a rover that repeatedly re-enters STUCK from
+        # mailing on every episode; the session cap stops a genuinely pathological loop from
+        # filling an inbox before anyone notices. This codebase has already been bitten by an
+        # unthrottled per-tick action (the WAL checkpoint that spun at ~9Hz for an hour), so both
+        # are deliberate rather than defensive boilerplate.
+        if now-self._stuck_alert_t<config.STUCK_ALERT_COOLDOWN_S: return
+        if self._stuck_alert_count>=config.STUCK_ALERT_MAX_PER_SESSION:
+            return
+        self._stuck_alert_t=now; self._stuck_alert_count+=1
+        try:
+            photo=self.detector.capture_still()  # None if disabled/privacy-off/failed
+            pose=self.world_model.get_robot_pose()
+            d=self.sonars.distances
+            body=(f"I'm stuck and can't work out how to get free.\n\n"
+                  f"Pose: x={pose.x:.2f}m y={pose.y:.2f}m heading={pose.heading:.0f}deg\n"
+                  f"Sonar: front={d.get('front',999):.0f}cm left={d.get('left',999):.0f}cm "
+                  f"right={d.get('right',999):.0f}cm\n"
+                  f"Battery: {self.adc.battery_volts:.2f}V\n"
+                  f"Stuck episodes this run: {self._stuck_count}\n"
+                  f"Alert {self._stuck_alert_count} of {config.STUCK_ALERT_MAX_PER_SESSION} this session.\n\n"
+                  f"{'Photo attached from my front camera.' if photo else 'No photo — camera unavailable or privacy-disabled.'}\n\n-- Willy")
+            self.email.send_alert('Willy is stuck and needs help',body,image_bytes=photo,
+                                   image_name='willy_stuck.jpg')
+        except Exception:
+            log.warning('STUCK alert email failed',exc_info=True)
 
     def _upd(self,fs,st,d,tilt,spd=0.0,awaiting_reset=False,offer_override=False):
         self.display.update_state(state=fs,status=st,distances=d,tilt=tilt,speed=spd,

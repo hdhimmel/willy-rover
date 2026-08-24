@@ -235,6 +235,18 @@ BAT_ADC_STALE_S=5.0         # 2026-08-24: how long ADC.battery_volts may go with
 # Deliberately scoped to the startup self-test: TILT/STALL/SENSOR faults are NOT overridable.
 SELFTEST_RETRY_S=30.0
 SELFTEST_OVERRIDE_AFTER=3
+
+# STUCK help-photo alert (owner request 2026-08-24). When Willy enters STUCK -- he has exhausted
+# his own avoidance attempts and escalated -- he emails the owner a photo from the front camera
+# plus pose/sonar/battery context, so the situation can be seen rather than guessed at.
+# This is the ONLY path where Willy sends outbound mail without a human confirmation step (see
+# email_client.py::send_alert for why that's a bounded exception to FR-2000-004). It can only
+# ever send to EMAIL_OUTBOUND_ALLOWLIST[0], and it reports -- it never acts.
+# Both limits below are load-bearing, not boilerplate: _go('STUCK') can recur, and this codebase
+# has already been bitten once by an unthrottled per-tick action spinning at ~9Hz for an hour.
+ENABLE_STUCK_ALERT_EMAIL=True
+STUCK_ALERT_COOLDOWN_S=600.0      # min seconds between stuck alerts (10 min)
+STUCK_ALERT_MAX_PER_SESSION=5     # hard cap per service run, regardless of cooldown
 STALL_GRACE_S=1.0           # FR-500-003 (Directive 5): how long a commanded wheel may show near-zero
                             # counts_per_sec before brain.py treats it as a real stall rather than
                             # still ramping up. Must clear both SPEED_RAMP_PER_S's worst-case ramp

@@ -145,6 +145,32 @@ class ObjectDetector:
         bearing_deg=offset*(_ASSUMED_HFOV_DEG/2.0)
         return distance_cm,bearing_deg
 
+    def capture_still(self):
+        """JPEG bytes from the already-open camera, or None. Added 2026-08-24 for the STUCK
+        help-photo feature.
+
+        Exists because the Hailo backend holds the CSI camera for the process lifetime, so
+        nothing else can open it -- a standalone capture requires stopping the service, which is
+        exactly what a fault alert cannot do. This borrows a frame from the running picam2
+        instead. Uses the 'main' stream (1280x720) rather than the 640x640 'lores' stream
+        detect() consumes, so the photo is actually useful to look at.
+
+        Honours privacy.camera_enabled() via `available` -- a privacy-disabled camera stays
+        disabled even for a fault alert. Never raises: a failed capture returns None and the
+        caller falls back to a text-only alert."""
+        if not self.available or self._picam2 is None: return None
+        try:
+            import io
+            from PIL import Image
+            frame=self._picam2.capture_array('main')
+            buf=io.BytesIO()
+            # 'main' is XRGB8888 (see _load_hailo) -- drop the padding byte, keep RGB.
+            Image.fromarray(frame[:,:,:3][:,:,::-1]).save(buf,format='JPEG',quality=80)
+            return buf.getvalue()
+        except Exception as e:
+            log.warning(f'capture_still failed, alert will be text-only: {e}')
+            return None
+
     def close(self):
         # brain.py::stop() runs memory.close()/world_model.close()/motors.cleanup() and every
         # sensor stop() AFTER this call, so an exception escaping here would silently skip all of

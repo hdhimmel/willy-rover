@@ -1,5 +1,7 @@
 import imaplib,smtplib,email,json,os,time,threading,queue,uuid
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
 from email.header import decode_header
 import config,logsetup,privacy
 log=logsetup.setup('email')
@@ -107,6 +109,41 @@ class EmailClient:
             return True,'sent'
         except (smtplib.SMTPException,OSError,TimeoutError) as e:
             log.error(f'Send failed: {e}')
+            return False,str(e)
+
+    def send_alert(self,subject,body,image_bytes=None,image_name='willy.jpg'):
+        """Fault alert to the owner. UNLIKE request_send/confirm_and_send, this sends WITHOUT a
+        human confirmation step -- the only such path in this class, added 2026-08-24 for the
+        STUCK help-photo feature at the owner's request.
+
+        Why that's a defensible exception to FR-2000-004's "never acts autonomously": this can
+        only ever send TO an already-allowlisted address (the owner's own), it is triggered only
+        by Willy's own fault states rather than by anything inbound, and it cannot act on the
+        world -- it reports. Acting on inbound instructions still requires confirmation, which is
+        what FR-2000-004 is actually protecting against. Callers own rate limiting; this method
+        deliberately has none, so a caller in a tick loop MUST throttle (see brain.py's cooldown).
+        """
+        if not self._enabled: return False,'email not configured/enabled'
+        if not config.EMAIL_OUTBOUND_ALLOWLIST: return False,'no outbound allowlist configured'
+        to=config.EMAIL_OUTBOUND_ALLOWLIST[0]
+        try:
+            if image_bytes:
+                msg=MIMEMultipart()
+                msg.attach(MIMEText(body,'plain'))
+                img=MIMEImage(image_bytes)
+                img.add_header('Content-Disposition','attachment',filename=image_name)
+                msg.attach(img)
+            else:
+                msg=MIMEText(body)
+            msg['Subject']=subject; msg['From']=config.WILLIE_GOOGLE_ACCOUNT; msg['To']=to
+            with smtplib.SMTP_SSL(config.GMAIL_SMTP_HOST,config.GMAIL_SMTP_PORT,timeout=15) as s:
+                s.login(config.WILLIE_GOOGLE_ACCOUNT,self._password)
+                s.send_message(msg)
+            log.warning(f'ALERT email sent to {to}: "{subject}" '
+                        f'({"with photo" if image_bytes else "text only"})')
+            return True,'sent'
+        except (smtplib.SMTPException,OSError,TimeoutError) as e:
+            log.error(f'Alert send failed: {e}')
             return False,str(e)
 
     # --- inbound (FR-2000-002/003/006/010) ---
