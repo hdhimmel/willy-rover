@@ -14,6 +14,8 @@ C_GREEN=(0,210,90);C_RED=(220,50,50);C_AMBER=(255,165,0)
 # state NOT in this set (fault/lowbatt/warn/stuck) is mandatory and always wins — FR-1600-008.
 _PERSONALITY_SAFE_STATES={'idle','roam','slow','listening','processing','think','speak'}
 W,H=1280,720; FACE_CX=640; FACE_CY=360
+_NET_POLL_S=5.0      # how often the background thread refreshes the on-face network indicator
+_STOP_ARM_S=4.0      # how long the stop button stays armed/CONFIRM after the first tap
 EYE_L=415;EYE_R=865;EYE_CY=340;EYE_RX=175;EYE_RY=130;IRIS_R=86;PUPIL_R=38
 MOUTH_CX=640;MOUTH_CY=535;MOUTH_W=475;MOUTH_H=110
 STATUS_Y=600
@@ -42,11 +44,79 @@ class WillyFace:
         # true, consumed by reset_tapped() (called from brain.py's tick thread).
         self._awaiting_reset=False; self._reset_event=threading.Event()
         self._reset_button_rect=pygame.Rect(W//2-220,H//2+60,440,110)
+        # Stop-service button (owner request 2026-08-24): small, red, top-right. Two-step so a
+        # stray touch can't kill a running rover -- first tap arms it and it turns into CONFIRM
+        # for _STOP_ARM_S, second tap inside that window actually fires. _stop_event is the
+        # thread-safe handoff to brain.py's tick thread, same pattern as _reset_event above.
+        self._stop_event=threading.Event(); self._stop_armed_until=0.0
+        self._stop_button_rect=pygame.Rect(W-150,10,138,44)
+        # Network status (owner request 2026-08-24). Sampled on a background thread, never in
+        # _draw() -- reading interface state costs a syscall/subprocess and the render loop runs
+        # at DISPLAY_FPS. Cached value only. This exists because a rover that is up but off the
+        # network is otherwise completely silent about it: on 2026-08-24 Willy sat healthy with
+        # blue eyes and a smile while being entirely unreachable, and there was no way to tell
+        # from the face whether he thought he was connected.
+        self._net_text='NET ...'; self._net_color=C_DIM
+        self._net_thread=None
 
     def reset_tapped(self):
         if self._reset_event.is_set():
             self._reset_event.clear(); return True
         return False
+
+    def stop_tapped(self):
+        # Consumed by brain.py's tick thread, same contract as reset_tapped(): True exactly once
+        # per confirmed press. brain.py owns what "stop" actually does -- this only reports intent.
+        if self._stop_event.is_set():
+            self._stop_event.clear(); return True
+        return False
+
+    def _handle_stop_tap(self,x,y):
+        # Two-step confirm. First tap inside the button arms it; a second tap inside _STOP_ARM_S
+        # fires. A tap anywhere else while armed cancels, so the safe action is always "touch
+        # something else". Runs on the display thread; _stop_event crosses to brain.py's tick.
+        inside=self._stop_button_rect.collidepoint(x,y)
+        with self._lock:
+            armed=self._t<self._stop_armed_until
+            if inside and armed:
+                self._stop_armed_until=0.0; fire=True
+            elif inside:
+                self._stop_armed_until=self._t+_STOP_ARM_S; fire=False
+            else:
+                self._stop_armed_until=0.0; fire=False  # tap elsewhere disarms
+        if fire: self._stop_event.set()
+
+    def _net_loop(self):
+        # Background sampler for the on-face network indicator. Deliberately cheap and slow
+        # (_NET_POLL_S): this is operator-facing status, not something anything reacts to.
+        import subprocess
+        while self._running:
+            text,color='NET DOWN',C_RED
+            try:
+                out=subprocess.run(['nmcli','-t','-f','DEVICE,STATE,CONNECTION','dev','status'],
+                                    capture_output=True,text=True,timeout=4).stdout
+                best=None
+                for line in out.splitlines():
+                    p=line.split(':')
+                    if len(p)>=3 and p[1]=='connected' and p[0] not in ('lo','docker0'):
+                        # Prefer a wired link when both are up -- it's the one that survives a
+                        # WiFi block, and it's what someone debugging wants to see named.
+                        if best is None or p[0].startswith('eth'): best=(p[0],p[2])
+                if best:
+                    dev,conn=best
+                    ip=subprocess.run(['ip','-4','-o','addr','show',dev],
+                                       capture_output=True,text=True,timeout=4).stdout
+                    addr=ip.split('inet ')[1].split('/')[0] if 'inet ' in ip else '?'
+                    kind='ETH' if dev.startswith('eth') else 'WIFI'
+                    text=f'{kind} {conn} {addr}' if kind=='WIFI' else f'{kind} {addr}'
+                    color=C_GREEN
+            except Exception:
+                text,color='NET ?',C_AMBER  # couldn't determine -- distinct from a known-down link
+            with self._lock:
+                self._net_text=text; self._net_color=color
+            for _ in range(int(_NET_POLL_S*2)):
+                if not self._running: return
+                time.sleep(0.5)
 
     def note_heard(self,duration=2.0):
         # Confirms a command was actually transcribed (non-empty STT text) — distinct from the
@@ -92,10 +162,12 @@ class WillyFace:
     def start(self):
         self._running=True
         self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
+        self._net_thread=threading.Thread(target=self._net_loop,daemon=True); self._net_thread.start()
 
     def stop(self):
         self._running=False
         if self._thread is not None: self._thread.join(timeout=2.0)
+        if self._net_thread is not None: self._net_thread.join(timeout=2.0)
 
     def _loop(self):
         # SDL/Wayland requires init, window creation, and every subsequent display
@@ -119,10 +191,12 @@ class WillyFace:
                     with self._lock: awaiting=self._awaiting_reset
                     if awaiting and self._reset_button_rect.collidepoint(e.x*W,e.y*H):
                         self._reset_event.set()
+                    self._handle_stop_tap(e.x*W,e.y*H)
                 elif e.type==pygame.MOUSEBUTTONDOWN:
                     with self._lock: awaiting=self._awaiting_reset
                     if awaiting and self._reset_button_rect.collidepoint(e.pos):
                         self._reset_event.set()
+                    self._handle_stop_tap(*e.pos)
             dt=1.0/config.DISPLAY_FPS; self._t+=dt
             if config.ENABLE_DISPLAY_EXPRESSIONS:
                 with self._lock:
@@ -143,6 +217,8 @@ class WillyFace:
             dists=dict(self._dists); tilt=self._tilt; speed=self._speed
             personality=self._personality if self._t<self._personality_until else None
             heard=self._t<self._heard_until
+            net_text=self._net_text; net_color=self._net_color
+            stop_armed=self._t<self._stop_armed_until
             awaiting_reset=self._awaiting_reset
         # FR-1600-008: personality only ever substitutes the VISUAL state (vis), never the real
         # `state` used for the HUD badge/status text below — and only when `state` is itself in
@@ -218,6 +294,24 @@ class WillyFace:
             cx,cy=36,36
             pygame.draw.circle(s,C_GREEN,(cx,cy),22)
             pygame.draw.lines(s,C_BG,False,[(cx-10,cy),(cx-3,cy+9),(cx+12,cy-11)],5)
+        # Network indicator (owner request 2026-08-24). Sits just under the stop button, top
+        # right. Green = a real connection with an IP, red = nothing connected, amber = could
+        # not determine. Sampled by _net_loop(), never computed here.
+        net_surf=self.f_sm.render(net_text,True,net_color)
+        s.blit(net_surf,(W-net_surf.get_width()-12,self._stop_button_rect.bottom+8))
+        # Stop-service button (owner request 2026-08-24): small, red, top-right corner. Two-step
+        # -- see _handle_stop_tap(). Drawn last so nothing can overdraw it.
+        r=self._stop_button_rect
+        if stop_armed:
+            pulse=0.5+0.5*math.sin(t*8)  # faster pulse than the reset button: this one is armed
+            pygame.draw.rect(s,tuple(int(c*(0.6+0.4*pulse)) for c in C_AMBER),r,border_radius=8)
+            pygame.draw.rect(s,C_BG,r,3,border_radius=8)
+            lbl=self.f_sm.render('CONFIRM?',True,C_BG)
+        else:
+            pygame.draw.rect(s,C_RED,r,border_radius=8)
+            pygame.draw.rect(s,C_BG,r,2,border_radius=8)
+            lbl=self.f_sm.render('STOP SVC',True,C_EYE_W)
+        s.blit(lbl,(r.centerx-lbl.get_width()//2,r.centery-lbl.get_height()//2))
         # FR-300-003 (owner decision 2026-08-18): the fault condition has cleared but nothing
         # resumes until this is tapped -- drawn only then, never during an active fault, so it
         # can never be mistaken for a way to interrupt/skip past a fault that's still real.

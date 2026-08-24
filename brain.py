@@ -354,6 +354,23 @@ class RoverBrain:
             self.cloud_ai.reset_async(); self._claude_pending=False; self._claude_move_pending=False
 
     def _tick(self):
+        # On-screen STOP SVC button (owner request 2026-08-24). Checked first, before any
+        # Directive gating: this is an operator explicitly asking the service to stop, and it
+        # must work even when the rover is faulted, wedged, or off the network -- which is the
+        # whole reason it exists (2026-08-24: Willy sat healthy but unreachable with no way to
+        # stop him from the panel). display.py's two-step confirm means this only fires on a
+        # deliberate second tap. Brake first, then let main.py's normal shutdown path run.
+        if self.display.stop_tapped():
+            log.warning('STOP SVC tapped on screen — braking and stopping the service.')
+            self.safety.emergency_stop('operator stop button')
+            if self.retrieval.active: self.retrieval.abort('operator stop button')
+            if self.mapping.active: self.mapping.abort('operator stop button')
+            if self.navigator.active: self.navigator.abort('operator stop button')
+            if self.pursuit.active: self.pursuit.abort('operator stop button')
+            self.memory.save_all_now()
+            self.display.update_state('warn','STOPPING SERVICE…')
+            self._running=False
+            return
         if self.voice.stop_requested.is_set():
             # Checked before any Directive gating below — see voice.py's stop_requested docstring.
             # This is the only place that ever clears it, and this is the tick thread, so
