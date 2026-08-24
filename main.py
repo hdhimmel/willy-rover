@@ -25,7 +25,7 @@ if not os.environ.get('WILLY_SIMULATE'):
     def _i2c_bus_online():
         addrs=(config.ENCODER_ADDR,config.IMU_ADDR,config.ADS_ADDR,config.STEER_PCA_ADDR,
                config.ARM_PCA_ADDR,config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR,
-               config.INA260_SERVO_ADDR,config.INA260_PI_ADDR,config.INA260_MOTOR_ADDR)
+               config.INA260_SERVO_ADDR,config.INA260_PI_ADDR,config.INA260_WITTY_ADDR)
         try:
             with smbus2.SMBus(1) as bus:
                 for addr in addrs:

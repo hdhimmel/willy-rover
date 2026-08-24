@@ -117,7 +117,22 @@ ESTOP_LOG_INTERVAL_S=5.0 # safety.py throttles emergency_stop()'s own log line t
 
 # Current monitoring — INA260 x3 (§5.2). Monitor/log only (FR-1100 diagnostics) — no numeric
 # overcurrent trip thresholds exist anywhere in the documentation to hardcode a cutoff against.
-INA260_SERVO_ADDR=0x40; INA260_PI_ADDR=0x44; INA260_MOTOR_ADDR=0x45
+#
+# 2026-08-24: LABELS CORRECTED AGAINST LIVE MEASUREMENT. Read directly off the bus with the
+# base powered:  0x40 -> absent (Errno 121),  0x44 -> 11.388V @ 0.113A,  0x45 -> 9.070V @ 0.001A.
+# Neither of the old names matched its rail: 0x44 was called the "Pi" rail but is nowhere near
+# 5V, and 0x45 was called the "motor" 12V bus but reads 9V. Owner confirmed 0x45 now sits on the
+# DROK 9V feed to Witty Pi's VIN terminal (the 2026-08-23 power rework), so it is renamed here.
+# 0x44's true rail is NOT yet confirmed -- 11.39V is pack/bus voltage, so the old "Pi 5V" name is
+# definitely wrong, but the accurate name is still open. Left as-is with this warning rather than
+# guessed at. Do not reason about these by name until 0x44 is settled.
+INA260_SERVO_ADDR=0x40   # steering servo rail (R2). ABSENT as of 2026-08-24 -- fails self-test.
+                         # R2 also feeds the AMS1117 powering the isolated I2C bus, and that bus
+                         # is alive, so this rail HAS power: points at a dead device or a broken
+                         # SDA/SCL run to this chip specifically, not an unpowered rail.
+INA260_PI_ADDR=0x44      # NAME UNVERIFIED -- measures 11.39V, so not the Pi's 5V rail. See above.
+INA260_WITTY_ADDR=0x45   # DROK 9V -> Witty Pi VIN (owner-confirmed 2026-08-24). Was
+                         # INA260_MOTOR_ADDR; it does not monitor the motor bus.
 
 # Witty Pi 5 HAT+ (UUGear) — RTC and power management. Uses only SDA/SCL (per its own user
 # manual), no other GPIO — confirmed no conflict with anything else on this bus. Physically
@@ -445,7 +460,7 @@ def validate():
 
     i2c_addrs={'ENCODER_ADDR':ENCODER_ADDR,'INA260_SERVO_ADDR':INA260_SERVO_ADDR,
                'STEER_PCA_ADDR':STEER_PCA_ADDR,'ARM_PCA_ADDR':ARM_PCA_ADDR,
-               'INA260_PI_ADDR':INA260_PI_ADDR,'INA260_MOTOR_ADDR':INA260_MOTOR_ADDR,
+               'INA260_PI_ADDR':INA260_PI_ADDR,'INA260_WITTY_ADDR':INA260_WITTY_ADDR,
                'ADS_ADDR':ADS_ADDR,'IMU_ADDR':IMU_ADDR,
                'MOTORKIT_LEFT_ADDR':MOTORKIT_LEFT_ADDR,'MOTORKIT_RIGHT_ADDR':MOTORKIT_RIGHT_ADDR}
     seen={}
