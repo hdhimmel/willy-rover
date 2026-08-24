@@ -462,10 +462,20 @@ not run on ARM), which is not available.
 These are recorded rather than described as working. Each is flagged in the
 implementing code itself.
 
-**S-1 — E-stop is invisible to software.** No GPIO sense pin exists. Directive
-1 is enforced physically but has no representation in the control loop, cannot
-be logged, and FR-300-003's post-E-stop reset gate cannot be implemented
-*for E-stop specifically* — this needs a wiring change first.
+**S-1 — E-stop is invisible to software. CLOSED 2026-08-24 by owner decision.**
+The owner authorized that no Pi-side sense line is required: the latching
+mushroom switch physically cuts motor and arm power, that cut is absolute and
+independent of software, and FR-300-001/002/003 are therefore satisfied by
+hardware. See FRD v3.1's FR-300 Acceptance Criteria for the full rationale.
+
+The underlying technical statement remains true and is retained as background:
+no GPIO sense pin exists, so Directive 1 is enforced physically but has no
+representation in the control loop and cannot be logged. What changed is that
+this is now an accepted design position rather than an open gap. Partial
+observability was added the same day — `brain.py::_check_motor_rail()` watches
+INA260 0x44 (inline on the +12V motor bus) for the voltage collapse a cut
+produces, logging it and surfacing it on the face. That is detection only: it
+never stops or faults, and it is not a substitute for a sense line.
 
 The reset-gate *mechanism* itself is no longer blocked on that wiring, though.
 Owner decision 2026-08-18: a touchscreen "TAP TO RESUME" button, applied now

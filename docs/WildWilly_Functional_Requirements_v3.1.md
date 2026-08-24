@@ -60,8 +60,14 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   Hardware Design v2.0
                                                   Section 13).
 
-  FR-300 Safety / E-stop  Not live-verified       Blocking for any motion
-                                                  testing
+  FR-300 Safety / E-stop  SATISFIED by hardware   Owner decision 2026-08-24:
+                          (owner decision          the latching mushroom switch
+                          2026-08-24)              physically cuts motor+arm
+                                                  power; no Pi sense line
+                                                  required. NO LONGER BLOCKS
+                                                  FR-400..700 live testing.
+                                                  See FR-300 Acceptance
+                                                  Criteria and G-1.
 
   FR-400 Drive            Not live-verified       Motor crimps unverified
                                                   on five of six units
@@ -112,8 +118,13 @@ Requirements are implemented and unit-tested off-hardware unless noted.
   FR-1800 onwards         hardware tested only    
   -----------------------------------------------------------------------
 
-Motion-related groups (FR-400 through FR-700) must not be live-tested until
-FR-300 passes --- that is Directive 2.
+Motion-related groups (FR-400 through FR-700) were gated behind FR-300 passing
+--- Directive 2. **That gate is released as of 2026-08-24** by the owner decision
+recorded in FR-300's Acceptance Criteria: the E-stop's physical power cut
+satisfies FR-300-001/002/003 without a Pi-side sense line. Remaining pre-drive
+items are physical, not requirement-level: motor crimps unverified on five of six
+units (FR-400), and the steering servo V+ current path (~9A worst case against an
+8A UBEC, Master Hardware Design §14 item 16).
 
 ## V.1 Implementation and test coverage (2026-08-18)
 
@@ -183,7 +194,16 @@ These are recorded so they are not mistaken for untested-but-working. Each is
 a real limitation of the current build, flagged in the implementing code
 itself rather than papered over.
 
-**G-1 --- FR-300-002/003, E-stop is unobservable to software.** The E-stop is
+**G-1 --- CLOSED 2026-08-24 by owner decision, not by implementation.** The owner
+authorized that no Pi-side E-stop sense line is required: the latching mushroom
+switch physically cuts motor and arm power, and that cut is absolute and
+independent of software. FR-300-001/002/003 are therefore satisfied by hardware
+— see the FR-300 Acceptance Criteria section for the full rationale and for what
+this explicitly does NOT claim. **FR-300 no longer gates live testing of FR-400
+through FR-700.** The technical description below is retained as accurate
+background on what software can and cannot see.
+
+**G-1 (original text) --- FR-300-002/003, E-stop is unobservable to software.** The E-stop is
 a hardware-only latching cut with no documented GPIO sense pin. Software
 therefore cannot detect that it has fired, cannot log it, and cannot enforce
 FR-300-003's post-E-stop reset gate. This is a wiring change, not a code gap:
@@ -532,6 +552,39 @@ conditions:
 
 FR-300 is Directive 1 and gates every motion group. It must pass before
 FR-400 through FR-700 are live-tested at all.
+
+**OWNER DECISION 2026-08-24 — FR-300-001/002/003 are satisfied by hardware
+alone; no Pi-side E-stop sense line is required.** Owner's authorization, stated
+directly: *the Pi doesn't need this, the main power down is sufficient.*
+
+Rationale and scope, recorded so this is traceable rather than silently relaxed:
+
+-   The E-stop is a **latching mushroom switch that physically cuts motor and
+    arm power** (Master Hardware Design v2.0 §2.3). That cut is absolute and
+    does not depend on software running, being responsive, or being correct.
+    Software awareness would add logging and a reset gate — it would not make
+    the stop itself any more reliable.
+-   **FR-300-001** (continuous monitoring) is therefore met physically: the cut
+    is continuous by construction, not polled.
+-   **FR-300-002** (immediate motion disable) is met physically and more
+    strongly than software could: removing power halts motors and arm
+    regardless of what any queued command intended.
+-   **FR-300-003** (operator reset) is met by the latching switch itself —
+    motion cannot resume until a human physically releases it. The touchscreen
+    reset gate remains in force for `TILT_FAULT`/`SENSOR_FAULT`/`STALL_FAULT`,
+    which are software-detected and genuinely need it.
+
+**What this decision does NOT claim.** Software still cannot *observe* an E-stop,
+so it keeps issuing drive commands into unpowered controllers and logs nothing
+about the event. Two partial mitigations exist as of 2026-08-24:
+`brain.py::_check_motor_rail()` detects motor-bus voltage collapse via INA260
+0x44 (inline on that bus) and surfaces it in the log and on the face —
+detection only, no automatic stop — and SW-M/SW-A (§2.1/§2.3) give per-domain
+cuts. Neither is a sense line, and neither is claimed to be.
+
+**Consequence:** FR-300 no longer blocks live testing of FR-400 through FR-700.
+Directive 2's gate is considered satisfied. G-1 in §V.2 is closed by this
+decision rather than by implementation.
 
 -   **FR-300-001 (continuous monitoring).** The E-stop state is polled or
     interrupt-driven on every control cycle, not checked once at startup.
