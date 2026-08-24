@@ -870,11 +870,22 @@ names were always right; only the two address values were swapped).
 correct behaviour, not a fault: the DROK feed is simply unloaded.
 
 **Physical placement (owner, 2026-08-24).** Viewed from the **front** of Willy,
-**0x45 (the 9V DROK → Witty Pi feed) is the leftmost of the three.** Positions of
-0x40 and 0x44 relative to it are not yet recorded — fill in when known. This
-matters for troubleshooting: the leading cause of an INA260 dropping off the bus
-on this build is a loose logic-side wire (see 0x40, 2026-08-24), so being able to
-go straight to the right physical board without tracing addresses is worth having.
+left to right:
+
+| Position | Addr | Voltage | Rail |
+|---|---|---|---|
+| **Left** | 0x45 | 9V | DROK → Witty Pi VIN → Pi |
+| **Middle** | 0x44 | 12V | +12V bus → both FeatherWing VIN (motors) |
+| **Right** | 0x40 | 5V | FEICHAO UBEC → servos, AMS1117, Pi screen |
+
+Left and right were owner-stated; the middle follows by elimination (only three
+boards). Note the layout is 9V, 12V, 5V left-to-right — not sorted by voltage and
+not matching I²C address order either, so don't infer position from either one.
+
+This matters for troubleshooting: the leading cause of an INA260 dropping off the
+bus on this build is a loose logic-side wire (see 0x40, 2026-08-24), so being able
+to go straight to the right physical board without tracing addresses is worth
+having.
 
 Logic pins on each: VCC, GND, SDA, SCL from that device's own row.
 
