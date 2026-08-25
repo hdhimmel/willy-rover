@@ -102,10 +102,14 @@ ENCODER_COUNTS_PER_REV=3292  # §9.2: 823.1 PPR x4 quadrature decode -- NOT benc
                              # have reduced I2C transaction count anyway. Polling is the real
                              # mechanism -- see sensors.py::Encoders._loop().
 
-# Odometry (§8, WildWilly_Claude_Fix_Implementation_Plan.md). UNCONFIRMED: the master doc gives
-# only the overall chassis envelope (430x330x220mm, §2), never a wheel diameter or track (L/R
-# wheel-center spacing) measurement — these two values are placeholder estimates derived from
-# that envelope, not a bench/caliper measurement. odometry.py's pose output is dead-reckoning
+# Odometry (§8, WildWilly_Claude_Fix_Implementation_Plan.md). This comment used to cite a
+# "430x330x220mm chassis envelope (§2)" — that figure appears ONLY in
+# docs/archive/WildWilly_Master_Engineering_Package_rev6.0.7.md, a superseded document the repo
+# explicitly says not to cite as authoritative, and the current Master Hardware Design v2.0
+# carries no chassis envelope at all. Owner measured the chassis at 400mm wide on 2026-08-25;
+# the archived 430mm is stale. Neither figure is a track measurement anyway — no doc ever gave a
+# wheel diameter or a track (L/R wheel-center spacing), so both constants below began as
+# estimates derived from that retired envelope rather than from a caliper. odometry.py's pose output is dead-reckoning
 # only (no slip correction, no fusion with the IMU heading) and will drift; re-measure these two
 # values directly off the chassis before trusting distances/headings for anything beyond rough
 # relative dead-reckoning.
@@ -117,7 +121,13 @@ WHEEL_DIAMETER_M=0.1016 # 4.00 in, owner-measured 2026-08-25. Was 0.065 (an UNCO
                         # NOTE this is the nominal/unloaded diameter. The effective ROLLING
                         # diameter under the rover's weight is slightly smaller if the tyre
                         # compresses; a drive-a-measured-distance check is what settles that.
-TRACK_WIDTH_M=0.28      # UNCONFIRMED placeholder — center-to-center of left/right wheel tracks
+TRACK_WIDTH_M=0.28      # STILL UNCONFIRMED — center-to-center of left/right wheel tracks. NOT the
+                        # same as the 400mm chassis width: wheels mounted outboard make the track
+                        # wider than the body, inboard makes it narrower, and only the wheel
+                        # centrelines matter to odometry.py:36's d_heading division. Measure
+                        # outside-of-left-tyre to outside-of-right-tyre, then subtract one tyre
+                        # width. Too-small a value over-reports rotation: if the true track is
+                        # 0.40, this 0.28 makes him believe he turned ~43% further than he did.
 POSE_LOG_INTERVAL_S=5.0 # brain.py logs the current odometry pose at most this often
 TICK_OVERRUN_THRESHOLD_S=0.15 # brain.py::run() logs+counts a TICK_OVERRUN when a single _tick()
                               # call takes longer than this (loop targets ~50ms sleep + tick time) --
