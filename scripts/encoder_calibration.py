@@ -54,7 +54,7 @@ def main():
     from sensors import Encoders
     enc=Encoders(); enc.start()
     time.sleep(0.5)
-    start=dict(enc.counts())
+    start=dict(enc.counts)
     print(f'Turn the {wheel.upper()} wheel exactly {revs:g} full revolutions over the next '
           f'{window:g}s.')
     print(f'configured ENCODER_COUNTS_PER_REV = {config.ENCODER_COUNTS_PER_REV}\n')
@@ -62,13 +62,13 @@ def main():
         end_t=time.time()+window
         while time.time()<end_t:
             time.sleep(2.0)
-            now=enc.counts()
+            now=enc.counts
             live={w:now[w]-start[w] for w in now if now[w]!=start[w]}
             remaining=max(0.0,end_t-time.time())
             print(f'  {remaining:5.1f}s left  counts so far: {live or "(nothing moving yet)"}',
                   flush=True)
     finally:
-        final=dict(enc.counts())
+        final=dict(enc.counts)
         try: enc.stop()
         except Exception: pass
 
