@@ -437,13 +437,22 @@ physical wheels, or the same M1/M2 swap, or neither. This affects per-wheel
 odometry attribution only; whole-side drive is unaffected. Settle it the same
 way: turn one wheel by hand and read which encoder channel counts.
 
-**Open fault (2026-08-24): the LEFT MIDDLE motor on 0x60 M1 is an open
-circuit.** Zero current draw at 0.35/0.60/0.80/0.90 duty, both directions,
+**RESOLVED 2026-08-25 — the LEFT MIDDLE motor on 0x60 M1 was a disconnected
+connector, not a failed motor.** Reconnected during teardown; the wheel was
+confirmed turning under command on 2026-08-25.
+
+Kept because the diagnostic reasoning generalises to the other five legs. The
+symptom was zero current draw at 0.35/0.60/0.80/0.90 duty in both directions,
 against ~0.11 A for every healthy motor free-running. Twelve consecutive
-pulses gave identical near-zero readings, which points to the wiring rather
-than a commutator dead spot (a dead spot varies between attempts). One slight
-tick was observed early, so contact existed momentarily. Check the crimp and
-the M1 screw terminal before suspecting the motor.
+pulses gave identical near-zero readings — that repeatability is what pointed
+at wiring rather than a commutator dead spot, which varies between attempts at
+the same duty. One slight tick early on showed contact had existed
+momentarily. Note also that a **stall reads HIGHER than healthy, not lower**:
+a motor humming without turning is still drawing. A near-zero reading only
+ever means the circuit is open, so connector, crimp and screw terminal come
+before any suspicion of the motor or the driver channel.
+
+`scripts/wheel_current_test.py` reproduces this measurement per wheel.
 
 Adafruit FeatherWing #2927, used standalone with no Feather host board.
 Direction and PWM are handled internally over I²C — there are no direction

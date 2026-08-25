@@ -36,7 +36,10 @@ MOTORKIT_LEFT_ADDR=0x60; MOTORKIT_RIGHT_ADDR=0x61
 # commands all three wheels of a side to the same value, so forward, reverse
 # and skid turns behaved correctly regardless. It only surfaced during
 # per-wheel diagnostics, where "lf is dead" pointed at the wrong physical
-# wheel -- the dead leg on 0x60 M1 is the left MIDDLE motor, not the front.
+# wheel -- the dead leg was on 0x60 M1, i.e. the left MIDDLE motor, not the
+# front. (That leg turned out to be a disconnected connector, reconnected and
+# confirmed turning 2026-08-25 -- see docs/WildWilly_Master_Hardware_Design_v2.0.md
+# section 7.2. The mapping correction stands on its own regardless.)
 # Anything per-wheel (odometry attribution, crab/differential steering, a
 # future stall trace) needs this correct.
 MOTOR_PORT={'lf':(MOTORKIT_LEFT_ADDR,2),'lm':(MOTORKIT_LEFT_ADDR,1),'lr':(MOTORKIT_LEFT_ADDR,3),
