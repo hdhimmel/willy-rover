@@ -423,6 +423,15 @@ VOICE_ECHO_DECAY_S=0.6        # 2026-08-24: back at 0.6 (its original value). It
 # Hailo NPU spec (SS6) deferred rather than rejected. Deliberately a tone and NOT speech: this
 # mic+speaker puck has no echo cancellation (see voice.py), so a spoken ack would be recorded
 # and transcribed as part of the command.
+# How long a queued voice command stays valid. voice.py stamps every queued command with 'ts'
+# but nothing read it until 2026-08-25, so a command issued during a running task executed
+# whenever that task happened to end -- "turn right" said during a 30s retrieval turned the
+# rover half a minute later. Acting late on a motion command is worse than not acting: by then
+# the person has stopped expecting it and is no longer watching for it. 10s is long enough to
+# survive a slow STT+intent pass (measured worst case ~38.6s total is dominated by the LLM,
+# which happens BEFORE queueing) and short enough that nothing executes out of context.
+# confirm_receipt is exempt -- see brain.py's _NON_EXPIRING_INTENTS.
+VOICE_COMMAND_MAX_AGE_S=10.0
 VOICE_ACK_ENABLED=True
 VOICE_ACK_PATH='models/ack.wav'  # generated on first use, not provisioned -- models/ is gitignored
 # 2026-08-23: owner-requested -- a second, audibly distinct chirp signalling Willy has finished

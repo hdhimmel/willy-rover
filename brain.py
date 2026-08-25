@@ -21,6 +21,27 @@ from email_client import EmailClient
 from witty_pi import WittyPi
 log=logsetup.setup('brain')
 
+# Intents that must never be dropped for age in _drain_voice_commands(). confirm_receipt answers
+# retrieval_task.py's AWAIT_CONFIRM state, which can legitimately sit waiting longer than the
+# expiry window -- expiring it would stall the task rather than protect anyone from a stale
+# command. Everything else is safer discarded than executed out of context.
+_NON_EXPIRING_INTENTS=frozenset({'confirm_receipt'})
+
+# Intents _drain_voice_commands() will answer on ANY tick rather than only from IDLE. Everything
+# here does nothing but read already-cached state and speak, so it cannot move the rover and
+# cannot meaningfully block the tick thread.
+#
+# The test is "does it block the tick", NOT "does it only speak". Two intents that speak rather
+# than move are deliberately excluded:
+#   'diagnostics'     runs a real I2C scan synchronously, ~0.5s+. The branch's own comment
+#                     accepts that cost specifically because it only ever runs from IDLE.
+#                     Draining it mid-drive stalls obstacle checks for half a second at speed.
+#   'what_do_you_see' runs a detector inference synchronously -- cheap on the Hailo, several
+#                     hundred ms on the CPU-YOLO fallback, which is precisely when the rover is
+#                     already under strain.
+# Both belong here once they are made non-blocking, and not before.
+_SPEECH_ONLY_INTENTS=frozenset({'status','battery','where_are_you'})
+
 class _SdNotify:
     # Hand-rolled systemd sd_notify (no extra dependency) — sends READY=1 once init passes and
     # periodic WATCHDOG=1 so systemd's WatchdogSec can restart us on a stalled tick loop
@@ -595,6 +616,11 @@ class RoverBrain:
         # the gate (§10) -- mapping never touches self._state (see mapping.py's module docstring),
         # so without this a voice-issued "stop mapping" could never be drained while ROAM/SLOW/
         # AVOID legitimately keeps running the whole session.
+        # Queries first, on every tick regardless of state. Asking "how's your battery?" while the
+        # rover is driving used to leave the command sitting in the queue until it stopped, which
+        # reads as being ignored. These branches only read cached state, so answering them costs
+        # the tick nothing and none of the Directive 1-5 gating above is relevant to them.
+        self._drain_voice_commands(speech_only=True)
         if (self._state=='IDLE' or self.mapping.active) and not self.retrieval.active and not self.pursuit.active:
             self._drain_voice_commands()
 
@@ -604,7 +630,21 @@ class RoverBrain:
          'TILT_FAULT':lambda d,t:None,'SAFE_MODE':lambda d,t:None,'SHUTDOWN':lambda d,t:None,
         }.get(self._state,lambda d,t:None)(d,tilt)
 
-    def _drain_voice_commands(self):
+    def _drain_voice_commands(self,speech_only=False):
+        # speech_only is the every-tick pass: it answers queries that read cached state and
+        # leaves everything else untouched for the IDLE-gated pass below to handle normally.
+        if speech_only:
+            # A pending shutdown confirmation claims the NEXT queued command as its yes/no
+            # answer (see the _shutdown_pending branch below). Draining anything here while
+            # that is outstanding would silently eat the user's reply.
+            if self._shutdown_pending: return
+            q=self.voice.pending_commands
+            # Peek rather than pop-and-requeue: putting a non-matching command back would send
+            # it to the tail and reorder the queue, so a task intent could be overtaken by
+            # everything queued after it.
+            with q.mutex:
+                if not q.queue: return
+                if q.queue[0].get('intent') not in _SPEECH_ONLY_INTENTS: return
         try:
             cmd=self.voice.pending_commands.get_nowait()
         except Exception:
@@ -620,6 +660,25 @@ class RoverBrain:
             else:
                 log.info('Voice shutdown declined.')
                 if self.voice.available: self.voice.speak("Okay, I won't shut down.")
+            return
+        # Drop commands that have gone stale in the queue. voice.py has always stamped 'ts' here
+        # but nothing ever read it, so a command queued while a task was running executed
+        # whenever the task happened to finish -- say "turn right" during a 30s retrieval and the
+        # rover turns half a minute later, in a situation you have stopped watching for. Acting
+        # late on a motion command is worse than not acting at all.
+        #
+        # confirm_receipt is exempt: it answers retrieval_task.py's AWAIT_CONFIRM, which may
+        # legitimately wait longer than this window, and expiring it stalls the task rather than
+        # protecting anyone. The shutdown confirmation is handled above this check for the same
+        # reason, and carries its own timeout in _tick().
+        #
+        # A command with no 'ts' at all is treated as fresh: that means an unfamiliar source, not
+        # an old command, and silently eating it would be the worse failure.
+        ts=cmd.get('ts')
+        if (ts is not None and cmd.get('intent') not in _NON_EXPIRING_INTENTS
+                and (time.time()-ts)>config.VOICE_COMMAND_MAX_AGE_S):
+            log.info(f'Dropping stale voice command "{cmd.get("intent")}" '
+                     f'({time.time()-ts:.1f}s old, limit {config.VOICE_COMMAND_MAX_AGE_S}s)')
             return
         if cmd.get('intent')=='retrieve':
             target=cmd.get('args',{}).get('object','object')
