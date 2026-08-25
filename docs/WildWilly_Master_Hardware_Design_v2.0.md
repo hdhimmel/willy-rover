@@ -396,8 +396,44 @@ default is usually more effective than lowering it.
 
 ### 7.1 Motors
 
-6 × JGA25-370B micro metal gearmotors. 6V nominal, ~100–200 RPM, quadrature
-encoders at 11 PPR on the motor shaft. One 6-pin JST-PH per motor.
+6 × JGA25-370B micro metal gearmotors. **12V nominal, 620 RPM** (owner-corrected
+2026-08-25), quadrature encoders at 11 PPR on the motor shaft. One 6-pin JST-PH
+per motor.
+
+⚠ **This spec was wrong until 2026-08-25** — it read "6V nominal, ~100–200 RPM",
+which is a different gearbox entirely. Anything reasoned from the old figure is
+suspect, including any assumption that the motors were being over-driven by the
+11.4V rail. They are not: 12V motors on a 12V rail, running at their rated
+voltage.
+
+**620 RPM is a low-reduction, speed-optimised gearbox, and that is the reason
+drive torque is low.** Torque scales with gear reduction, so the 100–200 RPM
+variants of this same motor produce roughly 3–5× the torque. Two independent
+factors compound here:
+
+1. **Gearing.** 620 RPM trades reduction for speed.
+2. **Wheel radius.** Tractive force at the ground is motor torque × reduction ÷
+   wheel *radius*. The 101.6mm wheels (measured 2026-08-25) have a 1.56× larger
+   radius than the 65mm the config originally assumed, which is ~35% less force
+   at the ground for identical motor torque.
+
+Theoretical top speed is 620/60 × π × 0.1016 ≈ **3.3 m/s (11.9 km/h)** — far
+beyond anything an indoor home-assistant rover needs, and that unused speed is
+bought entirely with torque. It also explains the ~0.5 duty breakaway measured
+2026-08-24: with this little reduction it takes about half the rail voltage just
+to overcome static friction and chassis weight. Raising SPEED_SLOW 0.35→0.55
+that day spent headroom rather than creating torque; full duty is still full
+duty, and no software change can recover what the gearbox gives away.
+
+**If more torque is wanted, it is a motor change, not a tuning change.** A 12V
+~130 RPM JGA25-370 shares the body, mount and 6-pin encoder, gives roughly 4.8×
+the torque and still tops out near 0.7 m/s. The only downstream change is
+ENCODER_COUNTS_PER_REV, already flagged unconfirmed in config.py.
+
+**Exact gear ratio / vendor part number is NOT recorded** — "620 RPM" is the
+owner's figure and no datasheet has been matched to these units. Capture the
+part number before ordering replacements, since JGA25-370 is a family covering
+many ratios and the wire colours differ between batches (§7.2).
 
 | Wire | Function | Lands on |
 |------|----------|----------|

@@ -49,6 +49,12 @@ MOTOR_PORT={'lf':(MOTORKIT_LEFT_ADDR,2),'lm':(MOTORKIT_LEFT_ADDR,1),'lr':(MOTORK
 # audible hum with no rotation. Measured per-wheel on the bench that day, a
 # JGA25-370 on this base needs roughly 0.5+ duty to start turning at all, so
 # SLOW=0.35 could never move him -- it only ever stalled the motors.
+# WHY breakaway is that high, established 2026-08-25: these are 12V 620 RPM motors,
+# a low-reduction speed-optimised gearbox, driving 101.6mm wheels. Torque scales
+# with reduction and tractive force scales inversely with wheel radius, so both
+# choices cut force at the ground. Raising these numbers spends headroom; it does
+# not create torque, and full duty is already full duty. If more torque is needed
+# it is a motor change -- see Master Hardware Design v2.0 section 7.1.
 SPEED_ROAM=0.75; SPEED_TURN=0.70; SPEED_SLOW=0.55; SPEED_MAX=1.00
 SPEED_RAMP_PER_S=2.0  # FR-400-003: max throttle change per second (slew rate), full range in 0.5s
 TURN_INNER_SCALE=0.0
