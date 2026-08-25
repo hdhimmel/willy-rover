@@ -948,7 +948,9 @@ ssh hhimmel@<ip> 'sudo systemctl stop willy-rover && cd ~/rover && \
   venv/bin/python3 -m pytest tests/ -q 2>&1 | tail -5; sudo systemctl start willy-rover'
 ```
 
-Expected: the same 4 pre-existing failures as the 2026-08-25 baseline (`test_brain_reset_gate`, `test_brain_wave`, `test_navigation`, `test_sim_hardware`) and **no new ones**. Stop the service first — a full suite run against a live service starved the CPU and made the wake word unresponsive on 2026-08-25.
+Expected: the same **2** pre-existing failures as the 2026-08-25 baseline — `test_brain_reset_gate` and `test_brain_wave` — and **no new ones**. `test_brain_wave` fails on `AttributeError: 'types.SimpleNamespace' object has no attribute '_WAVE_OFFSETS_US'`, a test harness out of sync with production, not a rover fault.
+
+Stop the service first, and note *why* the number is 2: an earlier run of this same suite against a **live** service reported 4 failures, because `test_navigation` and `test_sim_hardware` fail under CPU and device contention with the running rover. Those two are not broken. A suite run against a live service also starved the CPU badly enough to make the wake word unresponsive. Always stop the service before a full run, or the baseline you compare against is noise.
 
 - [ ] **Step 8: Commit**
 

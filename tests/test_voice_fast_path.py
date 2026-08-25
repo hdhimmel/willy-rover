@@ -71,3 +71,39 @@ def test_previously_working_phrasings_still_match(utterance,intent):
 ])
 def test_non_commands_fall_through_rather_than_matching(utterance):
     assert _intent(utterance) not in ('stop','turn_left','time','date')
+
+
+# Arm presets, added 2026-08-25 after Jules pointed out that "center arm" fell through to the
+# ~30s LLM. Composed as verb x subject rather than enumerated, for the same reason the time and
+# date patterns were: listing surface forms is what let this class of gap recur three times.
+# Note brain.py currently aliases BOTH arm_home and arm_stow to arm.center_all(), since no
+# calibrated stow pose exists yet (section 20.6) -- the intents are distinct, the behaviour is
+# not yet.
+@pytest.mark.parametrize('utterance',[
+    'center arm',
+    'arm center',
+    'center the arm',
+    'centre your arm',        # the rover's owner writes British English in the docs
+    'arm home',               # already worked; pinned so the rewrite cannot drop it
+    'reset your arm',
+    'home the arm',
+])
+def test_arm_home_phrasings_reach_the_arm_home_intent(utterance):
+    assert _intent(utterance)=='arm_home'
+
+@pytest.mark.parametrize('utterance',[
+    'stow the arm',           # already worked; pinned
+    'put your arm away',
+    'arm away',
+    'stow arm',
+    'park the arm',
+])
+def test_arm_stow_phrasings_reach_the_arm_stow_intent(utterance):
+    assert _intent(utterance)=='arm_stow'
+
+@pytest.mark.parametrize('utterance',[
+    "don't stow the arm",
+    'do not center the arm',
+])
+def test_negated_arm_commands_fall_through(utterance):
+    assert _intent(utterance) not in ('arm_home','arm_stow')

@@ -57,6 +57,17 @@ def _fp(core):
 # and trailer wrappers are new, so "Willie, turn left" works while "don't turn left" does not.
 # 'stop' sits in tier 2 by topic but is fail-safe in the same direction as a false positive
 # (stopping when not asked is harmless), so its core is widened too.
+# Arm presets, composed as verb x subject rather than enumerated. "center arm" used to fall
+# through to the ~30s LLM because the old pattern listed only 'arm home|reset your arm|home
+# (the|your) arm' -- the same enumeration trap that let the time/date patterns regress three
+# times. Both word orders are accepted because people say it both ways, and composing means a
+# phrasing nobody predicted still lands.
+# NOTE brain.py currently aliases arm_home AND arm_stow to arm.center_all(), since no calibrated
+# stow pose exists yet (section 20.6). The intents are distinct; the behaviour is not yet.
+_ARM=r"(?:the |your )?arm"
+_ARM_HOME_V=r"(?:centre|center|home|reset)"
+_ARM_STOW_V=r"(?:stow|park)"
+
 _FAST_PATH_PATTERNS=[
     # --- tier 2: motion / destructive, narrow cores ---
     (_fp(r'stop|halt|freeze|hold (it|on|up)|stop moving|stand still|whoa'),'stop','Stopping.'),
@@ -76,8 +87,8 @@ _FAST_PATH_PATTERNS=[
     (_fp(r'what (?:do|can) you see|what'r"'"r's (?:in front of you|out there|there)|'
          r'look around|describe what you see|tell me what you see'),'what_do_you_see','Looking.'),
     (_fp(r'wave(?: hello| hi| at me)?|say (?:hi|hello)|give (?:me )?a wave'),'wave',''),
-    (_fp(r'stow (?:the|your) arm|put your arm away|arm away'),'arm_stow','Stowing the arm.'),
-    (_fp(r'arm home|reset your arm|home (?:the|your) arm'),'arm_home','Homing the arm.'),
+    (_fp(_ARM_STOW_V+r' '+_ARM+r'|put '+_ARM+r' away|'+_ARM+r' away'),'arm_stow','Stowing the arm.'),
+    (_fp(_ARM_HOME_V+r' '+_ARM+r'|'+_ARM+r' '+_ARM_HOME_V),'arm_home','Homing the arm.'),
     (_fp(r'(?:start|begin) (?:mapping|the map)|map this room|start mapping this room'),
      'map','Starting the map.'),
     (_fp(r'(?:stop|end|finish) (?:mapping|the map)'),'stop_map','Stopping the map.'),
