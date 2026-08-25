@@ -109,7 +109,14 @@ ENCODER_COUNTS_PER_REV=3292  # §9.2: 823.1 PPR x4 quadrature decode -- NOT benc
 # only (no slip correction, no fusion with the IMU heading) and will drift; re-measure these two
 # values directly off the chassis before trusting distances/headings for anything beyond rough
 # relative dead-reckoning.
-WHEEL_DIAMETER_M=0.065  # UNCONFIRMED placeholder
+WHEEL_DIAMETER_M=0.1016 # 4.00 in, owner-measured 2026-08-25. Was 0.065 (an UNCONFIRMED
+                        # placeholder), so every distance odometry reported was 56% short of
+                        # actual -- 0.204 m/rev assumed against 0.319 m/rev real. Anything
+                        # derived from dead reckoning before this date is wrong by that
+                        # factor, including stored world_model landmark positions.
+                        # NOTE this is the nominal/unloaded diameter. The effective ROLLING
+                        # diameter under the rover's weight is slightly smaller if the tyre
+                        # compresses; a drive-a-measured-distance check is what settles that.
 TRACK_WIDTH_M=0.28      # UNCONFIRMED placeholder — center-to-center of left/right wheel tracks
 POSE_LOG_INTERVAL_S=5.0 # brain.py logs the current odometry pose at most this often
 TICK_OVERRUN_THRESHOLD_S=0.15 # brain.py::run() logs+counts a TICK_OVERRUN when a single _tick()

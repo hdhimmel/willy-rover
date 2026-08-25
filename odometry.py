@@ -5,8 +5,9 @@ log=logsetup.setup('odometry')
 # estimate from wheel encoders. Six-wheel skid-steer, not true differential-drive — left/right
 # wheel counts are each averaged across their 3 wheels (lf/lm/lr, rf/rm/rr) to smooth individual
 # encoder noise, then treated as a single virtual left/right pair for the standard arc-update
-# odometry math. This is dead-reckoning only: no slip correction, no fusion with the IMU heading,
-# and WHEEL_DIAMETER_M/TRACK_WIDTH_M are unconfirmed placeholders (see config.py) — do not treat
+# odometry math. This is dead-reckoning only: no slip correction and no fusion with the IMU
+# heading. WHEEL_DIAMETER_M is owner-measured as of 2026-08-25 (4.00 in / 0.1016 m), but
+# TRACK_WIDTH_M and ENCODER_COUNTS_PER_REV are both still placeholders (see config.py) — do not treat
 # x/y/heading as accurate localization, only as a rough relative-motion estimate (§8's own
 # instruction: "Do not claim localization accuracy beyond what the sensors support").
 
