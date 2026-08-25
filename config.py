@@ -139,13 +139,15 @@ WHEEL_DIAMETER_M=0.1016 # 4.00 in, owner-measured 2026-08-25. Was 0.065 (an UNCO
                         # NOTE this is the nominal/unloaded diameter. The effective ROLLING
                         # diameter under the rover's weight is slightly smaller if the tyre
                         # compresses; a drive-a-measured-distance check is what settles that.
-TRACK_WIDTH_M=0.28      # STILL UNCONFIRMED — center-to-center of left/right wheel tracks. NOT the
-                        # same as the 400mm chassis width: wheels mounted outboard make the track
-                        # wider than the body, inboard makes it narrower, and only the wheel
-                        # centrelines matter to odometry.py:36's d_heading division. Measure
-                        # outside-of-left-tyre to outside-of-right-tyre, then subtract one tyre
-                        # width. Too-small a value over-reports rotation: if the true track is
-                        # 0.40, this 0.28 makes him believe he turned ~43% further than he did.
+TRACK_WIDTH_M=0.310     # Owner-measured 2026-08-25. 400mm overall width ACROSS THE WHEELS minus
+                        # one 90mm wheel width: outer edges at +/-200mm put the wheel centrelines
+                        # at +/-155mm, so track = 310mm. Was 0.28, which over-reported rotation by
+                        # ~11% (odometry.py:36 divides d_heading by this, so too small a value
+                        # makes him believe he turned further than he did).
+                        # Chassis envelope, same measurements: 430mm long x 400mm wide across the
+                        # wheels, wheels 90mm wide. Note the archived rev6.0.7 figure of
+                        # "430x330x220mm" had the LENGTH right and the width wrong -- a reminder
+                        # that a superseded citation is not automatically wrong in every part.
 POSE_LOG_INTERVAL_S=5.0 # brain.py logs the current odometry pose at most this often
 TICK_OVERRUN_THRESHOLD_S=0.15 # brain.py::run() logs+counts a TICK_OVERRUN when a single _tick()
                               # call takes longer than this (loop targets ~50ms sleep + tick time) --
