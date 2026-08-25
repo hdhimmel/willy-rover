@@ -81,9 +81,35 @@ distribution, bus node board and motor drivers in the body tray.
 | R1 | 9V | DROK buck | Witty Pi VIN → Pi (2026-08-23 rework) | INA260 **0x45** |
 | R2 | 5V | FEICHAO 8A UBEC | Steering servo distribution, AMS1117 input, Pi screen | INA260 0x40 |
 | R3 | 6V | DZS buck | Arm servo distribution | — |
-| R4 | 3V3 | Pi header pin 1 | Encoder distribution, ISO1540 Side 1 | — |
-| — | 3V3 (VCC2) | AMS1117-3.3 | Entire isolated I²C bus | — |
+| R4 | 3V3 | Pi header pin 1 | ISO1540 Side 1 VCC only | — |
+| — | 3V3 (VCC2) | AMS1117-3.3 | Entire isolated I²C bus **+ encoder distribution** | — |
 | — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | INA260 **0x44** |
+
+⚠ **R4 corrected 2026-08-25 (owner).** This table previously listed encoder
+distribution on R4, the Pi's own 3V3 header pin. That is wrong as-built: **the
+encoders are powered from the isolated bus rail (VCC2/GND2), the same domain as
+the MCP23017 expander that reads them.** Header pin 1 feeds ISO1540 Side 1 only.
+
+The distinction matters and cost real time on 2026-08-25. If the encoders had
+been on R4, they would have been driving GND1-referenced signals into
+GND2-referenced expander inputs across a barrier §3.1 requires to have no DC
+path — which would have neatly explained all six encoders reading static. They
+are not, sensors and expander share a reference, and that explanation is void.
+
+**Encoder signal path remains UNRESOLVED as of 2026-08-25.** Established by
+measurement that day: the MCP23017 is alive and correctly configured (IODIR
+0xFF, GPPU 0xFF, sensible mixed resting levels per wheel), the I²C bus is
+healthy, and all six motors physically turn (0.068–0.099 A each). Yet driving
+any wheel produces no edges on any encoder pin, where ~340 would be expected
+over a 2.5s drive at 0.6 duty. Hand-turning a wheel produces nothing at all —
+the encoder is on the motor shaft behind the 17.1:1 gearbox and does not
+back-drive, so any encoder test on this rover must be taken under power.
+
+The next measurement is at the motor, not in software: probe a yellow/green
+signal wire at the motor's own connector while that motor is driven. Toggling
+there means the sensor works and the signal is lost between connector and
+expander; static there means the sensors are not producing output despite
+having power.
 
 **R1 changed 2026-08-23/24.** It was "5.0–5.1V, Pi buck → Pi header pins 2/4,
 monitored by INA260 0x44." The Pi is no longer fed that way: the DROK buck now
@@ -548,7 +574,7 @@ desoldering.
 
 | Pin | BCM | Connects to |
 |-----|-----|-------------|
-| 1 | 3V3 | ISO1540 Side 1 VCC, encoder distribution |
+| 1 | 3V3 | ISO1540 Side 1 VCC (**not** encoder distribution — see §2.2) |
 | 2, 4 | 5V | Pi buck output |
 | 3 | GP2 | ISO1540 Side 1 SDA |
 | 5 | GP3 | ISO1540 Side 1 SCL |
