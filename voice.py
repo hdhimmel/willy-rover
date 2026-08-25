@@ -87,31 +87,37 @@ _FAST_PATH_PATTERNS=[
 
 _ACK_TONE_S=0.18      # wake-chirp duration. NOT skipped from capture -- see _handle_wake()
 
-# Widened 2026-08-21 for the same reason as _FAST_PATH_PATTERNS, plus one real failure: a clipped
-# first word turned "what time is it" into "time is it", missed here, and cost 84.9s via the LLM.
-# The clipping is fixed, but tolerating a dropped leading word is cheap insurance -- worst case
-# for a false positive is that he tells you the time.
+# Composed rather than enumerated. Both patterns below are built as an optional interrogative
+# prefix followed by a subject noun phrase, because enumerating surface forms has now failed
+# three times in a row -- each time fixed by appending one more alternative, each time leaving
+# every OTHER unlisted combination as a silent ~30s fall-through to the local LLM:
+#   2026-08-21  a clipped first word turned "what time is it" into "time is it" -> 84.9s
+#   2026-08-23  "what's today's day" missed -- no alternative put "today's" before "day"
+#   2026-08-25  "What is the current time?" missed -- `(?:the )?current time` was a bare
+#               alternative, so nothing allowed "what is" in front of it. Live log 08:19:15:
+#               30s in the LLM, directly after "What is today's date?" answered in 8.7s, which
+#               is why it presented as "the second command never works".
+# Coverage is deliberately generous. These are tier 1: a false positive means Willie tells you
+# the time when you did not ask, against 30s of apparent deafness for a miss. Neither 'time' nor
+# 'date' is in _interpret_local()'s prompt, so anything missing here reaches an LLM with no clock
+# that will cheerfully invent an answer. Regression-pinned in tests/test_voice_fast_path.py.
+_ASK=r"(?:what'?s|whats|what is|tell me|do you know|do you have|have|got)"
+
 _TIME_PATTERN=re.compile(
     _ADDRESS+r"(?:"
-    r"(?:what'?s|whats|what is) the time|(?:what )?time is it|what time is it|"
-    r"(?:the )?current time|do you (?:know|have) (?:what )?the time(?: it is)?|"
-    r"(?:got|have) the time|tell me the time|time check|what hour is it"
+    r"(?:"+_ASK+r" )?(?:the )?(?:current )?time(?: is it)?|"
+    r"(?:what )?time is it|"
+    r"do you (?:know|have) (?:what )?the time(?: it is)?|"
+    r"time check|what hour is it"
     r")"+_TRAILER,re.I)
 
-# Same shape as _TIME_PATTERN: answered inline in _fast_path() and spoken by _act_on_intent()'s
-# tail, so 'date' never reaches brain.py and needs no handler there. Coverage is deliberately
-# generous -- 'date' is NOT in _interpret_local()'s prompt, so anything that misses here goes to
-# the local LLM, which has no clock and would cheerfully invent a date.
 _DATE_PATTERN=re.compile(
     _ADDRESS+r"(?:"
-    r"(?:what'?s|whats|what is) (?:the |today'?s )?date|"
+    r"(?:"+_ASK+r" )?(?:the |today'?s )?(?:current )?(?:date|day)(?: today)?|"
     r"(?:what|which) (?:date|day) is it(?: today)?|"
     r"(?:what'?s|whats) (?:it |the day )?today|what day is today|"
-    r"today'?s date|(?:tell me|do you know) (?:the|what) date(?: it is)?|"
-    r"date check|what'?s the day|"
-    # 2026-08-23: "what's today's day" missed every alternative above -- none of them have
-    # "today's" placed before "day". Real live miss, not a hypothetical.
-    r"(?:what'?s|whats|what is) today'?s day"
+    r"(?:tell me|do you know) (?:the|what) date(?: it is)?|"
+    r"date check"
     r")"+_TRAILER,re.I)
 
 class VoicePipeline:
