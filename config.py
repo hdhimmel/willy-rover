@@ -102,7 +102,19 @@ ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
 ENCODER_ADDR=0x27
 ENCODER_PINS={'lf':('A',0,1),'lm':('A',2,3),'lr':('B',0,1),
               'rf':('A',4,5),'rm':('A',6,7),'rr':('B',2,3)}
-ENCODER_COUNTS_PER_REV=3292  # §9.2: 823.1 PPR x4 quadrature decode -- NOT bench-confirmed, see
+ENCODER_COUNTS_PER_REV=752   # 11 PPR (motor shaft) x4 quadrature x 17.1:1 reduction.
+                             # WAS 3292, derived as "823.1 PPR x4". 823.1/11 implies a 74.8:1
+                             # gearbox -- the ratio matching the STALE "6V, 100-200 RPM" motor
+                             # spec corrected 2026-08-25. Owner gave the real reduction as
+                             # 17.1:1 (consistent with 620 RPM from a ~10.6k RPM bare motor),
+                             # making the old value 4.375x too high.
+                             # odometry.py divides by this, so distances were reported at ~23%
+                             # of actual from the encoder side alone. Together with the wheel
+                             # diameter error fixed the same day (0.065 vs 0.1016, 1.56x), dead
+                             # reckoning under-reported by roughly 6.8x before 2026-08-25.
+                             # STILL DERIVED, NOT MEASURED: the 11 PPR figure comes from the
+                             # same doc section that had the motor spec wrong. Confirm with
+                             # scripts/encoder_calibration.py before trusting odometry -- see
                              # G-2 (FRD v3.1). Interrupt-driven decode (2026-08-18) is retracted
                              # (2026-08-23): would break ISO1540 galvanic isolation and would not
                              # have reduced I2C transaction count anyway. Polling is the real

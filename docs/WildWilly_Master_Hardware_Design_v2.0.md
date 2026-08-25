@@ -430,10 +430,24 @@ duty, and no software change can recover what the gearbox gives away.
 the torque and still tops out near 0.7 m/s. The only downstream change is
 ENCODER_COUNTS_PER_REV, already flagged unconfirmed in config.py.
 
-**Exact gear ratio / vendor part number is NOT recorded** — "620 RPM" is the
-owner's figure and no datasheet has been matched to these units. Capture the
-part number before ordering replacements, since JGA25-370 is a family covering
-many ratios and the wire colours differ between batches (§7.2).
+**Reduction ratio is 17.1:1**, owner-supplied 2026-08-25 and consistent with
+620 RPM from a ~10,600 RPM bare motor. The vendor part number is still NOT
+recorded — capture it before ordering replacements, since JGA25-370 is a family
+covering many ratios and wire colours differ between batches (§7.2).
+
+That ratio also corrected `config.ENCODER_COUNTS_PER_REV`. It was 3292, derived
+as "823.1 PPR ×4"; 823.1 ÷ 11 PPR implies a **74.8:1** gearbox — the reduction
+matching the stale 100–200 RPM spec above, not these motors. The real figure is
+11 PPR × 4 × 17.1 = **752**, making the old constant 4.375× too high. Since
+`odometry.py` divides by it, reported distances were ~23% of actual from the
+encoder side alone; combined with the wheel-diameter error fixed the same day
+(0.065m assumed against 0.1016m real), dead reckoning under-reported by roughly
+**6.8×** before 2026-08-25.
+
+The 11 PPR figure itself still comes from this same section, which was wrong
+about the motors — so 752 is derived, not measured. `scripts/encoder_calibration.py`
+confirms it by hand-turning a wheel a known number of revolutions, and settles
+the unverified A/B channel column in §7.2 in the same pass.
 
 | Wire | Function | Lands on |
 |------|----------|----------|
