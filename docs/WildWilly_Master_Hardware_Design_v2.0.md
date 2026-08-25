@@ -96,7 +96,34 @@ GND2-referenced expander inputs across a barrier §3.1 requires to have no DC
 path — which would have neatly explained all six encoders reading static. They
 are not, sensors and expander share a reference, and that explanation is void.
 
-**Encoder signal path remains UNRESOLVED as of 2026-08-25.** Established by
+**ROOT CAUSE FOUND 2026-08-25: the AMS1117-3.3 has failed and the isolated rail
+sits at 2.83V.** Measured that day: input 5.143V (healthy, from R2), output
+**2.83V** against a 3.3V target. An AMS1117-3.3 fed 5.14V has ample headroom —
+dropout is only ~1.1–1.3V — so producing 2.83V means the part is degraded, not
+starved. This is the thermal foldback this document already warns about in §12
+("the dissipation drives it into thermal foldback and the isolated rail
+collapses progressively"), now measured rather than predicted.
+
+**Why this killed the encoders and nothing else.** Every I²C device on that rail
+has enough headroom to keep working at 2.83V — MCP23017 down to 1.8V, PCA9685 to
+2.3V, INA260 to 2.7V. Hall encoders typically need 3.3V minimum and often 4.5V.
+So the bus, the expander and the current monitors all test perfectly healthy
+while all six Hall sensors sit powered-but-inoperative, holding a static output
+they have not the supply to switch. That is exactly the measured signature, and
+it is the only hypothesis tried that explains all six failing identically.
+
+**Repair: replace the AMS1117-3.3 with a switching module** (TPSM84203EAB is the
+candidate on the improvement list). Two things to settle BEFORE fitting it:
+verify the pinout actually matches rather than trusting "TO-220 drop-in", and
+establish whether these encoders want 3.3V or 5V — the vendor part number was
+never recorded, and JGA25-370 spans variants with both. If they need 5V the
+module must be set for 5V AND the twelve signal lines need level shifting, since
+the MCP23017 runs at 3.3V and its inputs are NOT 5V tolerant (abs max ~VDD+0.6V).
+That decision is far cheaper before installation than after.
+
+---
+
+**Superseded investigation notes (kept for the reasoning, which generalises).** Established by
 measurement that day: the MCP23017 is alive and correctly configured (IODIR
 0xFF, GPPU 0xFF, sensible mixed resting levels per wheel), the I²C bus is
 healthy, and all six motors physically turn (0.068–0.099 A each). Yet driving
