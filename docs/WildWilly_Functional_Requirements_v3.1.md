@@ -439,8 +439,11 @@ conditions:
 
 -   **FR-100-002, false-negative exclusion.** A blank or partial scan while the
     base is unpowered is expected behaviour, not a fault --- Side 2 of the
-    isolation barrier is fed by the AMS1117-3.3 off the 5V servo rail, so all
-    downstream devices go dark when the Pi is powered by USB-C alone. The
+    isolation barrier is fed by the **TPSM84203EAB on the bus node board off the
+    +12V main** (Master Hardware Design §4, §16.2 — changed 2026-08-28 from the
+    AMS1117-3.3 on the 5V servo rail), so all downstream devices go dark when
+    the Pi is powered by USB-C alone. The rail source changed but this
+    behaviour did not: the bus still depends on base power. The
     startup self-test must distinguish "base off" from "bus fault" before
     reporting a failure, or every dev-only session will raise a spurious
     critical.
@@ -456,8 +459,11 @@ conditions:
 
 Pre-power hardware conditions that gate the first execution of this test are
 listed in rev 6.2.0 §17.5 and are not restated here; the three marked BLOCKING
-(AMS1117 decoupling, SDA2/SCL2 pull-ups, ISO1540 orientation) have each already
-cost hardware on this build.
+(regulator decoupling, SDA2/SCL2 pull-ups, ISO1540 orientation) have each
+already cost hardware on this build. All three now have concrete hole
+assignments and a bare-board meter check in Master Hardware Design §4.5 — note
+in particular that the TPSM requires a 94µF ceramic Cout minimum, and that the
+entire SDA/SCL separation depends on the board's centre gap breaking column 30.
 
 # FR-200 Power Monitoring and Protection
 

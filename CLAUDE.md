@@ -268,9 +268,8 @@ flicker**, full 11-device set present every single time. The `hwmon3` under-volt
 also stopped recurring the same moment (40+ min clean afterward, vs. cycling every 15-30s
 before) — one root cause explains both symptoms, not two separate issues.
 
-**Upgrade designed, build pending** (see
-`docs/WildWilly_EPLZON_Combined_Board_v3.2.md` for the full board layout):
-replacing the AMS1117-3.3 (linear regulator, prone to this
+**Upgrade designed, build pending** (full board layout: Master Hardware Design
+§4, with pin detail in §16.2): replacing the AMS1117-3.3 (linear regulator, prone to this
 exact thermal-foldback failure mode) with a **TI TPSM84203EAB** integrated buck power module —
 4.5-28V input (would have tolerated the original 12V-miswiring failure mode instead of cooking
 itself), fixed 3.3V/1.5A output, ~95% efficiency, 3-pin TO-220 footprint confirmed by the owner

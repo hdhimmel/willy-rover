@@ -82,9 +82,22 @@ distribution, bus node board and motor drivers in the body tray.
 | R2 | 5V | FEICHAO 8A UBEC | Steering servo distribution, AMS1117 input, Pi screen | INA260 0x40 |
 | R3 | 6V | DZS buck | Arm servo distribution | — |
 | R4 | 3V3 | Pi header pin 1 | ISO1540 Side 1 VCC only | — |
-| — | 3V3 (VCC2) | AMS1117-3.3 | Entire isolated I²C bus **+ encoder distribution** | — |
+| — | 3V3 (VCC2) | **TPSM84203EAB** on the bus node board (§4) | Entire isolated I²C bus. **Encoder distribution — see the open item below.** | — |
 | — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | **none — see G-1 regression §16.4** |
 | — | +12V main input | Battery via F1/KCD4/Q1 | All four DROK converters + TPSM84203EAB | INA260 **0x44** |
+
+⚠ **VCC2 source changed 2026-08-28.** The AMS1117-3.3 is retired after two
+failures of the same thermal-foldback mode. VCC2 now comes from a
+**TPSM84203EAB** buck module on the bus node board, fed from the **+12V main**
+rather than the 5V UBEC rail — so the I²C bus is independent of the UBEC and
+comes up with base power. Board layout §4; pin detail §16.2.
+
+⚠ **Encoder distribution — OPEN (2026-08-28).** The encoders have been given
+their own rail (owner). This table and §4.1 rows 15–20 still show them on VCC2.
+Confirm the new rail's source and voltage, then either strike rows 15–20 from
+§4.1 or restore them here — six GND and six 3V3 taps ride on the answer. Until
+settled, treat encoder power as undocumented. Related open item: whether these
+encoders want 3.3V or 5V was never established, and 2.83V is what killed them.
 
 ⚠ **R4 corrected 2026-08-25 (owner).** This table previously listed encoder
 distribution on R4, the Pi's own 3V3 header pin. That is wrong as-built: **the
@@ -208,9 +221,21 @@ addressed around the same time.
 | 1 | 1000µF 16V + 1 × 0.1µF ceramic | Pi 5V rail, at header pins 2+4 |
 | 1 | 1000µF 16V | PCA9685 0x42 V+, C2 pad |
 | 1 | 2200µF 16V Rubycon low-ESR | PCA9685 0x43 V+, C2 pad |
-| 2 | 10µF | AMS1117 Vin and Vout |
+| 1 | 10µF ceramic **50V** | Bus node C1 — TPSM Cin, `c25c`↔`c26c` |
+| 2 | 47µF ceramic ≥1210 | Bus node C2/C3 — TPSM Cout pair, `c27c`↔`c28c` and `c27e`↔`c28e` |
+| 1 | 47µF/35V radial electrolytic | Bus node C6 — 12V input bulk, `c26a`↔`G26`, stripe (−) up |
+| 2 | 10µF ceramic 25V | Bus node C4/C5 — 3V3 rail decoupling, `V29`↔`G29` and `V30`↔`G30` |
+| *opt* | 0.1µF ceramic | Bus node C7 — HF decoupler, `V26`↔`G28` diagonal |
 
-Seven capacitors total. The Pi-rail pair sits at the **header end** of the
+Eleven capacitors total, twelve with the optional HF decoupler. The two 10µF
+AMS1117 caps retire with the part.
+
+**Cout is not optional.** TI specifies a 94µF ceramic minimum (2×47µF) on the
+TPSM output; a single 10µF there will oscillate. C4/C5 sit downstream on the
+rail and do not count toward it. C6 is why the TPSM feed takes a **slow-blow**
+fuse — inrush charging it trips a fast-blow.
+
+Original note: The Pi-rail pair sits at the **header end** of the
 feed, not at the buck — GPIO power bypasses the Pi's onboard input
 protection, so that feed carries its own local decoupling and its own fuse.
 
@@ -272,6 +297,16 @@ the reseat; worth confirming it holds before calling this fully closed.
 Side 2 measures approximately 1.3kΩ combined. Do not add pull-ups on Side 1 —
 that side sinks only 3.5mA and is already near budget.
 
+**The Side-2 pull-ups live on the bus node board**, circuit zone cols 29–30:
+R1 (SDA) legs `c29b`↔`c30b`, supply `c29a`→`V28`, output `c30e`→SDA rail col 30.
+R2 (SCL) legs `c29h`↔`c30h`, output `c30j`→SCL rail col 30, supplied across the
+centre gap by the `c29d`↕`c29f` bridge. **R2 sits below the gap because col-30
+*top* already belongs to SDA** — both pull-ups in the top section would short
+SDA to SCL.
+
+4.7kΩ at 400kHz supports only ~75pF of bus capacitance; twelve taps on drop
+cables is 300–400pF. **The LTC4311 is what keeps this bus inside spec** (§16.5).
+
 ### 3.3 Device roll-call
 
 `i2cdetect -y 1` returns **ten devices plus one broadcast address**:
@@ -300,12 +335,43 @@ fault: Side 2 dies with the 12V chain, so the Pi on USB-C alone sees nothing.
 
 ## 4. Bus Node Board
 
-Four rails. Colours: GND black, 3V3 red, SDA blue, SCL yellow. Note this is
-schematic role-colouring and differs from the sonar harness key in §6.1.
+An **EPLZON 3.5"×2.05" (88.9×52.1mm) gold-plated solderable breadboard**,
+30 columns × 0.1", M3 corner mounts. Rev 3.4, 2026-08-28. It carries three
+functions: I²C bus distribution, 3.3V regulation (the TPSM84203EAB that replaced
+the AMS1117), and the three sonar ECHO dividers.
+
+```
+TOP RAILS      row 1: +3.3V    row 2: GND      (30 holes each, column-aligned)
+rows a-e       5-hole tie-strips per column
+CENTER GAP     breaks the column strips
+rows f-j       5-hole tie-strips per column
+BOTTOM RAILS   row 1: SDA      row 2: SCL      (30 holes each)
+```
+
+Per column, `a-e` is one net and `f-j` is a separate net; the centre gap breaks
+them. Adjacent columns are not connected. Rails run continuously across all 30
+holes.
+
+**Rules.** One lead or wire per hole — never reuse a hole. Components mount
+horizontally across columns; vertical runs are rail connections only.
+
+**Zones.** Rail cols **1–20** are the device zone — external I²C connections
+only, all taps interchangeable. Cols **21–30** are the circuit zone, where every
+board-internal jumper lands.
+
+> **The SDA/SCL separation depends entirely on the centre gap breaking column
+> 30.** Meter `c30e`↔`c30f` as OPEN on the bare board before soldering anything
+> (§4.5). If that gap does not break the strip, SDA shorts to SCL and the bus is
+> dead on arrival.
+
+### 4.1 Device-zone tap allocation — cols 1–20
+
+Colours: GND black, 3V3 red, SDA blue, SCL yellow. This is schematic
+role-colouring and differs from the sonar harness key in §6.1.
 
 | Row | GND | 3V3 | SDA | SCL | Device | Addr |
 |-----|-----|-----|-----|-----|--------|------|
-| 1 | X | X | — | — | AMS1117-3.3 | — |
+| 1 | X | — | — | — | Star-ground bond — board GND rail ↔ system star point | — |
 | 2 | X | X | X | X | ISO1540 Side 2 | — |
 | 3 | X | X | X | X | ADS1115 logic | 0x48 |
 | 4 | X | — | — | — | ADS1115 ADDR→GND | 0x48 |
@@ -325,7 +391,11 @@ schematic role-colouring and differs from the sonar harness key in §6.1.
 | 18 | X | X | — | — | Motor RF | — |
 | 19 | X | X | — | — | Motor RM | — |
 | 20 | X | X | — | — | Motor RR | — |
-| 21 | X | — | — | — | Sonar divider GND ref | — |
+| 21 | X | — | — | — | Sonar divider GND ref — **circuit zone** `G22`/`G23`/`G24` (§4.2) | — |
+
+**The TPSM84203EAB is no longer a row.** It sits in the circuit zone at cols
+25–28 and *feeds* the +3.3V rail rather than tapping it (§16.2). Row 1 is
+reallocated to the star-ground bond, which is required and now explicit.
 
 **Devices taking more than one rail tap:** ADS1115 only, whose second tap is a
 GND for the ADDR strap selecting 0x48.
@@ -334,6 +404,83 @@ GND for the ADDR strap selecting 0x48.
 the Adafruit breakout has no AD0 pin, and its address-select pin (DI) is
 pulled low on-board, fixing it at 0x4A. The LTC4311 also takes four — its EN
 pin is already pulled high to VIN on the breakout.
+
+**Tap budget.** Twelve four-wire taps (ten addressed devices, ISO1540 side 2,
+LTC4311), plus the ADS1115 ADDR strap and the star-ground bond, against 20 holes
+per rail. **GND is the binding constraint** — a device needs all four rails, so
+expansion is GND-limited. Rows 15–20 are pending the encoder-rail open item in
+§2.2.
+
+### 4.2 Circuit zone — cols 21–30
+
+| Rail | Allocation |
+|---|---|
+| **+3.3V** | `V25` LED feed · `V27` TPSM output · `V28` R1 supply · `V29`/`V30` C4/C5. Free: V21–V24, V26 |
+| **GND** | `G21` ISO 2nd return · `G22`/`G23`/`G24` divider grounds · `G25`/`G27` power block · `G26` C6 (−) · `G29`/`G30` C4/C5. **Free: G28 only** |
+| **SDA** | col 30 — R1 output |
+| **SCL** | col 30 — R2 output |
+
+Board furniture, by block:
+
+- **Power block, cols 25–28 top** — TPSM, C1, C2, C3, C6, P2 input. §16.2.
+- **Pull-ups and rail caps, cols 29–30** — R1, R2, the 3.3V bridge, C4, C5. §3.2.
+- **Power LED, cols 24–26 bottom** — feed `c25f`→`V25`; anode `c25g` ↔ cathode
+  `c26g`; R9 1kΩ `c26i`↔`c24i` (0.2" span, keep `c25i` clear); ground via the
+  c24 bottom strip, already tied to `G24` by the RIGHT divider return. ~1.3mA.
+  It exists to make the "devices dark on USB-C-only" state visible at a glance.
+- **Sonar dividers, cols 9–24 bottom** — §16.13.
+- **ISO1540 side-2 drop, col 12** — §16.1.
+
+C6 occupies `G26`, so no vertical +3.3V/GND rail pair remains free. The optional
+HF decoupler (§2.4) fits diagonally as `V26`↔`G28`, 0.2" with bent leads.
+
+### 4.3 Wire list — 12 jumpers
+
+`c25a`→`G25` · `c27a`→`G27` · `c28a`→`V27` · `c29a`→`V28` · `c29d`↕`c29f` ·
+`c30e`→`SDA30` · `c30j`→`SCL30` · `c25f`→`V25` · `c12f`→`G22` · `c12g`→`G21` ·
+`c18f`→`G23` · `c24f`→`G24`
+
+Plus the ISO1540 **VCC2** wire to one open +3.3V device-zone tap — pick a
+specific tap and record it in §4.1.
+
+The TPSM feeds `V27` and R1 taps `V28`, shifted one column apart so the two
+3.3V diagonals run parallel and never cross. The three divider-ground runs are
+insulated wire crossing cols 12–24 *over* the board — under a wire, not
+occupied; those holes remain usable.
+
+### 4.4 Free space
+
+- **Top strips:** `c1`–`c24` entirely free. c25–c28 power block; c29/c30 partial.
+- **Bottom strips:** `c1`–`c8`, `c13`, `c14`, `c19`, `c20`, `c27`–`c28` free.
+  Everything else partial.
+
+### 4.5 Build order and verification
+
+**Before soldering anything:**
+
+1. Meter the bare board. `c30e`↔`c30f` must be **OPEN** — repeat on 2–3 random
+   columns. Confirm 4 rails = 4 independent nets, each continuous across 30 holes.
+2. Confirm TPSM pin order against the physical part, face-on (§12 rule 3 applies
+   — orientation errors on this rover have cost real time).
+3. Confirm cap lead pitch, 2.54mm vs 5mm. Measure `c26a`→`G26` before ordering
+   C6: if that gap is 0.1" rather than the assumed 0.2", a 2.5mm-pitch part is
+   required.
+
+**Assembly:**
+
+4. Power block — **row-a jumpers first**, then P2, C1, TPSM, C2, C3, **C6 last**.
+   A 6.3mm can at `c26a` has a 3.15mm radius and its neighbours sit 2.54mm away,
+   so it covers both jumper holes. Bring up on a bench supply with the current
+   limit at ~200mA: expect 3.3V ±0.1V at `V27` **and** at rail col 1 (far end),
+   and the LED lit.
+5. Pull-ups, C4/C5, the bridge, and the optional `V26`↔`G28` decoupler.
+   SDA/SCL idle ~3.3V.
+6. Sonar section — headers, dividers, GPIO pins, ground wires. 5V on the ECHO
+   pins must give 3.2–3.4V at the junctions.
+7. ISO side-2 drop pins. Continuity `c12j`↔GND rail. No +3.3V↔GND continuity
+   (the caps charge, then it opens).
+8. Connect the ISO module, the LTC4311 (shortest leads — §16.5), and the
+   devices → `i2cdetect` roll-call per §3.3.
 
 ---
 
@@ -893,7 +1040,7 @@ listed in §15.8 rather than carried as a line item.
 | 2kΩ resistor | Sonar ECHO dividers, low side | 3 | Installed |
 | 10kΩ resistor | Battery divider high side | 1 | Installed |
 | 10kΩ + 4.7kΩ resistor | Battery divider low side (parallel ≈3.2kΩ) | 2 | Installed |
-| EPLZON perfboard | Carries all four divider circuits | 1 | Installed |
+| EPLZON perfboard | Bus node board (§4) — I²C distribution, TPSM 3V3 regulation, 3 sonar ECHO dividers | 1 | Rev 3.4 to build |
 
 ### 15.6 Power
 
@@ -904,6 +1051,8 @@ listed in §15.8 rather than carried as a line item.
 | Pi rail buck converter | 12V → 5.0–5.1V | 1 | Installed |
 | FEICHAO 8A UBEC | 12V → 5V servo/steering rail | 1 | Installed |
 | DZS Elec 12A adjustable buck | 12V → 6.0V arm rail | 1 | Installed |
+| **TI TPSM84203EAB** | 12V → 3.3V/1.5A, isolated bus rail (§16.2) | 1 | **To build** |
+| 1A slow-blow fuse + inline holder | TPSM 12V feed — **slow-blow**; C6 inrush trips a fast-blow | 1 | **To build** |
 | Rubycon ZL 1000µF 16V low-ESR | Pi 5V rail bulk, at header | 1 | Installed |
 | 0.1µF ceramic | Pi 5V rail HF bypass | 1 | Installed |
 | FQP27P06 P-FET (Q1) | Reverse-polarity protection | 1 | Built |
@@ -939,12 +1088,14 @@ Listed so their absence is deliberate and traceable, not an omission.
 | 2 × 1000µF interim arm decoupling | Superseded — the single Rubycon can was fitted instead |
 | 2×3S paraboard | Replaced by main + balance Y cables |
 | Elecbee 5V/5A buck | Retired in favour of the current Pi rail buck |
+| AMS1117-3.3 linear regulator | Retired 2026-08-28. Failed twice by thermal foldback — the second time degrading to 2.83V, killing the encoders and flickering the whole bus. Replaced by the TPSM84203EAB (§16.2), which also moves the bus rail off the 5V UBEC onto +12V. |
 
 **One item to confirm:** the Pi rail buck's identity is recorded inconsistently
 across older documents — a DROK 12A LCD unit in some, an Elecbee 5V/5A in
 others. The rail measures correctly and the monitor is confirmed at 0x44, so
 this is a labelling question rather than an electrical one. Confirm the part
-physically and settle §15.6.
+physically and settle §15.6. *(The monitor reference here previously read 0x44;
+the Pi supply monitor is 0x45 — corrected 2026-08-28. See §16.4.)*
 
 ---
 
@@ -962,22 +1113,53 @@ Side 1 is the half nearest the SOIC-8 pin-1 marker (§12 rule 3).
 
 | Side 1 pad | To | | Side 2 pad | To |
 |---|---|---|---|---|
-| VCC | Pi header pin 1 (3V3) | | VCC | AMS1117 Vout / VCC2 rail |
+| VCC | Pi header pin 1 (3V3) | | VCC | VCC2 rail — one open +3.3V device-zone tap |
 | GND | Pi header pin 6 or 9 | | GND | GND2 star |
 | SDA | Pi header pin 3 (GP2) | | SDA | SDA2 rail |
 | SCL | Pi header pin 5 (GP3) | | SCL | SCL2 rail |
 
 A STEMMA QT connector on each half sits on the same nets as that half's pads.
 
-### 16.2 AMS1117-3.3 regulator
+**Side 2 lands on the bus node board at column 12**, as a vertical 3-pin drop
+at 0.1": GND2 `c12j`, SDA2 the SDA rail hole at col 12, SCL2 the SCL rail hole
+at col 12. VCC2 is a fourth wire to any open +3.3V device-zone tap.
 
-| Pin | To |
-|---|---|
-| Vin | 5V FEICHAO rail, downstream of INA260 0x40 |
-| GND | GND2 star — single-point reference for the isolated domain |
-| Vout | VCC2 rail **and** ISO1540 Side 2 VCC (one rail, two branches) |
+The col-12 bottom strip carries `f`=`c12f`→`G22`, `g`=`c12g`→`G21` (a second
+low-Z return), `h`=the FRONT divider's 2kΩ leg, `j`=the GND2 pin; `i` is free.
 
-10µF from Vin to GND and 10µF from Vout to GND, both close to the device.
+> **The bus is not galvanically isolated.** The ISO1540 isolates the I²C lines
+> and nothing else. The six sonar GPIO wires (§16.13) run Pi ↔ board directly,
+> and the ECHO divider bottoms tie the board's GND rail to what the Pi reads.
+> The two domains also meet at the battery star point (§10). Treat this part as
+> **noise rejection on I²C**, which it genuinely provides — never as a safety
+> barrier.
+
+Confirm the breakout carries its own decoupling; 2 × 0.1µF, one per side, if not.
+
+### 16.2 TPSM84203EAB regulator — bus node cols 25–28
+
+Replaces the AMS1117-3.3, retired 2026-08-28 (§15.8). TI spec: 4.5–28V in,
+3.3V/1.5A fixed, ~95% efficiency, 3-pin TO-220.
+
+| Pin | Hole | To |
+|---|---|---|
+| VIN | `c26b` | **+12V main** via a 1A slow-blow fuse and P2 — *not* the 5V UBEC rail |
+| GND | `c27b` | col-27 top strip → `c27a`→`G27` → GND rail (GND2 star) |
+| VOUT | `c28b` | col-28 top strip → `c28a`→`V27` → +3.3V rail (VCC2, and ISO1540 side-2 VCC) |
+
+P2 power input: GND `c25e`, 12V `c26e`. JST-PH is 2.0mm pitch — splay the pins
+into the 2.54mm holes. Capacitors in §2.4; build order and clearances in §4.5.
+
+**Feeding it from +12V rather than the 5V rail is deliberate.** The I²C bus is
+then independent of the UBEC and comes up with base power. It also removes the
+failure path that killed two AMS1117s: this part tolerates the full 4.5–28V
+range, so the historical 12V-miswiring mode would not have cooked it.
+**Known behaviour:** bus devices are dark when the Pi runs on USB-C only without
+12V. The board LED (§4.2) makes that state visible.
+
+Input draw is ~145mA at 0.5A out, ~434mA at the full 1.5A — hence the 1A fuse.
+It protects the harness, not the module; the TPSM fails long before any sanely
+rated fuse opens.
 
 ### 16.3 ADS1115 — 0x48, rows 3–4
 
@@ -1047,6 +1229,12 @@ Logic pins on each: VCC, GND, SDA, SCL from that device's own row.
 | EN | **unconnected** — pulled high to VIN on the breakout |
 
 Four wires only. Transparent to the bus; never appears in a scan.
+
+**Mount it off-board, adjacent to the bus node board, with the shortest leads
+of any device.** It is an edge-rate accelerator: on a long drop cable it adds
+capacitance at the wrong point and can mis-trigger. With twelve taps at
+300–400pF against 4.7kΩ pull-ups (§3.2), this part is what keeps the bus
+inside I²C timing.
 
 ### 16.6 BNO085 — 0x4A, row 9
 
@@ -1176,6 +1364,46 @@ Harness: white VCC, blue GND, grey TRIG, purple ECHO.
 
 Each ECHO divider: 1kΩ from the sensor's ECHO to the midpoint, 2kΩ from
 midpoint to GND, midpoint to the Pi. TRIG connects directly.
+5V × 2k/3k = **3.33V**.
+
+**All three dividers are on the bus node board** (§4), bottom rows, cols 9–24:
+
+| | FRONT | LEFT | RIGHT |
+|---|---|---|---|
+| Header (JST-PH 2-pin, row j) | TRIG `c9j` · ECHO `c10j` | TRIG `c15j` · ECHO `c16j` | TRIG `c21j` · ECHO `c22j` |
+| TRIG pin → Pi | GP5 `c9h` | GP13 `c15h` | GP4 `c21h` |
+| 1kΩ | `c10g`↔`c11g` | `c16g`↔`c17g` | `c22g`↔`c23g` |
+| Junction → Pi | GP26 `c11i` | GP14 `c17i` | GP21 `c23i` |
+| 2kΩ | `c11h`↔`c12h` | `c17h`↔`c18h` | `c23h`↔`c24h` |
+| Divider ground | `c12f`→`G22` | `c18f`→`G23` | `c24f`→`G24` |
+
+Matches `config.py:65-67`. **The third sonar is RIGHT**, bearing +90°
+(`config.py:262`) — there is no rear sonar (§6.1).
+
+Sonar VCC and GND connect **off-board** at the 5V servo rail and star ground;
+the board carries signals only. The divider bottoms therefore reference the
+board's GND rail while the sensors reference star ground — an accepted
+trade-off with a commissioning check attached:
+
+> **Verify the ECHO junctions hold 3.2–3.4V under worst-case servo load, not at
+> idle.** Idle is exactly when the star-ground IR drop this check exists to catch
+> is absent. If they wander more than 0.2V, add one bond wire from sonar ground
+> to any open device-zone GND tap. Re-check whenever the 5V trimpot moves — the
+> rail is adjustable and it sets the divider output directly.
+
+The 1kΩ series element is also the overvoltage protection. A buck cannot sink
+current, so back-driven servos can push the 5V rail up. At 6V with the Pi
+clamping the junction to 3.6V the clamp sinks only 0.6mA — (6−3.6)/1k in,
+3.6/2k out; at 7V it is 1.6mA. **Do not shrink it.**
+
+⚠ **GPIO14 is UART0 TXD on a Pi 5**, and LEFT ECHO sits there. If the serial
+console is enabled the UART drives that pin against the divider. Confirm it is
+disabled, or move LEFT ECHO.
+
+*Optional — 220Ω series TRIG protection*, placeable as drawn: FRONT `c9g`↔`c8g`
+with GP5 moving to `c8h`; LEFT `c15g`↔`c14g`, GP13 → `c14h`; RIGHT `c21g`↔`c20g`,
+GP4 → `c20h`. Insurance against a miswire, not a functional need — TRIG is an
+HC-SR04 input and never back-drives.
 
 ### 16.14 Battery divider
 
