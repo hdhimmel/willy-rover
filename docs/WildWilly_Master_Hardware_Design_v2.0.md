@@ -68,7 +68,7 @@ distribution, bus node board and motor drivers in the body tray.
 |----|------|-------|------------|
 | P1 | 2 × 3S 8000mAh → hard parallel, per-pack BMS | 12–14 AWG | BMS per pack |
 | P2 | Battery+ → F1 → KCD4 switch → Q1 FET → +12V bus | 12 AWG | F1 30A ATC |
-| P3 | +12V bus → F2 → **SW-M** → INA260 0x45 → both FeatherWing VIN | 16 AWG | F2 |
+| P3 | +12V bus → F2 → **SW-M** → both FeatherWing VIN | 16 AWG | F2 |
 | P4 | +12V bus → F3 → Pi buck input | 16 AWG | F3 |
 | P5 | +12V bus → F4 → FEICHAO UBEC input | 16 AWG | F4 10A |
 | P6 | +12V bus → F5 → **SW-A** → DZS buck input | 16 AWG | F5 |
@@ -83,7 +83,8 @@ distribution, bus node board and motor drivers in the body tray.
 | R3 | 6V | DZS buck | Arm servo distribution | — |
 | R4 | 3V3 | Pi header pin 1 | ISO1540 Side 1 VCC only | — |
 | — | 3V3 (VCC2) | AMS1117-3.3 | Entire isolated I²C bus **+ encoder distribution** | — |
-| — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | INA260 **0x44** |
+| — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | **none — see G-1 regression §16.4** |
+| — | +12V main input | Battery via F1/KCD4/Q1 | All four DROK converters + TPSM84203EAB | INA260 **0x44** |
 
 ⚠ **R4 corrected 2026-08-25 (owner).** This table previously listed encoder
 distribution on R4, the Pi's own 3V3 header pin. That is wrong as-built: **the
@@ -177,15 +178,15 @@ addressed around the same time.
 - Latching mushroom E-stop cuts motors and arm.
 - **SW-M and SW-A — added 2026-08-23, closing FRD v3.1 G-1.** Two dedicated
   physical switches, placed directly in the distribution tree (§2.1): **SW-M**
-  in P3, between F2 and INA260 0x45 (both FeatherWing motor drivers); **SW-A**
+  in P3, between F2 and both FeatherWing motor drivers; **SW-A**
   in P6, between F5 and the DZS buck input (arm servo supply, R3). Relationship
   to the existing latching mushroom E-stop above — **replaces it, is driven by
   it, or is fully independent — not yet confirmed, owner to specify.**
-  SW-M's placement upstream of INA260 0x45 is deliberate: it makes the motor
-  side of G-1 observable through the *existing* current monitor (0A downstream
-  while a drive command is active is now a real, intentional signal, not an
-  inferred side-effect) — likely removing the need for a separate GPIO/
-  optoisolator sense line on that side. SW-A's side (P6/R3) still has no
+  SW-M's placement was chosen so the motor side of G-1 would be observable
+  through the current monitor then sitting downstream of it (0x44). **That no
+  longer holds** — 0x44 moved to the +12V main input on 2026-08-28, upstream
+  of SW-M, so a motor cut is invisible to it again. See the G-1 regression in
+  §16.4. SW-A's side (P6/R3) still has no
   current monitor, so it needs either a new INA260 or a direct switch-state
   sense to be observable in software.
 - **Switch 2** in the Pi buck input line — de-powers the Pi and the 3V3 bus
@@ -273,8 +274,8 @@ that side sinks only 3.5mA and is already near budget.
 | 0x40 | INA260 | 5V servo/steering rail current |
 | 0x42 | PCA9685 | Steering servos, CH0–CH5 |
 | 0x43 | PCA9685 | Arm servos, CH0–CH6 |
-| 0x44 | INA260 | Pi 5V rail current — SAFE_MODE trip reads this |
-| 0x45 | INA260 | Motor 12V rail current |
+| 0x44 | INA260 | +12V main input — total system draw (moved upstream 2026-08-28) |
+| 0x45 | INA260 | Pi supply: DROK 9V → Witty Pi VIN |
 | 0x48 | ADS1115 | Battery voltage ADC |
 | 0x4A | BNO085 | 9-DoF IMU |
 | 0x60 | FeatherWing | Motor driver, LEFT |
@@ -301,8 +302,8 @@ schematic role-colouring and differs from the sonar harness key in §6.1.
 | 3 | X | X | X | X | ADS1115 logic | 0x48 |
 | 4 | X | — | — | — | ADS1115 ADDR→GND | 0x48 |
 | 5 | X | X | X | X | INA260 servo/steering | 0x40 |
-| 6 | X | X | X | X | INA260 Pi 5V | 0x44 |
-| 7 | X | X | X | X | INA260 motor 12V | 0x45 |
+| 6 | X | X | X | X | INA260 +12V main input | 0x44 |
+| 7 | X | X | X | X | INA260 Pi supply | 0x45 |
 | 8 | X | X | X | X | LTC4311 | none |
 | 9 | X | X | X | X | BNO085 IMU | 0x4A |
 | 10 | X | X | X | X | MCP23017 encoder | 0x27 |
@@ -334,7 +335,11 @@ pin is already pulled high to VIN on the breakout.
 
 Powered through the GPIO header from the Pi buck, not USB-C. The GPIO path
 bypasses the Pi's onboard input protection, so brownout protection is
-firmware-only, via the INA260 at 0x44. There is no hardware supervisor.
+**not implemented in software at all.** Earlier revisions of this document
+claimed it was "firmware-only, via the INA260 at 0x44"; no such code exists
+(`safety.py` has no INA260 logic; `config.py:177` — monitors are log-only
+with no trip thresholds). Corrected 2026-08-28. There is no hardware
+supervisor either.
 
 ### 5.2 AI HAT+ 2
 
@@ -1086,7 +1091,7 @@ match the actual JST-PH style in hand.
 
 | Addr | Row | VIN | Logic | Motor terminals |
 |---|---|---|---|---|
-| 0x60 | 11 | +12V via F2, downstream of INA260 0x45 | VCC2/GND2/SDA2/SCL2 row 11 | M1 = LF, M2 = LM, M3 = LR, M4 spare |
+| 0x60 | 11 | +12V via F2 and SW-M (no current monitor since 2026-08-28) | VCC2/GND2/SDA2/SCL2 row 11 | M1 = LF, M2 = LM, M3 = LR, M4 spare |
 | 0x61 | 12 | same | row 12 | M1 = RF, M2 = RM, M3 = RR, M4 spare |
 
 Standalone — no Feather host board. Direction and PWM are internal, so there

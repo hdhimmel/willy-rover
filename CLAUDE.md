@@ -20,8 +20,8 @@ code needs fixing — every line below was confirmed on the bench.
 | 0x40 | INA260 | Servo/steering 5V rail current |
 | 0x42 | PCA9685 | Steering servos, CH0–CH5 |
 | 0x43 | PCA9685 | Arm servos, CH1–CH7 (CH0 unused, shifted 2026-08-21) |
-| 0x44 | INA260 | **Pi 5V rail** — SAFE_MODE brownout trip reads this |
-| 0x45 | INA260 | Motor 12V rail current |
+| 0x44 | INA260 | **+12V main input** — total system draw (moved upstream 2026-08-28) |
+| 0x45 | INA260 | Pi supply: DROK 9V → Witty Pi VIN |
 | 0x48 | ADS1115 | Battery voltage ADC, A0 |
 | 0x4A | BNO085 | 9-DoF IMU |
 | 0x60 | FeatherWing | Motor driver, LEFT side |
@@ -32,13 +32,18 @@ answers whenever either PCA9685 is alive. Any roll-call check that counts
 0x70 toward the device total will pass a scan that is actually missing a
 device. Expect ten, not eleven.
 
-**The Pi-rail INA260 is at 0x44, not 0x46.** Confirmed by scan — 0x46 does
-not answer. If `config.py` names 0x46, the brownout trip reads nothing and
-fails silently.
+> **INA260 map corrected + 0x44 relocated 2026-08-28.** Addresses were transposed in every doc until
+> `config.py` was fixed against live measurement on 2026-08-24 (0x40 -> 5.148V, 0x44 -> 11.373V,
+> 0x45 -> 9.068V). 0x44 has now additionally been **moved upstream** of all four DROK converters
+> and the TPSM, onto the +12V main input, so it reads total system draw. See the G-1 regression
+> note below — this move takes 0x44 off the motor branch and out from behind SW-M.
+
+**Trust `config.py`, not prose, for these three addresses.** Every doc in this
+repo had 0x44 and 0x45 transposed until 2026-08-24.
 
 **Witty Pi 5 HAT+ (0x51) — NOT YET PHYSICALLY INSTALLED, software prepared ahead of it
 (2026-08-20).** Per its own user manual, it uses only SDA/SCL — confirmed no conflict with
-anything above. Wired via VUSB (USB-C, off the existing 5V/0x44-monitored rail), not the VIN
+anything above. Wired via VUSB (USB-C, off the 0x45-monitored Pi supply), not the VIN
 screw terminal. `config.ENABLE_WITTY_PI` stays `False` (and 0x51 stays out of `brain.py`'s
 self-test expected-device set) until it's actually connected — flip it on then, not before.
 See `docs/WildWilly_Software_Design_v1.0.md` §4.1 for the integration story and the open
@@ -234,9 +239,12 @@ commanded driving is unaffected; this only blocks the unprompted idle/post-charg
   5V rail above — servo current now flows through the board itself, not just
   signal current. Confirm against the board's ratings before running all six
   steering servos under load simultaneously (Master Hardware Design v2.0 §14).
-- GPIO power bypasses the Pi's onboard input protection, so brownout
-  protection is firmware-only via the 0x44 INA260. There is no hardware
-  supervisor behind it. **The Witty Pi 5 HAT+ (above) is the intended fix for
+- GPIO power bypasses the Pi's onboard input protection. **There is no
+  brownout trip in software.** Docs previously claimed this was "firmware-only
+  via the 0x44 INA260" — that code does not exist: `safety.py` contains no
+  INA260 logic, and `config.py:177` states the monitors are "Monitor/log only
+  — no numeric overcurrent trip thresholds exist anywhere." Corrected
+  2026-08-28. There is no hardware supervisor behind it either. **The Witty Pi 5 HAT+ (above) is the intended fix for
   this** — its own MCU can force a real power cycle independent of whatever
   the Pi's own OS/kernel is doing — now installed and software-configured
   (see below), but the underlying undervoltage gap itself is still open.
@@ -260,7 +268,9 @@ flicker**, full 11-device set present every single time. The `hwmon3` under-volt
 also stopped recurring the same moment (40+ min clean afterward, vs. cycling every 15-30s
 before) — one root cause explains both symptoms, not two separate issues.
 
-**Planned upgrade, not yet done**: replacing the AMS1117-3.3 (linear regulator, prone to this
+**Upgrade designed, build pending** (see
+`docs/WildWilly_EPLZON_Combined_Board_v3.2.md` for the full board layout):
+replacing the AMS1117-3.3 (linear regulator, prone to this
 exact thermal-foldback failure mode) with a **TI TPSM84203EAB** integrated buck power module —
 4.5-28V input (would have tolerated the original 12V-miswiring failure mode instead of cooking
 itself), fixed 3.3V/1.5A output, ~95% efficiency, 3-pin TO-220 footprint confirmed by the owner

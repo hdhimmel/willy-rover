@@ -473,9 +473,15 @@ no GPIO sense pin exists, so Directive 1 is enforced physically but has no
 representation in the control loop and cannot be logged. What changed is that
 this is now an accepted design position rather than an open gap. Partial
 observability was added the same day — `brain.py::_check_motor_rail()` watches
-INA260 0x44 (inline on the +12V motor bus) for the voltage collapse a cut
-produces, logging it and surfacing it on the face. That is detection only: it
-never stops or faults, and it is not a substitute for a sense line.
+INA260 0x44 for the voltage collapse a cut produces, logging it and surfacing
+it on the face. That is detection only: it never stops or faults, and it is not
+a substitute for a sense line.
+
+**Broken 2026-08-28.** 0x44 moved from the motor branch to the +12V main input,
+upstream of SW-M, so a cut no longer collapses the voltage it reads and this
+check reports healthy unconditionally. Recommended fix: relocate INA260 0x45
+(redundant now that the Witty Pi 5 HAT+ measures Pi current) into P3 downstream
+of SW-M, then repoint the `'motor'` rail key at it. Owner decision pending.
 
 The reset-gate *mechanism* itself is no longer blocked on that wiring, though.
 Owner decision 2026-08-18: a touchscreen "TAP TO RESUME" button, applied now

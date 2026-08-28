@@ -213,12 +213,13 @@ control loop.
 
 **Design update 2026-08-23:** two dedicated physical cut switches, SW-M and
 SW-A, added to the distribution tree (Master Hardware Design v2.0 Section
-2.1/2.3) -- SW-M in P3, upstream of the existing INA260 0x45 current monitor
-on the motor supply; SW-A in P6, on the arm servo supply (DZS buck input),
-which has no current monitor. SW-M's placement means the motor side of this
-gap can likely be closed by reading the *existing* 0x45 monitor in software
-(0A while a drive command is active, rather than a new sense wire) --
-`sensors.py::CurrentMonitor` already reads this address for FR-200. The arm
+2.1/2.3) -- SW-M in P3 on the motor supply; SW-A in P6, on the arm servo supply (DZS buck input),
+which has no current monitor. SW-M's placement was intended to close the motor side of
+this gap by reading the current monitor then downstream of it (0x44). **That
+route closed on 2026-08-28** when 0x44 moved upstream to the +12V main input,
+reopening the motor side of G-1. Recommended fix: relocate INA260 0x45 into P3
+downstream of SW-M — the Witty Pi 5 HAT+ measures the Pi's own current, making
+0x45 redundant where it currently sits. Owner decision pending. The arm
 side (SW-A) still needs either a new INA260 or a direct switch-state sense.
 Relationship between SW-M/SW-A and the previously-documented latching
 mushroom E-stop is **not yet confirmed** -- whether these replace it, are
@@ -503,7 +504,9 @@ conditions:
 -   **FR-200-001 (voltage/current/power).** Reported pack voltage tracks a
     meter reading within 0.05V across the 10.2--12.6V range, after the divider
     scale factor in `config.py` is set. Rail currents are read from the three
-    INA260s at 0x40 (servo/steering 5V), 0x44 (Pi 5V) and 0x45 (motor 12V).
+    INA260s at 0x40 (servo/steering 5V), 0x44 (+12V main input) and 0x45 (Pi
+    supply). 0x44/0x45 were transposed in docs until 2026-08-24; 0x44 moved
+    upstream to the main input 2026-08-28.
 
 -   **FR-200-001, pre-power safety condition.** A0 must be metered before the
     ADS1115 is first energised and must sit in the 2.76--3.06V window. A
@@ -577,8 +580,12 @@ Rationale and scope, recorded so this is traceable rather than silently relaxed:
 **What this decision does NOT claim.** Software still cannot *observe* an E-stop,
 so it keeps issuing drive commands into unpowered controllers and logs nothing
 about the event. Two partial mitigations exist as of 2026-08-24:
-`brain.py::_check_motor_rail()` detects motor-bus voltage collapse via INA260
-0x44 (inline on that bus) and surfaces it in the log and on the face —
+`brain.py::_check_motor_rail()` was written to detect motor-bus voltage
+collapse via INA260 0x44 while that monitor sat inline on the motor branch.
+**As of 2026-08-28 it no longer can** — 0x44 moved upstream of SW-M to the
++12V main input, so a cut does not collapse what it reads. Retained here as
+the description of intent; the check currently reports a healthy rail
+unconditionally. It surfaces in the log and on the face —
 detection only, no automatic stop — and SW-M/SW-A (§2.1/§2.3) give per-domain
 cuts. Neither is a sense line, and neither is claimed to be.
 
