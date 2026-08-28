@@ -273,6 +273,13 @@ not implement as designed.** Three independent problems, not one:
    --- the same barrier this session's own I²C fault-finding relied on
    staying intact. Doing it correctly would need another isolator channel,
    adding a part and a failure mode for no net gain (see next point).
+
+   ⚠ **Premise corrected 2026-08-28.** Reason 1 as written does not hold: GND1
+   and GND2 are not galvanically separate and never were (Master Hardware Design
+   §3.1). A non-isolated regulator cannot create a ground domain, the star-ground
+   bond ties the rails deliberately, and six sonar GPIO wires already cross the
+   barrier. The retraction still stands on reasons 2 and 3, which are unaffected —
+   but do not cite galvanic isolation as the blocker in future decisions.
 2. **Saves no I²C transactions.** INTA only reports "something on port A
    changed" --- actually learning what changed still requires an I²C read
    (`INTCAP` or `GPIO`). Every edge costs a bus transaction either way, so

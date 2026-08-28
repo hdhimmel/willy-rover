@@ -79,7 +79,7 @@ distribution, bus node board and motor drivers in the body tray.
 | ID | Rail | Source | Feeds | Monitor |
 |----|------|--------|-------|---------|
 | R1 | 9V | DROK buck | Witty Pi VIN → Pi (2026-08-23 rework) | INA260 **0x45** |
-| R2 | 5V | FEICHAO 8A UBEC | Steering servo distribution, AMS1117 input, Pi screen | INA260 0x40 |
+| R2 | 5V | FEICHAO 8A UBEC | Steering servo distribution, sonar VCC, Pi screen | INA260 0x40 |
 | R3 | 6V | DZS buck | Arm servo distribution | — |
 | R4 | 3V3 | Pi header pin 1 | ISO1540 Side 1 VCC only | — |
 | — | 3V3 (VCC2) | **TPSM84203EAB** on the bus node board (§4) | Entire isolated I²C bus. **Encoder distribution — see the open item below.** | — |
@@ -126,8 +126,8 @@ while all six Hall sensors sit powered-but-inoperative, holding a static output
 they have not the supply to switch. That is exactly the measured signature, and
 it is the only hypothesis tried that explains all six failing identically.
 
-**Repair: replace the AMS1117-3.3 with a switching module** (TPSM84203EAB is the
-candidate on the improvement list). Two things to settle BEFORE fitting it:
+**Repair: replaced by the TPSM84203EAB** — designed 2026-08-28, build pending.
+Layout §4, pin detail §16.2. Two things still to settle BEFORE fitting it:
 verify the pinout actually matches rather than trusting "TO-220 drop-in", and
 establish whether these encoders want 3.3V or 5V — the vendor part number was
 never recorded, and JGA25-370 spans variants with both. If they need 5V the
@@ -258,20 +258,40 @@ first, the balance Y a minute later.
 
 The Pi's I²C controller (GND1 domain) is separated from every device (GND2
 domain) by an ISO1540 bidirectional isolator. Side 2 is powered by an
-AMS1117-3.3 drawing from the 5V FEICHAO rail, feeding a single 3V3 rail that
-branches to the isolator's Side 2 VCC and to the bus node VCC2 rail.
+**TPSM84203EAB on the bus node board, drawing from the +12V main** (changed
+2026-08-28 from an AMS1117-3.3 on the 5V FEICHAO rail), feeding a single 3V3
+rail that branches to the isolator's Side 2 VCC and to the bus node VCC2 rail.
 
 ```
 Pi native I²C (GND1)      ISO1540        Isolated bus (GND2)
 ─────────────────────────────────────────────────────────────
 GP2  SDA  ──────────>  Side 1 ‖ Side 2  ──────────>  SDA2 rail
 GP3  SCL  ──────────>  Side 1 ‖ Side 2  ──────────>  SCL2 rail
-3V3       ──────────>  Side 1 ‖ Side 2  <──────────  AMS1117 out
+3V3       ──────────>  Side 1 ‖ Side 2  <──────────  TPSM out
 GND       ──────────>  Side 1 ‖ Side 2  ──────────>  GND2 star
 ```
 
-GND2 has exactly one star reference, at the AMS1117 ground pin. The two
-ground domains must show no DC path between them.
+GND2's reference is the bus node board's GND rail, tied at the TPSM ground pin
+(`c27b` → `c27a` → `G27`).
+
+> ⚠ **GND1 and GND2 are not galvanically separate, and never have been.**
+> Earlier revisions of this document asserted "the two ground domains must show
+> no DC path between them." That is not achievable with this topology, for
+> three independent reasons:
+>
+> 1. **A non-isolated regulator cannot create a ground domain.** The AMS1117's
+>    GND pin was common to its input and output, so GND2 was tied to the 5V
+>    rail's ground — i.e. GND1 — the whole time. The TPSM is a non-isolated buck
+>    and behaves the same way.
+> 2. **The star-ground bond** (§4.1 row 1) deliberately ties the board GND rail
+>    to the system star point.
+> 3. **The six sonar GPIO wires** (§16.13) cross the barrier by design, and the
+>    ECHO divider bottoms reference the board GND rail that the Pi then reads
+>    against its own ground.
+>
+> The ISO1540 provides **common-mode noise rejection on the I²C lines**, which
+> is real and worth having. It is not a safety barrier and must not be relied on
+> as one. Corrected 2026-08-28.
 
 **Fault found and partially fixed, 2026-08-23.** The power wire to this
 isolated-side 3V3 rail (VCC2, from the AMS1117 above) had come loose,
@@ -795,8 +815,9 @@ Port, answering **no** to both prompts. Verify with
 Single-point star. Every converter negative, board ground and sensor return
 lands on it.
 
-The isolated GND2 domain has its own single reference at the AMS1117 ground
-pin and must not bond to GND1 anywhere. All measurements stay within one
+The GND2 rail is referenced at the TPSM ground pin (§16.2). It is **not**
+galvanically separate from GND1 — see the correction in §3.1; the star-ground
+bond ties them deliberately. Measurements should still stay within one
 domain — a reading taken between domains is a floating value and means
 nothing.
 
@@ -850,8 +871,13 @@ not obvious from the schematic.
 
 1. Motor− (white) lands on a FeatherWing motor terminal. Never on an
    MCP23017 GPIO or any logic pin.
-2. The AMS1117-3.3 input is the 5V rail. Never 12V — the dissipation drives
-   it into thermal foldback and the isolated rail collapses progressively.
+2. **The TPSM84203EAB input is the +12V main, via a 1A slow-blow fuse.** Its
+   range is 4.5–28V, so 12V is correct and intended — this is the reverse of the
+   rule that applied to the AMS1117 it replaced, which had to be on 5V because
+   12V drove it into thermal foldback. **Do not carry the old rule forward.**
+   Feeding the TPSM from 5V would work but throws away the reason for the
+   change: on +12V the bus is independent of the UBEC and comes up with base
+   power.
 3. ISO1540 sides are not interchangeable. Side 1 takes 40pF and one device;
    Side 2 takes 400pF and multiple nodes. The device bus goes on Side 2.
    Identify Side 1 by the SOIC-8 pin-1 marker — pins 1–4 are VCC1, SDA1,
@@ -861,9 +887,14 @@ not obvious from the schematic.
 
 **Before power-up**
 
-5. AMS1117 decoupling present on both Vin and Vout.
+5. TPSM decoupling present: C1 (10µF 50V) on Vin, and **C2+C3 giving the 94µF
+   ceramic Cout minimum** — a single 10µF on the output will oscillate. C6
+   (47µF/35V electrolytic) fitted with the stripe up into `G26`. §2.4, §4.5.
 6. 4.7kΩ pull-ups present on SDA2 and SCL2.
-7. GND1/GND2 isolation confirmed — no DC path between domains.
+7. ~~GND1/GND2 isolation confirmed — no DC path between domains.~~
+   **Struck 2026-08-28** — not achievable with this topology and never was
+   (§3.1). Replace with: confirm the star-ground bond is present and the board
+   GND rail reads continuous to the system star point.
 8. ADS1115 A0 metered in the 2.76–3.06V window. A reading near 12V means the
    divider is open and the ADC will be destroyed on power-up.
 9. Address straps verified individually on both PCA9685s and all three
@@ -942,8 +973,10 @@ measurement, not a construction task.
    tightest in the design.
 5. **Runtime measurement** — log the three INA260s through a representative
    run and integrate, rather than relying on estimates.
-6. **AMS1117 thermal watch** — this part has seen sustained thermal stress.
-   Watch for drift or shutdown as bus load increases.
+6. ~~**AMS1117 thermal watch**~~ — **closed 2026-08-28.** The part is retired
+   (§15.8); the TPSM84203EAB that replaces it is a ~95%-efficient switcher and
+   does not share the failure mode. Superseded by the bus node board build
+   (§4.5).
 7. **Pi-rail buck identity** — DROK 12A LCD versus Elecbee 5V/5A across older
    documents. Electrically settled: the rail measures correctly and its
    monitor is confirmed at 0x44. This is a labelling question only. Identify
@@ -1019,8 +1052,8 @@ listed in §15.8 rather than carried as a line item.
 | Component | Role | Qty | Status |
 |-----------|------|-----|--------|
 | Adafruit ISO1540 (#4903) | Galvanic I²C isolator | 1 | Installed |
-| AMS1117-3.3 regulator module | Isolated 3V3 (VCC2) supply | 1 | Installed |
-| 10µF capacitor | AMS1117 Vin and Vout decoupling | 2 | Installed |
+| TI TPSM84203EAB | Bus 3V3 (VCC2) supply, 12V → 3.3V/1.5A | 1 | To build — replaces the AMS1117 (§15.8) |
+| Bus node capacitors C1–C6 | TPSM Cin/Cout, 12V bulk, 3V3 rail decoupling | 6 | To build — see §2.4 |
 | 4.7kΩ resistor | SDA2 / SCL2 rail pull-ups | 2 | Installed |
 | Adafruit LTC4311 | I²C accelerator — no address | 1 | Installed |
 | MCP23017 | Encoder GPIO expander, 0x27 | 1 | Installed |
@@ -1180,7 +1213,7 @@ it is not a parallel tap.
 
 | Addr | Row | VIN+ from | VIN− to |
 |---|---|---|---|
-| 0x40 | 5 | FEICHAO UBEC 5V output | Servo/steering distribution + AMS1117 Vin |
+| 0x40 | 5 | FEICHAO UBEC 5V output | Servo/steering distribution + sonar VCC |
 | 0x44 | 6 | +12V bus via F2 | Both FeatherWing VIN terminals |
 | 0x45 | 7 | DROK 9V buck output | Witty Pi VIN terminal → Pi |
 
@@ -1205,7 +1238,7 @@ left to right:
 |---|---|---|---|
 | **Left** | 0x45 | 9V | DROK → Witty Pi VIN → Pi |
 | **Middle** | 0x44 | 12V | +12V bus → both FeatherWing VIN (motors) |
-| **Right** | 0x40 | 5V | FEICHAO UBEC → servos, AMS1117, Pi screen |
+| **Right** | 0x40 | 5V | FEICHAO UBEC → servos, sonar VCC, Pi screen |
 
 Left and right were owner-stated; the middle follows by elimination (only three
 boards). Note the layout is 9V, 12V, 5V left-to-right — not sorted by voltage and
@@ -1455,8 +1488,8 @@ sections were created in rev 6.2.0, which is not committed to the repository at
 all.
 
 The consequence is specific, not theoretical: an agent following `CLAUDE.md`
-goes looking for the ISO1540/AMS1117 as-built (§5.7) and the bus-node row
-allocation (§17.4) and finds nothing. Those are the two sections behind both
+goes looking for the ISO1540/regulator as-built and the bus-node row allocation
+and finds nothing — both now live here, in §16.1/§16.2 and §4.1 respectively. Those are the two sections behind both
 isolator incidents.
 
 Further, rev 6.0.7 is the oldest document in the repository. It predates the

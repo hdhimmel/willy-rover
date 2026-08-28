@@ -524,7 +524,9 @@ Reverted for three reasons: (1) the MCP23017 lives on the isolated side of
 the ISO1540 (§3.1); wiring its INTA pin to a bare Pi GPIO runs a conductor
 straight across the isolation barrier, which needs its own isolator channel
 to do safely — a part and a failure mode added for the gain described in
-(2); (2) INTA only signals "something on port A changed" — learning what
+(2); **[Premise corrected 2026-08-28: GND1/GND2 are not
+galvanically separate and never were — Master Hardware Design §3.1. The
+retraction stands on (2) and (3); do not cite isolation as the blocker.]** (2) INTA only signals "something on port A changed" — learning what
 still costs an I²C read (`INTCAP`/`GPIO`), so every edge costs a bus
 transaction regardless, same as today's polling, which already decodes all
 twelve channels in two reads per cycle; interrupt-driven is not cheaper and
