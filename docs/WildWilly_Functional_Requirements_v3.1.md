@@ -213,7 +213,7 @@ control loop.
 
 **Design update 2026-08-23:** two dedicated physical cut switches, SW-M and
 SW-A, added to the distribution tree (Master Hardware Design v2.0 Section
-2.1/2.3) -- SW-M in P3 on the motor supply; SW-A in P6, on the arm servo supply (DZS buck input),
+2.1/2.3) -- SW-M in P3 on the motor supply; SW-A in P6, on the arm servo supply (6V DROK input — was the DZS, replaced 2026-08-28),
 which has no current monitor. SW-M's placement was intended to close the motor side of
 this gap by reading the current monitor then downstream of it (0x44). **That
 route closed on 2026-08-28** when 0x44 moved upstream to the +12V main input,

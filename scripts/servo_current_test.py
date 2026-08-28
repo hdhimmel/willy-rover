@@ -9,8 +9,8 @@ that is not making contact draws nothing while a healthy one clearly does.
 
 SCOPE -- READ THIS BEFORE EXPECTING IT TO COVER THE ARM. It does not, and cannot:
 
-    R2  5V  FEICHAO UBEC  steering servos + AMS1117 + Pi screen   INA260 0x40
-    R3  6V  DZS buck      ARM servo distribution                  (no sensor)
+    R2  5V  DROK buck     steering servos + sonar VCC + Pi screen INA260 0x40
+    R3  6V  DROK buck     ARM servo distribution                  (no sensor)
 
 The arm servos sit on their own 6V rail with NO current sensor on it, so nothing here can see
 them. Standard PWM servos give no feedback either, so an unplugged arm joint remains an

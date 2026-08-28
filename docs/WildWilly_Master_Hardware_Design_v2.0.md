@@ -70,8 +70,10 @@ distribution, bus node board and motor drivers in the body tray.
 | P2 | Battery+ → F1 → KCD4 switch → Q1 FET → +12V bus | 12 AWG | F1 30A ATC |
 | P3 | +12V bus → F2 → **SW-M** → both FeatherWing VIN | 16 AWG | F2 |
 | P4 | +12V bus → F3 → Pi buck input | 16 AWG | F3 |
-| P5 | +12V bus → F4 → FEICHAO UBEC input | 16 AWG | F4 10A |
-| P6 | +12V bus → F5 → **SW-A** → DZS buck input | 16 AWG | F5 |
+| P5 | +12V bus → F4 → **5V DROK** input | 16 AWG | F4 10A |
+| P6 | +12V bus → F5 → **SW-A** → **6V DROK** input | 16 AWG | F5 |
+| P8 | +12V bus → **3V DROK** input | 16 AWG | **fuse TBD** |
+| P9 | +12V bus → 1A slow-blow → P2 on the bus node board (TPSM, §16.2) | 22–26 AWG | 1A T |
 | P7 | Charge Y-cable (main + balance) → battery side of KCD4 | 14 AWG | — |
 
 ### 2.2 Regulated rails
@@ -79,8 +81,9 @@ distribution, bus node board and motor drivers in the body tray.
 | ID | Rail | Source | Feeds | Monitor |
 |----|------|--------|-------|---------|
 | R1 | 9V | DROK buck | Witty Pi VIN → Pi (2026-08-23 rework) | INA260 **0x45** |
-| R2 | 5V | FEICHAO 8A UBEC | Steering servo distribution, sonar VCC, Pi screen | INA260 0x40 |
-| R3 | 6V | DZS buck | Arm servo distribution | — |
+| R2 | 5V | **DROK buck** | Steering servo distribution, sonar VCC, Pi screen | INA260 0x40 |
+| R3 | 6V | **DROK buck** | Arm servo distribution | — |
+| R5 | 3V | **DROK buck** | Encoder distribution — **see the voltage warning below** | — |
 | R4 | 3V3 | Pi header pin 1 | ISO1540 Side 1 VCC only | — |
 | — | 3V3 (VCC2) | **TPSM84203EAB** on the bus node board (§4) | Entire isolated I²C bus. **Encoder distribution — see the open item below.** | — |
 | — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | **none — see G-1 regression §16.4** |
@@ -92,12 +95,33 @@ failures of the same thermal-foldback mode. VCC2 now comes from a
 rather than the 5V UBEC rail — so the I²C bus is independent of the UBEC and
 comes up with base power. Board layout §4; pin detail §16.2.
 
-⚠ **Encoder distribution — OPEN (2026-08-28).** The encoders have been given
-their own rail (owner). This table and §4.1 rows 15–20 still show them on VCC2.
-Confirm the new rail's source and voltage, then either strike rows 15–20 from
-§4.1 or restore them here — six GND and six 3V3 taps ride on the answer. Until
-settled, treat encoder power as undocumented. Related open item: whether these
-encoders want 3.3V or 5V was never established, and 2.83V is what killed them.
+⚠ **Converters replaced 2026-08-28 (owner).** The FEICHAO 8A UBEC and the DZS
+Elec buck are both out, replaced by **individual DROK bucks** — owner's stated
+reason: reliable, similar components, one per rail. Four DROKs total: **9V, 5V,
+3V, 6V**. Rail voltages, roles and fuse assignments are unchanged; only the
+converter parts differ. Downstream wiring, INA260 placement and the PCA9685 V+
+feeds are unaffected.
+
+> **Assumption flagged for correction.** The owner listed "9 5 3" explicitly and
+> stated the DZS is gone; the 6V DROK for the arm is inferred from the earlier
+> "finalized at 4 DROK" plus "reliable similar components", since the seven arm
+> servos on PCA9685 0x43 (§16.9) otherwise have no supply. **If the arm instead
+> moved to the 5V rail, strike R3 and re-check the 5V budget** — worst-case 5V
+> draw is already near 9A (§12), and 6V-rated servos lose roughly 20% torque at 5V.
+
+⚠ **ENCODER RAIL VOLTAGE — VERIFY BEFORE POWERING THE ENCODERS.** R5 is recorded
+as **3V**. That is *below* the 3.3V minimum this document already gives for these
+Hall encoders (see the 2026-08-25 root cause above), and only **170mV above the
+2.83V that killed all six of them**. If "3" means 3.3V, fine. If it is literally
+3.0V, this reproduces the original failure exactly — the encoders will sit
+powered-but-inoperative while every I²C device on the bus tests healthy, which is
+the signature that cost days to diagnose. **Meter the rail before connecting the
+encoders, and settle the still-open question of whether these encoders want 3.3V
+or 5V** — the vendor part number was never recorded. If they want 4.5V+, R5 is
+the wrong rail regardless of how it measures.
+
+Moving the encoders off VCC2 onto R5 frees six GND and six 3V3 taps in §4.1 rows
+15–20; strike those rows once R5 is confirmed.
 
 ⚠ **R4 corrected 2026-08-25 (owner).** This table previously listed encoder
 distribution on R4, the Pi's own 3V3 header pin. That is wrong as-built: **the
@@ -158,8 +182,10 @@ supplies 9V into Witty Pi's VIN terminal, and Witty Pi supplies the Pi. Its
 monitor is 0x45, not 0x44 — see §16.4 for the live measurements confirming this
 and the 0x44/0x45 transposition that was corrected at the same time.
 
-Set the Pi buck to 5.0–5.1V and the DZS to 6.0V off-load before connecting
-anything downstream.
+Set each DROK off-load before connecting anything downstream: **9V** rail to the
+Witty Pi's input spec, **5V** to 5.0–5.1V, **6V** to 6.0V, **3V** per the warning
+above. These are adjustable trimpot modules — re-verify after any knock, and note
+that the 5V setting directly sets the sonar ECHO divider outputs (§16.13).
 
 **Witty Pi 5 power feed — reworked 2026-08-23.** Witty Pi 5 (real-time
 clock + power management HAT, sits between the +12V/battery side and the Pi's
@@ -192,7 +218,7 @@ addressed around the same time.
 - **SW-M and SW-A — added 2026-08-23, closing FRD v3.1 G-1.** Two dedicated
   physical switches, placed directly in the distribution tree (§2.1): **SW-M**
   in P3, between F2 and both FeatherWing motor drivers; **SW-A**
-  in P6, between F5 and the DZS buck input (arm servo supply, R3). Relationship
+  in P6, between F5 and the **6V DROK** input (arm servo supply, R3). Relationship
   to the existing latching mushroom E-stop above — **replaces it, is driven by
   it, or is fully independent — not yet confirmed, owner to specify.**
   SW-M's placement was chosen so the motor side of G-1 would be observable
@@ -751,7 +777,7 @@ GPIOs and no STBY pin.
 order LF, RF, LM, RM, LR, RR.
 
 Each servo plugs into a 3-pin channel header — signal, V+ and GND all pass
-through the board. The board takes its own V+ from the 5V FEICHAO rail.
+through the board. The board takes its own V+ from the 5V rail (R2, DROK).
 
 1500µs centre, 500–2500µs for 180°. Confirm per unit; some stock ships in
 900–2100µs / 120° mode.
@@ -761,7 +787,7 @@ through the board. The board takes its own V+ from the 5V FEICHAO rail.
 ## 8. Arm
 
 5-DOF plus gripper, 7 servos on PCA9685 0x43. The board takes its V+ from the
-6V DZS rail; servos plug into 3-pin channel headers.
+6V rail (R3, DROK — was the DZS); servos plug into 3-pin channel headers.
 
 | Joint | Servo | Channel |
 |-------|-------|---------|
@@ -1086,8 +1112,11 @@ listed in §15.8 rather than carried as a line item.
 | 3S LiPo 8000mAh | Two packs, hard-paralleled | 2 | Installed |
 | 3S BMS 40–60A with balance | One per pack | 2 | Installed |
 | Pi rail buck converter | 12V → 5.0–5.1V | 1 | Installed |
-| FEICHAO 8A UBEC | 12V → 5V servo/steering rail | 1 | Installed |
-| DZS Elec 12A adjustable buck | 12V → 6.0V arm rail | 1 | Installed |
+| ~~FEICHAO 8A UBEC~~ | Replaced 2026-08-28 — see §15.8 | — | Removed |
+| ~~DZS Elec 12A adjustable buck~~ | Replaced 2026-08-28 — see §15.8 | — | Removed |
+| DROK adjustable buck — 5V | 12V → 5.0–5.1V servo/steering rail (R2) | 1 | To fit |
+| DROK adjustable buck — 6V | 12V → 6.0V arm rail (R3) | 1 | To fit |
+| DROK adjustable buck — 3V | 12V → encoder rail (R5) — **verify voltage, §2.2** | 1 | To fit |
 | **TI TPSM84203EAB** | 12V → 3.3V/1.5A, isolated bus rail (§16.2) | 1 | **To build** |
 | 1A slow-blow fuse + inline holder | TPSM 12V feed — **slow-blow**; C6 inrush trips a fast-blow | 1 | **To build** |
 | Rubycon ZL 1000µF 16V low-ESR | Pi 5V rail bulk, at header | 1 | Installed |
@@ -1125,6 +1154,8 @@ Listed so their absence is deliberate and traceable, not an omission.
 | 2 × 1000µF interim arm decoupling | Superseded — the single Rubycon can was fitted instead |
 | 2×3S paraboard | Replaced by main + balance Y cables |
 | Elecbee 5V/5A buck | Retired in favour of the current Pi rail buck |
+| FEICHAO 8A UBEC | Replaced 2026-08-28 by a dedicated 5V DROK. Worst-case draw on this rail was already near 9A against the UBEC's 8A rating (§12), so it was running with no margin. |
+| DZS Elec 12A adjustable buck | Replaced 2026-08-28 by a dedicated 6V DROK. One converter per rail, reliable similar components (owner). |
 | AMS1117-3.3 linear regulator | Retired 2026-08-28. Failed twice by thermal foldback — the second time degrading to 2.83V, killing the encoders and flickering the whole bus. Replaced by the TPSM84203EAB (§16.2), which also moves the bus rail off the 5V UBEC onto +12V. |
 
 **One item to confirm:** the Pi rail buck's identity is recorded inconsistently
@@ -1217,7 +1248,7 @@ it is not a parallel tap.
 
 | Addr | Row | VIN+ from | VIN− to |
 |---|---|---|---|
-| 0x40 | 5 | FEICHAO UBEC 5V output | Servo/steering distribution + sonar VCC |
+| 0x40 | 5 | **5V DROK** output | Servo/steering distribution + sonar VCC |
 | 0x44 | 6 | +12V bus via F2 | Both FeatherWing VIN terminals |
 | 0x45 | 7 | DROK 9V buck output | Witty Pi VIN terminal → Pi |
 
@@ -1242,7 +1273,7 @@ left to right:
 |---|---|---|---|
 | **Left** | 0x45 | 9V | DROK → Witty Pi VIN → Pi |
 | **Middle** | 0x44 | 12V | +12V bus → both FeatherWing VIN (motors) |
-| **Right** | 0x40 | 5V | FEICHAO UBEC → servos, sonar VCC, Pi screen |
+| **Right** | 0x40 | 5V | **5V DROK** → servos, sonar VCC, Pi screen |
 
 Left and right were owner-stated; the middle follows by elimination (only three
 boards). Note the layout is 9V, 12V, 5V left-to-right — not sorted by voltage and
@@ -1334,8 +1365,8 @@ are no direction GPIOs and no STBY pin.
 
 | Addr | Row | Logic | Board V+ | Address straps |
 |---|---|---|---|---|
-| 0x42 | 13 | VCC2/GND2/SDA2/SCL2 row 13 | 5V FEICHAO rail | A1 bridged |
-| 0x43 | 14 | row 14 | 6V DZS rail | A0 **and** A1 bridged |
+| 0x42 | 13 | VCC2/GND2/SDA2/SCL2 row 13 | 5V rail (R2) | A1 bridged |
+| 0x43 | 14 | row 14 | 6V rail (R3) | A0 **and** A1 bridged |
 
 Base address is 0x40; each bridged jumper adds its bit. Servos plug into the
 3-pin channel headers, so signal, V+ and GND all pass through the board.
