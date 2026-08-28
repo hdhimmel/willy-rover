@@ -192,6 +192,14 @@ addressed around the same time.
 - **Switch 2** in the Pi buck input line — de-powers the Pi and the 3V3 bus
   after a software shutdown.
 
+> **UNVERIFIED as of 2026-08-28.** This regression assumes the device moving to
+> the 12V input is 0x44. The owner subsequently described the three monitors by
+> *rail* as Pi / UBEC 5V / DZS 6V, with the 5V and 6V staying put — which makes
+> the **Pi-rail** monitor the one that moves, and this regression spurious. That
+> conflicts with `config.py`'s measured 0x44 = 11.373V on the motor bus. Resolve
+> by reading bus voltage at 0x40/0x44/0x45 before treating this as fact.
+
+
 ### 2.4 Capacitors — complete list
 
 | Qty | Value | Location |

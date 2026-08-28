@@ -226,6 +226,14 @@ mushroom E-stop is **not yet confirmed** -- whether these replace it, are
 driven by it, or are independent. Do not close this gap in code until that's
 settled, since it changes what "E-stop fired" actually means in the wiring.
 
+> **UNVERIFIED as of 2026-08-28.** This regression assumes the device moving to
+> the 12V input is 0x44. The owner subsequently described the three monitors by
+> *rail* as Pi / UBEC 5V / DZS 6V, with the 5V and 6V staying put — which makes
+> the **Pi-rail** monitor the one that moves, and this regression spurious. That
+> conflicts with `config.py`'s measured 0x44 = 11.373V on the motor bus. Resolve
+> by reading bus voltage at 0x40/0x44/0x45 before treating this as fact.
+
+
 **G-2 --- FR-500-002/004, encoder counts are possibly under-sampled at
 speed --- the "~8.5 kHz per channel" figure this doc previously stated is
 wrong, corrected 2026-08-23.** `ENCODER_COUNTS_PER_REV` is 3292 (823.1 PPR
