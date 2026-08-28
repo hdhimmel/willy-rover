@@ -482,9 +482,13 @@ occupied; those holes remain usable.
    columns. Confirm 4 rails = 4 independent nets, each continuous across 30 holes.
 2. Confirm TPSM pin order against the physical part, face-on (§12 rule 3 applies
    — orientation errors on this rover have cost real time).
-3. Confirm cap lead pitch, 2.54mm vs 5mm. Measure `c26a`→`G26` before ordering
-   C6: if that gap is 0.1" rather than the assumed 0.2", a 2.5mm-pitch part is
-   required.
+3. **Dry-fit C6 before soldering — the constraint is body diameter, not lead
+   pitch.** Electrolytic leads bend easily over this span, so a 2.5mm or 5mm
+   part will both seat between `c26a` and `G26` whichever way that gap measures.
+   What does not bend is the can: at 6.3mm diameter its 3.15mm radius covers
+   `c25a` and `c27a`, 2.54mm away on either side, and an 8mm can also crowds the
+   TPSM body at `c26b` one pitch over. This is why the row-a jumpers go in first
+   (step 4). Confirm ceramic lead pitch separately, 2.54mm vs 5mm.
 
 **Assembly:**
 
