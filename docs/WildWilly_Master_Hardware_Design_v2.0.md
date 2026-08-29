@@ -76,6 +76,82 @@ distribution, bus node board and motor drivers in the body tray.
 | P9 | +12V bus → 1A slow-blow → P2 on the bus node board (TPSM, §16.2) | 22–26 AWG | 1A T |
 | P7 | Charge Y-cable (main + balance) → battery side of KCD4 | 14 AWG | — |
 
+**Distribution tree diagram:**
+
+```mermaid
+graph TD
+    BAT["2× 3S 8000mAh LiPo<br/>in parallel"]
+    BMS["Per-pack BMS"]
+    F1["F1: 30A ATC"]
+    KCD4["KCD4 Main Switch"]
+    Q1["Q1 FET"]
+    BUS["12V Bus"]
+    
+    F2["F2<br/>Motor"]
+    F3["F3<br/>Pi"]
+    F4["F4 10A<br/>5V"]
+    F5["F5<br/>6V"]
+    F_TPSM["1A slow-blow<br/>TPSM"]
+    
+    SW_M["SW-M<br/>Motor Cut"]
+    FW_MOTOR["FeatherWing<br/>Motor Drivers<br/>12V VIN"]
+    
+    PI_BUCK["9V DROK<br/>Witty Pi"]
+    R1["R1: 9V<br/>INA260 0x45"]
+    
+    DROK5["5V DROK<br/>INA260 0x40"]
+    R2["R2: 5V<br/>Servos/Sonar"]
+    
+    SW_A["SW-A<br/>Arm Cut"]
+    DROK6["6V DROK"]
+    R3["R3: 6V<br/>Arm Servos"]
+    
+    DROK3["3V DROK"]
+    R5["R5: 3V<br/>Encoders"]
+    
+    TPSM["TPSM84203EAB<br/>on Bus Node"]
+    BUS_VCC2["VCC2: 3.3V<br/>I²C Bus"]
+    
+    BAT --> BMS
+    BMS --> F1
+    F1 --> KCD4
+    KCD4 --> Q1
+    Q1 --> BUS
+    
+    BUS --> F2
+    BUS --> F3
+    BUS --> F4
+    BUS --> F5
+    BUS --> F_TPSM
+    
+    F2 --> SW_M
+    SW_M --> FW_MOTOR
+    
+    F3 --> PI_BUCK
+    PI_BUCK --> R1
+    
+    F4 --> DROK5
+    DROK5 --> R2
+    
+    F5 --> SW_A
+    SW_A --> DROK6
+    DROK6 --> R3
+    
+    BUS --> DROK3
+    DROK3 --> R5
+    
+    F_TPSM --> TPSM
+    TPSM --> BUS_VCC2
+    
+    style BAT fill:#ffcccc
+    style BUS fill:#ffeecc
+    style R1 fill:#cce5ff
+    style R2 fill:#cce5ff
+    style R3 fill:#cce5ff
+    style R5 fill:#cce5ff
+    style BUS_VCC2 fill:#e5ccff
+```
+
 ### 2.2 Regulated rails
 
 | ID | Rail | Source | Feeds | Monitor |
@@ -297,6 +373,68 @@ GP3  SCL  ──────────>  Side 1 ‖ Side 2  ──────
 GND       ──────────>  Side 1 ‖ Side 2  ──────────>  GND2 star
 ```
 
+**Isolation topology diagram:**
+
+```mermaid
+graph LR
+    PI["Raspberry Pi 5<br/>3.3V Logic"]
+    
+    R4["R4: 3V3<br/>from Pi pin 1"]
+    SDA1["SDA1"]
+    SCL1["SCL1"]
+    
+    ISO1540["ISO1540<br/>Galvanic<br/>Isolator"]
+    
+    SDA2["SDA2"]
+    SCL2["SCL2"]
+    VCC2["VCC2: 3.3V<br/>from TPSM"]
+    GND2["GND2"]
+    
+    BUS_BOARD["Bus Node Board<br/>on EPLZON"]
+    
+    DEV2["ADS1115<br/>0x48"]
+    DEV3["INA260<br/>0x40/44/45"]
+    DEV4["MCP23017<br/>0x27"]
+    DEV5["BNO085<br/>0x4A"]
+    DEV6["FeatherWings<br/>0x60/0x61"]
+    DEV7["PCA9685<br/>0x42/0x43"]
+    DEV8["LTC4311<br/>Bus Accelerator"]
+    
+    PI --> R4
+    PI --> SDA1
+    PI --> SCL1
+    
+    R4 --> ISO1540
+    SDA1 --> ISO1540
+    SCL1 --> ISO1540
+    
+    ISO1540 --> SDA2
+    ISO1540 --> SCL2
+    VCC2 --> ISO1540
+    GND2 --> ISO1540
+    
+    SDA2 --> BUS_BOARD
+    SCL2 --> BUS_BOARD
+    VCC2 --> BUS_BOARD
+    GND2 --> BUS_BOARD
+    
+    BUS_BOARD --> DEV2
+    BUS_BOARD --> DEV3
+    BUS_BOARD --> DEV4
+    BUS_BOARD --> DEV5
+    BUS_BOARD --> DEV6
+    BUS_BOARD --> DEV7
+    BUS_BOARD --> DEV8
+    
+    style PI fill:#ccffcc
+    style R4 fill:#ffffcc
+    style ISO1540 fill:#ffcccc
+    style VCC2 fill:#e5ccff
+    style BUS_BOARD fill:#ffffdd
+    style DEV2 fill:#cce5ff
+    style DEV3 fill:#cce5ff
+```
+
 GND2's reference is the bus node board's GND rail, tied at the TPSM ground pin
 (`c27b` → `c27a` → `G27`).
 
@@ -392,6 +530,25 @@ rows a-e       5-hole tie-strips per column
 CENTER GAP     breaks the column strips
 rows f-j       5-hole tie-strips per column
 BOTTOM RAILS   row 1: SDA      row 2: SCL      (30 holes each)
+```
+
+**Board layout diagram:**
+
+```mermaid
+graph TB
+    subgraph Board["EPLZON 3.5×2.05 inch (30 columns × 10 rows a-j)"]
+        subgraph DevZone["Device Zone: Columns 1–20<br/>I²C Taps Only<br/>All rows: GND, 3V3, SDA, SCL connections"]
+            D["ISO1540 Side 2 | ADS1115 | INA260×3 | LTC4311 | BNO085 |<br/>MCP23017 | FeatherWings | PCA9685×2 | Motors | Encoders"]
+        end
+        
+        subgraph CircuitZone["Circuit Zone: Columns 21–30<br/>Board-Internal Circuits<br/>Rails: VCC2, GND2, SDA2, SCL2"]
+            R["TPSM84203EAB<br/>Cols 25-28: 12V→3.3V<br/><br/>C6 Decoupling<br/>Cols 26-27<br/><br/>Sonar ECHO Dividers<br/>1k/2k Voltage Dividers"]
+        end
+    end
+    
+    style DevZone fill:#f9f9f9
+    style CircuitZone fill:#f0f0f0
+    style R fill:#ffe5cc
 ```
 
 Per column, `a-e` is one net and `f-j` is a separate net; the centre gap breaks
@@ -788,6 +945,71 @@ through the board. The board takes its own V+ from the 5V rail (R2, DROK).
 
 5-DOF plus gripper, 7 servos on PCA9685 0x43. The board takes its V+ from the
 6V rail (R3, DROK — was the DZS); servos plug into 3-pin channel headers.
+
+**Motor and arm control topology diagram:**
+
+```mermaid
+graph TD
+    PI["Raspberry Pi 5"]
+    
+    FWL["FeatherWing LEFT<br/>Motor Driver<br/>0x60<br/>12V VIN"]
+    FWR["FeatherWing RIGHT<br/>Motor Driver<br/>0x61<br/>12V VIN"]
+    
+    ENC["MCP23017 GPIO<br/>Encoder Inputs<br/>0x27"]
+    
+    LF["LF Motor +<br/>Encoder A/B"]
+    LM["LM Motor +<br/>Encoder A/B"]
+    LR["LR Motor +<br/>Encoder A/B"]
+    RF["RF Motor +<br/>Encoder A/B"]
+    RM["RM Motor +<br/>Encoder A/B"]
+    RR["RR Motor +<br/>Encoder A/B"]
+    
+    PCA_STEER["PCA9685 Steering<br/>0x42<br/>5V VIN"]
+    STEER_SERVO["6× GDW DS041MG<br/>Steering Servos"]
+    
+    PCA_ARM["PCA9685 Arm<br/>0x43<br/>6V VIN<br/>R3"]
+    ARM_SERVO["7× Servos<br/>4× MG996R<br/>3× MG90S"]
+    
+    PI -->|I²C| FWL
+    PI -->|I²C| FWR
+    PI -->|I²C| ENC
+    PI -->|I²C| PCA_STEER
+    PI -->|I²C| PCA_ARM
+    
+    FWL -->|Motor Cmd| LF
+    FWL -->|Motor Cmd| LM
+    FWL -->|Motor Cmd| LR
+    
+    FWR -->|Motor Cmd| RF
+    FWR -->|Motor Cmd| RM
+    FWR -->|Motor Cmd| RR
+    
+    LF -->|Encoder| ENC
+    LM -->|Encoder| ENC
+    LR -->|Encoder| ENC
+    RF -->|Encoder| ENC
+    RM -->|Encoder| ENC
+    RR -->|Encoder| ENC
+    
+    PCA_STEER -->|PWM| STEER_SERVO
+    
+    PCA_ARM -->|PWM| ARM_SERVO
+    
+    style PI fill:#ccffcc
+    style FWL fill:#e5ccff
+    style FWR fill:#e5ccff
+    style ENC fill:#ccf0ff
+    style PCA_STEER fill:#ffe5cc
+    style PCA_ARM fill:#ffe5cc
+    style LF fill:#f0f0f0
+    style LM fill:#f0f0f0
+    style LR fill:#f0f0f0
+    style RF fill:#f0f0f0
+    style RM fill:#f0f0f0
+    style RR fill:#f0f0f0
+    style STEER_SERVO fill:#fff0cc
+    style ARM_SERVO fill:#fff0cc
+```
 
 | Joint | Servo | Channel |
 |-------|-------|---------|
@@ -1433,6 +1655,29 @@ Harness: white VCC, blue GND, grey TRIG, purple ECHO.
 Each ECHO divider: 1kΩ from the sensor's ECHO to the midpoint, 2kΩ from
 midpoint to GND, midpoint to the Pi. TRIG connects directly.
 5V × 2k/3k = **3.33V**.
+
+**Sonar ECHO divider circuit diagram (one of three):**
+
+```mermaid
+graph LR
+    SONAR["HC-SR04 ECHO<br/>5V output"]
+    SONAR --> R1["1kΩ<br/>c-row"]
+    R1 --> OUT["GPIO input<br/>~3.33V"]
+    R1 --> R2["2kΩ<br/>b-row to GND"]
+    SONAR --> GND["GND reference<br/>Board GND rail"]
+    
+    CALC["Voltage divider:<br/>5V × 2kΩ/(1k+2k)<br/>= 3.33V max"]
+    
+    R2 --> GND
+    OUT --> PI["Raspberry Pi GPIO"]
+    
+    style SONAR fill:#ffcccc
+    style OUT fill:#ccffcc
+    style CALC fill:#ffffcc
+    style PI fill:#ccffcc
+    style R1 fill:#e5e5e5
+    style R2 fill:#e5e5e5
+```
 
 **All three dividers are on the bus node board** (§4), bottom rows, cols 9–24:
 
