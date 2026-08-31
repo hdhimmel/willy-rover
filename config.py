@@ -188,7 +188,7 @@ ESTOP_LOG_INTERVAL_S=5.0 # safety.py throttles emergency_stop()'s own log line t
 # So the original NAMES were right and only the ADDRESSES were transposed -- fixed by swapping the
 # two address values below rather than renaming anything, which keeps every existing caller valid.
 # Owner-confirmed. Master Hardware Design v2.0 §2.2/§16.4 updated to match.
-INA260_SERVO_ADDR=0x40   # 5V FEICHAO UBEC rail -> steering servos + AMS1117 Vin. VERIFIED 5.148V.
+INA260_SERVO_ADDR=0x40   # 5V rail (DROK-5V, replaced FEICHAO UBEC 2026-08-28) → steering servos + sonar VCC. VERIFIED 5.148V.
                          # Wired inline, so the rail passes through it: this device can stop
                          # ACKing on I2C while still passing power perfectly (seen 2026-08-24 --
                          # dropped off the bus, came back after the wiring was physically handled,
@@ -202,17 +202,14 @@ INA260_PI_ADDR=0x45      # Pi supply feed: DROK 9V -> Witty Pi VIN -> Pi. VERIFI
 # Witty Pi 5 HAT+ (UUGear) — RTC and power management. Uses only SDA/SCL (per its own user
 # manual), no other GPIO — confirmed no conflict with anything else on this bus. Physically
 # installed, `wp5`/`wp5d` software installed and configured 2026-08-21: power source priority
-# V-USB first (matches wiring), "default state when powered" set to ON with a 2s delay (so Willy
-# boots when power is connected rather than needing the HAT's physical button pressed), hardware
-# watchdog enabled at 200 missed heartbeats (~10-20s at brain.py's tick's ~50-100ms heartbeat
-# cadence — tolerant of ordinary hiccups, still catches a genuinely wedged kernel; see CLAUDE.md).
+# VUSB first (matches wiring — Pi powered via USB-C, then Witty Pi outputs that same 5V to the
+# Pi via its own VUSB output). "Default state when powered" set to ON with a 2s delay (so Willy
+# boots when power is connected), hardware watchdog enabled at 200 missed heartbeats (~10-20s).
 # ENABLE_WITTY_PI now True — 0x51 is included in brain.py's _EXPECTED_I2C self-test set.
-# Wired via VUSB (USB-C, off the existing 5V/INA260_PI_ADDR-monitored rail), not VIN — the
-# manual documents its configurable low-voltage-threshold registers (#22/#23) as monitoring VIN
-# specifically; whether an equivalent threshold usefully applies to a dropping VUSB is NOT
-# confirmed and needs live testing, not an assumed number. The existing software battery-tier
-# system (config.BAT_SHUTDOWN_V et al., via the real battery-voltage ADC) remains the primary
-# safety mechanism regardless of how that resolves.
+# Witty Pi's 9V input (INA260_PI_ADDR monitoring) comes from DROK-Pi (9V adjustable buck, R1).
+# The manual's low-voltage-threshold registers (#22/#23) monitor VIN; exact thresholds are not
+# live-tested. The existing software battery-tier system (config.BAT_SHUTDOWN_V, battery-voltage
+# ADC) remains the primary safety mechanism.
 ENABLE_WITTY_PI=True
 WITTY_PI_ADDR=0x51
 

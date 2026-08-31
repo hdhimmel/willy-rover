@@ -68,12 +68,11 @@ distribution, bus node board and motor drivers in the body tray.
 |----|------|-------|------------|
 | P1 | 2 × 3S 8000mAh → hard parallel, per-pack BMS | 12–14 AWG | BMS per pack |
 | P2 | Battery+ → F1 → KCD4 switch → Q1 FET → +12V bus | 12 AWG | F1 30A ATC |
-| P3 | +12V bus → F2 → **SW-M** → both FeatherWing VIN | 16 AWG | F2 |
-| P4 | +12V bus → F3 → Pi buck input | 16 AWG | F3 |
-| P5 | +12V bus → F4 → **5V DROK** input | 16 AWG | F4 10A |
-| P6 | +12V bus → F5 → **SW-A** → **6V DROK** input | 16 AWG | F5 |
-| P8 | +12V bus → **3V DROK** input | 16 AWG | **fuse TBD** |
-| P9 | +12V bus → 1A slow-blow → P2 on the bus node board (TPSM, §16.2) | 22–26 AWG | 1A T |
+| P3 | +12V bus → F2 → **SW-M** → INA260 0x44 → both FeatherWing VIN | 16 AWG | F2 |
+| P4 | +12V bus → F3 → Switch 2 → **DROK-Pi** (9V to Witty Pi) | 16 AWG | F3 |
+| P5 | +12V bus → F4 → **DROK-5V** input | 16 AWG | F4 10A |
+| P6 | +12V bus → F5 → **SW-A** → **DROK-6V** input | 16 AWG | F5 |
+| P8 | +12V bus → F6 polyfuse (RXEF110 1.1A) → **TPSM84205** (12V→5V) → **AMS1117-3.3** → isolated 3.3V rail (VCC2) | 20–22 AWG | F6 PTC |
 | P7 | Charge Y-cable (main + balance) → battery side of KCD4 | 14 AWG | — |
 
 **Distribution tree diagram:**
@@ -156,34 +155,37 @@ graph TD
 
 | ID | Rail | Source | Feeds | Monitor |
 |----|------|--------|-------|---------|
-| R1 | 9V | DROK buck | Witty Pi VIN → Pi (2026-08-23 rework) | INA260 **0x45** |
-| R2 | 5V | **DROK buck** | Steering servo distribution, sonar VCC, Pi screen | INA260 0x40 |
-| R3 | 6V | **DROK buck** | Arm servo distribution | — |
-| R5 | 3V | **DROK buck** | Encoder distribution — **see the voltage warning below** | — |
+| R1 | 9V | **DROK-Pi** buck | Witty Pi 5 VIN (KF350-2P) → Witty Pi → Pi 5 | INA260 **0x45** |
+| R2 | 5V | **DROK-5V** buck | Steering servo distribution, sonar VCC, Pi screen | INA260 **0x40** |
+| R3 | 6V | **DROK-6V** buck | Arm servo distribution | — |
 | R4 | 3V3 | Pi header pin 1 | ISO1540 Side 1 VCC only | — |
-| — | 3V3 (VCC2) | **TPSM84203EAB** on the bus node board (§4) | Entire isolated I²C bus. **Encoder distribution — see the open item below.** | — |
-| — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | **none — see G-1 regression §16.4** |
-| — | +12V main input | Battery via F1/KCD4/Q1 | All four DROK converters + TPSM84203EAB | INA260 **0x44** |
+| — | 3V3 (VCC2) | **Two-stage chain** (§3): TPSM84205 (12V→5V) → AMS1117-3.3 (5V→3.3V) | Entire isolated I²C bus + encoders | — |
+| — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | INA260 **0x44** (P3 monitoring) |
+| — | +12V main | Battery via F1/KCD4/Q1 | All four DROK inputs + isolated power chain (P8) | — |
 
-⚠ **VCC2 source changed 2026-08-28.** The AMS1117-3.3 is retired after two
-failures of the same thermal-foldback mode. VCC2 now comes from a
-**TPSM84203EAB** buck module on the bus node board, fed from the **+12V main**
-rather than the 5V UBEC rail — so the I²C bus is independent of the UBEC and
-comes up with base power. Board layout §4; pin detail §16.2.
+⚠ **DROK inventory status (2026-08-28).** Four DROK adjustable units total: DROK-Pi (9V), DROK-5V, DROK-6V, and DROK-4 (spec pending). Set each off-load to rated voltage before connecting downstream. DROK-4's set-point and load are **not yet recorded** — owner to specify before power-up.
 
-⚠ **Converters replaced 2026-08-28 (owner).** The FEICHAO 8A UBEC and the DZS
-Elec buck are both out, replaced by **individual DROK bucks** — owner's stated
-reason: reliable, similar components, one per rail. Four DROKs total: **9V, 5V,
-3V, 6V**. Rail voltages, roles and fuse assignments are unchanged; only the
-converter parts differ. Downstream wiring, INA260 placement and the PCA9685 V+
-feeds are unaffected.
+⚠ **Isolated rail VCC2 — two-stage power chain (2026-08-28 repair).** The 2026-08-25
+root cause stands: the old AMS1117-3.3, fed 5.14V from the servo rail, degraded
+into thermal foldback and sagged to 2.83V, killing all six Hall encoders. The
+repair now installed uses a **two-stage chain** to eliminate the dissipation:
 
-> **Assumption flagged for correction.** The owner listed "9 5 3" explicitly and
-> stated the DZS is gone; the 6V DROK for the arm is inferred from the earlier
-> "finalized at 4 DROK" plus "reliable similar components", since the seven arm
-> servos on PCA9685 0x43 (§16.9) otherwise have no supply. **If the arm instead
-> moved to the 5V rail, strike R3 and re-check the 5V budget** — worst-case 5V
-> draw is already near 9A (§12), and 6V-rated servos lose roughly 20% torque at 5V.
+- **Stage 1:** +12V bus → F6 polyfuse (RXEF110, 1.1A hold) → **TPSM84205** buck (12V → 5V at ~95% efficiency)
+- **Stage 2:** TPSM 5V output → **AMS1117-3.3** (5V → 3.3V at ~80% efficiency, now dropping only ~1.7V at bus current)
+
+The TPSM pre-regulates 12V down to 5V, removing the thermal stress that killed its
+predecessor. **CRITICAL:** This chain requires the **TPSM84205** (5V family) — NOT the
+84203 (3.3V out) or 84212 (12V out). The AMS1117 needs ≥~4.5V input; a 84203 with
+3.3V out would fail. **Verify the part marking before fitting.** The AMS1117 remains
+a single-point-of-failure on the isolated bus; its ground pin is the sole GND2 star
+reference. Replace if its age or thermal history suggests degradation — use a fresh
+part, not the 2026-08-25 casualty.
+
+⚠ **Converter consolidation (2026-08-28).** The FEICHAO 8A UBEC and DZS buck are
+retired, replaced by **four DROK adjustable bucks**: DROK-Pi (9V), DROK-5V, DROK-6V,
+and DROK-4 (pending specification). Owner's stated reason: reliable, matched components,
+one converter per rail. Rail voltages, roles, fuses, and downstream wiring are unchanged.
+**DROK-4's set-point and load remain unspecified** — confirm before power-up.
 
 ⚠ **ENCODER RAIL VOLTAGE — VERIFY BEFORE POWERING THE ENCODERS.** R5 is recorded
 as **3V**. That is *below* the 3.3V minimum this document already gives for these
@@ -359,17 +361,23 @@ first, the balance Y a minute later.
 ### 3.1 Topology
 
 The Pi's I²C controller (GND1 domain) is separated from every device (GND2
-domain) by an ISO1540 bidirectional isolator. Side 2 is powered by an
-**TPSM84203EAB on the bus node board, drawing from the +12V main** (changed
-2026-08-28 from an AMS1117-3.3 on the 5V FEICHAO rail), feeding a single 3V3
-rail that branches to the isolator's Side 2 VCC and to the bus node VCC2 rail.
+domain) by an ISO1540 bidirectional isolator. Side 2 is powered by a
+**two-stage power chain** (updated 2026-08-28):
+
+- **+12V bus → F6 polyfuse → TPSM84205 (5V out) → AMS1117-3.3 (3.3V out) → VCC2 rail**
+
+This two-stage design eliminates the thermal dissipation that caused the 2026-08-25
+failure: the TPSM buck (~95% efficient) pre-regulates 12V to 5V, leaving the
+AMS1117 to drop only ~1.7V at bus current instead of the previous ~1.9V at servo
+load, which triggered thermal foldback. The isolated bus is now independent of the
+servo rail and comes up with base 12V power.
 
 ```
 Pi native I²C (GND1)      ISO1540        Isolated bus (GND2)
 ─────────────────────────────────────────────────────────────
 GP2  SDA  ──────────>  Side 1 ‖ Side 2  ──────────>  SDA2 rail
 GP3  SCL  ──────────>  Side 1 ‖ Side 2  ──────────>  SCL2 rail
-3V3       ──────────>  Side 1 ‖ Side 2  <──────────  TPSM out
+3V3       ──────────>  Side 1 ‖ Side 2  <──────────  AMS1117-3.3 out
 GND       ──────────>  Side 1 ‖ Side 2  ──────────>  GND2 star
 ```
 
@@ -520,9 +528,10 @@ fault: Side 2 dies with the 12V chain, so the Pi on USB-C alone sees nothing.
 ## 4. Bus Node Board
 
 An **EPLZON 3.5"×2.05" (88.9×52.1mm) gold-plated solderable breadboard**,
-30 columns × 0.1", M3 corner mounts. Rev 3.4, 2026-08-28. It carries three
-functions: I²C bus distribution, 3.3V regulation (the TPSM84203EAB that replaced
-the AMS1117), and the three sonar ECHO dividers.
+30 columns × 0.1", M3 corner mounts. Rev 3.4, 2026-08-28. It carries two
+functions: I²C bus distribution and the three sonar ECHO dividers. The isolated
+bus power chain (TPSM84205 → AMS1117-3.3) is now external in the P8 path (§2.1),
+not on the board.
 
 ```
 TOP RAILS      row 1: +3.3V    row 2: GND      (30 holes each, column-aligned)
@@ -542,7 +551,7 @@ graph TB
         end
         
         subgraph CircuitZone["Circuit Zone: Columns 21–30<br/>Board-Internal Circuits<br/>Rails: VCC2, GND2, SDA2, SCL2"]
-            R["TPSM84203EAB<br/>Cols 25-28: 12V→3.3V<br/><br/>C6 Decoupling<br/>Cols 26-27<br/><br/>Sonar ECHO Dividers<br/>1k/2k Voltage Dividers"]
+            R["Sonar ECHO Dividers<br/>Cols 9-24: 1k/2k Voltage Dividers<br/>5V→3.3V per sonar<br/><br/>VCC2/GND2 Rails<br/>Routed across cols 21-30"]
         end
     end
     
@@ -596,9 +605,9 @@ role-colouring and differs from the sonar harness key in §6.1.
 | 20 | X | X | — | — | Motor RR | — |
 | 21 | X | — | — | — | Sonar divider GND ref — **circuit zone** `G22`/`G23`/`G24` (§4.2) | — |
 
-**The TPSM84203EAB is no longer a row.** It sits in the circuit zone at cols
-25–28 and *feeds* the +3.3V rail rather than tapping it (§16.2). Row 1 is
-reallocated to the star-ground bond, which is required and now explicit.
+**Power regulators are now external.** The isolated-bus power chain (TPSM84205 → AMS1117-3.3)
+is in the P8 path (§2.1, §3), no longer on the board. Row 1 is allocated to the
+star-ground bond, which ties the board GND rail to the system star point.
 
 **Devices taking more than one rail tap:** ADS1115 only, whose second tap is a
 GND for the ADDR strap selecting 0x48.
@@ -1123,13 +1132,13 @@ not obvious from the schematic.
 
 1. Motor− (white) lands on a FeatherWing motor terminal. Never on an
    MCP23017 GPIO or any logic pin.
-2. **The TPSM84203EAB input is the +12V main, via a 1A slow-blow fuse.** Its
-   range is 4.5–28V, so 12V is correct and intended — this is the reverse of the
-   rule that applied to the AMS1117 it replaced, which had to be on 5V because
-   12V drove it into thermal foldback. **Do not carry the old rule forward.**
-   Feeding the TPSM from 5V would work but throws away the reason for the
-   change: on +12V the bus is independent of the UBEC and comes up with base
-   power.
+2. **The isolated-bus power chain (P8) uses TPSM84205 (5V output), NOT 84203 (3.3V) or 84212 (12V).** 
+   The TPSM84205 draws from +12V via F6 polyfuse, pre-regulates to 5V (~95% efficient), 
+   then feeds AMS1117-3.3 (5V → 3.3V at ~80% efficient). **Do not use a 84203 or 84212** — 
+   the 84203 outputs only 3.3V and cannot feed the AMS1117 (which needs ≥4.5V in); the 84212 
+   outputs 12V and bypasses the pre-regulation that prevents thermal foldback. Verify the part 
+   marking before fitting. The two-stage design removes the dissipation that killed the 
+   previous single-stage AMS1117 and makes the bus independent of servo load.
 3. ISO1540 sides are not interchangeable. Side 1 takes 40pF and one device;
    Side 2 takes 400pF and multiple nodes. The device bus goes on Side 2.
    Identify Side 1 by the SOIC-8 pin-1 marker — pins 1–4 are VCC1, SDA1,
@@ -1139,9 +1148,9 @@ not obvious from the schematic.
 
 **Before power-up**
 
-5. TPSM decoupling present: C1 (10µF 50V) on Vin, and **C2+C3 giving the 94µF
-   ceramic Cout minimum** — a single 10µF on the output will oscillate. C6
-   (47µF/35V electrolytic) fitted with the stripe up into `G26`. §2.4, §4.5.
+5. **TPSM84205 decoupling (P8 path):** 10µF/50V on 12V input, 2× 47µF ceramic on 5V output 
+   (TI minimum 94µF). **AMS1117-3.3 decoupling:** 10µF/50V on 5V input (from TPSM), 10µF on 3.3V output 
+   (≥10mm from pins). The AMS1117 remains the critical stage on isolated rail — use a fresh part.
 6. 4.7kΩ pull-ups present on SDA2 and SCL2.
 7. ~~GND1/GND2 isolation confirmed — no DC path between domains.~~
    **Struck 2026-08-28** — not achievable with this topology and never was
@@ -1304,13 +1313,11 @@ listed in §15.8 rather than carried as a line item.
 | Component | Role | Qty | Status |
 |-----------|------|-----|--------|
 | Adafruit ISO1540 (#4903) | Galvanic I²C isolator | 1 | Installed |
-| TI TPSM84203EAB | Bus 3V3 (VCC2) supply, 12V → 3.3V/1.5A | 1 | To build — replaces the AMS1117 (§15.8) |
-| Bus node capacitors C1–C6 | TPSM Cin/Cout, 12V bulk, 3V3 rail decoupling | 6 | To build — see §2.4 |
 | 4.7kΩ resistor | SDA2 / SCL2 rail pull-ups | 2 | Installed |
 | Adafruit LTC4311 | I²C accelerator — no address | 1 | Installed |
 | MCP23017 | Encoder GPIO expander, 0x27 | 1 | Installed |
 | ADS1115 | Battery voltage ADC, 0x48 | 1 | Installed |
-| INA260 current sensor | 0x40 servo, 0x44 Pi, 0x45 motor | 3 | Installed |
+| INA260 current sensor | 0x40 servo, 0x44 12V, 0x45 Witty Pi | 3 | Installed |
 | Adafruit PCA9685 | 0x42 steering, 0x43 arm | 2 | Installed |
 | 1000µF 16V electrolytic | PCA9685 0x42 V+, C2 pad | 1 | Installed |
 | Rubycon 2200µF 16V low-ESR | PCA9685 0x43 V+, C2 pad | 1 | Installed |
@@ -1325,7 +1332,7 @@ listed in §15.8 rather than carried as a line item.
 | 2kΩ resistor | Sonar ECHO dividers, low side | 3 | Installed |
 | 10kΩ resistor | Battery divider high side | 1 | Installed |
 | 10kΩ + 4.7kΩ resistor | Battery divider low side (parallel ≈3.2kΩ) | 2 | Installed |
-| EPLZON perfboard | Bus node board (§4) — I²C distribution, TPSM 3V3 regulation, 3 sonar ECHO dividers | 1 | Rev 3.4 to build |
+| EPLZON perfboard | Bus node board (§4) — I²C distribution, 3 sonar ECHO dividers | 1 | Rev 3.4 to build |
 
 ### 15.6 Power
 
@@ -1333,15 +1340,22 @@ listed in §15.8 rather than carried as a line item.
 |-----------|------|-----|--------|
 | 3S LiPo 8000mAh | Two packs, hard-paralleled | 2 | Installed |
 | 3S BMS 40–60A with balance | One per pack | 2 | Installed |
-| Pi rail buck converter | 12V → 5.0–5.1V | 1 | Installed |
 | ~~FEICHAO 8A UBEC~~ | Replaced 2026-08-28 — see §15.8 | — | Removed |
 | ~~DZS Elec 12A adjustable buck~~ | Replaced 2026-08-28 — see §15.8 | — | Removed |
-| DROK adjustable buck — 5V | 12V → 5.0–5.1V servo/steering rail (R2) | 1 | To fit |
-| DROK adjustable buck — 6V | 12V → 6.0V arm rail (R3) | 1 | To fit |
-| DROK adjustable buck — 3V | 12V → encoder rail (R5) — **verify voltage, §2.2** | 1 | To fit |
-| **TI TPSM84203EAB** | 12V → 3.3V/1.5A, isolated bus rail (§16.2) | 1 | **To build** |
-| 1A slow-blow fuse + inline holder | TPSM 12V feed — **slow-blow**; C6 inrush trips a fast-blow | 1 | **To build** |
-| Rubycon ZL 1000µF 16V low-ESR | Pi 5V rail bulk, at header | 1 | Installed |
+| **DROK-Pi** adjustable buck | 12V → 9.0V for Witty Pi VIN (R1) | 1 | To fit |
+| **DROK-5V** adjustable buck | 12V → 5.0V for steering servos (R2, INA260 0x40) | 1 | To fit |
+| **DROK-6V** adjustable buck | 12V → 6.0V for arm servos (R3) | 1 | To fit |
+| **DROK-4** adjustable buck | **Spec pending** — set-point and load TBD | 1 | **Waiting on owner** |
+| **Isolated bus power chain (P8):** | — | — | — |
+| **TI TPSM84205** | 12V → 5.0V pre-regulator (1.5A) — **NOT 84203 or 84212** | 1 | **To build** |
+| RXEF110 1.1A polyfuse | F6, TPSM12V input, PTC resettable | 1 | **To build** |
+| AMS1117-3.3 | 5V → 3.3V final stage, VCC2 (isolated bus + encoders), **fresh part** | 1 | **To fit** |
+| 10µF 50V ceramic | TPSM Vin bypass | 1 | **To build** |
+| 2× 47µF ceramic | TPSM Vout (TI min 94µF total) | 2 | **To build** |
+| 10µF 50V electrolytic | AMS1117 Vin (≥10mm from pins) | 1 | **To build** |
+| 10µF ceramic | AMS1117 Vout, VCC2 | 1 | **To build** |
+| — | — | — | — |
+| Rubycon ZL 1000µF 16V low-ESR | Pi 5V rail bulk, at header (from Witty Pi) | 1 | Installed |
 | 0.1µF ceramic | Pi 5V rail HF bypass | 1 | Installed |
 | FQP27P06 P-FET (Q1) | Reverse-polarity protection | 1 | Built |
 | 220nF capacitor | Q1 gate-source soft-start | 1 | Installed |
@@ -1426,30 +1440,31 @@ low-Z return), `h`=the FRONT divider's 2kΩ leg, `j`=the GND2 pin; `i` is free.
 
 Confirm the breakout carries its own decoupling; 2 × 0.1µF, one per side, if not.
 
-### 16.2 TPSM84203EAB regulator — bus node cols 25–28
+### 16.2 Isolated bus power chain — P8 (external)
 
-Replaces the AMS1117-3.3, retired 2026-08-28 (§15.8). TI spec: 4.5–28V in,
-3.3V/1.5A fixed, ~95% efficiency, 3-pin TO-220.
+Two-stage regulation for VCC2 rail: **TPSM84205 → AMS1117-3.3** (updated 2026-08-28).
 
-| Pin | Hole | To |
-|---|---|---|
-| VIN | `c26b` | **+12V main** via a 1A slow-blow fuse and P2 — *not* the 5V UBEC rail |
-| GND | `c27b` | col-27 top strip → `c27a`→`G27` → GND rail (GND2 star) |
-| VOUT | `c28b` | col-28 top strip → `c28a`→`V27` → +3.3V rail (VCC2, and ISO1540 side-2 VCC) |
+**Stage 1: TPSM84205 (12V → 5V pre-regulator)**
 
-P2 power input: GND `c25e`, 12V `c26e`. JST-PH is 2.0mm pitch — splay the pins
-into the 2.54mm holes. Capacitors in §2.4; build order and clearances in §4.5.
+TI spec: 4.5–28V in, 5.0V/1.5A, ~95% efficiency, TO-220-6. Polyfuse F6 (RXEF110 1.1A, 
+PTC resettable) on 12V input. Decoupling: 10µF/50V on input, 2× 47µF ceramic on output.
 
-**Feeding it from +12V rather than the 5V rail is deliberate.** The I²C bus is
-then independent of the UBEC and comes up with base power. It also removes the
-failure path that killed two AMS1117s: this part tolerates the full 4.5–28V
-range, so the historical 12V-miswiring mode would not have cooked it.
-**Known behaviour:** bus devices are dark when the Pi runs on USB-C only without
-12V. The board LED (§4.2) makes that state visible.
+**Stage 2: AMS1117-3.3 (5V → 3.3V final stage)**
 
-Input draw is ~145mA at 0.5A out, ~434mA at the full 1.5A — hence the 1A fuse.
-It protects the harness, not the module; the TPSM fails long before any sanely
-rated fuse opens.
+TI spec: 4.5–28V in, 3.3V/1A, TO-220. Draws 5V from TPSM output; supplies VCC2 rail 
+and ISO1540 Side 2 VCC. GND pin is the sole GND2 star reference. Decoupling: 10µF/50V 
+on 5V input (from TPSM), 10µF ceramic on 3.3V output. **Use a fresh part** — the 
+2026-08-25 casualty is degraded.
+
+**Why two stages?** The 2026-08-25 root cause: single-stage AMS1117 fed 5.14V from servo 
+rail, dissipated ~1.9W at bus load, thermally folded back, sagged to 2.83V, killed encoders. 
+The TPSM pre-regulates 12V to 5V at ~95% efficiency, leaving AMS1117 to drop only ~1.7V at 
+bus current — removing the thermal stress and making the bus independent of servo load. Bus 
+stays dark on USB-C only (no 12V) by design.
+
+**Known behaviour:** TPSM input draw is ~145mA at 0.5A out, ~434mA at 1.5A max. F6 polyfuse 
+protects the harness; TPSM fails before fuse opens. **CRITICAL:** use TPSM84205 (5V output), 
+NOT 84203 (3.3V) or 84212 (12V). The AMS1117 needs ≥4.5V in; a 84203 would fail immediately.
 
 ### 16.3 ADS1115 — 0x48, rows 3–4
 
