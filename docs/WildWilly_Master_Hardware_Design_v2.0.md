@@ -158,12 +158,13 @@ graph TD
 | R1 | 9V | **DROK-Pi** buck | Witty Pi 5 VIN (KF350-2P) → Witty Pi → Pi 5 | INA260 **0x45** |
 | R2 | 5V | **DROK-5V** buck | Steering servo distribution, sonar VCC, Pi screen | INA260 **0x40** |
 | R3 | 6V | **DROK-6V** buck | Arm servo distribution | — |
+| R5 | **⚠ 3V or 5V?** | **DROK-4** buck | Motor Hall encoders (JGA25-370B) — **voltage TBD, see warning below** | — |
 | R4 | 3V3 | Pi header pin 1 | ISO1540 Side 1 VCC only | — |
-| — | 3V3 (VCC2) | **Two-stage chain** (§3): TPSM84205 (12V→5V) → AMS1117-3.3 (5V→3.3V) | Entire isolated I²C bus + encoders | — |
+| — | 3V3 (VCC2) | **Two-stage chain** (§3): TPSM84205 (12V→5V) → AMS1117-3.3 (5V→3.3V) | Entire isolated I²C bus (devices, not encoders) | — |
 | — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | INA260 **0x44** (P3 monitoring) |
 | — | +12V main | Battery via F1/KCD4/Q1 | All four DROK inputs + isolated power chain (P8) | — |
 
-⚠ **DROK inventory status (2026-08-28).** Four DROK adjustable units total: DROK-Pi (9V), DROK-5V, DROK-6V, and DROK-4 (spec pending). Set each off-load to rated voltage before connecting downstream. DROK-4's set-point and load are **not yet recorded** — owner to specify before power-up.
+⚠ **DROK inventory status (2026-08-28).** Four DROK adjustable units total: DROK-Pi (9V), DROK-5V, DROK-6V, and DROK-4 (encoder rail, R5). Set each off-load to rated voltage before connecting downstream. **DROK-4 voltage still unresolved:** encoders may want 3.3V, 5V, or the recorded 3.0V — vendor part number was never captured, and 3.0V is dangerously close to the 2.83V that killed them. Meter before connecting.
 
 ⚠ **Isolated rail VCC2 — two-stage power chain (2026-08-28 repair).** The 2026-08-25
 root cause stands: the old AMS1117-3.3, fed 5.14V from the servo rail, degraded
@@ -1345,7 +1346,7 @@ listed in §15.8 rather than carried as a line item.
 | **DROK-Pi** adjustable buck | 12V → 9.0V for Witty Pi VIN (R1) | 1 | To fit |
 | **DROK-5V** adjustable buck | 12V → 5.0V for steering servos (R2, INA260 0x40) | 1 | To fit |
 | **DROK-6V** adjustable buck | 12V → 6.0V for arm servos (R3) | 1 | To fit |
-| **DROK-4** adjustable buck | **Spec pending** — set-point and load TBD | 1 | **Waiting on owner** |
+| **DROK-4** adjustable buck | Encoder distribution (R5) — **⚠ voltage TBD: 3.3V or 5V?** (§2.2) | 1 | **Pending voltage decision** |
 | **Isolated bus power chain (P8):** | — | — | — |
 | **TI TPSM84205** | 12V → 5.0V pre-regulator (1.5A) — **NOT 84203 or 84212** | 1 | **To build** |
 | RXEF110 1.1A polyfuse | F6, TPSM12V input, PTC resettable | 1 | **To build** |
