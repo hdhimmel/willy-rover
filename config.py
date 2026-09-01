@@ -419,12 +419,10 @@ LOCAL_LLM_CONFIDENCE_FLOOR=0.55  # FR-1400-001: below this, offer cloud AI fallb
 # intent-reliability batch (experiments/llm_reliability_batch.py) -- that is the number this
 # backend's own pass rate needs to be judged against before treating it as safe to leave on,
 # not an assumed-good ~100%.
-ENABLE_HAILO_LLM=False  # default off -- flip only after experiments/llm_reliability_batch.py
-                        # (run with `hailo` as the arg) shows an acceptable pass rate live
-HAILO_LLM_MODEL_PATH='models/hailo_qwen2_1_5b.hef'  # qwen2:1.5b, the real Hailo GenAI Model
-                                                     # Zoo model for this rover's delivery path
-                                                     # (Phi-2 is not obtainable here -- see spec
-                                                     # section 10.1). ~1.6GB, not tracked in git.
+ENABLE_HAILO_LLM=True   # PRIMARY on-device reasoning (Hailo-10H NPU). 2026-09-01: enabled for autonomous thinking.
+                        # STUCK state tries this first; falls back to Claude only if confidence < HAILO_LLM_CONFIDENCE_FLOOR.
+HAILO_LLM_MODEL_PATH='models/hailo_qwen2_1_5b.hef'  # qwen2:1.5b, Hailo GenAI Model Zoo. ~1.6GB, not tracked in git.
+HAILO_LLM_CONFIDENCE_FLOOR=0.7  # 70% confidence on Hailo decision = proceed without Claude. Below = escalate to cloud.
 AUDIO_INPUT_DEVICE=None; AUDIO_OUTPUT_DEVICE=None  # None = system default
 VOICE_TONE_DEFAULT='neutral'  # 'neutral'|'funny'|'silly'|'bashful' — FR-1500-008/009/010
 # --- Voice latency, 2026-08-21. Measured live on this rover, "What time is it?":

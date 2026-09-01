@@ -19,6 +19,8 @@ from retrieval_task import RetrievalTask
 from pursuit_task import PursuitTask
 from email_client import EmailClient
 from witty_pi import WittyPi
+if config.ENABLE_HAILO_LLM:
+    from hailo_llm import HailoIntentModel
 log=logsetup.setup('brain')
 
 # Intents that must never be dropped for age in _drain_voice_commands(). confirm_receipt answers
@@ -122,6 +124,7 @@ class RoverBrain:
         # and voice.py's free-text fallback — was two separate, un-unified clients hitting the
         # same Anthropic endpoint (ClaudeClient + CloudAIClient).
         self.memory=MemoryStore(); self.cloud_ai=CloudAIProvider(); self.smart_home=SmartHomeClient()
+        self.hailo_llm=HailoIntentModel() if config.ENABLE_HAILO_LLM else None  # Primary on-device reasoning (STUCK state)
         self.voice=VoicePipeline(memory=self.memory,cloud_ai=self.cloud_ai,display=self.display,
                                   smart_home=self.smart_home)
         self.detector=ObjectDetector()
@@ -902,53 +905,66 @@ class RoverBrain:
         self._upd('stop',f'Avoiding l={l:.0f} r={r:.0f}',d,tilt)
 
     def _stuck(self,d,tilt):
-        # Non-blocking (§2): the AI call runs on CloudAIProvider's own worker thread
-        # (ai_provider.py) — this state polls rather than blocks, so _tick() keeps running (and
-        # Directive 1-4 checks keep firing) for however long the API call takes.
+        # Autonomous thinking: Hailo LLM primary (on-device), Claude fallback only if needed.
+        # Non-blocking (§2): Claude calls run on CloudAIProvider's worker thread; Hailo is sync.
         if self.safety.timed_move_active:
             self._upd('stuck',f'Executing: {self._last_action}',d,tilt); return
         if self._claude_move_pending:
-            # the Claude-issued timed move just finished (checked above) — wrap up this episode
             self._claude_move_pending=False; self._stuck_count=0; self._go('ROAM'); return
         if self._claude_pending:
             result=self.cloud_ai.poll_async()
             if result is None:
-                self._upd('stuck','Calling Claude...',d,tilt); return
+                self._upd('stuck','Escalated to Claude...',d,tilt); return
             self._claude_pending=False
-            log.info(f'Claude: parse_success={result.parse_success} '
-                     f'intent_confidence={result.intent_confidence} '
-                     f'action_confidence={result.action_confidence} payload={result.payload}')  # §15
-            payload=result.payload if(result.parse_success and isinstance(result.payload,dict)) else {}
-            if result.parse_success:
-                # §14: caller-owned history (see ai_provider.py's CloudAIProvider docstring) —
-                # only recorded on a successful parse, matching the old claude_client.py's own
-                # _call()'s behavior (its except-branch never appended to history either).
-                self._stuck_history.append({'role':'user','content':self._last_stuck_prompt})
-                self._stuck_history.append({'role':'assistant','content':json.dumps(payload)})
-                self._stuck_history=self._stuck_history[-12:]
-            cmd=payload.get('action','stop'); dur=float(payload.get('duration',1.0)); spd=float(payload.get('speed',config.SPEED_SLOW))
-            self._last_action=cmd
-            if cmd in('forward','reverse','turn_left','turn_right','stop','wait'):
-                # 'wait' has no dedicated safety action — hold position via 'stop' for the same
-                # requested duration, matching the original blocking behavior's intent.
-                move_cmd='stop' if cmd=='wait' else cmd
-                self.safety.request(move_cmd,spd,dur); self._claude_move_pending=True  # clamped/rejected by approve_motion, not trusted blindly
-            else:
-                self.safety.stop(); self._stuck_count=0; self._go('ROAM')  # unrecognized action — no hold, matches prior behavior
+            log.info(f'Claude(fallback): parse_success={result.parse_success} '
+                     f'action_confidence={result.action_confidence} payload={result.payload}')
+            self._apply_ai_motion(result,d,tilt,'Claude(fallback)')
             return
+        # Try Hailo LLM first (on-device, ~10-50ms)
         self.safety.stop()
         situation=build_world_state(self.world_model,goal='find a clear path to continue roaming',
                                      battery=self.adc.battery_pct,front_cm=d['front'],left_cm=d['left'],
                                      right_cm=d['right'],tilt_deg=tilt,stuck_count=self._stuck_count,
-                                     last_action=self._last_action)  # §14: structured world state, not raw sensor values
+                                     last_action=self._last_action)
         self._last_stuck_prompt=(
             f'Situation: {json.dumps(situation)}\nWhat should I do? Respond ONLY with JSON: '
             f'{{"action":"forward"|"reverse"|"turn_left"|"turn_right"|"stop"|"wait","duration":<float>,'
-            f'"speed":<0.0-1.0>,"reason":"<60 chars>","confidence":<0.0-1.0, how sure you are>}}')
+            f'"speed":<0.0-1.0>,"reason":"<60 chars>","confidence":<0.0-1.0>}}')
+
+        if config.ENABLE_HAILO_LLM and self.hailo_llm and self.hailo_llm.available:
+            result=self.hailo_llm._call(self._last_stuck_prompt,system=_MOTION_SYSTEM,schema=_MOTION_SCHEMA)
+            log.info(f'Hailo(primary): parse_success={result.parse_success} '
+                     f'action_confidence={result.action_confidence} payload={result.payload}')
+            if result.parse_success and result.action_confidence>=config.HAILO_LLM_CONFIDENCE_FLOOR:
+                # High confidence on-device decision — proceed without Claude
+                self._apply_ai_motion(result,d,tilt,'Hailo(primary)')
+                self._stuck_history.append({'role':'user','content':self._last_stuck_prompt})
+                self._stuck_history.append({'role':'assistant','content':json.dumps(result.payload)})
+                self._stuck_history=self._stuck_history[-12:]
+                return
+            # Hailo failed or low confidence — escalate to Claude
+            log.info(f'Hailo confidence {result.action_confidence:.2f} < floor {config.HAILO_LLM_CONFIDENCE_FLOOR} or parse failed, escalating to Claude')
+
+        # Fall back to Claude (cloud, potentially slower but higher capability)
         self.cloud_ai.request_async(self._last_stuck_prompt,system=_MOTION_SYSTEM,
                                      schema=_MOTION_SCHEMA,history=self._stuck_history)
         self._claude_pending=True
-        self._upd('stuck','Calling Claude...',d,tilt)
+        self._upd('stuck','Thinking locally, escalating to Claude if needed...',d,tilt)
+
+    def _apply_ai_motion(self,result,d,tilt,source):
+        """Execute motion decision from AI (Hailo or Claude)."""
+        payload=result.payload if(result.parse_success and isinstance(result.payload,dict)) else {}
+        cmd=payload.get('action','stop')
+        dur=float(payload.get('duration',1.0))
+        spd=float(payload.get('speed',config.SPEED_SLOW))
+        reason=payload.get('reason','no reason given')
+        self._last_action=cmd
+        log.info(f'{source} decision: action={cmd} duration={dur}s speed={spd} reason="{reason}"')
+        if cmd in('forward','reverse','turn_left','turn_right','stop','wait'):
+            move_cmd='stop' if cmd=='wait' else cmd
+            self.safety.request(move_cmd,spd,dur); self._claude_move_pending=True
+        else:
+            self.safety.stop(); self._stuck_count=0; self._go('ROAM')
 
     def _dock(self,d,tilt):
         if self.adc.is_charging: self.safety.stop(); return
