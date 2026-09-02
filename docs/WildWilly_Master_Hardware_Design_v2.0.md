@@ -1149,9 +1149,12 @@ not obvious from the schematic.
 
 **Before power-up**
 
-5. **TPSM84205 decoupling (P8 path):** 10µF/50V on 12V input, 2× 47µF ceramic on 5V output 
-   (TI minimum 94µF). **AMS1117-3.3 decoupling:** 10µF/50V on 5V input (from TPSM), 10µF on 3.3V output 
-   (≥10mm from pins). The AMS1117 remains the critical stage on isolated rail — use a fresh part.
+5. **TPSM84205 decoupling (P8 path):** **10µF 50V** on 12V input (50V minimum for transient headroom), 
+   2× **47µF 50V ceramic** on 5V output (TI minimum 94µF total). **AMS1117-3.3 decoupling:** **10µF 50V** 
+   on 5V input (from TPSM, same part as Vin), **10µF 10V+ ceramic** on 3.3V output (≥10mm from pins). 
+   **Voltage rating rule:** Input stages (Vin) need 50V for transient protection; output stages can be lower 
+   (50V overspecs fine, 10V minimum on 3.3V output). The AMS1117 remains single-point-of-failure on isolated 
+   rail — use a fresh part, never the 2026-08-25 casualty.
 6. 4.7kΩ pull-ups present on SDA2 and SCL2.
 7. ~~GND1/GND2 isolation confirmed — no DC path between domains.~~
    **Struck 2026-08-28** — not achievable with this topology and never was
@@ -1349,12 +1352,12 @@ listed in §15.8 rather than carried as a line item.
 | **DROK-4** adjustable buck | Encoder distribution (R5) — **⚠ voltage TBD: 3.3V or 5V?** (§2.2) | 1 | **Pending voltage decision** |
 | **Isolated bus power chain (P8):** | — | — | — |
 | **TI TPSM84205** | 12V → 5.0V pre-regulator (1.5A) — **NOT 84203 or 84212** | 1 | **To build** |
-| RXEF110 1.1A polyfuse | F6, TPSM12V input, PTC resettable | 1 | **To build** |
+| RXEF110 1.1A polyfuse | F6, TPSM 12V input, PTC resettable | 1 | **To build** |
 | AMS1117-3.3 | 5V → 3.3V final stage, VCC2 (isolated bus + encoders), **fresh part** | 1 | **To fit** |
-| 10µF 50V ceramic | TPSM Vin bypass | 1 | **To build** |
-| 2× 47µF ceramic | TPSM Vout (TI min 94µF total) | 2 | **To build** |
-| 10µF 50V electrolytic | AMS1117 Vin (≥10mm from pins) | 1 | **To build** |
-| 10µF ceramic | AMS1117 Vout, VCC2 | 1 | **To build** |
+| 10µF **50V** electrolytic | TPSM Vin (12V input protection — 50V minimum for transient headroom) | 1 | **To build** |
+| 2× 47µF **50V** ceramic | TPSM Vout (TI min 94µF total at 5V — 50V overspecs but safe) | 2 | **To build** |
+| 10µF 50V electrolytic | AMS1117 Vin, from TPSM (≥10mm from pins) | 1 | **To build** |
+| 10µF ceramic, **10V+** | AMS1117 Vout, VCC2 (3.3V rail, 10V sufficient) | 1 | **To build** |
 | — | — | — | — |
 | Rubycon ZL 1000µF 16V low-ESR | Pi 5V rail bulk, at header (from Witty Pi) | 1 | Installed |
 | 0.1µF ceramic | Pi 5V rail HF bypass | 1 | Installed |
