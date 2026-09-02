@@ -628,15 +628,20 @@ expansion is GND-limited. Rows 15–20 are pending the encoder-rail open item in
 
 | Rail | Allocation |
 |---|---|
-| **+3.3V** | `V25` LED feed · `V27` TPSM output · `V28` R1 supply · `V29`/`V30` C4/C5. Free: V21–V24, V26 |
-| **GND** | `G21` ISO 2nd return · `G22`/`G23`/`G24` divider grounds · `G25`/`G27` power block · `G26` C6 (−) · `G29`/`G30` C4/C5. **Free: G28 only** |
-| **SDA** | col 30 — R1 output |
-| **SCL** | col 30 — R2 output |
+| **+3.3V** | `V25` LED feed · `V27` TPSM output · `V28` R1 (pull-up) supply · `V29`/`V30` C4/C5. Free: V21–V24, V26 |
+| **+12V** | `V21` battery divider R3 high side (external 12V feed) |
+| **GND** | `G21` ISO 2nd return · `G22` battery divider midpoint + sonar div ref · `G23`/`G24` sonar div grounds · `G25`/`G27` power block · `G26` C6 (−) · `G29`/`G30` C4/C5. **Free: G28 only** |
+| **SDA** | col 30 — R1 (pull-up) output; col 22 — battery divider midpoint → ADS1115 A0 |
+| **SCL** | col 30 — R2 (pull-up) output |
 
 Board furniture, by block:
 
 - **Power block, cols 25–28 top** — TPSM, C1, C2, C3, C6, P2 input. §16.2.
 - **Pull-ups and rail caps, cols 29–30** — R1, R2, the 3.3V bridge, C4, C5. §3.2.
+- **Battery voltage divider, cols 21–24 top** — **NEW (2026-09-02):** R3/R4 (10kΩ + 10kΩ∥4.7kΩ) 
+  measure +12V bus → ADS1115 A0. R3 `c21c`↔`c22c`, R4 `c22b`↔`c23b`, midpoint tap 
+  `c22f`→ADS row 3 A0 input, ground via `G22`. Accounts for the full battery voltage across 
+  shutdown/safe/rth/warn tiers (§13.2). **12V input:** external P8 12V feed to col 21 top.
 - **Power LED, cols 24–26 bottom** — feed `c25f`→`V25`; anode `c25g` ↔ cathode
   `c26g`; R9 1kΩ `c26i`↔`c24i` (0.2" span, keep `c25i` clear); ground via the
   c24 bottom strip, already tied to `G24` by the RIGHT divider return. ~1.3mA.
@@ -1323,6 +1328,8 @@ listed in §15.8 rather than carried as a line item.
 | ADS1115 | Battery voltage ADC, 0x48 | 1 | Installed |
 | INA260 current sensor | 0x40 servo, 0x44 12V, 0x45 Witty Pi | 3 | Installed |
 | Adafruit PCA9685 | 0x42 steering, 0x43 arm | 2 | Installed |
+| 10kΩ resistor | Battery divider on EPLZON (R3 high side, §4.2) | 1 | New 2026-09-02 |
+| 10kΩ + 4.7kΩ resistor | Battery divider low side (parallel, ≈3.2kΩ, §4.2) — **now on board** | 2 | New 2026-09-02 |
 | 1000µF 16V electrolytic | PCA9685 0x42 V+, C2 pad | 1 | Installed |
 | Rubycon 2200µF 16V low-ESR | PCA9685 0x43 V+, C2 pad | 1 | Installed |
 
@@ -1336,7 +1343,7 @@ listed in §15.8 rather than carried as a line item.
 | 2kΩ resistor | Sonar ECHO dividers, low side | 3 | Installed |
 | 10kΩ resistor | Battery divider high side | 1 | Installed |
 | 10kΩ + 4.7kΩ resistor | Battery divider low side (parallel ≈3.2kΩ) | 2 | Installed |
-| EPLZON perfboard | Bus node board (§4) — I²C distribution, 3 sonar ECHO dividers | 1 | Rev 3.4 to build |
+| EPLZON perfboard | Bus node board (§4) — I²C distribution, 3 sonar ECHO dividers, battery voltage divider | 1 | Rev 3.4 updated 2026-09-02 |
 
 ### 15.6 Power
 
