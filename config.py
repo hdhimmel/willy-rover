@@ -42,8 +42,8 @@ MOTORKIT_LEFT_ADDR=0x60; MOTORKIT_RIGHT_ADDR=0x61
 # section 7.2. The mapping correction stands on its own regardless.)
 # Anything per-wheel (odometry attribution, crab/differential steering, a
 # future stall trace) needs this correct.
-MOTOR_PORT={'lf':(MOTORKIT_LEFT_ADDR,2),'lm':(MOTORKIT_LEFT_ADDR,1),'lr':(MOTORKIT_LEFT_ADDR,3),
-            'rf':(MOTORKIT_RIGHT_ADDR,2),'rm':(MOTORKIT_RIGHT_ADDR,1),'rr':(MOTORKIT_RIGHT_ADDR,3)}
+MOTOR_PORT={'lf':(MOTORKIT_LEFT_ADDR,3),'lm':(MOTORKIT_LEFT_ADDR,2),'lr':(MOTORKIT_LEFT_ADDR,1),
+            'rf':(MOTORKIT_RIGHT_ADDR,3),'rm':(MOTORKIT_RIGHT_ADDR,2),'rr':(MOTORKIT_RIGHT_ADDR,1)}
 # Raised 2026-08-24. The previous set (ROAM .55 / TURN .50 / SLOW .35 / MAX .80)
 # was below breakaway torque for this chassis: commanded motion produced an
 # audible hum with no rotation. Measured per-wheel on the bench that day, a
