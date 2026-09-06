@@ -91,10 +91,10 @@ SERVO_PWM_FREQ=50
 # No per-joint safe limits, presets, or IK exist yet pending §20.6 bench calibration — arm.py is
 # a driver + manual jog tool only this pass, not autonomous motion.
 ARM_PCA_ADDR=0x43
-# Channels shifted +1 (2026-08-21, owner's physical rewiring): CH0 left unused, joints now on
-# CH1-7 rather than CH0-6.
-ARM_BASE=1; ARM_SHOULDER_A=2; ARM_SHOULDER_B=3; ARM_ELBOW=4
-ARM_WRIST_ROT=5; ARM_WRIST_PITCH=6; ARM_GRIPPER=7
+# 2026-09-06 reassignment (owner): physical order base(7)→gripper(6)→wrist(5,4)→elbow(3)→shoulders(2,1).
+# Shoulder pair (CH1-2) move together: J1b = 2×1500µs − J1a. CH0 unused.
+ARM_BASE=7; ARM_SHOULDER_A=1; ARM_SHOULDER_B=2; ARM_ELBOW=3
+ARM_WRIST_PITCH=4; ARM_WRIST_ROT=5; ARM_GRIPPER=6
 ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
 
 # Wheel encoders — MCP23017 @0x27 (§9.1), quadrature A/B per wheel. counts/rev is a "starting
