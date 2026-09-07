@@ -92,10 +92,22 @@ _MOTION_SCHEMA={'action':str,'duration':(int,float),'speed':(int,float)}
 # MotorKit's first PWM write) then hits 'OSError: [Errno 121] Remote I/O error' even though the
 # bus is otherwise healthy moments later. Not a substitute for real hardware margin -- just
 # resilience against a demonstrated transient at process startup specifically.
-def _init_device(ctor,name,attempts=4,delay_s=0.3):
+#
+# Widened 2026-09-07 to catch ValueError as well, and the window lengthened from 4x0.3s to
+# 8x0.75s. The original guard caught OSError only, which covers the Errno 121 transient above
+# but NOT the case that actually crash-looped the service: Adafruit's
+# I2CDevice.__probe_for_device() raises **ValueError** ("No I2C device at address: 0x60") when
+# nothing ACKs, so "the isolated rail has not come up yet" propagated on the first attempt with
+# zero retries -- the exact scenario this function exists for, and it never engaged. The longer
+# window is for rail settling, which is seconds, not the sub-second bus transient.
+#
+# ValueError is caught broadly rather than matched on message text, which would be fragile
+# against a library string. The cost is that a genuine ValueError bug inside a constructor is
+# retried before surfacing; unrelated exception types still propagate on the first attempt.
+def _init_device(ctor,name,attempts=8,delay_s=0.75):
     for attempt in range(attempts):
         try: return ctor()
-        except OSError as e:
+        except (OSError,ValueError) as e:
             if attempt==attempts-1: raise
             log.warning(f'{name} init failed ({e}), retrying in {delay_s}s (attempt {attempt+1}/{attempts})')
             time.sleep(delay_s)
