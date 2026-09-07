@@ -19,7 +19,7 @@ code needs fixing — every line below was confirmed on the bench.
 | 0x27 | MCP23017 | Encoder expander, 6 channels |
 | 0x40 | INA260 | Servo/steering 5V rail current |
 | 0x42 | PCA9685 | Steering servos, CH0–CH5 |
-| 0x43 | PCA9685 | Arm servos, CH1–CH7 (CH0 unused, shifted 2026-08-21) |
+| 0x43 | PCA9685 | Arm servos, CH0–CH6 (CH7 unused, remapped 2026-09-06) |
 | 0x44 | INA260 | **+12V main input** — total system draw (moved upstream 2026-08-28) |
 | 0x45 | INA260 | Pi supply: DROK 9V → Witty Pi VIN |
 | 0x48 | ADS1115 | Battery voltage ADC, A0 |
@@ -113,6 +113,24 @@ front and right sonar read fine, left returns garbage.
 
 ## Hardware pitfalls that have already cost time
 
+- **CH0 on the arm PCA9685 (0x43) went from deliberately-unused to carrying a shoulder
+  servo, 2026-09-06 — unverified.** From the 2026-08-21 rewire until 2026-09-06, CH0 was
+  explicitly empty and joints sat on CH1–CH7. The 2026-09-06 remap (`444d4f6`, `fb752a1`)
+  reversed the joint order onto CH0–CH6 and put `ARM_SHOULDER_A` (J1a) on CH0. If the
+  servos were not physically re-plugged to match, J1a commands a dead channel while J1b
+  (CH1) moves — which drives one half of the mirrored pair alone, the exact
+  mechanical-damage case FRD FR-700-001 warns about. **Confirm a servo is seated on CH0
+  before commanding the arm.** Note the 2026-08-20 disconnected-connector item below is
+  still open too, so "the arm didn't move" currently has at least two live explanations.
+- **FeatherWing motor port order was changed on 2026-09-04 from a bench-verified mapping
+  to an assumed one.** `config.MOTOR_PORT` read M1=MIDDLE, M2=FRONT, M3=REAR — established
+  2026-08-24 by driving one port at a time and watching which wheel turned. Commit
+  `484fbdc` changed it to M1=REAR, M2=MIDDLE, M3=FRONT for "physical layout symmetry",
+  which is an ordering argument, not a measurement, and no rewire or re-test is recorded.
+  The docs were synced to `config.py` on 2026-09-07 because `config.py` is the authority,
+  **but the mapping itself is unverified.** Re-run the one-wheel test before trusting
+  per-wheel odometry, stall attribution, or crab steering. See Master Hardware Design
+  v2.0 §7.2.
 - **Arm servo connector(s) found disconnected under the cover, 2026-08-20 — unresolved,
   physical fix needed.** Voice-triggered `arm_home`/`wave` both dispatched correctly in
   software (heard, matched, `brain.py::_drain_voice_commands()` called `arm.center_all()`/
@@ -148,12 +166,15 @@ internal inconsistencies). Master Hardware Design v2.0 gives each a single,
 unambiguous answer now — recorded here only so nobody re-opens them by
 citing the old, superseded wording:
 
-1. **Motor mapping — resolved.** 0x60 drives the LEFT side (LF/LM/LR),
+1. **Motor side assignment — resolved.** 0x60 drives the LEFT side (LF/LM/LR),
    0x61 drives the RIGHT side (RF/RM/RR), one board per side. See
-   `docs/WildWilly_Master_Hardware_Design_v2.0.md` §7.2.
-2. **Arm shoulder channels — resolved.** J1a=CH2, J1b=CH3 (channels shifted +1 on
-   2026-08-21 — was CH1/CH2 before), a mirrored pair driving one physical axis:
-   `J1b = 2×1500µs − J1a`. See §8.
+   `docs/WildWilly_Master_Hardware_Design_v2.0.md` §7.2. The *port* order within
+   a side is a separate question and is NOT settled — see the motor-port pitfall
+   in "Hardware pitfalls" above.
+2. **Arm shoulder channels — J1a=CH0, J1b=CH1** as of the 2026-09-06 remap
+   (was CH2/CH3 from 2026-08-21, and CH1/CH2 before that). A mirrored pair
+   driving one physical axis: `J1b = 2×1500µs − J1a`. See §8 — and read the
+   CH0 pitfall in "Hardware pitfalls" above before commanding the arm.
 
 Still genuinely open (not a doc contradiction — a real unverified-hardware
 item, tracked in Master Hardware Design v2.0 §14):

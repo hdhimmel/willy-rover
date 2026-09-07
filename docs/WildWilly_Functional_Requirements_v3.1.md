@@ -819,13 +819,23 @@ live-verified — see `motors.py::Steering`'s own comment.
 
 # Acceptance Criteria
 
-Seven servos on PCA9685 0x43, channels CH0--CH6.
+Seven servos on PCA9685 0x43, channels CH0--CH6; CH7 is unused.
+
+**Channel order is not joint order.** As remapped 2026-09-06 the board runs
+shoulders on CH0/CH1, elbow CH2, wrist pitch CH3, wrist rotate CH4, gripper
+CH5, base yaw CH6. `config.py` is the authority and Master Hardware Design
+v2.0 §8 carries the table plus the remap history; any channel number quoted
+from a revision older than 2026-09-06 is stale.
 
 -   **FR-700-001 (all joints).** Each joint responds on its own channel across
-    its range. The shoulder is a mirrored pair driving one physical axis and
-    must be commanded together as `J1b = 2 × 1500µs − J1a`. Driving either
-    shoulder servo alone fights the other through the linkage and is a
-    mechanical-damage risk --- test the pair as a unit from the outset.
+    its range. The shoulder is a mirrored pair (CH0 = J1a, CH1 = J1b) driving
+    one physical axis and must be commanded together as
+    `J1b = 2 × 1500µs − J1a`. Driving either shoulder servo alone fights the
+    other through the linkage and is a mechanical-damage risk --- test the pair
+    as a unit from the outset. Note that CH0 was the deliberately-unused
+    channel from 2026-08-21 until the 2026-09-06 remap; confirm a servo is
+    seated on it before the first commanded motion, or J1a silently does
+    nothing while J1b drives the linkage alone.
 
 -   **FR-700-002 (preset positions).** Named poses are repeatable to within
     the mechanical backlash of the joint, and a stow pose is reachable from

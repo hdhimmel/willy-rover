@@ -509,7 +509,7 @@ cables is 300–400pF. **The LTC4311 is what keeps this bus inside spec** (§16.
 | 0x27 | MCP23017 | Encoder GPIO expander, 6 channels |
 | 0x40 | INA260 | 5V servo/steering rail current |
 | 0x42 | PCA9685 | Steering servos, CH0–CH5 |
-| 0x43 | PCA9685 | Arm servos, CH0–CH6 |
+| 0x43 | PCA9685 | Arm servos, CH0–CH6 (CH7 unused, remapped 2026-09-06) |
 | 0x44 | INA260 | +12V main input — total system draw (moved upstream 2026-08-28) |
 | 0x45 | INA260 | Pi supply: DROK 9V → Witty Pi VIN |
 | 0x48 | ADS1115 | Battery voltage ADC |
@@ -899,26 +899,37 @@ Meter each crimp before trusting wire colour — batch variation is documented.
 
 Each FeatherWing drives one side.
 
-**As-built port order is M1 = MIDDLE, M2 = FRONT, M3 = REAR** — not the
-front/middle/rear order the port numbers suggest. Verified 2026-08-24 by
-driving one wheel at a time with the rover on a block and recording which
-wheel physically turned (M2-left → left front, M1-right → right middle,
-M2-right → right front; the rest follow by elimination, and the convention is
-symmetric across both kits). `config.MOTOR_PORT` was corrected to match.
+**As-built port order is M1 = REAR, M2 = MIDDLE, M3 = FRONT** — not the
+front/middle/rear order the port numbers suggest. `config.MOTOR_PORT` is the
+authority; this table follows it (synced 2026-09-07).
 
 | Motor | Position | Driver | Encoder A/B |
 |-------|----------|--------|-------------|
-| LF | Left front | 0x60 **M2** | GPA0 / GPA1 |
-| LM | Left middle | 0x60 **M1** | GPA2 / GPA3 |
-| LR | Left rear | 0x60 M3 | GPB0 / GPB1 |
-| RF | Right front | 0x61 **M2** | GPA4 / GPA5 |
-| RM | Right middle | 0x61 **M1** | GPA6 / GPA7 |
-| RR | Right rear | 0x61 M3 | GPB2 / GPB3 |
+| LF | Left front | 0x60 **M3** | GPA0 / GPA1 |
+| LM | Left middle | 0x60 **M2** | GPA2 / GPA3 |
+| LR | Left rear | 0x60 **M1** | GPB0 / GPB1 |
+| RF | Right front | 0x61 **M3** | GPA4 / GPA5 |
+| RM | Right middle | 0x61 **M2** | GPA6 / GPA7 |
+| RR | Right rear | 0x61 **M1** | GPB2 / GPB3 |
 
-⚠ **The Encoder A/B column is NOT verified.** Only the driver ports were
-tested. The motor ports turned out not to follow position order, so the
-encoder channel assignment cannot be assumed to either — it may follow the
-physical wheels, or the same M1/M2 swap, or neither. This affects per-wheel
+⚠ **This mapping is NOT bench-verified, and it replaced one that was.**
+Until 2026-09-04 both this table and `config.MOTOR_PORT` read
+**M1 = MIDDLE, M2 = FRONT, M3 = REAR**, established 2026-08-24 by driving one
+wheel at a time with the rover on a block and recording which wheel physically
+turned (M2-left → left front, M1-right → right middle, M2-right → right
+front; the rest by elimination, the convention symmetric across both kits).
+Commit `484fbdc` (2026-09-04) changed `config.MOTOR_PORT` to the
+rear-middle-front order above, for "physical layout symmetry" — that is an
+ordering argument, not a measurement, and no record of a rewire or of a re-run
+of the one-wheel test exists in this repo. **Re-run that test before trusting
+per-wheel attribution**: drive one port at a time and record which wheel turns.
+If the 2026-08-24 result still holds, this table and `config.MOTOR_PORT` both
+need reverting together.
+
+⚠ **The Encoder A/B column is NOT verified either.** Only the driver ports
+were ever tested. The motor ports turned out not to follow position order, so
+the encoder channel assignment cannot be assumed to either — it may follow the
+physical wheels, or the port permutation, or neither. This affects per-wheel
 odometry attribution only; whole-side drive is unaffected. Settle it the same
 way: turn one wheel by hand and read which encoder channel counts.
 
@@ -1026,15 +1037,34 @@ graph TD
     style ARM_SERVO fill:#fff0cc
 ```
 
-| Joint | Servo | Channel |
-|-------|-------|---------|
-| J0 base yaw | MG996R | CH0 |
-| J1a shoulder (right) | MG996R | CH1 |
-| J1b shoulder (left) | MG996R | CH2 |
-| J2 elbow | MG996R | CH3 |
-| J3 wrist rotate | MG90S | CH4 |
-| J4 wrist pitch | MG90S | CH5 |
-| J5 gripper | MG90S | CH6 |
+**Channel order is not joint order.** Remapped 2026-09-06 (commits `444d4f6`
+then `fb752a1`) to follow the physical wiring order the owner reported; the
+table below matches `config.py`, which is the authority.
+
+| Joint | Servo | Channel | `config.py` name |
+|-------|-------|---------|------------------|
+| J1a shoulder (right) | MG996R | CH0 | `ARM_SHOULDER_A` |
+| J1b shoulder (left) | MG996R | CH1 | `ARM_SHOULDER_B` |
+| J2 elbow | MG996R | CH2 | `ARM_ELBOW` |
+| J4 wrist pitch | MG90S | CH3 | `ARM_WRIST_PITCH` |
+| J3 wrist rotate | MG90S | CH4 | `ARM_WRIST_ROT` |
+| J5 gripper | MG90S | CH5 | `ARM_GRIPPER` |
+| J0 base yaw | MG996R | CH6 | `ARM_BASE` |
+| — | unused | CH7 | — |
+
+This is the third assignment for this board. The original build put J0–J5 on
+CH0–CH6 in joint order; a 2026-08-21 rewire shifted every joint +1 onto
+CH1–CH7, leaving CH0 unused; the 2026-09-06 remap above reverses the joint
+order and returns the unused channel to CH7. Do not cite a channel number from
+any document revision older than 2026-09-06.
+
+⚠ **CH0 now carries a shoulder servo, and CH0 was the deliberately-unused
+channel from 2026-08-21 until 2026-09-06.** If the shoulder pair was not
+physically moved down onto CH0/CH1 as part of that remap, `ARM_SHOULDER_A`
+commands a dead channel while `ARM_SHOULDER_B` moves — driving one half of the
+mirrored pair alone, which FRD FR-700-001 flags as a mechanical-damage risk
+(the halves fight each other through the linkage). Confirm a servo is actually
+seated on CH0 before commanding the arm.
 
 J1a and J1b are a mirrored pair driving one physical axis:
 `J1b = 2 × 1500µs − J1a`. They must be commanded together.
@@ -1603,8 +1633,13 @@ match the actual JST-PH style in hand.
 
 | Addr | Row | VIN | Logic | Motor terminals |
 |---|---|---|---|---|
-| 0x60 | 11 | +12V via F2 and SW-M (no current monitor since 2026-08-28) | VCC2/GND2/SDA2/SCL2 row 11 | M1 = LF, M2 = LM, M3 = LR, M4 spare |
-| 0x61 | 12 | same | row 12 | M1 = RF, M2 = RM, M3 = RR, M4 spare |
+| 0x60 | 11 | +12V via F2 and SW-M (no current monitor since 2026-08-28) | VCC2/GND2/SDA2/SCL2 row 11 | M1 = LR, M2 = LM, M3 = LF, M4 spare |
+| 0x61 | 12 | same | row 12 | M1 = RR, M2 = RM, M3 = RF, M4 spare |
+
+Port order matches §7.2 and `config.MOTOR_PORT` — rear on M1, front on M3.
+This table previously read M1 = front / M3 = rear, which agreed with neither
+§7.2 nor `config.py`; corrected 2026-09-07. See the §7.2 warning — the
+rear-middle-front order itself is not bench-verified.
 
 Standalone — no Feather host board. Direction and PWM are internal, so there
 are no direction GPIOs and no STBY pin.
@@ -1658,15 +1693,18 @@ bulkhead connector.
 
 | Joint | Servo | Channel |
 |---|---|---|
-| J0 base yaw | MG996R | CH0 |
-| J1a shoulder right | MG996R | CH1 |
-| J1b shoulder left | MG996R | CH2 |
-| J2 elbow | MG996R | CH3 |
+| J1a shoulder right | MG996R | CH0 |
+| J1b shoulder left | MG996R | CH1 |
+| J2 elbow | MG996R | CH2 |
+| J4 wrist pitch | MG90S | CH3 |
 | J3 wrist rotate | MG90S | CH4 |
-| J4 wrist pitch | MG90S | CH5 |
-| J5 gripper | MG90S | CH6 |
+| J5 gripper | MG90S | CH5 |
+| J0 base yaw | MG996R | CH6 |
+| — | unused | CH7 |
 
-J1a and J1b drive one axis as a mirrored pair and are commanded together.
+Synced to `config.py` 2026-09-07 — see §8 for the remap history and the CH0
+warning. J1a and J1b drive one axis as a mirrored pair and are commanded
+together.
 
 ### 16.13 Sonar × 3
 
