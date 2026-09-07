@@ -327,6 +327,40 @@ not revised, or the installed unit on Willie differs from the repository copy.
 Confirm with `systemctl cat willy-rover.service` on the rover before relying on
 either.
 
+**RESOLVED 2026-09-07 --- it was the second one: the installed unit differed.**
+Checked on the rover: `/etc/systemd/system/willy-rover.service` was
+byte-identical to the repository copy except for a single missing line,
+`WatchdogSec=500ms`, and `systemctl show -p WatchdogUSec` returned `0`. The
+repository file had been correct since 2026-08-02 (`df24199`) and simply was
+never deployed --- a stale unit for over a month.
+
+This reframes every dated entry in this gap. From 2026-08-02 until 2026-09-07
+**no systemd watchdog was armed at all**, so none of the mid-tick kills
+described above could actually have occurred, including the one the 2026-09-07
+G-5 update attributes to `f18af62`. That call was a real defect against the
+documented design and against `ask_sync()`'s contract, and it is still worth
+having fixed --- but it was never killing the process in the field, and this
+register should not be read as saying it was.
+
+The inverse gap ran for the same period and is the more serious one:
+`brain.py`'s `sd_notify` `WATCHDOG=1` was a no-op, so a genuinely wedged tick
+loop would never have been restarted by systemd. The Witty Pi 5 HAT's own
+watchdog (200 missed heartbeats, ~10-20s) was the only live backstop the whole
+time.
+
+The repository unit was installed and `daemon-reload`ed on 2026-09-07, with the
+previous unit preserved as `willy-rover.service.bak-20260907-090533`. systemd
+applies `WatchdogSec` at service *start*, not at `daemon-reload`, so the
+running instance was deliberately left untouched and the watchdog arms on the
+next restart. **From that restart onward the 500ms/250ms deadline is live for
+the first time, and the threshold-ordering advice at the top of this gap stops
+being hygiene and starts being load-bearing.** `TICK_OVERRUN_THRESHOLD_S` is
+still 0.15s against an effective ~200ms kill line (250ms deadline minus the run
+loop's 50ms sleep), leaving roughly a 50ms band in which an overrun is logged
+rather than fatal --- and the log only executes after `_tick()` returns, so an
+overrun past the line is never self-reported. Lower it before relying on the
+logs to warn you.
+
 **Update 2026-08-18 (same day):** the two known code paths that could actually
 push a single tick anywhere near the 500ms/250ms figures above --- `retrieval_
 task.py`'s `_grasp()` and `brain.py`'s wave-hello gesture, both previously

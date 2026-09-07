@@ -215,7 +215,8 @@ Verified by a standalone run on the rover (`venv/bin/python3`, **service stopped
 loads (`available: True`, 80 labels, `(640,640)` input shape) and a real detection round-trip
 succeeded with `camera_id='front'`. Not yet covered by that: startup under the live
 `willy-rover.service` (alongside the pygame/SDL display and voice audio stack) and per-tick
-timing against `WatchdogSec=500ms` — `detect()` runs synchronously on the tick thread, so watch
+timing against `WatchdogSec=500ms` (see the watchdog note below — not armed until 2026-09-07)
+— `detect()` runs synchronously on the tick thread, so watch
 for `TICK_OVERRUN` during the first mapping/pursuit session.
 
 **This flag does more than swap backends.** `_enabled` is `ENABLE_HAILO_VISION or
@@ -237,6 +238,27 @@ Reflex/deliberative layer separation still applies:
 
 An obstacle stop must never depend on a detection frame arriving. Vision
 informs navigation; it does not gate the stop.
+
+**The systemd watchdog was never armed until 2026-09-07 — the installed unit was stale.**
+`willy-rover.service` in this repo has set `WatchdogSec=500ms` since 2026-08-02 (df24199), but
+the unit actually installed at `/etc/systemd/system/willy-rover.service` was byte-identical
+*except* for that one line, and `systemctl show -p WatchdogUSec` returned `0`. Confirmed on the
+rover 2026-09-07, resolving the "unreconciled since 08-08" question in `brain.py` and FRD v3.1
+G-5: the repo file was right, it just was never deployed. Two consequences, opposite in
+direction:
+- Every "systemd kills the process mid-tick" risk written in this repo between 2026-08-02 and
+  2026-09-07 was **dormant**, not live. Real in the code, unarmed in deployment.
+- `brain.py`'s `WATCHDOG=1` heartbeat was a **no-op** for the same period, so a wedged tick
+  loop would never have been restarted. The Witty Pi HAT watchdog was the only real backstop.
+
+The repo unit was installed and `daemon-reload`ed 2026-09-07 (previous saved as
+`willy-rover.service.bak-20260907-090533`). **systemd applies `WatchdogSec` at service start,
+not at `daemon-reload`** — so it arms on the next restart, and from then on the 500ms deadline
+is live for the first time. Before trusting the overrun logs to warn you, note that
+`TICK_OVERRUN_THRESHOLD_S=0.15` sits against an effective ~200ms kill line and the overrun log
+only runs *after* `_tick()` returns — an overrun past the line never reports itself.
+
+---
 
 **Autonomous ROAM — gated off 2026-08-20, re-enabled 2026-09-07.** `brain.py::_idle()`'s
 idle-timeout auto-wander and the post-charging auto-resume (`_tick()`'s `DOCK` handling) both

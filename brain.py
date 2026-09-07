@@ -153,13 +153,23 @@ class RoverBrain:
         self._motor_rail_low_since=None; self._motor_rail_lost=False
         self._bat_tier='normal'; self._health={}; self._fault_since={}; self._stall_since={}
         self._wave_step=0; self._wave_deadline=None
-        # 2026-08-08 audit P1 found no systemd WatchdogSec configured, confirmed via `systemctl
-        # cat willy-rover.service` on the live unit -- but this repo's own willy-rover.service
-        # has specified WatchdogSec=500ms since 2026-08-02 (df24199, predates that audit). The
-        # audit was checking the live *installed* unit, not this file, so the likely explanation
-        # is a stale deploy (the live systemd unit hadn't picked up the repo's version yet), not
-        # a wrong repo file -- unreconciled since 08-08, needs a fresh `systemctl cat
-        # willy-rover.service` on the actual Pi to confirm which is currently true.
+        # RESOLVED 2026-09-07: it was a stale deploy, exactly as guessed below. The 2026-08-08
+        # audit P1 found no systemd WatchdogSec configured, confirmed via `systemctl cat` on the
+        # live unit -- while this repo's own willy-rover.service has specified WatchdogSec=500ms
+        # since 2026-08-02 (df24199, predating that audit). Checked on the rover 2026-09-07:
+        # /etc/systemd/system/willy-rover.service was byte-identical to the repo copy EXCEPT for
+        # the missing WatchdogSec line, and `systemctl show -p WatchdogUSec` returned 0. So the
+        # repo file was right and simply had never been installed, for over a month.
+        #
+        # Consequence worth holding onto: for that whole period the watchdog described below was
+        # NOT armed. Every "systemd will kill us mid-tick" risk in this file and in FRD G-5 was
+        # real in the code and dormant in deployment -- including the f18af62 blocking call noted
+        # further down. sd_notify's WATCHDOG=1 was a no-op, so a genuinely wedged tick loop was
+        # never restarted either; the Witty Pi HAT's own watchdog was the only live backstop.
+        # The repo unit was installed and daemon-reload'd on 2026-09-07 (previous unit saved as
+        # willy-rover.service.bak-20260907-090533). systemd applies WatchdogSec at service
+        # start, not at daemon-reload, so it arms on the next restart -- from that restart on,
+        # the deadline below is real and every figure in it applies for the first time.
         #
         # FRD v3.1 G-5 (2026-08-18) sharpened the risk this WatchdogSec value actually poses:
         # notify() below is called once per tick, so a single _tick() call blocking anywhere near
@@ -924,10 +934,16 @@ class RoverBrain:
         # Non-blocking (§2): BOTH providers run on their own AIProvider worker thread and this
         # state polls them, so a slow decision costs extra STUCK ticks instead of stalling the
         # tick loop. f18af62 (2026-09-01) called Hailo synchronously here instead, which put a
-        # full generate_all() on the tick thread against the unit's WatchdogSec=500ms -- the
-        # exact kill-mid-tick case FRD v3.1 G-5 describes, and a direct violation of
-        # ai_provider.py::ask_sync()'s "only for callers already off the tick thread" contract.
-        # Restored to the async path 2026-09-07. If a decision needs to be made inline for
+        # full generate_all() on the tick thread -- the kill-mid-tick case FRD v3.1 G-5
+        # describes, and a direct violation of ai_provider.py::ask_sync()'s "only for callers
+        # already off the tick thread" contract. Restored to the async path 2026-09-07.
+        #
+        # Accuracy note (found later the same day): the installed systemd unit had no
+        # WatchdogSec at all until 2026-09-07 -- see the stale-deploy paragraph in __init__ --
+        # so that blocking call was never actually killing the process in the field. It was a
+        # real defect against the documented design, not a live outage. It becomes live the
+        # first time the service restarts under the newly-installed unit, which is why this was
+        # worth fixing before arming the watchdog rather than after. If a decision needs to be made inline for
         # latency reasons, raise WatchdogSec first -- do not put generation back on this thread.
         if self.safety.timed_move_active:
             self._upd('stuck',f'Executing: {self._last_action}',d,tilt); return
