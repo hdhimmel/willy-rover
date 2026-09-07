@@ -542,11 +542,26 @@ STUCK_TIMEOUT=3.0; BACK_UP_TIME=0.8; TURN_TIME_90=1.2; IDLE_TIMEOUT=30.0
 # auto-ROAM behind this flag — default off. Manual/voice-commanded driving is unaffected, this
 # only blocks the unprompted idle-timeout wander.
 # NOTE 2026-08-21: the original note said "until vision is live-verified; flip to True then".
-# Vision now IS live-verified (ENABLE_HAILO_VISION above) — but that does NOT satisfy this gate
-# and this stays False. Vision feeds world_model.py for planning/classification only; it is
-# deliberately kept out of the reflex/obstacle path (see CLAUDE.md's "keep the NPU out of the
-# safety path"), so ROAM is still sonar-only for avoidance and the original reason is unchanged.
-ENABLE_AUTONOMOUS_ROAM=False
+# Vision now IS live-verified (ENABLE_HAILO_VISION above) — but that does NOT satisfy this gate.
+# Vision feeds world_model.py for planning/classification only; it is deliberately kept out of
+# the reflex/obstacle path (see CLAUDE.md's "keep the NPU out of the safety path"), so ROAM is
+# still sonar-only for avoidance and the 2026-08-20 reason is unchanged.
+#
+# OWNER DECISION 2026-09-07 — flipped to True with the sonar-only limitation ACCEPTED, not
+# resolved. Nothing above was fixed: obstacle avoidance is still sonar-only, so the 2026-08-20
+# failure mode (wandering into what sonar can't see, repeated STALL_FAULTs, once 5 of 6 wheels
+# at a time) can recur unattended. Three items were open at the moment of the flip, all of
+# which bear on unprompted driving:
+#   1. MOTOR_PORT is unverified since 2026-09-04 — it replaced a bench-measured mapping with an
+#      assumed one, so per-wheel stall attribution and odometry may name the wrong wheel.
+#      See CLAUDE.md's motor-port pitfall and Master Hardware Design v2.0 §7.2.
+#   2. The STUCK-state on-device reasoning that ROAM depends on is FRD v3.1 G-6: the Hailo LLM
+#      scored 0% on the 32-case intent batch on 2026-08-23 and has not been re-benchmarked
+#      since. In practice most STUCK episodes will fall through to Claude, so unattended
+#      roaming is cloud-dependent for recovery despite ENABLE_HAILO_LLM being primary.
+#   3. HAILO_LLM_CONFIDENCE_FLOOR=0.7 is a guessed number, never tuned against real output.
+# Set back to False if Willy starts tripping STALL_FAULTs unattended.
+ENABLE_AUTONOMOUS_ROAM=True
 
 def validate():
     """Configuration self-test (2026-08-08 external code audit's P2 item): config.py has grown

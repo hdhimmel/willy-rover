@@ -168,14 +168,21 @@ class RoverBrain:
         # The two known culprits that could push a tick that long -- retrieval_task.py's _grasp()
         # and this file's wave-hello gesture, both previously blocking via time.sleep() -- were
         # both converted to non-blocking, tick-serviced step machines the same day (see
-        # retrieval_task.py and _wave()/_start_wave() below). No other per-tick blocking call is
-        # known to remain. This closes the *known cause*, not the risk structurally -- nothing
-        # stops a future blocking call from reintroducing it, and this reconciliation itself is
-        # unverified on live hardware. Tick-overrun counting below is pure visibility regardless --
+        # retrieval_task.py and _wave()/_start_wave() below). This closes the *known cause*,
+        # not the risk structurally -- nothing stops a future blocking call from reintroducing
+        # it, and this reconciliation itself is unverified on live hardware.
+        #
+        # A future blocking call did exactly that. f18af62 (2026-09-01) added a synchronous
+        # Hailo LLM generate_all() to _stuck(), on this thread, while the paragraph above still
+        # read "no other per-tick blocking call is known to remain" -- so the claim was false
+        # for six days and nothing flagged it. Moved to the async worker-thread path 2026-09-07
+        # (see _stuck()). Treat "no blocking call remains" as a claim to re-verify whenever an
+        # AI provider or task is added, not as a standing fact. Tick-overrun counting below is pure visibility regardless --
         # it doesn't do anything about an overrun, just makes one observable instead of silent.
         self._last_tick_duration_s=0.0; self._max_tick_duration_s=0.0; self._tick_overrun_count=0
         self._stopped=False
         self._claude_pending=False; self._claude_move_pending=False
+        self._hailo_pending=False  # 2026-09-07: Hailo LLM is polled, not called inline
         self._stuck_history=[]; self._last_stuck_prompt=''  # §14: caller-owned conversation history
         self._pose_log_t=0.0
         self._shutdown_pending=False; self._shutdown_deadline=0.0  # FR-900-005 voice-commanded shutdown confirm
@@ -390,11 +397,18 @@ class RoverBrain:
 
     def _abandon_stuck_if_active(self):
         # Called alongside every retrieval.abort() at a Directive 1-4 preemption point (tilt,
-        # battery, sensor fault). If STUCK was mid-flight — waiting on Claude, or executing a
-        # Claude-issued timed move — this drops that in-flight work so the next STUCK entry
-        # starts clean rather than replaying a stale poll/move-pending state.
+        # battery, sensor fault). If STUCK was mid-flight — waiting on Hailo or Claude, or
+        # executing an AI-issued timed move — this drops that in-flight work so the next STUCK
+        # entry starts clean rather than replaying a stale poll/move-pending state.
+        #
+        # Both providers must be reset, not just the cloud one: reset_async() exists precisely
+        # because an unpolled result leaves _busy True forever, after which every future
+        # request_async() silently refuses to submit. Missing the Hailo reset here would mean a
+        # single tilt fault during on-device thinking permanently disables on-device thinking.
         if self._state=='STUCK':
             self.cloud_ai.reset_async(); self._claude_pending=False; self._claude_move_pending=False
+            if self.hailo_llm is not None: self.hailo_llm.reset_async()
+            self._hailo_pending=False
 
     def _tick(self):
         # On-screen STOP SVC button (owner request 2026-08-24). Checked first, before any
@@ -906,11 +920,37 @@ class RoverBrain:
 
     def _stuck(self,d,tilt):
         # Autonomous thinking: Hailo LLM primary (on-device), Claude fallback only if needed.
-        # Non-blocking (§2): Claude calls run on CloudAIProvider's worker thread; Hailo is sync.
+        #
+        # Non-blocking (§2): BOTH providers run on their own AIProvider worker thread and this
+        # state polls them, so a slow decision costs extra STUCK ticks instead of stalling the
+        # tick loop. f18af62 (2026-09-01) called Hailo synchronously here instead, which put a
+        # full generate_all() on the tick thread against the unit's WatchdogSec=500ms -- the
+        # exact kill-mid-tick case FRD v3.1 G-5 describes, and a direct violation of
+        # ai_provider.py::ask_sync()'s "only for callers already off the tick thread" contract.
+        # Restored to the async path 2026-09-07. If a decision needs to be made inline for
+        # latency reasons, raise WatchdogSec first -- do not put generation back on this thread.
         if self.safety.timed_move_active:
             self._upd('stuck',f'Executing: {self._last_action}',d,tilt); return
         if self._claude_move_pending:
             self._claude_move_pending=False; self._stuck_count=0; self._go('ROAM'); return
+        if self._hailo_pending:
+            result=self.hailo_llm.poll_async()
+            if result is None:
+                self._upd('stuck','Thinking on-device...',d,tilt); return
+            self._hailo_pending=False
+            log.info(f'Hailo(primary): parse_success={result.parse_success} '
+                     f'action_confidence={result.action_confidence} payload={result.payload}')
+            if result.parse_success and result.action_confidence>=config.HAILO_LLM_CONFIDENCE_FLOOR:
+                # High confidence on-device decision — proceed without Claude
+                self._apply_ai_motion(result,d,tilt,'Hailo(primary)')
+                self._stuck_history.append({'role':'user','content':self._last_stuck_prompt})
+                self._stuck_history.append({'role':'assistant','content':json.dumps(result.payload)})
+                self._stuck_history=self._stuck_history[-12:]
+                return
+            # Hailo failed or low confidence — escalate to Claude
+            log.info(f'Hailo confidence {result.action_confidence:.2f} < floor '
+                     f'{config.HAILO_LLM_CONFIDENCE_FLOOR} or parse failed, escalating to Claude')
+            self._escalate_to_claude(d,tilt); return
         if self._claude_pending:
             result=self.cloud_ai.poll_async()
             if result is None:
@@ -920,7 +960,7 @@ class RoverBrain:
                      f'action_confidence={result.action_confidence} payload={result.payload}')
             self._apply_ai_motion(result,d,tilt,'Claude(fallback)')
             return
-        # Try Hailo LLM first (on-device, ~10-50ms)
+        # Fresh STUCK episode: halt, build the prompt, hand it to the on-device model.
         self.safety.stop()
         situation=build_world_state(self.world_model,goal='find a clear path to continue roaming',
                                      battery=self.adc.battery_pct,front_cm=d['front'],left_cm=d['left'],
@@ -932,24 +972,25 @@ class RoverBrain:
             f'"speed":<0.0-1.0>,"reason":"<60 chars>","confidence":<0.0-1.0>}}')
 
         if config.ENABLE_HAILO_LLM and self.hailo_llm and self.hailo_llm.available:
-            result=self.hailo_llm._call(self._last_stuck_prompt,system=_MOTION_SYSTEM,schema=_MOTION_SCHEMA)
-            log.info(f'Hailo(primary): parse_success={result.parse_success} '
-                     f'action_confidence={result.action_confidence} payload={result.payload}')
-            if result.parse_success and result.action_confidence>=config.HAILO_LLM_CONFIDENCE_FLOOR:
-                # High confidence on-device decision — proceed without Claude
-                self._apply_ai_motion(result,d,tilt,'Hailo(primary)')
-                self._stuck_history.append({'role':'user','content':self._last_stuck_prompt})
-                self._stuck_history.append({'role':'assistant','content':json.dumps(result.payload)})
-                self._stuck_history=self._stuck_history[-12:]
-                return
-            # Hailo failed or low confidence — escalate to Claude
-            log.info(f'Hailo confidence {result.action_confidence:.2f} < floor {config.HAILO_LLM_CONFIDENCE_FLOOR} or parse failed, escalating to Claude')
+            if self.hailo_llm.request_async(self._last_stuck_prompt,system=_MOTION_SYSTEM,
+                                             schema=_MOTION_SCHEMA):
+                self._hailo_pending=True
+                self._upd('stuck','Thinking on-device...',d,tilt); return
+            # request_async() refused: a previous result was never polled. Don't wait on it.
+            log.warning('Hailo LLM still busy with an unpolled request — escalating to Claude')
+            self.hailo_llm.reset_async()
 
         # Fall back to Claude (cloud, potentially slower but higher capability)
+        self._escalate_to_claude(d,tilt)
+
+    def _escalate_to_claude(self,d,tilt):
+        """Hand self._last_stuck_prompt to the cloud provider's worker thread. Split out of
+        _stuck() 2026-09-07 so the on-device-poll branch and the fresh-episode branch reach the
+        fallback by the same path instead of duplicating the request/flag/_upd trio."""
         self.cloud_ai.request_async(self._last_stuck_prompt,system=_MOTION_SYSTEM,
                                      schema=_MOTION_SCHEMA,history=self._stuck_history)
         self._claude_pending=True
-        self._upd('stuck','Thinking locally, escalating to Claude if needed...',d,tilt)
+        self._upd('stuck','Escalated to Claude...',d,tilt)
 
     def _apply_ai_motion(self,result,d,tilt,source):
         """Execute motion decision from AI (Hailo or Claude)."""

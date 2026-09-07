@@ -238,14 +238,25 @@ Reflex/deliberative layer separation still applies:
 An obstacle stop must never depend on a detection frame arriving. Vision
 informs navigation; it does not gate the stop.
 
-**Autonomous ROAM gated off pending vision — added 2026-08-20.** `brain.py::_idle()`'s
+**Autonomous ROAM — gated off 2026-08-20, re-enabled 2026-09-07.** `brain.py::_idle()`'s
 idle-timeout auto-wander and the post-charging auto-resume (`_tick()`'s `DOCK` handling) both
-now check `config.ENABLE_AUTONOMOUS_ROAM` (default `False`) before calling `_go('ROAM')`.
-Found live: with only sonar for obstacle sensing (no vision yet), Willy was wandering
+check `config.ENABLE_AUTONOMOUS_ROAM` before calling `_go('ROAM')`.
+Found live 2026-08-20: with only sonar for obstacle sensing (no vision yet), Willy was wandering
 unprompted and tripping repeated `STALL_FAULT`s against things sonar didn't catch — sometimes
-5 of 6 wheels at once. Owner decision: no unprompted autonomous driving until vision is live-
-verified working (see the camera-orientation note above — not there yet). Manual/voice-
-commanded driving is unaffected; this only blocks the unprompted idle/post-charge wander.
+5 of 6 wheels at once. Owner decision then: no unprompted autonomous driving until vision is
+live-verified working. Manual/voice-commanded driving was never affected; the flag only ever
+gated the unprompted idle/post-charge wander.
+
+**The flag is now `True` (owner decision 2026-09-07) and the underlying limitation was
+accepted, not fixed.** Obstacle avoidance is still sonar-only — vision is deliberately kept
+out of the reflex path (see "keep the NPU out of the safety path" above), so live-verified
+vision never satisfied this gate and does not now. The 2026-08-20 failure mode can recur
+unattended. Two open items make that worse and both are worth knowing before leaving Willy
+alone: `MOTOR_PORT` is unverified since 2026-09-04 (a stall may be attributed to the wrong
+wheel — see the motor-port pitfall above), and the STUCK-state on-device reasoning that
+recovery depends on is FRD v3.1 G-6, last benchmarked at 0%. Expect most STUCK episodes to
+fall through to Claude, i.e. unattended recovery currently needs the network. Set the flag
+back to `False` if unattended `STALL_FAULT`s reappear.
 
 ---
 

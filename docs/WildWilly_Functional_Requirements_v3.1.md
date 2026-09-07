@@ -339,8 +339,30 @@ reconciliation itself is unverified on live hardware, same as everything else
 in this register. The threshold-ordering advice above (raise `WatchdogSec` or
 lower `TICK_OVERRUN_THRESHOLD_S`) still stands as general hygiene regardless.
 
+**Update 2026-09-07 --- the structural risk named above materialised, and is
+now closed again.** Commit `f18af62` (2026-09-01) added a synchronous Hailo
+LLM `generate_all()` call to `brain.py::_stuck()`, executed directly on the
+tick thread. That is a full autoregressive generation inside one tick, against
+a 250ms heartbeat deadline --- the mid-tick kill this gap describes, arriving
+at the worst possible moment, since STUCK is by definition the state entered
+when the rover is already up against an obstacle. It also violated
+`ai_provider.py::ask_sync()`'s documented contract ("only for callers already
+off the tick thread"). Nothing caught it for six days: `brain.py`'s own
+comment still asserted no per-tick blocking call remained, and the commit
+claimed "~10-50ms inference" without a measurement.
+
+`_stuck()` was moved onto `HailoIntentModel`'s `request_async`/`poll_async`
+worker thread on 2026-09-07, matching the Claude path, so a slow on-device
+decision now costs extra STUCK ticks rather than the process. The lesson for
+this register is that "no other per-tick blocking call is currently known" is
+a claim with a shelf life --- re-verify it whenever an AI provider or task is
+added, rather than treating the 2026-08-18 update above as settled. The
+threshold-ordering advice (raise `WatchdogSec` or lower
+`TICK_OVERRUN_THRESHOLD_S`) is still not done, and would have made this
+visible as a logged overrun before it became a kill.
+
 **G-6 --- FR-1500, Hailo NPU intent-parsing LLM is not usable as tested.**
-`hailo_llm.py::HailoIntentModel` (`config.ENABLE_HAILO_LLM`, default `False`)
+`hailo_llm.py::HailoIntentModel` (`config.ENABLE_HAILO_LLM`)
 loads and runs on the shared Hailo device, but scored 0% on a 32-case
 intent-reliability batch (`experiments/llm_reliability_batch.py`)
 2026-08-23, versus 75% for the existing CPU `LocalAIProvider` on the same
@@ -351,6 +373,27 @@ syntax). Real investigation needed before this can be enabled; see Software
 Design v1.0 Section 7 and `docs/superpowers/plans/2026-08-23-hailo-voice-
 offload.md` Task 4. Voice continues to run on the CPU LLM path in the
 meantime, which this gap does not affect.
+
+**Update 2026-09-07 --- this gap is still open, and the flag was enabled
+anyway.** `config.ENABLE_HAILO_LLM` was set `True` on 2026-09-01 (`f18af62`)
+and the model made *primary* for STUCK-state motion decisions, with Claude
+demoted to a fallback below `HAILO_LLM_CONFIDENCE_FLOOR=0.7`. The 32-case
+batch that produced the 0% score has not been re-run, and the 0.7 floor is a
+guessed number rather than one tuned against observed output. The "real
+investigation needed before this can be enabled" advice above was not
+followed.
+
+The confidence floor does contain the damage in the expected case: a failed
+parse or a sub-0.7 score escalates to Claude, so a 0%-scoring model should
+route essentially every episode to the cloud. Two consequences follow. First,
+on-device reasoning is not actually providing autonomy --- unattended recovery
+is cloud-dependent, and an offline rover has no STUCK reasoning at all beyond
+the reflex layer. Second, the residual risk is a *confidently wrong* parse:
+one that scores above 0.7 and drives the rover on a decision no one has
+validated. Re-run `experiments/llm_reliability_batch.py` and tune the floor
+against the result before relying on unattended operation --- this became
+materially more urgent on 2026-09-07, when `ENABLE_AUTONOMOUS_ROAM` was set
+`True` and unprompted wandering resumed.
 
 # 1. Purpose
 
