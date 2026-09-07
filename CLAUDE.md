@@ -153,7 +153,17 @@ front and right sonar read fine, left returns garbage.
   never retired despite a 2026-08-28 plan to replace it, and since 2026-09-07
   it is fed 5V from the TPSM84205 pre-regulator. Its input must still come
   from that 5V node, never from the +12V bus the TPSM sits on.
-- **ISO1540 sides are not interchangeable.** Side 1 (Pi side) takes max 40pF
+- **The Side-2 4.7kΩ I²C pull-ups were removed, and nothing recorded it.**
+  Found 2026-09-07: the owner reports a previous Claude session directed their
+  removal, but no doc, commit or comment captured it — Master Hardware Design
+  §3.2 still listed them and §14's pre-power checklist still told you to verify
+  them. Removal is defensible **only if the LTC4311 is fitted and enabled**: the
+  accelerator supplies the fast edge, and 1.3kΩ combined was drawing ~2.5mA
+  against a 3mA sink budget. Without it, the ISO1540's 10kΩ alone against
+  300–400pF gives ~12µs to threshold on a 10µs bit at 100kHz — the bus simply
+  cannot clock, and every device on the segment goes dark at once. **Meter SDA2
+  and SCL2 to VCC2 with power off before assuming the rail is at fault.**
+- **ISO1540 sides are not interchangeable.**
   and one device; Side 2 (bus side) takes 400pF and multiple nodes. Wiring the
   ten-device bus to Side 1 silences the bus. This has cost the build twice.
 - **A degrading failure means thermal.** A wiring fault gives the same wrong

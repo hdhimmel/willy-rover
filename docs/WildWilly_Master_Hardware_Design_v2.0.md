@@ -497,23 +497,43 @@ the reseat; worth confirming it holds before calling this fully closed.
 
 ### 3.2 Pull-ups
 
+⚠ **The Side-2 4.7kΩ rail pull-ups (R1/R2) have been REMOVED from the board.**
+Recorded 2026-09-07, on the owner's report that a previous Claude session
+directed their removal. The date and the stated reason were not written down at
+the time, and nothing in this repository recorded the change until now — every
+table below described a board that no longer existed.
+
 | Location | Value |
 |----------|-------|
 | Side 1 | Pi internal 1.8kΩ + ISO1540 onboard 10kΩ |
-| Side 2 | 4.7kΩ rail pair + ISO1540 onboard 10kΩ + device breakouts |
+| Side 2 | ISO1540 onboard 10kΩ + device breakouts — **the 4.7kΩ rail pair is gone** |
 
-Side 2 measures approximately 1.3kΩ combined. Do not add pull-ups on Side 1 —
-that side sinks only 3.5mA and is already near budget.
+**The combined Side-2 resistance is now unmeasured.** It was ~1.3kΩ with the
+rail pair fitted. Without it the value depends entirely on how many device
+breakouts still carry their own pull-ups, which has never been catalogued.
+Measure SDA2 and SCL2 to VCC2 with power off before trusting any figure here.
 
-**The Side-2 pull-ups live on the bus node board**, circuit zone cols 29–30:
-R1 (SDA) legs `c29b`↔`c30b`, supply `c29a`→`V28`, output `c30e`→SDA rail col 30.
-R2 (SCL) legs `c29h`↔`c30h`, output `c30j`→SCL rail col 30, supplied across the
-centre gap by the `c29d`↕`c29f` bridge. **R2 sits below the gap because col-30
-*top* already belongs to SDA** — both pull-ups in the top section would short
-SDA to SCL.
+Do not add pull-ups on Side 1 — that side sinks only 3.5mA and is already near
+budget. That constraint is unchanged.
 
-4.7kΩ at 400kHz supports only ~75pF of bus capacitance; twelve taps on drop
-cables is 300–400pF. **The LTC4311 is what keeps this bus inside spec** (§16.5).
+**Why removing them can be correct.** Combined 1.3kΩ at 3.3V draws ~2.5mA
+against the 3mA I²C sink budget, which is tight; and an LTC4311 supplies the
+fast edge actively, so strong static pull-ups work against it rather than with
+it. Removal is a defensible change **provided the LTC4311 is fitted and
+enabled**. This reasoning is reconstructed, not a record of the original intent.
+
+⚠ **Without the accelerator it is a bus-killer, and that is a live hypothesis
+for the 2026-09-07 fault.** 4.7kΩ at 400kHz supports only ~75pF; twelve taps on
+drop cables is 300–400pF. At the 100kHz this bus actually runs, one bit is 10µs:
+
+| Side-2 pull-up | RC at 400pF | ~3τ to threshold | vs 10µs bit |
+|---|---|---|---|
+| 1.3kΩ (as previously documented) | 0.52µs | ~1.6µs | fine |
+| ~2kΩ (breakouts still populated) | 0.8µs | ~2.4µs | fine |
+| 10kΩ (ISO1540 alone) | 4µs | ~12µs | **exceeds the bit — bus dead** |
+
+**Confirm the LTC4311 is still fitted and enabled (§16.5)** before treating the
+removal as safe. See §14 for the open item.
 
 ### 3.3 Device roll-call
 
@@ -643,16 +663,16 @@ expansion is GND-limited. Rows 15–20 are pending the encoder-rail open item in
 
 | Rail | Allocation |
 |---|---|
-| **+3.3V** | `V25` LED feed · `V27` TPSM output · `V28` R1 (pull-up) supply · `V29`/`V30` C4/C5. Free: V21–V24, V26 |
+| **+3.3V** | `V25` LED feed · `V27` TPSM output · `V29`/`V30` C4/C5. **Free: V21–V24, V26, and V28** — V28 was R1's supply until the pull-ups were removed (§3.2) |
 | **+12V** | `V21` battery divider R3 high side (external 12V feed) |
 | **GND** | `G21` ISO 2nd return · `G22` battery divider midpoint + sonar div ref · `G23`/`G24` sonar div grounds · `G25`/`G27` power block · `G26` C6 (−) · `G29`/`G30` C4/C5. **Free: G28 only** |
-| **SDA** | col 30 — R1 (pull-up) output; col 22 — battery divider midpoint → ADS1115 A0 |
-| **SCL** | col 30 — R2 (pull-up) output |
+| **SDA** | col 30 — *(was R1 pull-up output; vacant since the pull-ups were removed, §3.2)*; col 22 — battery divider midpoint → ADS1115 A0 |
+| **SCL** | col 30 — *(was R2 pull-up output; vacant since the pull-ups were removed, §3.2)* |
 
 Board furniture, by block:
 
 - **Power block, cols 25–28 top** — TPSM, C1, C2, C3, C6, P2 input. §16.2.
-- **Pull-ups and rail caps, cols 29–30** — R1, R2, the 3.3V bridge, C4, C5. §3.2.
+- **Rail caps, cols 29–30** — the 3.3V bridge, C4, C5. R1/R2 previously sat here and are removed (§3.2), so cols 29–30 are now largely free.
 - **Battery voltage divider, cols 21–24 top** — **NEW (2026-09-02):** R3/R4 (10kΩ + 10kΩ∥4.7kΩ) 
   measure +12V bus → ADS1115 A0. R3 `c21c`↔`c22c`, R4 `c22b`↔`c23b`, midpoint tap 
   `c22f`→ADS row 3 A0 input, ground via `G22`. Accounts for the full battery voltage across 
@@ -676,7 +696,7 @@ HF decoupler (§2.4) fits diagonally as `V26`↔`G28`, 0.2" with bent leads.
 Plus the ISO1540 **VCC2** wire to one open +3.3V device-zone tap — pick a
 specific tap and record it in §4.1.
 
-The TPSM feeds `V27` and R1 taps `V28`, shifted one column apart so the two
+The TPSM feeds `V27`. R1 previously tapped `V28`, one column apart so the two
 3.3V diagonals run parallel and never cross. The three divider-ground runs are
 insulated wire crossing cols 12–24 *over* the board — under a wire, not
 occupied; those holes remain usable.
@@ -710,7 +730,7 @@ occupied; those holes remain usable.
    so it covers both jumper holes. Bring up on a bench supply with the current
    limit at ~200mA: expect 3.3V ±0.1V at `V27` **and** at rail col 1 (far end),
    and the LED lit.
-5. Pull-ups, C4/C5, the bridge, and the optional `V26`↔`G28` decoupler.
+5. C4/C5, the bridge, and the optional `V26`⇔`G28` decoupler. **The R1/R2 pull-ups are no longer fitted** (§3.2) — do not re-add them without first confirming the LTC4311 and measuring combined Side-2 resistance.
    SDA/SCL idle ~3.3V.
 6. Sonar section — headers, dividers, GPIO pins, ground wires. 5V on the ECHO
    pins must give 3.2–3.4V at the junctions.
@@ -1205,7 +1225,7 @@ not obvious from the schematic.
    **Voltage rating rule:** Input stages (Vin) need 50V for transient protection; output stages can be lower 
    (50V overspecs fine, 10V minimum on 3.3V output). The AMS1117 remains single-point-of-failure on isolated 
    rail — use a fresh part, never the 2026-08-25 casualty.
-6. 4.7kΩ pull-ups present on SDA2 and SCL2.
+6. ~~4.7kΩ pull-ups present on SDA2 and SCL2.~~ **STRUCK 2026-09-07 — the rail pair has been removed** (§3.2). Do not verify or re-fit them on the strength of this checklist. The replacement check is: confirm the LTC4311 is fitted and enabled (§16.5), and meter SDA2/SCL2 to VCC2 with power off — a reading near 10kΩ means the lines are held only by the ISO1540 and the bus cannot clock at this cabling's capacitance.
 7. ~~GND1/GND2 isolation confirmed — no DC path between domains.~~
    **Struck 2026-08-28** — not achievable with this topology and never was
    (§3.1). Replace with: confirm the star-ground bond is present and the board
@@ -1378,7 +1398,7 @@ listed in §15.8 rather than carried as a line item.
 | Component | Role | Qty | Status |
 |-----------|------|-----|--------|
 | Adafruit ISO1540 (#4903) | Galvanic I²C isolator | 1 | Installed |
-| 4.7kΩ resistor | SDA2 / SCL2 rail pull-ups | 2 | Installed |
+| ~~4.7kΩ resistor~~ | SDA2 / SCL2 rail pull-ups | 2 | **REMOVED — no longer fitted (§3.2, recorded 2026-09-07)** |
 | Adafruit LTC4311 | I²C accelerator — no address | 1 | Installed |
 | MCP23017 | Encoder GPIO expander, 0x27 | 1 | Installed |
 | ADS1115 | Battery voltage ADC, 0x48 | 1 | Installed |
@@ -1621,7 +1641,7 @@ Four wires only. Transparent to the bus; never appears in a scan.
 **Mount it off-board, adjacent to the bus node board, with the shortest leads
 of any device.** It is an edge-rate accelerator: on a long drop cable it adds
 capacitance at the wrong point and can mis-trigger. With twelve taps at
-300–400pF against 4.7kΩ pull-ups (§3.2), this part is what keeps the bus
+300–400pF and the 4.7kΩ rail pull-ups now **removed** (§3.2), this part is load-bearing rather than merely helpful — it is what keeps the bus
 inside I²C timing.
 
 ### 16.6 BNO085 — 0x4A, row 9

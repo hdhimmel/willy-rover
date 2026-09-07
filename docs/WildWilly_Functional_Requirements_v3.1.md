@@ -569,6 +569,11 @@ conditions:
 Pre-power hardware conditions that gate the first execution of this test are
 listed in rev 6.2.0 §17.5 and are not restated here; the three marked BLOCKING
 (regulator decoupling, SDA2/SCL2 pull-ups, ISO1540 orientation) have each
+already cost hardware on this build. **The SDA2/SCL2 pull-up condition can no
+longer be satisfied as written (2026-09-07): the 4.7kΩ rail pair has been
+removed from the board.** Whether the bus still meets I²C rise-time now depends
+on the LTC4311 and on whatever pull-ups the device breakouts carry, neither of
+which is measured. See Master Hardware Design §3.2.
 already cost hardware on this build. All three now have concrete hole
 assignments and a bare-board meter check in Master Hardware Design §4.5 — note
 in particular that the TPSM requires a 94µF ceramic Cout minimum, and that the
