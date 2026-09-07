@@ -16,7 +16,26 @@ EnvironmentFile=-/home/hhimmel/rover/.env
 ExecStart=/home/hhimmel/rover/venv/bin/python3 /home/hhimmel/rover/main.py
 Restart=on-failure
 RestartSec=5
-WatchdogSec=500ms
+# WatchdogSec is DISABLED 2026-09-07. Do not re-add it without also fixing the two
+# problems below -- installing this line as it stood put the rover into a permanent
+# crash loop (killed by SIGABRT ~500ms after every start, 4 times in 20 seconds,
+# never reaching its own first log line).
+#
+# 1. This unit is Type=simple, so NotifyAccess defaults to `none` and systemd
+#    DISCARDS every sd_notify message the process sends. brain.py's WATCHDOG=1
+#    heartbeat is therefore never received, and no heartbeat rate can satisfy the
+#    deadline -- the watchdog fires unconditionally. Needs Type=notify (or at
+#    minimum NotifyAccess=main) before WatchdogSec means anything at all.
+# 2. 500ms cannot cover startup even once notifications are accepted. brain.py sends
+#    READY=1 only after init passes, and init loads a 1.7GB Hailo HEF plus the vision
+#    and voice models -- seconds, not milliseconds. Under Type=notify that also
+#    becomes the startup deadline, so TimeoutStartSec and WatchdogSec both need
+#    values matched to real measured startup, and a failed self-test that never
+#    sends READY=1 would then count as a failed start.
+#
+# See FRD v3.1 G-5. Validate on the bench with `systemd-notify`-level logging before
+# arming this on a rover anyone is standing next to.
+# WatchdogSec=500ms
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=willy-rover

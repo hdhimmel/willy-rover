@@ -251,12 +251,21 @@ direction:
 - `brain.py`'s `WATCHDOG=1` heartbeat was a **no-op** for the same period, so a wedged tick
   loop would never have been restarted. The Witty Pi HAT watchdog was the only real backstop.
 
-The repo unit was installed and `daemon-reload`ed 2026-09-07 (previous saved as
-`willy-rover.service.bak-20260907-090533`). **systemd applies `WatchdogSec` at service start,
-not at `daemon-reload`** — so it arms on the next restart, and from then on the 500ms deadline
-is live for the first time. Before trusting the overrun logs to warn you, note that
-`TICK_OVERRUN_THRESHOLD_S=0.15` sits against an effective ~200ms kill line and the overrun log
-only runs *after* `_tick()` returns — an overrun past the line never reports itself.
+**Arming it on 2026-09-07 broke the rover and was reverted the same hour — the repo unit is
+unusable as written.** Installing it put the service into a permanent crash loop: SIGABRT
+~500ms after every start, four starts in twenty seconds, never reaching its own first log
+line. The cause is not a bad threshold. The unit is `Type=simple`, so `NotifyAccess` defaults
+to `none` and **systemd discards every `sd_notify` message the process sends** — `brain.py`'s
+`WATCHDOG=1` was never received, so the watchdog fired unconditionally on a timer and no
+`WatchdogSec` value would have helped. Reverted to the previous unit; `WatchdogSec` is now
+commented out in `willy-rover.service` with the preconditions recorded inline.
+
+**So the watchdog has still never run on this rover.** Before re-arming it, two things must
+both be true: `Type=notify` (or `NotifyAccess=main`) so the heartbeat is received at all, and
+a `WatchdogSec` matched to real measured startup — init loads a 1.7GB Hailo HEF plus vision
+and voice models, and under `Type=notify` that figure doubles as the startup deadline, so a
+self-test that never sends `READY=1` would count as a failed start. Bench-validate before
+arming it on a rover anyone is standing next to.
 
 ---
 

@@ -348,18 +348,39 @@ loop would never have been restarted by systemd. The Witty Pi 5 HAT's own
 watchdog (200 missed heartbeats, ~10-20s) was the only live backstop the whole
 time.
 
-The repository unit was installed and `daemon-reload`ed on 2026-09-07, with the
-previous unit preserved as `willy-rover.service.bak-20260907-090533`. systemd
-applies `WatchdogSec` at service *start*, not at `daemon-reload`, so the
-running instance was deliberately left untouched and the watchdog arms on the
-next restart. **From that restart onward the 500ms/250ms deadline is live for
-the first time, and the threshold-ordering advice at the top of this gap stops
-being hygiene and starts being load-bearing.** `TICK_OVERRUN_THRESHOLD_S` is
-still 0.15s against an effective ~200ms kill line (250ms deadline minus the run
-loop's 50ms sleep), leaving roughly a 50ms band in which an overrun is logged
-rather than fatal --- and the log only executes after `_tick()` returns, so an
-overrun past the line is never self-reported. Lower it before relying on the
-logs to warn you.
+**Attempting to arm it the same day proved the repository unit is unusable as
+written.** The repo unit was installed and `daemon-reload`ed on 2026-09-07. The
+service then entered a permanent crash loop --- SIGABRT roughly 500ms after
+every start, four starts in twenty seconds, never reaching its own first log
+line --- and was reverted to the previously installed unit within the hour. The
+rover was left stopped rather than cycling.
+
+Root cause, confirmed on the rover: the unit is `Type=simple`, so
+`NotifyAccess` defaults to `none` and **systemd discards every `sd_notify`
+message the process sends**. `brain.py`'s `WATCHDOG=1` was never received by
+anything, so no heartbeat rate could satisfy the deadline and the watchdog
+fired unconditionally on a timer from each start. This is not a threshold
+tuning problem and no `WatchdogSec` value would have fixed it.
+
+Two preconditions must both be met before this line goes back:
+
+1. `Type=notify` (or at minimum `NotifyAccess=main`), so the heartbeat is
+   actually received. Without this, `WatchdogSec` is not merely wrong, it is
+   inert-then-fatal.
+2. A `WatchdogSec` matched to measured startup. `brain.py` sends `READY=1` only
+   after init passes, and init loads a 1.7GB Hailo HEF plus the vision and voice
+   models. Under `Type=notify` that same figure also becomes the startup
+   deadline, and a failed self-test that never sends `READY=1` would then count
+   as a failed start --- a behaviour change worth deciding on deliberately.
+
+`WatchdogSec` is commented out in the repository unit as of 2026-09-07 with
+these preconditions recorded inline, so the next person cannot arm it by
+copying the file. **The watchdog has therefore still never run in this
+deployment**, and the threshold-ordering advice at the top of this gap remains
+hygiene rather than something load-bearing --- `TICK_OVERRUN_THRESHOLD_S=0.15`
+against a hypothetical ~200ms kill line, with the overrun log only executing
+after `_tick()` returns. Settle preconditions 1 and 2 on the bench first; the
+threshold ordering matters only once a watchdog can actually fire.
 
 **Update 2026-08-18 (same day):** the two known code paths that could actually
 push a single tick anywhere near the 500ms/250ms figures above --- `retrieval_

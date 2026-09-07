@@ -166,10 +166,15 @@ class RoverBrain:
         # real in the code and dormant in deployment -- including the f18af62 blocking call noted
         # further down. sd_notify's WATCHDOG=1 was a no-op, so a genuinely wedged tick loop was
         # never restarted either; the Witty Pi HAT's own watchdog was the only live backstop.
-        # The repo unit was installed and daemon-reload'd on 2026-09-07 (previous unit saved as
-        # willy-rover.service.bak-20260907-090533). systemd applies WatchdogSec at service
-        # start, not at daemon-reload, so it arms on the next restart -- from that restart on,
-        # the deadline below is real and every figure in it applies for the first time.
+        # Installing the repo unit on 2026-09-07 to arm it was a mistake and was reverted the
+        # same hour: the service was SIGABRT'd ~500ms after every start, four times in twenty
+        # seconds, never reaching its own first log line. Cause: this unit is Type=simple, so
+        # NotifyAccess defaults to `none` and systemd DISCARDS every sd_notify message the
+        # process sends -- the WATCHDOG=1 below was never received by anything, and no heartbeat
+        # rate could have satisfied the deadline. WatchdogSec=500ms is now commented out in
+        # willy-rover.service with the full precondition list; the rover is back on the unit it
+        # had before. So the watchdog is STILL not armed, and the figures below still describe
+        # a mechanism that has never once run in this deployment.
         #
         # FRD v3.1 G-5 (2026-08-18) sharpened the risk this WatchdogSec value actually poses:
         # notify() below is called once per tick, so a single _tick() call blocking anywhere near
