@@ -544,9 +544,13 @@ conditions:
 
 -   **FR-100-002, false-negative exclusion.** A blank or partial scan while the
     base is unpowered is expected behaviour, not a fault --- Side 2 of the
-    isolation barrier is fed by the **TPSM84203EAB on the bus node board off the
-    +12V main** (Master Hardware Design §4, §16.2 — changed 2026-08-28 from the
-    AMS1117-3.3 on the 5V servo rail), so all downstream devices go dark when
+    isolation barrier is fed by the **two-stage chain on the bus node board off
+    the +12V main** — TPSM84205 (12V→5V) into AMS1117-3.3 (5V→3.3V) (Master
+    Hardware Design §4, §16.2; the +12V source replaced the 5V servo rail on
+    2026-08-28, and the TPSM stage was installed 2026-09-07). Corrected
+    2026-09-07: this paragraph previously named a single-stage TPSM84203EAB with
+    the AMS1117 retired, which was a planned design that was never built — the
+    AMS1117-3.3 is still the final stage. All downstream devices go dark when
     the Pi is powered by USB-C alone. The rail source changed but this
     behaviour did not: the bus still depends on base power. The
     startup self-test must distinguish "base off" from "bus fault" before

@@ -149,7 +149,10 @@ front and right sonar read fine, left returns garbage.
 - **AMS1117-3.3 input is the 5V rail, never 12V.** Fed from 12V it dissipates
   ~9V across the pass element, overheats, and drags VCC2 down progressively.
   This presented as devices dropping off successive scans — ten, then six,
-  then four — with no rewiring between them.
+  then four — with no rewiring between them. **Still live:** the part was
+  never retired despite a 2026-08-28 plan to replace it, and since 2026-09-07
+  it is fed 5V from the TPSM84205 pre-regulator. Its input must still come
+  from that 5V node, never from the +12V bus the TPSM sits on.
 - **ISO1540 sides are not interchangeable.** Side 1 (Pi side) takes max 40pF
   and one device; Side 2 (bus side) takes 400pF and multiple nodes. Wiring the
   ten-device bus to Side 1 silences the bus. This has cost the build twice.
@@ -331,13 +334,23 @@ flicker**, full 11-device set present every single time. The `hwmon3` under-volt
 also stopped recurring the same moment (40+ min clean afterward, vs. cycling every 15-30s
 before) — one root cause explains both symptoms, not two separate issues.
 
-**Upgrade designed, build pending** (full board layout: Master Hardware Design
-§4, with pin detail in §16.2): replacing the AMS1117-3.3 (linear regulator, prone to this
-exact thermal-foldback failure mode) with a **TI TPSM84203EAB** integrated buck power module —
-4.5-28V input (would have tolerated the original 12V-miswiring failure mode instead of cooking
-itself), fixed 3.3V/1.5A output, ~95% efficiency, 3-pin TO-220 footprint confirmed by the owner
-as a direct drop-in for the current part, no rewiring needed. Do this before the replacement
-linear part fails the same way a third time.
+**Two-stage chain installed 2026-09-07 — and the AMS1117-3.3 is STILL IN SERVICE.**
+The rail is now: +12V → F6 (RXEF110 1.1A) → **TPSM84205** (12V→5V) → **AMS1117-3.3**
+(5V→3.3V) → VCC2. The TPSM stage is owner-confirmed installed and functioning. Layout in
+Master Hardware Design §4, pin detail §16.2.
+
+**Do not read older notes as saying the AMS1117 was retired.** A 2026-08-28 plan proposed
+replacing it outright with a single-stage **TPSM84203EAB**, and parts of this repo were
+written as though that had been built. It was not. The AMS1117-3.3 remains the final stage,
+and fitting a 84203 into the chain as it actually stands would starve it (needs ≥4.5V in)
+and take the whole isolated bus down.
+
+**The AMS1117 also supplies the touch sensor** (owner, 2026-09-07), so its load is bus
+devices plus the panel. The TPSM pre-regulator cuts its drop from ~1.9V to ~1.7V and takes it
+off servo load — real improvement — but dissipation is still 1.7V × total current on a part
+that has failed twice by thermal foldback. Neither the current nor the case temperature has
+been measured with the touch sensor active. Master Hardware Design §14 item 6 is reopened
+until they are.
 
 The abnormally slow local-LLM voice latency measured 2026-08-20 (`intent=40.9s` vs. this repo's
 own documented ~15-20s expectation from the 2026-08-15 voice latency work, `vcgencmd

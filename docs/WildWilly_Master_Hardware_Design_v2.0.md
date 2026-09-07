@@ -108,8 +108,9 @@ graph TD
     DROK3["3V DROK"]
     R5["R5: 3V<br/>Encoders"]
     
-    TPSM["TPSM84203EAB<br/>on Bus Node"]
-    BUS_VCC2["VCC2: 3.3V<br/>I²C Bus"]
+    TPSM["TPSM84205<br/>12V to 5V"]
+    AMS["AMS1117-3.3<br/>5V to 3.3V"]
+    BUS_VCC2["VCC2: 3.3V<br/>I²C Bus + touch sensor"]
     
     BAT --> BMS
     BMS --> F1
@@ -140,7 +141,8 @@ graph TD
     DROK3 --> R5
     
     F_TPSM --> TPSM
-    TPSM --> BUS_VCC2
+    TPSM --> AMS
+    AMS --> BUS_VCC2
     
     style BAT fill:#ffcccc
     style BUS fill:#ffeecc
@@ -229,9 +231,18 @@ while all six Hall sensors sit powered-but-inoperative, holding a static output
 they have not the supply to switch. That is exactly the measured signature, and
 it is the only hypothesis tried that explains all six failing identically.
 
-**Repair: replaced by the TPSM84203EAB** — designed 2026-08-28, build pending.
-Layout §4, pin detail §16.2. Two things still to settle BEFORE fitting it:
-verify the pinout actually matches rather than trusting "TO-220 drop-in", and
+**Repair: TPSM84205 pre-regulator fitted ahead of the AMS1117-3.3 — installed
+and functioning, owner-confirmed 2026-09-07.** The chain is now two-stage
+(§3, §16.2): +12V → F6 → TPSM84205 (12V→5V) → AMS1117-3.3 (5V→3.3V) → VCC2.
+
+> **Superseded plan — do not build.** An earlier 2026-08-28 revision of this
+> document proposed replacing the AMS1117-3.3 outright with a single-stage
+> **TPSM84203EAB** (12V→3.3V), and several sections were written as though that
+> had happened. It was not built. The AMS1117-3.3 is still in service and is
+> still the final stage. Corrected throughout 2026-09-07; if you find a
+> surviving reference to a single-stage 84203 anywhere, it is stale.
+
+One item still to settle:
 establish whether these encoders want 3.3V or 5V — the vendor part number was
 never recorded, and JGA25-370 spans variants with both. If they need 5V the
 module must be set for 5V AND the twelve signal lines need level shifting, since
@@ -332,8 +343,12 @@ addressed around the same time.
 | 2 | 10µF ceramic 25V | Bus node C4/C5 — 3V3 rail decoupling, `V29`↔`G29` and `V30`↔`G30` |
 | *opt* | 0.1µF ceramic | Bus node C7 — HF decoupler, `V26`↔`G28` diagonal |
 
-Eleven capacitors total, twelve with the optional HF decoupler. The two 10µF
-AMS1117 caps retire with the part.
+Eleven capacitors total on the bus node board, twelve with the optional HF
+decoupler. **The two 10µF AMS1117 caps do NOT retire** — corrected 2026-09-07.
+An earlier revision said they retired "with the part", on the assumption the
+AMS1117-3.3 was being replaced by a single-stage TPSM84203EAB. That replacement
+was never built: the AMS1117 is still stage 2 (§16.2), so its Vin and Vout
+decoupling is still required and is listed separately in the BOM (§15).
 
 **Cout is not optional.** TI specifies a 94µF ceramic minimum (2×47µF) on the
 TPSM output; a single 10µF there will oscillate. C4/C5 sit downstream on the
@@ -1273,10 +1288,21 @@ measurement, not a construction task.
    tightest in the design.
 5. **Runtime measurement** — log the three INA260s through a representative
    run and integrate, rather than relying on estimates.
-6. ~~**AMS1117 thermal watch**~~ — **closed 2026-08-28.** The part is retired
-   (§15.8); the TPSM84203EAB that replaces it is a ~95%-efficient switcher and
-   does not share the failure mode. Superseded by the bus node board build
-   (§4.5).
+6. **AMS1117 thermal watch** — **REOPENED 2026-09-07.** This item was closed on
+   2026-08-28 on the premise that the part had been retired in favour of a
+   single-stage TPSM84203EAB. That replacement was never built. The AMS1117-3.3
+   is still fitted as stage 2 and is still the single point of failure on VCC2,
+   so the watch stands.
+   What genuinely improved: the TPSM84205 pre-regulator is now installed
+   (owner-confirmed 2026-09-07), so the AMS1117 drops ~1.7V instead of ~1.9V and
+   no longer sits downstream of servo load. That reduces the thermal stress that
+   killed it twice; it does not remove it.
+   What got worse and is not yet quantified: the AMS1117 also supplies the touch
+   sensor (owner, 2026-09-07), so its load is now bus devices **plus** the
+   panel. Dissipation is 1.7V × total current, and this part has already failed
+   twice by thermal foldback. **Measure the actual AMS1117 current and case
+   temperature with the touch sensor active** before treating the two-stage
+   chain as having closed the risk. Neither figure is recorded anywhere yet.
 7. **Pi-rail buck identity** — DROK 12A LCD versus Elecbee 5V/5A across older
    documents. Electrically settled: the rail measures correctly and its
    monitor is confirmed at 0x44. This is a labelling question only. Identify
@@ -1388,9 +1414,9 @@ listed in §15.8 rather than carried as a line item.
 | **DROK-6V** adjustable buck | 12V → 6.0V for arm servos (R3) | 1 | To fit |
 | **DROK-4** adjustable buck | Encoder distribution (R5) — **⚠ voltage TBD: 3.3V or 5V?** (§2.2) | 1 | **Pending voltage decision** |
 | **Isolated bus power chain (P8):** | — | — | — |
-| **TI TPSM84205** | 12V → 5.0V pre-regulator (1.5A) — **NOT 84203 or 84212** | 1 | **To build** |
-| RXEF110 1.1A polyfuse | F6, TPSM 12V input, PTC resettable | 1 | **To build** |
-| AMS1117-3.3 | 5V → 3.3V final stage, VCC2 (isolated bus + encoders), **fresh part** | 1 | **To fit** |
+| **TI TPSM84205** | 12V → 5.0V pre-regulator (1.5A) — **NOT 84203 or 84212** | 1 | **Installed 2026-09-07** |
+| RXEF110 1.1A polyfuse | F6, TPSM 12V input, PTC resettable | 1 | **Installed 2026-09-07** |
+| AMS1117-3.3 | 5V → 3.3V final stage, VCC2 (isolated bus + encoders + **touch sensor**) | 1 | **Installed — in service, not retired** |
 | 10µF **50V** electrolytic | TPSM Vin (12V input protection — 50V minimum for transient headroom) | 1 | **To build** |
 | 2× 47µF **50V** ceramic | TPSM Vout (TI min 94µF total at 5V — 50V overspecs but safe) | 2 | **To build** |
 | 10µF 50V electrolytic | AMS1117 Vin, from TPSM (≥10mm from pins) | 1 | **To build** |
@@ -1433,7 +1459,7 @@ Listed so their absence is deliberate and traceable, not an omission.
 | Elecbee 5V/5A buck | Retired in favour of the current Pi rail buck |
 | FEICHAO 8A UBEC | Replaced 2026-08-28 by a dedicated 5V DROK. Worst-case draw on this rail was already near 9A against the UBEC's 8A rating (§12), so it was running with no margin. |
 | DZS Elec 12A adjustable buck | Replaced 2026-08-28 by a dedicated 6V DROK. One converter per rail, reliable similar components (owner). |
-| AMS1117-3.3 linear regulator | Retired 2026-08-28. Failed twice by thermal foldback — the second time degrading to 2.83V, killing the encoders and flickering the whole bus. Replaced by the TPSM84203EAB (§16.2), which also moves the bus rail off the 5V UBEC onto +12V. |
+| ~~AMS1117-3.3 linear regulator~~ | **NOT RETIRED — row struck 2026-09-07.** Listing it here was premature: it recorded a planned single-stage TPSM84203EAB replacement that was never built. The AMS1117-3.3 remains in service as stage 2 of the two-stage chain (§16.2) and additionally supplies the touch sensor. Its history stands — it has failed twice by thermal foldback, the second time degrading to 2.83V and killing the encoders — which is why §14 item 6 is reopened rather than closed. What did change on 2026-08-28/2026-09-07 is upstream: the rail now comes off +12V through the TPSM84205 rather than off the 5V UBEC. |
 
 **One item to confirm:** the Pi rail buck's identity is recorded inconsistently
 across older documents — a DROK 12A LCD unit in some, an Elecbee 5V/5A in
@@ -1490,12 +1516,21 @@ Two-stage regulation for VCC2 rail: **TPSM84205 → AMS1117-3.3** (updated 2026-
 TI spec: 4.5–28V in, 5.0V/1.5A, ~95% efficiency, TO-220-6. Polyfuse F6 (RXEF110 1.1A, 
 PTC resettable) on 12V input. Decoupling: 10µF/50V on input, 2× 47µF ceramic on output.
 
-**Stage 2: AMS1117-3.3 (5V → 3.3V final stage)**
+**Stage 2: AMS1117-3.3 (5V → 3.3V final stage)** — in service, NOT retired.
 
-TI spec: 4.5–28V in, 3.3V/1A, TO-220. Draws 5V from TPSM output; supplies VCC2 rail 
-and ISO1540 Side 2 VCC. GND pin is the sole GND2 star reference. Decoupling: 10µF/50V 
-on 5V input (from TPSM), 10µF ceramic on 3.3V output. **Use a fresh part** — the 
-2026-08-25 casualty is degraded.
+TI spec: 4.5–28V in, 3.3V/1A, TO-220. Draws 5V from TPSM output; supplies VCC2 rail,
+ISO1540 Side 2 VCC, **and the touch sensor** (owner, 2026-09-07). GND pin is the sole
+GND2 star reference. Decoupling: 10µF/50V on 5V input (from TPSM), 10µF ceramic on
+3.3V output. **Use a fresh part** — the 2026-08-25 casualty is degraded.
+
+⚠ **Load is no longer just the bus, and the total is unrecorded.** With the touch
+sensor on this rail the AMS1117 carries bus devices plus the panel, against a 1A part
+that has already failed twice by thermal foldback. The TPSM pre-regulator cuts the drop
+to ~1.7V, so dissipation is 1.7V × total current — better than before, not eliminated.
+Measure AMS1117 current and case temperature with the touch sensor active before
+assuming headroom; §14 item 6 stays open until those two numbers exist. If the touch
+sensor proves a significant load, giving it its own supply is cheaper than a third
+failure of this part.
 
 **Why two stages?** The 2026-08-25 root cause: single-stage AMS1117 fed 5.14V from servo 
 rail, dissipated ~1.9W at bus load, thermally folded back, sagged to 2.83V, killed encoders. 
@@ -1503,9 +1538,16 @@ The TPSM pre-regulates 12V to 5V at ~95% efficiency, leaving AMS1117 to drop onl
 bus current — removing the thermal stress and making the bus independent of servo load. Bus 
 stays dark on USB-C only (no 12V) by design.
 
-**Known behaviour:** TPSM input draw is ~145mA at 0.5A out, ~434mA at 1.5A max. F6 polyfuse 
-protects the harness; TPSM fails before fuse opens. **CRITICAL:** use TPSM84205 (5V output), 
-NOT 84203 (3.3V) or 84212 (12V). The AMS1117 needs ≥4.5V in; a 84203 would fail immediately.
+**Known behaviour:** TPSM input draw is ~145mA at 0.5A out, ~434mA at 1.5A max. F6
+polyfuse protects the harness; TPSM fails before fuse opens. **CRITICAL:** use
+TPSM84205 (5V output), NOT 84203 (3.3V) or 84212 (12V). The AMS1117 needs ≥4.5V in; a
+84203 would fail immediately.
+
+This CRITICAL note is live and load-bearing, not historical. A 2026-08-28 revision of
+this document proposed elsewhere that the AMS1117 be removed in favour of a
+single-stage 84203. That build never happened. Fitting a 84203 into the chain as it
+actually stands today would starve the AMS1117 and take the entire isolated bus
+down.
 
 ### 16.3 ADS1115 — 0x48, rows 3–4
 
