@@ -37,6 +37,94 @@ baseline requirement.
 
 ---
 
+## 0. AS-BUILT 2026-09-08 — READ THIS FIRST
+
+**Sections 2, 3, 4, 16.1 and 16.2 describe a bus architecture that no longer
+exists.** They are retained for history and because the reasoning in them is
+still instructive, but they are **not** the current build. This section is.
+
+### What was removed
+
+| Part | Status |
+|---|---|
+| **ISO1540 isolator** | Removed. There is no isolation on the I²C bus. |
+| **VCC2 / GND2 isolated rail** | Gone with it. One ground, one 3.3V supply. |
+| **AMS1117-3.3** | Removed — touchscreen went back on Pi power, leaving it no consumers. |
+| **TPSM84203EAB / TPSM84205** | Removed. With no isolated rail there is nothing to supply. |
+| **F6 polyfuse and the P8 path** | Gone with the power chain. |
+| **Seengreat breakout HAT + ribbon** | Removed. |
+
+### Current topology
+
+```
+Pi 40-pin header (GP2/GP3)
+  ├─ Witty Pi 5 HAT+                      0x51
+  └─ GODIY I²C hub ── GODIY I²C hub      (passive, daisy-chained)
+        ├─ MCP23017 0x27   (Waveshare board)
+        ├─ INA260   0x40 0x44 0x45
+        ├─ PCA9685  0x42 0x43              (+0x70 All-Call)
+        ├─ ADS1115  0x48
+        ├─ BNO085   0x4A
+        ├─ FeatherWing 0x60 0x61
+        └─ LTC4311 accelerator             (no address, transparent)
+```
+
+Both hubs are **passive fan-outs**, so this is **one electrical segment**. There
+is no segmentation and no containment: any device holding SDA or SCL low takes
+the entire bus down. That happened repeatedly on 2026-09-07/08.
+
+The 4.7kΩ Side-2 rail pull-ups are re-fitted. A TCA9548A multiplexer (strapped
+`0x74`) was bought, wired and proven working during the 2026-09-07/08 debugging,
+then removed in favour of this simpler topology — see
+`docs/superpowers/specs/2026-09-07-i2c-mux-design.md`, which describes a design
+that was **not** built.
+
+### Power rails — four DROK converters
+
+| Rail | Volts | Source | Feeds | Monitor |
+|------|-------|--------|-------|---------|
+| R1 | **9.5V** | DROK-Pi | Witty Pi 5 VIN → Pi | INA260 `0x45` |
+| R2 | 5V | DROK-5V | Steering servos, sonar VCC, Pi screen | INA260 `0x40` |
+| R3 | 6V | DROK-6V | Arm servo distribution | — |
+| R5 | **3.3V** | DROK-4 | Hall encoders **and all I²C device logic** | — |
+| — | +12V | Battery via F1/KCD4/Q1 | Both FeatherWing VIN, all DROK inputs | INA260 `0x44` |
+
+**R5 = 3.3V settles the "3V or 5V — voltage TBD" question open in §2.2 since
+2026-08-28.** It also means the bus does not load the Pi's own 3V3 pin.
+
+⚠ **R5 is a single point of failure for the encoders and the entire I²C bus** —
+the same role the AMS1117 held when it failed twice. Budget its draw: six Hall
+encoders, eleven I²C devices, all bus pull-ups.
+
+### Verified 2026-09-08
+
+Eleven devices plus the `0x70` All-Call broadcast, **20 consecutive scans, zero
+bus errors**, stable across power cycles. See §0.1 for the roll-call, which
+matches §3.3's table.
+
+### Open hardware items as of 2026-09-08
+
+1. **Battery divider has no +12V feed.** ADS1115 `0x48` is healthy — all four
+   channels convert correctly — but A0 reads **0.0146V** against the required
+   2.76–3.06V. `brain.py` maps that to ~0.06V, below `BAT_SHUTDOWN_V=10.2`, and
+   will perform a controlled shutdown believing the pack is flat.
+   `sensors.py`'s guard only catches *failed* reads; a successful read of a real
+   zero passes straight through. **Do not enable `willy-rover.service` until A0
+   is in band.** The divider was added 2026-09-02 and appears never to have been
+   fed.
+2. **Encoders unverified.** MCP23017 `0x27` is confirmed healthy (registers
+   read/write, internal pull-ups engage, both ports read cleanly). Whether the
+   Hall channels actually count is untested — all 16 bits read high at rest,
+   which is the pull-ups holding idle lines with nothing driving them. Use
+   `~/enctest 20` on the rover and turn each wheel.
+3. §14 item 8 — Hall output drive type (push-pull vs open-collector) still
+   unknown, and it decides whether 5V encoders would need level shifting at all.
+4. **Redesign pending:** the bus node board is to be rebuilt to make room for the
+   two GODIY hubs, dropping the TPSM/AMS1117 footprints. The battery divider must
+   survive that redesign — and must actually be fed this time.
+
+---
+
 ## 1. System Overview
 
 Six-wheel rocker-bogie rover. Independent drive and steering on all six
@@ -61,6 +149,10 @@ distribution, bus node board and motor drivers in the body tray.
 ---
 
 ## 2. Power Architecture
+
+> ⚠ **SUPERSEDED 2026-09-08 — see §0.** The P8 isolated-power path, the F6
+> polyfuse, the TPSM and the AMS1117 are all removed from the build. Rail
+> voltages R1 and R5 have changed. Retained for history.
 
 ### 2.1 Distribution tree
 
@@ -374,6 +466,11 @@ first, the balance Y a minute later.
 
 ## 3. I²C Bus and Isolation
 
+> ⚠ **SUPERSEDED 2026-09-08 — see §0.** The ISO1540 is removed; there is no
+> isolation, no Side 1/Side 2, no VCC2 and no GND2. The bus is one segment on
+> the Pi's own I²C via two passive hubs. The roll-call in §3.3 is still
+> correct. Retained for history.
+
 ### 3.1 Topology
 
 The Pi's I²C controller (GND1 domain) is separated from every device (GND2
@@ -537,7 +634,10 @@ removal as safe. See §14 for the open item.
 
 ### 3.3 Device roll-call
 
-`i2cdetect -y 1` returns **ten devices plus one broadcast address**:
+`i2cdetect -y 1` returns **eleven devices plus one broadcast address** — the
+ten below plus the Witty Pi 5 HAT+ at `0x51`, which sits on the Pi header
+rather than this bus. Verified 2026-09-08 across 20 consecutive scans with
+zero bus errors. Expect eleven, not twelve: `0x70` is All-Call, not a device.
 
 | Address | Device | Function |
 |---------|--------|----------|
@@ -562,6 +662,10 @@ fault: Side 2 dies with the 12V chain, so the Pi on USB-C alone sees nothing.
 ---
 
 ## 4. Bus Node Board
+
+> ⚠ **SUPERSEDED 2026-09-08 — see §0.** This board is being redesigned to
+> house the two GODIY hubs and to drop the TPSM/AMS1117 footprints. The
+> battery divider is the one part that must carry forward — and must be fed.
 
 An **EPLZON 3.5"×2.05" (88.9×52.1mm) gold-plated solderable breadboard**,
 30 columns × 0.1", M3 corner mounts. Rev 3.4, 2026-08-28. It carries two
@@ -1499,6 +1603,11 @@ isolator orientation, breakout swap and servo power method were settled.
 
 ### 16.1 ISO1540 isolator
 
+> ⚠ **SUPERSEDED 2026-09-08 — the ISO1540 is removed from the build (§0).**
+> Retained for history and because the Side 1 / Side 2 asymmetry cost this
+> build twice.
+
+
 Both halves silkscreen VCC / GND / SDA / SCL — there are no numbered pads.
 Side 1 is the half nearest the SOIC-8 pin-1 marker (§12 rule 3).
 
@@ -1528,6 +1637,12 @@ low-Z return), `h`=the FRONT divider's 2kΩ leg, `j`=the GND2 pin; `i` is free.
 Confirm the breakout carries its own decoupling; 2 × 0.1µF, one per side, if not.
 
 ### 16.2 Isolated bus power chain — P8 (external)
+
+> ⚠ **SUPERSEDED 2026-09-08 — this entire path is removed (§0).** No TPSM, no
+> AMS1117, no F6, no VCC2. Bus logic is fed from the 3.3V DROK (R5). Retained
+> for history, including the dropout lesson: a rail that sags with load is a
+> linear regulator with no headroom; a buck holds flat.
+
 
 Two-stage regulation for VCC2 rail: **TPSM84205 → AMS1117-3.3** (updated 2026-08-28).
 

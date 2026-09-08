@@ -10,27 +10,54 @@ code needs fixing — every line below was confirmed on the bench.
 
 ---
 
-## Bus state — verified 2026-08-13
+## Bus topology and roll-call — AS-BUILT, verified 2026-09-08
 
-`i2cdetect -y 1` returns **ten devices plus one broadcast address**:
+**The bus is no longer isolated.** The ISO1540, the VCC2/GND2 isolated rail, the
+AMS1117-3.3 and the TPSM84203EAB are all out of the build, along with the
+Seengreat breakout HAT and its ribbon cable. Everything now hangs off the Pi's
+own I²C on `/dev/i2c-1`:
+
+```
+Pi 40-pin header (GP2/GP3)
+  ├─ Witty Pi 5 HAT+                    0x51
+  └─ GODIY I²C hub ── GODIY I²C hub    (passive, daisy-chained)
+        └─ all remaining devices + LTC4311 accelerator
+```
+
+Both hubs are passive fan-outs, so this is **one electrical segment** — there is
+no segmentation and no containment. A single device holding SDA or SCL low takes
+the whole bus down, which is exactly what happened repeatedly on 2026-09-07/08.
+
+A TCA9548A multiplexer (strapped `0x74`) was bought, wired and proven working
+during that debugging, then removed in favour of this simpler topology. It is on
+the shelf if segmentation is ever wanted; `dtoverlay=i2c-mux,pca9548,addr=0x74,
+base=20,disconnect_on_idle` is still in `config.txt` and harmlessly fails to
+probe at boot.
+
+### Roll-call
+
+`i2cdetect -y 1` returns **eleven devices plus one broadcast address**, verified
+2026-09-08 across 20 consecutive scans with zero bus errors:
 
 | Addr | Device | Notes |
 |------|--------|-------|
-| 0x27 | MCP23017 | Encoder expander, 6 channels |
+| 0x27 | MCP23017 | Encoder expander, 6 channels. **Waveshare board** |
 | 0x40 | INA260 | Servo/steering 5V rail current |
 | 0x42 | PCA9685 | Steering servos, CH0–CH5 |
 | 0x43 | PCA9685 | Arm servos, CH0–CH6 (CH7 unused, remapped 2026-09-06) |
 | 0x44 | INA260 | **+12V main input** — total system draw (moved upstream 2026-08-28) |
-| 0x45 | INA260 | Pi supply: DROK 9V → Witty Pi VIN |
-| 0x48 | ADS1115 | Battery voltage ADC, A0 |
+| 0x45 | INA260 | Pi supply: DROK 9.5V → Witty Pi VIN |
+| 0x48 | ADS1115 | Battery voltage ADC, A0. **See the divider pitfall below** |
 | 0x4A | BNO085 | 9-DoF IMU |
+| 0x51 | Witty Pi 5 HAT+ | On the Pi header, its own power domain |
 | 0x60 | FeatherWing | Motor driver, LEFT side |
 | 0x61 | FeatherWing | Motor driver, RIGHT side |
 
 **0x70 is NOT a device.** It is the PCA9685 All-Call broadcast address and
 answers whenever either PCA9685 is alive. Any roll-call check that counts
 0x70 toward the device total will pass a scan that is actually missing a
-device. Expect ten, not eleven.
+device. Expect eleven, not twelve.
+
 
 > **INA260 map corrected + 0x44 relocated 2026-08-28.** Addresses were transposed in every doc until
 > `config.py` was fixed against live measurement on 2026-08-24 (0x40 -> 5.148V, 0x44 -> 11.373V,
@@ -84,7 +111,9 @@ driven directly. Sonar VCC is 5V, not 3V3.
 
 **Other GPIO**
 
-- GP2 / GP3 — I²C, via ISO1540 isolator to the whole device bus
+- GP2 / GP3 — I²C. Straight to the GODIY hubs and the whole device bus. The
+  ISO1540 isolator that used to sit here was removed 2026-09-08; there is no
+  isolation on this bus any more.
 - GP15 — BNO085 interrupt
 - GP0 / GP1 — RESERVED for AI HAT EEPROM, do not use
 - GP7 — encoder interrupt (`config.ENCODER_INT_PIN`), interrupt-driven quadrature decode.
@@ -112,6 +141,35 @@ front and right sonar read fine, left returns garbage.
 ---
 
 ## Hardware pitfalls that have already cost time
+
+- **Board address defaults are not the chip's datasheet defaults, and this cost
+  two days (2026-09-07/08).** A misconfigured FeatherWing address wedged the
+  whole bus and presented as *dead hardware*: SDA or SCL clamped low, `i2cdetect`
+  hanging or reporting phantom devices at every address from `0x08` up,
+  `lost arbitration` and `controller timed out` in the thousands. Four driver
+  boards were written off as destroyed. **None of them were faulty** — every one
+  came back once the addressing was corrected.
+  - **FeatherWing (Adafruit #2927)** — the address jumper documentation is the
+    thing that misled here. Verify `0x60`/`0x61` on a scan, never by assumption.
+  - **MCP23017 (Waveshare)** — address pins are **HIGH by default when unwelded**
+    (→ `0x27`); you short the pads to pull them LOW. That is inverted from the
+    bare chip's convention, where all-low is `0x20`.
+  - Diagnostic rule learned: a bus that scans as *everything present from 0x08*
+    is a stuck-low SDA being read as an ACK at every address, not devices.
+- **Battery divider has no +12V feed — open as of 2026-09-08.** The ADS1115 at
+  `0x48` is healthy (all four channels convert correctly), but A0 reads
+  **0.0146V** against the 2.76–3.06V this file requires below. `brain.py` maps
+  that to ~0.06V, far under `BAT_SHUTDOWN_V=10.2`, and will perform a controlled
+  shutdown believing the pack is flat. `sensors.py`'s guard only catches *failed*
+  reads — a successful read of a genuine zero sails straight through it. **Do not
+  re-enable `willy-rover.service` until A0 is in band.** The divider was added
+  2026-09-02 and appears never to have been fed.
+- **A crash-looping service will masquerade as flaky hardware.** On 2026-09-08
+  `willy-rover.service` was found `active` with **196 restarts**, holding two file
+  descriptors on `/dev/i2c-1`, alongside `scripts/power_logger.py` polling the
+  INA260s. Hours of "intermittent device dropout" measurements were taken against
+  that. Before trusting any bus observation: `systemctl is-active willy-rover`
+  and `sudo lsof /dev/i2c-1`. Only `wp5d` belongs there.
 
 - **CH0 on the arm PCA9685 (0x43) went from deliberately-unused to carrying a shoulder
   servo, 2026-09-06 — unverified.** From the 2026-08-21 rewire until 2026-09-06, CH0 was
@@ -146,26 +204,26 @@ front and right sonar read fine, left returns garbage.
 - **ADS1115 A0 must read 2.76–3.06V before the ADC is powered.** It sits on a
   10k / ~3.2k divider off the 12V bus. A reading near 12V means the divider is
   open and the part will be destroyed on power-up.
-- **AMS1117-3.3 input is the 5V rail, never 12V.** Fed from 12V it dissipates
-  ~9V across the pass element, overheats, and drags VCC2 down progressively.
-  This presented as devices dropping off successive scans — ten, then six,
-  then four — with no rewiring between them. **Still live:** the part was
-  never retired despite a 2026-08-28 plan to replace it, and since 2026-09-07
-  it is fed 5V from the TPSM84205 pre-regulator. Its input must still come
-  from that 5V node, never from the +12V bus the TPSM sits on.
-- **The Side-2 4.7kΩ I²C pull-ups were removed, and nothing recorded it.**
-  Found 2026-09-07: the owner reports a previous Claude session directed their
-  removal, but no doc, commit or comment captured it — Master Hardware Design
-  §3.2 still listed them and §14's pre-power checklist still told you to verify
-  them. Removal is defensible **only if the LTC4311 is fitted and enabled**: the
-  accelerator supplies the fast edge, and 1.3kΩ combined was drawing ~2.5mA
-  against a 3mA sink budget. Without it, the ISO1540's 10kΩ alone against
-  300–400pF gives ~12µs to threshold on a 10µs bit at 100kHz — the bus simply
-  cannot clock, and every device on the segment goes dark at once. **Meter SDA2
-  and SCL2 to VCC2 with power off before assuming the rail is at fault.**
-- **ISO1540 sides are not interchangeable.**
-  and one device; Side 2 (bus side) takes 400pF and multiple nodes. Wiring the
-  ten-device bus to Side 1 silences the bus. This has cost the build twice.
+> **Historical — these three parts are no longer in the build (2026-09-08).**
+> Kept because the reasoning generalises and because older notes and the design
+> documents still refer to them.
+>
+> - **AMS1117-3.3 input is the 5V rail, never 12V.** Fed from 12V it dissipates
+>   ~9V across the pass element, overheats, and drags its output down
+>   progressively. This presented as devices dropping off successive scans —
+>   ten, then six, then four — with no rewiring between them. It failed twice
+>   this way. Retired 2026-09-08 once the touchscreen went back on Pi power and
+>   it had no consumers left.
+> - **A linear regulator fed its own output voltage cannot regulate.** The
+>   AMS1117 was briefly fed 3.3V from a TPSM84203EAB, leaving it no headroom: it
+>   measured 3.28V at light load and sagged to 2.98V under load, behaving as a
+>   resistor rather than a regulator. **A rail that moves with load is a linear in
+>   dropout; a buck holds flat.** That distinction is the diagnostic.
+> - **ISO1540 sides are not interchangeable.** Side 1 (Pi side) took max 40pF and
+>   one device; Side 2 (bus side) took 400pF and multiple nodes. Wiring the device
+>   bus to Side 1 silenced it, and that cost this build twice. The part provided
+>   common-mode noise rejection, never galvanic isolation — GND1 and GND2 were
+>   always common. Removed 2026-09-08.
 - **A degrading failure means thermal.** A wiring fault gives the same wrong
   answer every time; a part in thermal foldback gives a progressively worse one.
 
@@ -344,23 +402,38 @@ flicker**, full 11-device set present every single time. The `hwmon3` under-volt
 also stopped recurring the same moment (40+ min clean afterward, vs. cycling every 15-30s
 before) — one root cause explains both symptoms, not two separate issues.
 
-**Two-stage chain installed 2026-09-07 — and the AMS1117-3.3 is STILL IN SERVICE.**
-The rail is now: +12V → F6 (RXEF110 1.1A) → **TPSM84205** (12V→5V) → **AMS1117-3.3**
-(5V→3.3V) → VCC2. The TPSM stage is owner-confirmed installed and functioning. Layout in
-Master Hardware Design §4, pin detail §16.2.
+**Power rails as-built — four DROK converters, 2026-09-08.** The entire isolated
+power chain is gone. No TPSM, no AMS1117, no VCC2, no F6 polyfuse path:
 
-**Do not read older notes as saying the AMS1117 was retired.** A 2026-08-28 plan proposed
-replacing it outright with a single-stage **TPSM84203EAB**, and parts of this repo were
-written as though that had been built. It was not. The AMS1117-3.3 remains the final stage,
-and fitting a 84203 into the chain as it actually stands would starve it (needs ≥4.5V in)
-and take the whole isolated bus down.
+| Rail | Volts | Source | Feeds |
+|------|-------|--------|-------|
+| R1 | **9.5V** | DROK-Pi | Witty Pi 5 VIN → Pi | INA260 `0x45` |
+| R2 | 5V | DROK-5V | Steering servos, sonar VCC, Pi screen | INA260 `0x40` |
+| R3 | 6V | DROK-6V | Arm servo distribution |
+| R5 | **3.3V** | DROK-4 | Hall encoders **and all I²C device logic** |
 
-**The AMS1117 also supplies the touch sensor** (owner, 2026-09-07), so its load is bus
-devices plus the panel. The TPSM pre-regulator cuts its drop from ~1.9V to ~1.7V and takes it
-off servo load — real improvement — but dissipation is still 1.7V × total current on a part
-that has failed twice by thermal foldback. Neither the current nor the case temperature has
-been measured with the touch sensor active. Master Hardware Design §14 item 6 is reopened
-until they are.
+**R5 is settled at 3.3V** — that resolves the "3V or 5V, voltage TBD" question
+open in Master Hardware Design §2.2 since 2026-08-28. It also means the bus does
+not load the Pi's own 3V3 pin.
+
+⚠ **R5 is now a single point of failure for both the encoders and the entire
+I²C bus.** That is precisely the role the AMS1117 held when it failed twice and
+took the bus down with it. Budget its draw — six Hall encoders, eleven I²C
+devices, and every pull-up on the bus.
+
+⚠ **3.3V is the documented *minimum* for these encoders.** The 2026-08-25
+root-cause notes Hall encoders "typically need 3.3V minimum and often 4.5V" —
+which is why a sag to 2.83V killed all six while every I²C device kept working.
+Running them at 3.3V leaves no margin. It is still the right choice, because the
+alternative needs level shifting: the MCP23017 is at 3.3V and its inputs are
+**not** 5V tolerant. If they do turn out to need 5V, check first whether the Hall
+outputs are open-collector — if so, power the sensor at 5V and pull the output up
+to 3.3V and no shifting is needed at all (Master Hardware Design §14 item 8).
+
+**Superseded:** notes above and in the design documents describing a two-stage
+TPSM84205 → AMS1117 chain, a single-stage TPSM84203EAB, or a VCC2 rail describe
+builds that either never existed or no longer do. `git log` has the full
+sequence; the table above is what is actually fitted.
 
 The abnormally slow local-LLM voice latency measured 2026-08-20 (`intent=40.9s` vs. this repo's
 own documented ~15-20s expectation from the 2026-08-15 voice latency work, `vcgencmd

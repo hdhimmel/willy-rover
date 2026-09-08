@@ -517,6 +517,16 @@ real problem is genuinely open, not established. Resolve by bench test
 `WHEEL_DIAMETER_M`), not more arithmetic. If it does turn out too slow, the
 fix is `dtparam=i2c_arm_baudrate=400000` (~4x, no wiring — this bus already
 carries an LTC4311 for exactly this), tested against a full roll-call first
+
+> **Note 2026-09-08:** the retraction below cites the ISO1540 and the isolated
+> side. Both are gone — the isolator was removed and there is no isolation
+> barrier any more (Master Hardware Design §0). Reason (1) is therefore void in
+> addition to having had its premise corrected on 2026-08-28. **Reasons (2) and
+> (3) still stand and the retraction still holds** — an interrupt only says
+> "something changed", so learning what still costs a register read. Waveshare's
+> MCP23017 board can also mirror INTA/INTB in `IOCON`, so either pin could reach
+> GP7 if interrupt-driven decode is ever revisited.
+
 given this session's I²C fragility history.
 
 *Interrupt-driven decode (decided 2026-08-18) — retracted 2026-08-23.*

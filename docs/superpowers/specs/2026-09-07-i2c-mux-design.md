@@ -1,3 +1,21 @@
+> ⚠ **NOT BUILT — status corrected 2026-09-08.**
+>
+> The TCA9548A was bought, strapped to `0x74`, wired, and **proven working** on
+> 2026-09-08: `pca954x 1-0074: registered 8 multiplexed busses`, channels
+> scannable, devices reachable through them. It was then **removed** in favour
+> of a simpler topology — two passive GODIY hubs, every device on one segment.
+>
+> The design below is therefore sound and tested but **not the current build**.
+> Master Hardware Design §0 is authoritative. The overlay line remains in
+> `config.txt` and harmlessly fails to probe at boot.
+>
+> Worth keeping: the fault that motivated this spec — one device clamping the
+> bus and taking down all eleven — remains entirely possible in the current
+> topology, because passive hubs give no containment. If that recurs, this is
+> the answer and the hardware is already on the shelf.
+
+---
+
 # I²C Segmentation via TCA9548A Multiplexer — Design
 
 **Date:** 2026-09-07

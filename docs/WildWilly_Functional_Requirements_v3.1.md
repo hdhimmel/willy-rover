@@ -544,7 +544,17 @@ conditions:
 
 -   **FR-100-002, false-negative exclusion.** A blank or partial scan while the
     base is unpowered is expected behaviour, not a fault --- Side 2 of the
-    isolation barrier is fed by the **two-stage chain on the bus node board off
+    isolation barrier **no longer exists — corrected 2026-09-08.** The ISO1540,
+    the VCC2 rail and the whole isolated power chain were removed from the
+    build; every device now sits on the Pi's own I²C via two passive hubs, with
+    logic fed from the 3.3V DROK (R5). See Master Hardware Design §0.
+
+    **The requirement's substance is unchanged**: a blank or partial scan while
+    the base is unpowered is still expected behaviour, because the DROKs that
+    feed device logic run off the +12V main. The startup self-test must still
+    distinguish "base off" from "bus fault". Only the mechanism changed.
+
+    *Superseded text, retained for history:* the barrier was fed off
     the +12V main** — TPSM84205 (12V→5V) into AMS1117-3.3 (5V→3.3V) (Master
     Hardware Design §4, §16.2; the +12V source replaced the 5V servo rail on
     2026-08-28, and the TPSM stage was installed 2026-09-07). Corrected
@@ -1137,7 +1147,9 @@ separately under FR-1200.
     a healthy voltage with near-zero current while the Pi is plainly running
     indicates USB-C bench power, not a sensor fault.
 
--   **Roll-call note.** The expected count is ten devices. The All-Call
+-   **Roll-call note.** The expected count is **eleven** devices as of
+    2026-09-08 — the ten on the device bus plus the Witty Pi 5 HAT+ at `0x51`.
+    Verified across 20 consecutive scans with zero bus errors. The All-Call
     broadcast address also answers whenever either servo controller is alive
     and must not be counted toward the total --- doing so lets a scan pass
     while a real device is missing.
