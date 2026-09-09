@@ -1,8 +1,10 @@
 # WildWilly / willy-rover
 
-Six-wheel rocker-bogie autonomous rover. Raspberry Pi 5 host, 5-DOF arm,
-galvanically isolated I²C bus. Hardware is 100% built as of 2026-08-14;
-the phase now is **live verification, not construction**.
+Six-wheel rocker-bogie autonomous rover. Raspberry Pi 5 host, 5-DOF arm, and a
+**single non-isolated I²C segment** — one VCC, one GND, one SDA, one SCL. The
+ISO1540 came out on 2026-09-08 and there is no isolation and no second rail
+domain; see the roll-call below. Hardware is 100% built as of 2026-08-14; the
+phase now is **live verification, not construction**.
 
 This file records hardware facts and pitfalls that cannot be derived from the
 code. Where code and this file disagree, assume the hardware is right and the

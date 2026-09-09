@@ -690,8 +690,8 @@ graph TB
             D["ISO1540 Side 2 | ADS1115 | INA260×3 | LTC4311 | BNO085 |<br/>MCP23017 | FeatherWings | PCA9685×2 | Motors | Encoders"]
         end
         
-        subgraph CircuitZone["Circuit Zone: Columns 21–30<br/>Board-Internal Circuits<br/>Rails: VCC2, GND2, SDA2, SCL2"]
-            R["Sonar ECHO Dividers<br/>Cols 9-24: 1k/2k Voltage Dividers<br/>5V→3.3V per sonar<br/><br/>VCC2/GND2 Rails<br/>Routed across cols 21-30"]
+        subgraph CircuitZone["Circuit Zone: Columns 21–30<br/>Board-Internal Circuits<br/>Rails: VCC, GND, SDA, SCL"]
+            R["Sonar ECHO Dividers<br/>Cols 9-24: 1k/2k Voltage Dividers<br/>5V→3.3V per sonar<br/><br/>VCC/GND Rails<br/>Routed across cols 21-30"]
         end
     end
     
@@ -1002,9 +1002,9 @@ magnetometer — useful with six motors nearby.
 
 | Pin | Connection |
 |-----|------------|
-| VIN | VCC2 rail row 9 |
-| GND | GND2 rail row 9 |
-| SDA / SCL | SDA2 / SCL2 rail row 9 |
+| VIN | VCC rail row 9 |
+| GND | GND rail row 9 |
+| SDA / SCL | SDA / SCL rail row 9 |
 | INT | GP15, physical header pin 10 |
 | RST | MCP23017 GPB4 |
 | DI, P0, P1, BT, 3Vo | unconnected |
@@ -1660,6 +1660,13 @@ view; this gives the device view. Supersedes the standalone
 `WildWilly_PIN_TO_PIN_SCHEDULE_v1.0` document, which was drafted before the
 isolator orientation, breakout swap and servo power method were settled.
 
+> **Rail naming, corrected 2026-09-09 (owner-confirmed).** There is now exactly ONE
+> of each rail — **VCC, GND, SDA, SCL** — because the isolator is gone. The `VCC2` /
+> `GND2` / `SDA2` / `SCL2` names below in §16.1 and §16.2 belong to the removed
+> two-domain design and are kept only inside those two banner-marked subsections. Every
+> live table from §16.3 down uses the single-rail names. If you find a `2`-suffixed rail
+> name outside §0, §3, §16.1 and §16.2, it is a leftover — fix it.
+
 ### 16.1 ISO1540 isolator
 
 > ⚠ **SUPERSEDED 2026-09-08 — the ISO1540 is removed from the build (§0).**
@@ -1747,11 +1754,11 @@ down.
 
 | Pin | To |
 |---|---|
-| VDD | VCC2 rail row 3 |
-| GND | GND2 rail row 3 |
-| SDA | SDA2 rail row 3 |
-| SCL | SCL2 rail row 3 |
-| ADDR | GND2 rail row 4 — selects 0x48 |
+| VDD | VCC rail row 3 |
+| GND | GND rail row 3 |
+| SDA | SDA rail row 3 |
+| SCL | SCL rail row 3 |
+| ADDR | GND rail row 4 — selects 0x48 |
 | A0 | Battery divider midpoint |
 | A1–A3, ALRT | unconnected |
 
@@ -1804,10 +1811,10 @@ Logic pins on each: VCC, GND, SDA, SCL from that device's own row.
 
 | Pin | To |
 |---|---|
-| VIN | VCC2 rail row 8 |
-| GND | GND2 rail row 8 |
-| SDA | SDA2 rail row 8 |
-| SCL | SCL2 rail row 8 |
+| VIN | VCC rail row 8 |
+| GND | GND rail row 8 |
+| SDA | SDA rail row 8 |
+| SCL | SCL rail row 8 |
 | EN | **unconnected** — pulled high to VIN on the breakout |
 
 Four wires only. Transparent to the bus; never appears in a scan.
@@ -1822,10 +1829,10 @@ inside I²C timing.
 
 | Pin | To |
 |---|---|
-| VIN | VCC2 rail row 9 |
-| GND | GND2 rail row 9 |
-| SDA | SDA2 rail row 9 |
-| SCL | SCL2 rail row 9 |
+| VIN | VCC rail row 9 |
+| GND | GND rail row 9 |
+| SDA | SDA rail row 9 |
+| SCL | SCL rail row 9 |
 | INT | Pi header pin 10 (GP15) |
 | RST | MCP23017 GPB4 |
 | DI, P0, P1, BT, 3Vo | unconnected |
@@ -1837,11 +1844,11 @@ breakout.
 
 | Pin | To |
 |---|---|
-| VDD | VCC2 rail row 10 |
-| VSS | GND2 rail row 10 |
-| SDA / SCL | SDA2 / SCL2 rail row 10 |
+| VDD | VCC rail row 10 |
+| VSS | GND rail row 10 |
+| SDA / SCL | SDA / SCL rail row 10 |
 | A0, A1, A2 | Address straps — set for 0x27 |
-| RESET | VCC2, tied high |
+| RESET | VCC, tied high |
 | GPA0 / GPA1 | LF encoder — yellow / green |
 | GPA2 / GPA3 | LM encoder — yellow / green |
 | GPA4 / GPA5 | RF encoder — yellow / green |
@@ -1869,7 +1876,7 @@ match the actual JST-PH style in hand.
 
 | Addr | Row | VIN | Logic | Motor terminals |
 |---|---|---|---|---|
-| 0x60 | 11 | +12V via F2 and SW-M (no current monitor since 2026-08-28) | VCC2/GND2/SDA2/SCL2 row 11 | M1 = LR, M2 = LM, M3 = LF, M4 spare |
+| 0x60 | 11 | +12V via F2 and SW-M (no current monitor since 2026-08-28) | VCC/GND/SDA/SCL row 11 | M1 = LR, M2 = LM, M3 = LF, M4 spare |
 | 0x61 | 12 | same | row 12 | M1 = RR, M2 = RM, M3 = RF, M4 spare |
 
 Port order matches §7.2 and `config.MOTOR_PORT` — rear on M1, front on M3.
@@ -1884,7 +1891,7 @@ are no direction GPIOs and no STBY pin.
 
 | Addr | Row | Logic | Board V+ | Address straps |
 |---|---|---|---|---|
-| 0x42 | 13 | VCC2/GND2/SDA2/SCL2 row 13 | 5V rail (R2) | A1 bridged |
+| 0x42 | 13 | VCC/GND/SDA/SCL row 13 | 5V rail (R2) | A1 bridged |
 | 0x43 | 14 | row 14 | 6V rail (R3) | A0 **and** A1 bridged |
 
 Base address is 0x40; each bridged jumper adds its bit. Servos plug into the
@@ -2026,7 +2033,7 @@ HC-SR04 input and never back-drives.
 | R1 10kΩ | High → midpoint |
 | R2 10kΩ ∥ 4.7kΩ (≈3.2kΩ) | Midpoint → GND |
 | Midpoint | ADS1115 A0 |
-| Low | GND2, referenced at bus node row 21 |
+| Low | GND, referenced at bus node row 21 |
 
 ### 16.15 Vision, display, accelerator
 
