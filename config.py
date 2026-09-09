@@ -25,23 +25,37 @@ DISPLAY_W=800; DISPLAY_H=480; DISPLAY_FPS=30; DISPLAY_ROTATE=0
 # Drive — 2x Adafruit FeatherWing #2927 MotorKit boards over I2C (§9, §1.3 master doc).
 # Replaces the old GPIO H-bridge pins (freed — no discrete driver chip, no direction/PWM GPIO).
 MOTORKIT_LEFT_ADDR=0x60; MOTORKIT_RIGHT_ADDR=0x61
-# As-built port order is M1=MIDDLE, M2=FRONT, M3=REAR on both kits -- NOT the
-# front/middle/rear order the port numbers suggest. Established 2026-08-24 by
-# driving one wheel at a time on a block and having the owner name the wheel
-# that actually turned: M2-left moved the left front, M1-right moved the right
-# middle, M2-right moved the right front. The remaining two follow by
-# elimination, and the convention is symmetric across both kits.
+# Port order below is M1=REAR, M2=MIDDLE, M3=FRONT on both kits -- NOT the
+# front/middle/rear order the port numbers suggest.
 #
-# The previous mapping was wrong in exactly the way that hides itself: _set()
-# commands all three wheels of a side to the same value, so forward, reverse
-# and skid turns behaved correctly regardless. It only surfaced during
-# per-wheel diagnostics, where "lf is dead" pointed at the wrong physical
-# wheel -- the dead leg was on 0x60 M1, i.e. the left MIDDLE motor, not the
-# front. (That leg turned out to be a disconnected connector, reconnected and
-# confirmed turning 2026-08-25 -- see docs/WildWilly_Master_Hardware_Design_v2.0.md
-# section 7.2. The mapping correction stands on its own regardless.)
-# Anything per-wheel (odometry attribution, crab/differential steering, a
-# future stall trace) needs this correct.
+# !! THIS MAPPING IS NOT BENCH-VERIFIED, AND IT REPLACED ONE THAT WAS. !!
+# Until 2026-09-04 this dict read M1=MIDDLE, M2=FRONT, M3=REAR, established
+# 2026-08-24 by driving one port at a time with the rover on a block and having
+# the owner name the wheel that actually turned (M2-left -> left front, M1-right
+# -> right middle, M2-right -> right front; the rest by elimination, the
+# convention symmetric across both kits). Commit 484fbdc changed it to the
+# rear-middle-front order below for "physical layout symmetry" -- an ordering
+# argument, not a measurement. No rewire and no re-run of the one-wheel test is
+# recorded anywhere in this repo.
+#
+# Re-run that test before trusting anything per-wheel. If the 2026-08-24 result
+# still holds, this dict AND Master Hardware Design v2.0 section 7.2 have to be
+# reverted together -- the doc was synced to follow this file on 2026-09-07
+# because config.py is the authority, so the doc agreeing with it is NOT
+# independent confirmation.
+#
+# A wrong mapping here hides itself, which is why it went unnoticed for weeks
+# the first time: _set() commands all three wheels of a side to the same value,
+# so forward, reverse and skid turns behave correctly either way. It only
+# surfaces under per-wheel work -- odometry attribution, crab/differential
+# steering, stall tracing -- where "lf is dead" points at the wrong physical
+# wheel. That is exactly how the 2026-08-24 error was caught: the dead leg was
+# on 0x60 M1, which under the mapping of the day was the left MIDDLE motor, not
+# the front. (That leg was a disconnected connector, reconnected and confirmed
+# turning 2026-08-25 -- see section 7.2. Independent of the mapping question.)
+#
+# The encoder A/B channel assignment in section 7.2 is unverified for the same
+# reason and is NOT settled by settling this one -- see that section.
 MOTOR_PORT={'lf':(MOTORKIT_LEFT_ADDR,3),'lm':(MOTORKIT_LEFT_ADDR,2),'lr':(MOTORKIT_LEFT_ADDR,1),
             'rf':(MOTORKIT_RIGHT_ADDR,3),'rm':(MOTORKIT_RIGHT_ADDR,2),'rr':(MOTORKIT_RIGHT_ADDR,1)}
 # Raised 2026-08-24. The previous set (ROAM .55 / TURN .50 / SLOW .35 / MAX .80)
