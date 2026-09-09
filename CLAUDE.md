@@ -352,13 +352,34 @@ gated the unprompted idle/post-charge wander.
 **The flag is now `True` (owner decision 2026-09-07) and the underlying limitation was
 accepted, not fixed.** Obstacle avoidance is still sonar-only — vision is deliberately kept
 out of the reflex path (see "keep the NPU out of the safety path" above), so live-verified
-vision never satisfied this gate and does not now. The 2026-08-20 failure mode can recur
-unattended. Two open items make that worse and both are worth knowing before leaving Willy
-alone: `MOTOR_PORT` is unverified since 2026-09-04 (a stall may be attributed to the wrong
-wheel — see the motor-port pitfall above), and the STUCK-state on-device reasoning that
-recovery depends on is FRD v3.1 G-6, last benchmarked at 0%. Expect most STUCK episodes to
-fall through to Claude, i.e. unattended recovery currently needs the network. Set the flag
-back to `False` if unattended `STALL_FAULT`s reappear.
+vision never satisfied this gate and does not now. Two open items make that worse and both
+are worth knowing before leaving Willy alone: `MOTOR_PORT` is unverified since 2026-09-04 (a
+stall may be attributed to the wrong wheel — see the motor-port pitfall above), and the
+STUCK-state on-device reasoning that recovery depends on is FRD v3.1 G-6, last benchmarked at
+0%. Expect most STUCK episodes to fall through to Claude, i.e. unattended recovery currently
+needs the network.
+
+**He now ASKS before the first unprompted wander of each session (owner decision 2026-09-09,
+FR-1000-005).** `ENABLE_AUTONOMOUS_ROAM=True` stopped meaning "roams unattended" and started
+meaning "allowed to ask" — the real gate is `self._roam_permission` in `brain.py`, false at
+every boot and never persisted. Both unprompted triggers go through `_roam_allowed()`.
+
+- He asks on **both** channels at once: speaks it, and lights a `LET ME ROAM` button on the
+  panel. Either answers. This is not belt-and-braces — the wake word is unreliable and nobody
+  is necessarily looking at the screen, so one channel alone is regularly unavailable.
+- **A refusal is not permanent, and a refusal and silence are the same thing.** Both start
+  `ROAM_ASK_COOLDOWN_S` (10 min) and then he asks again. That is why there is no DECLINE
+  button — it would offer a choice that changes nothing.
+- **Granted permission lasts the whole session**, so this does not make unattended roaming
+  impossible — the person who said yes can walk away. It puts a human in the loop once per
+  boot, nothing stronger. Cleared by a voice stop (`_revoke_roam_permission()` — otherwise
+  "stop" would just brake him and the idle timeout would send him back out 30s later) or a
+  reboot.
+- Debugging "he won't roam": check `_roam_permission` before anything else, then
+  `_roam_ask_next` (he may be in cooldown), then the flags. `ROAM_PERMISSION_REQUIRED=False`
+  restores the pre-2026-09-09 unattended behavior exactly.
+
+Set `ENABLE_AUTONOMOUS_ROAM` back to `False` if unattended `STALL_FAULT`s reappear.
 
 ---
 

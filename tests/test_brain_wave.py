@@ -23,7 +23,11 @@ class FakeArm:
     def set_pulse(self,joint,us): self.pulses.append((joint,us))
 
 def fb():
-    ns=types.SimpleNamespace(_wave_step=0,_wave_deadline=None,_state="WAVE")
+    # _WAVE_OFFSETS_US is a class attribute on RoverBrain, so a SimpleNamespace standing in for
+    # an instance does not inherit it -- it has to be copied across explicitly.
+    ns=types.SimpleNamespace(_wave_step=0,_wave_deadline=None,_state="WAVE",
+                             _WAVE_OFFSETS_US=RoverBrain._WAVE_OFFSETS_US,
+                             _WAVE_DELAY_S=RoverBrain._WAVE_DELAY_S)
     ns.arm=FakeArm()
     ns._go=lambda s: setattr(ns,"_state",s)
     ns._wave=types.MethodType(RoverBrain._wave,ns)

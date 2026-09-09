@@ -450,6 +450,14 @@ against the result before relying on unattended operation --- this became
 materially more urgent on 2026-09-07, when `ENABLE_AUTONOMOUS_ROAM` was set
 `True` and unprompted wandering resumed.
 
+**Partially mitigated 2026-09-09 (FR-1000-005).** Unprompted wandering now
+requires a per-session human grant rather than starting on its own, so nobody
+is relying on a 0%-scoring STUCK reasoner without having said yes to a wander
+first. This narrows the exposure; it does not close G-6. Once permission is
+given the grant holds for the rest of the session, so an unattended
+`STALL_FAULT` remains reachable --- the person who granted it may well have
+left the room. Re-running the batch and tuning the floor is still the fix.
+
 # 1. Purpose
 
 This Functional Requirements Document defines the required behavior,
@@ -1080,6 +1088,11 @@ from a revision older than 2026-09-06 is stale.
   FR-1000-004       Transfer control  High              Test
                     back to operator                    
                     on demand                           
+
+  FR-1000-005       Obtain operator   High              Test
+                    permission before                   
+                    unprompted                          
+                    autonomous motion                   
   -----------------------------------------------------------------------
 
 # Acceptance Criteria
@@ -1102,6 +1115,33 @@ separately under FR-1200.
 
 -   **FR-1000-004 (handover).** Operator control is regained on demand within
     one control cycle, from any autonomous state.
+
+-   **FR-1000-005 (permission to roam).** Owner decision 2026-09-09. The two
+    triggers that start motion nobody asked for --- the `IDLE_TIMEOUT` wander
+    and the charged-to-95%-at-the-dock resume --- must obtain an explicit
+    operator grant before the first such wander of a session. This governs
+    *unprompted* motion only: commanded driving (voice, manual, `go_to`,
+    retrieval, pursuit) is untouched, as is every reactive and fault
+    transition.
+
+    The grant is requested on both available channels at once --- spoken, and
+    as a `LET ME ROAM` button on the panel --- because either channel alone can
+    be unavailable in normal use (the wake word is unreliable; nobody may be
+    looking at the screen). Either one answers it.
+
+    Once granted the permission holds for the rest of the session and is
+    cleared by a voice stop or by reboot; it is never persisted, so the rover
+    never powers up already permitted. A refusal and an unanswered request are
+    treated identically --- both start `ROAM_ASK_COOLDOWN_S` and the request is
+    then repeated --- on the reasoning that "no" usually means "not now" and
+    silence usually means nobody heard. Verified by
+    `tests/test_brain_roam_permission.py`.
+
+    `ROAM_PERMISSION_REQUIRED=False` restores the pre-2026-09-09 behavior, in
+    which both triggers fire unattended. This requirement does not resolve
+    FR-1000-002's sonar-only limitation or the open `MOTOR_PORT` and G-6 items;
+    it puts a human in the loop so those are accepted knowingly rather than
+    discovered by a `STALL_FAULT` nobody witnessed.
 
 # FR-1100 Diagnostics and Logging
 

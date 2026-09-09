@@ -72,6 +72,16 @@ class WillyFace:
         self._offer_override=False
         self._override_event=threading.Event(); self._override_armed_until=0.0
         self._override_button_rect=pygame.Rect(W//2-230,H//2+185,460,84)
+        # Roam-permission button (owner decision 2026-09-09). Offered by brain.py only while it is
+        # actively asking to start an unprompted wander; withdrawn the moment the ask is answered,
+        # granted, revoked or lapses. Single tap, unlike the two-step STOP SVC / override buttons:
+        # this starts motion the owner would have commanded anyway, so a stray touch costs a wander
+        # they can stop, not a safety check they bypassed. There is no DECLINE button on purpose --
+        # declining and ignoring both land in the same cooldown, so a second button would offer a
+        # choice that changes nothing.
+        self._offer_roam=False
+        self._roam_event=threading.Event()
+        self._roam_button_rect=pygame.Rect(W//2-230,H//2+60,460,96)
 
     def reset_tapped(self):
         if self._reset_event.is_set():
@@ -89,6 +99,28 @@ class WillyFace:
         if self._override_event.is_set():
             self._override_event.clear(); return True
         return False
+
+    def roam_tapped(self):
+        # Same contract as reset_tapped()/override_tapped(): True exactly once per press,
+        # consumed by brain.py's tick thread.
+        if self._roam_event.is_set():
+            self._roam_event.clear(); return True
+        return False
+
+    def offer_roam(self,on):
+        # brain.py owns the ask's lifetime; this only controls whether the button is drawn and
+        # tappable. Clearing the offer also drops any tap that arrived but was never consumed, so
+        # a stale press cannot grant permission to a later ask.
+        with self._lock:
+            self._offer_roam=bool(on)
+        if not on: self._roam_event.clear()
+
+    def _handle_roam_tap(self,x,y):
+        # Single tap, and only while brain.py is actually asking -- _offer_roam gates it.
+        with self._lock:
+            if not self._offer_roam: return
+            inside=self._roam_button_rect.collidepoint(x,y)
+        if inside: self._roam_event.set()
 
     def _handle_override_tap(self,x,y):
         # Two-step, same shape as _handle_stop_tap(). Only ever reachable while brain.py is
@@ -243,12 +275,14 @@ class WillyFace:
                         self._reset_event.set()
                     self._handle_stop_tap(e.x*W,e.y*H)
                     self._handle_override_tap(e.x*W,e.y*H)
+                    self._handle_roam_tap(e.x*W,e.y*H)
                 elif e.type==pygame.MOUSEBUTTONDOWN:
                     with self._lock: awaiting=self._awaiting_reset
                     if awaiting and self._reset_button_rect.collidepoint(e.pos):
                         self._reset_event.set()
                     self._handle_stop_tap(*e.pos)
                     self._handle_override_tap(*e.pos)
+                    self._handle_roam_tap(*e.pos)
             dt=1.0/config.DISPLAY_FPS; self._t+=dt
             if config.ENABLE_DISPLAY_EXPRESSIONS:
                 with self._lock:
@@ -272,6 +306,7 @@ class WillyFace:
             net_text=self._net_text; net_color=self._net_color
             pwr_text=self._pwr_text; pwr_color=self._pwr_color
             offer_override=self._offer_override
+            offer_roam=self._offer_roam
             override_armed=self._t<self._override_armed_until
             stop_armed=self._t<self._stop_armed_until
             awaiting_reset=self._awaiting_reset
@@ -398,5 +433,16 @@ class WillyFace:
             pygame.draw.rect(s,tuple(int(c*(0.7+0.3*pulse)) for c in C_GREEN),r,border_radius=16)
             pygame.draw.rect(s,C_BG,r,4,border_radius=16)
             label=self.f_md.render('TAP TO RESUME',True,C_BG)
+            s.blit(label,(r.centerx-label.get_width()//2,r.centery-label.get_height()//2))
+        # Roam-permission ask (owner decision 2026-09-09). Drawn only while brain.py is asking, and
+        # suppressed under awaiting_reset: the two share this part of the screen and can only
+        # collide if something has gone wrong, in which case the fault reset is the one that
+        # matters. Single tap -- see _handle_roam_tap().
+        if offer_roam and not awaiting_reset:
+            r=self._roam_button_rect
+            pulse=0.5+0.5*math.sin(t*3)
+            pygame.draw.rect(s,tuple(int(c*(0.65+0.35*pulse)) for c in C_ROAM),r,border_radius=16)
+            pygame.draw.rect(s,C_BG,r,4,border_radius=16)
+            label=self.f_md.render('LET ME ROAM',True,C_BG)
             s.blit(label,(r.centerx-label.get_width()//2,r.centery-label.get_height()//2))
         pygame.display.flip()

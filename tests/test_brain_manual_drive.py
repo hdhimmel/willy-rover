@@ -52,6 +52,7 @@ def make_brain(cmds,reject=None,available=False):
     ns.voice=FakeVoice(cmds,available=available)
     ns.safety=FakeSafety(reject=reject)
     ns._manual_action=None; ns._state="IDLE"; ns._shutdown_pending=False
+    ns._roam_ask_pending=False   # roam-permission ask (2026-09-09); not what this test exercises
     ns._go=types.MethodType(RoverBrain._go,ns)
     ns._drain_voice_commands=types.MethodType(RoverBrain._drain_voice_commands,ns)
     return ns

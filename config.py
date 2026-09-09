@@ -563,6 +563,22 @@ STUCK_TIMEOUT=3.0; BACK_UP_TIME=0.8; TURN_TIME_90=1.2; IDLE_TIMEOUT=30.0
 # Set back to False if Willy starts tripping STALL_FAULTs unattended.
 ENABLE_AUTONOMOUS_ROAM=True
 
+# OWNER DECISION 2026-09-09 -- ENABLE_AUTONOMOUS_ROAM above no longer means "roams unattended"; it
+# means "allowed to ASK". Willy now requests permission before starting an unprompted wander, and
+# the grant lives for the session only (brain.py::_roam_allowed and friends). This does not fix any
+# of the three open items listed above -- obstacle avoidance is still sonar-only and MOTOR_PORT is
+# still unverified -- it puts a human in the loop each boot so those limitations are accepted
+# knowingly rather than discovered by a STALL_FAULT nobody was there to see.
+#
+# Set False to restore the pre-2026-09-09 behaviour exactly: roams on the idle timeout and on
+# charged-to-95%-at-the-dock with no ask, unattended.
+ROAM_PERMISSION_REQUIRED=True
+ROAM_ASK_TIMEOUT_S=30.0     # how long the spoken/on-screen ask stays open before it lapses
+# A declined ask and an unanswered one land in the same place: this cooldown, then he asks again.
+# Refusal is deliberately not permanent -- "no" usually means "not now", and nobody answering
+# usually means nobody heard. 10 minutes is long enough not to nag.
+ROAM_ASK_COOLDOWN_S=600.0
+
 def validate():
     """Configuration self-test (2026-08-08 external code audit's P2 item): config.py has grown
     into the central hardware/software contract, large enough that a copy-paste or typo drift

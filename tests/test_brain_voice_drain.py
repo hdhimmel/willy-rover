@@ -30,6 +30,7 @@ def fb(shutdown_pending=False):
     said=[]; calls=[]
     ns=types.SimpleNamespace(
         _shutdown_pending=shutdown_pending,
+        _roam_ask_pending=False,   # roam-permission ask (2026-09-09); not what this test exercises
         _state="ROAM",
         voice=types.SimpleNamespace(pending_commands=queue.Queue(),available=True,
                                     speak=lambda t,**k:said.append(t)),

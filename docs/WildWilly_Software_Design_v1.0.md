@@ -185,7 +185,7 @@ the inconsistency between this threshold and the systemd watchdog interval.
 |-------|-------|--------------|
 | `INIT` | Startup | Construction, before self-test |
 | `IDLE` | Nominal | Self-test passed; nothing to do |
-| `ROAM` | Nominal | Idle timeout elapsed, or path cleared |
+| `ROAM` | Nominal | Path cleared; or idle timeout elapsed **and** roam permission granted (FR-1000-005) |
 | `SLOW` | Nominal | Front distance inside `DIST_SLOW` |
 | `AVOID` | Reactive | Front distance inside `DIST_STOP` |
 | `STUCK` | Reactive | `CLAUDE_ESCALATE_AFTER` consecutive stuck-avoid cycles |
@@ -199,6 +199,46 @@ the inconsistency between this threshold and the systemd watchdog interval.
 | `NAVIGATE` | Task | `go_to` intent, delegates to `navigation.py` |
 | `RETRIEVE` | Task | `retrieve` intent, delegates to `retrieval_task.py` |
 | `PURSUE` | Task | `come_here`/`follow` intent, delegates to `pursuit_task.py` |
+
+### 3.1.1 Permission to enter ROAM unprompted (FR-1000-005)
+
+Owner decision 2026-09-09. Two transitions into `ROAM` are unprompted — the
+`IDLE_TIMEOUT` wander in `_idle()`, and the charged-to-95% resume in `_tick()`'s
+`DOCK` handling. Both now call `brain.py::_roam_allowed()`, which returns True
+only once `self._roam_permission` has been granted for this session, and
+otherwise opens a permission request as a side effect and returns False. Every
+other transition into `ROAM` — including `AVOID`/`SLOW` returning to it once the
+path clears — is untouched, because by then the rover is already moving with
+permission it was given.
+
+`_roam_allowed()` short-circuits on a pending request and on the cooldown
+*before* it would open a new one. Both callers fire repeatedly (the idle timeout
+stays tripped every tick once it elapses), so without those two checks Willy
+would re-ask at tick rate.
+
+The request has one exit, `_end_roam_ask()`, reached four ways: a panel tap or a
+spoken yes (granted), and a spoken no or a lapse past `ROAM_ASK_TIMEOUT_S`
+(declined, starting `ROAM_ASK_COOLDOWN_S`). Routing all four through one method
+is what guarantees the panel button is always withdrawn. `_service_roam_ask()`
+handles the two non-spoken outcomes on every tick; `_drain_voice_commands()`
+claims the next queued command as the answer, mirroring the shutdown
+confirmation exactly — including the `speech_only` early-return, without which
+the every-tick query pass would eat the reply before the request could see it.
+
+Two interactions worth noting. A pending shutdown confirmation suppresses the
+request entirely, so the owner is never asked two yes/no questions whose answers
+would be claimed by the same queue. And a voice stop calls
+`_revoke_roam_permission()` — without it, a stop would brake the rover and the
+idle timeout would send it straight back out `IDLE_TIMEOUT` seconds later, which
+is not what "stop" means.
+
+The panel side is `display.py::offer_roam()` / `roam_tapped()`, the same
+Event-across-threads contract as `reset_tapped()` and `override_tapped()`.
+Single tap, unlike the two-step `STOP SVC` and self-test override: this starts
+motion the owner could have commanded anyway, so a stray touch costs a wander
+they can stop rather than a safety check they bypassed. There is deliberately no
+DECLINE button — declining and ignoring both land in the same cooldown, so a
+second button would offer a choice that changes nothing.
 
 ### 3.2 Sub-state machines
 
@@ -677,6 +717,13 @@ currently checks battery ladder ordering (`SHUTDOWN < SAFE < RTH < WARN`),
 
 Two feature flags default on and were explicitly confirmed by the owner rather
 than left as accidental defaults: `ENABLE_CLOUD_AI` and `ENABLE_EMAIL`.
+
+`ENABLE_AUTONOMOUS_ROAM=True` no longer means "roams unattended". Since
+2026-09-09 it means "allowed to *ask*"; the session grant described in §3.1.1 is
+what actually opens the gate, and it is deliberately not persisted, so no
+configuration value can put the rover into unattended roaming at power-on.
+`ROAM_PERMISSION_REQUIRED=False` restores the earlier behavior for anyone who
+wants it.
 
 ---
 

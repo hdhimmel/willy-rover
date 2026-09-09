@@ -213,6 +213,12 @@ class RoverBrain:
         self._stuck_history=[]; self._last_stuck_prompt=''  # §14: caller-owned conversation history
         self._pose_log_t=0.0
         self._shutdown_pending=False; self._shutdown_deadline=0.0  # FR-900-005 voice-commanded shutdown confirm
+        # Roam permission (owner decision 2026-09-09). ENABLE_AUTONOMOUS_ROAM means "allowed to
+        # ask"; this grant is what actually opens the gate, and it starts false at EVERY boot --
+        # unattended roaming is never the state Willy powers up in. See _roam_allowed().
+        self._roam_permission=False
+        self._roam_ask_pending=False; self._roam_ask_deadline=0.0
+        self._roam_ask_next=0.0     # earliest time a new ask may open, after a decline/lapse
         self._shutdown_after_stop=False  # set by _begin_shutdown() -- see stop()'s tail
 
     def start(self):
@@ -466,11 +472,13 @@ class RoverBrain:
             if self.pursuit.active: self.pursuit.abort('voice stop')
             self._abandon_stuck_if_active()
             self.safety.emergency_stop('voice stop')
+            self._revoke_roam_permission()  # stop means stop, not "pause for 30 seconds"
             log.info('Voice-triggered immediate stop')
         if self._shutdown_pending and time.time()>self._shutdown_deadline:
             self._shutdown_pending=False
             log.info('Voice shutdown confirmation timed out — cancelled.')
             if self.voice.available: self.voice.speak("Never mind, I won't shut down.")
+        self._service_roam_ask()  # panel tap / lapse for the roam-permission ask (2026-09-09)
         sustained_fault=self._check_health()
         # FR-000 Prime Directives, in order — Directive 2 (self-test gate) and Directive 4
         # (tilt/physical-limit fault) and Directive 3 (battery ladder) are checked here, each
@@ -650,7 +658,7 @@ class RoverBrain:
         if self._state=='DOCK':
             if self.adc.is_charging:
                 self.safety.stop(); self._upd('idle',f'Charging {bat}%',d,tilt)
-                if config.ENABLE_AUTONOMOUS_ROAM and bat>=95: self._go('ROAM')
+                if config.ENABLE_AUTONOMOUS_ROAM and bat>=95 and self._roam_allowed(): self._go('ROAM')
                 return
 
         # FR-000 Directive 6 (v2.2): voice-queued task-level commands are only ever picked up
@@ -681,7 +689,7 @@ class RoverBrain:
             # A pending shutdown confirmation claims the NEXT queued command as its yes/no
             # answer (see the _shutdown_pending branch below). Draining anything here while
             # that is outstanding would silently eat the user's reply.
-            if self._shutdown_pending: return
+            if self._shutdown_pending or self._roam_ask_pending: return
             q=self.voice.pending_commands
             # Peek rather than pop-and-requeue: putting a non-matching command back would send
             # it to the tail and reorder the queue, so a task intent could be overtaken by
@@ -704,6 +712,21 @@ class RoverBrain:
             else:
                 log.info('Voice shutdown declined.')
                 if self.voice.available: self.voice.speak("Okay, I won't shut down.")
+            return
+        if self._roam_ask_pending:
+            # Same contract as the shutdown confirmation above: the first queued command after the
+            # ask is its answer, not a command in its own right. Anything that is not recognisably
+            # a yes counts as a no -- and a no costs only a cooldown, so reading an ambiguous reply
+            # as refusal is the cheap direction to be wrong in.
+            text=cmd.get('text','').lower()
+            if (cmd.get('intent')=='confirm_receipt'
+                    or any(w in text.split() for w in ('yes','yeah','yep','sure','okay','ok'))
+                    or 'go ahead' in text):
+                self._end_roam_ask(True)
+            else:
+                log.info('Roam permission declined.')
+                if self.voice.available: self.voice.speak('Okay, maybe later.')
+                self._end_roam_ask(False)
             return
         # Drop commands that have gone stale in the queue. voice.py has always stamped 'ts' here
         # but nothing ever read it, so a command queued while a task was running executed
@@ -902,7 +925,12 @@ class RoverBrain:
             log.info(msg)
             if self.voice.available: self.voice.speak(msg)  # FR-2000-003: surfaced, never acted on
         if config.ENABLE_AUTONOMOUS_ROAM and self._idle_t>=config.IDLE_TIMEOUT:
-            self._idle_t=0.0; self._go('ROAM')
+            # _roam_allowed() opens the permission ask as a side effect when there is no grant
+            # yet. _idle_t is only reset when he actually goes -- while an ask is open or in
+            # cooldown the timeout stays tripped, so the moment permission arrives he leaves
+            # rather than waiting out another full IDLE_TIMEOUT.
+            if self._roam_allowed():
+                self._idle_t=0.0; self._go('ROAM')
 
     def _roam(self,d,tilt):
         f=d['front']
@@ -1130,6 +1158,64 @@ class RoverBrain:
         if self._motor_rail_lost: st=f'⚡MOTOR POWER LOST — {st}'
         self.display.update_state(state=fs,status=st,distances=d,tilt=tilt,speed=spd,
                                    awaiting_reset=awaiting_reset,offer_override=offer_override)
+
+    def _roam_allowed(self):
+        """Gate on the two unprompted-ROAM triggers (idle timeout, charged-at-dock).
+
+        Owner decision 2026-09-09: Willy asks before wandering off on his own. Returns True only
+        once permission has been granted for this session; otherwise it opens the ask as a side
+        effect and returns False, so the caller simply does not transition this tick. Both callers
+        fire repeatedly (the idle timeout every tick once it trips), which is why the pending and
+        cooldown checks come first -- without them he would re-ask 20 times a second.
+        """
+        if not config.ROAM_PERMISSION_REQUIRED: return True
+        if self._roam_permission: return True
+        if self._roam_ask_pending: return False
+        # Never stack two yes/no questions on the owner: a pending shutdown confirmation already
+        # claims the next spoken command, so an ask opened now would have its answer eaten.
+        if self._shutdown_pending: return False
+        if time.time()<self._roam_ask_next: return False
+        self._begin_roam_ask()
+        return False
+
+    def _begin_roam_ask(self):
+        self._roam_ask_pending=True
+        self._roam_ask_deadline=time.time()+config.ROAM_ASK_TIMEOUT_S
+        self.display.offer_roam(True)
+        log.info('Asking permission to roam.')
+        if self.voice.available: self.voice.speak("I would like to go explore. Is that okay?")
+
+    def _end_roam_ask(self,granted):
+        # The single exit from an open ask -- granted or not, tapped or spoken or lapsed. Keeping
+        # it in one place is what guarantees the panel button is always withdrawn.
+        self._roam_ask_pending=False
+        self.display.offer_roam(False)
+        if granted:
+            self._roam_permission=True
+            log.info('Roam permission granted for this session.')
+            if self.voice.available: self.voice.speak('Thanks. Off I go.')
+        else:
+            self._roam_ask_next=time.time()+config.ROAM_ASK_COOLDOWN_S
+
+    def _service_roam_ask(self):
+        # Called every tick. Handles the two ways an ask ends that are not a spoken reply: the
+        # panel tap, and nobody answering at all. A lapse is deliberately silent -- if no one
+        # answered, no one is there to hear him announce it either.
+        if not self._roam_ask_pending: return
+        if self.display.roam_tapped():
+            self._end_roam_ask(True); return
+        if time.time()>self._roam_ask_deadline:
+            log.info('Roam permission ask lapsed unanswered -- will ask again later.')
+            self._end_roam_ask(False)
+
+    def _revoke_roam_permission(self):
+        # "Stop" ends autonomy, not just the wander in progress. Without this a voice stop would
+        # brake him and the idle timeout would send him straight back out 30 seconds later, which
+        # is not what anyone means by stop.
+        if self._roam_ask_pending: self._end_roam_ask(False)
+        if self._roam_permission:
+            self._roam_permission=False
+            log.info('Roam permission revoked -- he must ask again.')
 
     def _await_reset_or_resume(self,fault_desc,d,tilt,cleared_msg):
         # FR-300-003, applied to all faults (owner decision 2026-08-18, not just a future

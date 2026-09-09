@@ -26,6 +26,7 @@ def fb():
     calls=[]
     ns=types.SimpleNamespace(
         _shutdown_pending=False,
+        _roam_ask_pending=False,   # roam-permission ask (2026-09-09); not what this test exercises
         voice=types.SimpleNamespace(pending_commands=queue.Queue(),available=True,
                                     speak=lambda *a,**k:None),
         retrieval=types.SimpleNamespace(start=lambda t:(calls.append(("start",t)),(True,"ok"))[1]),

@@ -26,7 +26,9 @@ class FakeSafety:
     def emergency_stop(self,reason): self.calls.append(reason)
 
 def fb(tapped):
-    ns=types.SimpleNamespace(_state="SENSOR_FAULT")
+    # _motor_rail_lost is read by _upd() (the motor-rail banner, added after this test was
+    # written). Unrelated to the reset gate, but the fake has to carry it or _upd() raises.
+    ns=types.SimpleNamespace(_state="SENSOR_FAULT",_motor_rail_lost=False)
     ns.display=FakeDisplay(tapped); ns.safety=FakeSafety()
     ns._go=lambda s: setattr(ns,"_state",s)
     ns._upd=types.MethodType(RoverBrain._upd,ns)
