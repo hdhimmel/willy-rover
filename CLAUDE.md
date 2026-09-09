@@ -14,9 +14,12 @@ code needs fixing — every line below was confirmed on the bench.
 
 ## Bus topology and roll-call — AS-BUILT, verified 2026-09-08
 
-**The bus is no longer isolated.** The ISO1540, the VCC2/GND2 isolated rail, the
-AMS1117-3.3 and the TPSM84203EAB are all out of the build, along with the
-Seengreat breakout HAT and its ribbon cable. Everything now hangs off the Pi's
+**The bus is no longer isolated.** The ISO1540, the VCC2/GND2 isolated rail and
+the Seengreat breakout HAT + ribbon are out of the build. **The TPSM84205 is a
+different case: it is still physically fitted, just unused** (owner-confirmed
+2026-09-09) — expect to find the part on the board, not an empty footprint. The
+AMS1117-3.3 cannot be in service either, since its only input was the TPSM's
+now-dormant 5V output. The TPSM84203EAB single-stage variant was never built. Everything now hangs off the Pi's
 own I²C on `/dev/i2c-1`:
 
 ```
@@ -455,8 +458,10 @@ flicker**, full 11-device set present every single time. The `hwmon3` under-volt
 also stopped recurring the same moment (40+ min clean afterward, vs. cycling every 15-30s
 before) — one root cause explains both symptoms, not two separate issues.
 
-**Power rails as-built — four DROK converters, 2026-09-08.** The entire isolated
-power chain is gone. No TPSM, no AMS1117, no VCC2, no F6 polyfuse path:
+**Power rails as-built — four DROK converters, 2026-09-08.** The isolated power
+chain carries nothing: no VCC2 rail, and the TPSM/AMS1117/F6 path has no
+consumers. Note "out of service", not "unfitted" — the TPSM84205 is still on the
+board (owner-confirmed 2026-09-09). Everything live runs off these four DROKs:
 
 | Rail | Volts | Source | Feeds |
 |------|-------|--------|-------|

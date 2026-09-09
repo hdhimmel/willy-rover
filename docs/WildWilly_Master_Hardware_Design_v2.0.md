@@ -50,7 +50,7 @@ still instructive, but they are **not** the current build. This section is.
 | **ISO1540 isolator** | Removed. There is no isolation on the I²C bus. |
 | **VCC2 / GND2 isolated rail** | Gone with it. One ground, one 3.3V supply. |
 | **AMS1117-3.3** | Removed — touchscreen went back on Pi power, leaving it no consumers. |
-| **TPSM84203EAB / TPSM84205** | Removed. With no isolated rail there is nothing to supply. |
+| **TPSM84205** | **STILL PHYSICALLY FITTED, but OUT OF SERVICE** — owner-confirmed 2026-09-09: "the TPSM is there, not really used". With no isolated rail it has nothing to supply. It is *not* removed, so do not expect an empty footprint; treat it as dormant hardware. The **TPSM84203EAB** single-stage replacement was never built at all. |
 | **F6 polyfuse and the P8 path** | Gone with the power chain. |
 | **Seengreat breakout HAT + ribbon** | Removed. |
 
@@ -150,9 +150,16 @@ distribution, bus node board and motor drivers in the body tray.
 
 ## 2. Power Architecture
 
-> ⚠ **SUPERSEDED 2026-09-08 — see §0.** The P8 isolated-power path, the F6
-> polyfuse, the TPSM and the AMS1117 are all removed from the build. Rail
+> ⚠ **SUPERSEDED 2026-09-08 — see §0.** The P8 isolated-power path is out of
+> service: it has nothing to supply now that the isolated rail is gone. Rail
 > voltages R1 and R5 have changed. Retained for history.
+>
+> **Corrected 2026-09-09: "out of service" is not the same as "removed", and §0
+> originally said removed.** The TPSM84205 is still physically fitted
+> (owner-confirmed) with no consumers. The AMS1117-3.3's only input was the
+> TPSM's 5V output, so it cannot be in service either — whether the part is
+> still on the board is unconfirmed. Everything below describes how this chain
+> worked when it was live.
 
 ### 2.1 Distribution tree
 
@@ -1473,8 +1480,15 @@ measurement, not a construction task.
 6. **AMS1117 thermal watch** — **REOPENED 2026-09-07.** This item was closed on
    2026-08-28 on the premise that the part had been retired in favour of a
    single-stage TPSM84203EAB. That replacement was never built. The AMS1117-3.3
-   is still fitted as stage 2 and is still the single point of failure on VCC2,
-   so the watch stands.
+   is still fitted as stage 2.
+
+   **CLOSED AGAIN 2026-09-09 — for a different and better reason.** It is no
+   longer the single point of failure on anything: the isolated rail it fed does
+   not exist, and the TPSM that fed *it* is fitted but out of service
+   (owner-confirmed). A regulator with no input and no consumers cannot overheat,
+   so the thermal watch is moot. This closes on the load being gone, NOT on the
+   2026-08-28 premise that the part was replaced — that replacement was never
+   built. If anything is ever put back on this chain, reopen the watch.
    What genuinely improved: the TPSM84205 pre-regulator is now installed
    (owner-confirmed 2026-09-07), so the AMS1117 drops ~1.7V instead of ~1.9V and
    no longer sits downstream of servo load. That reduces the thermal stress that
@@ -1597,9 +1611,9 @@ listed in §15.8 rather than carried as a line item.
 | **DROK-6V** adjustable buck | 12V → 6.0V for arm servos (R3) | 1 | To fit |
 | **DROK-4** adjustable buck | Encoder distribution (R5) — **⚠ voltage TBD: 3.3V or 5V?** (§2.2) | 1 | **Pending voltage decision** |
 | **Isolated bus power chain (P8):** | — | — | — |
-| **TI TPSM84205** | 12V → 5.0V pre-regulator (1.5A) — **NOT 84203 or 84212** | 1 | **Installed 2026-09-07** |
+| **TI TPSM84205** | 12V → 5.0V pre-regulator (1.5A) — **NOT 84203 or 84212** | 1 | **Fitted, but OUT OF SERVICE** — no consumers since 2026-09-08 (§0) |
 | RXEF110 1.1A polyfuse | F6, TPSM 12V input, PTC resettable | 1 | **Installed 2026-09-07** |
-| AMS1117-3.3 | 5V → 3.3V final stage, VCC2 (isolated bus + encoders + **touch sensor**) | 1 | **Installed — in service, not retired** |
+| AMS1117-3.3 | 5V → 3.3V final stage of the dead P8 chain | 1 | **NOT in service** — its only input was the TPSM's 5V output, which is now dormant, and the touchscreen went back to Pi power. Physical presence unconfirmed |
 | 10µF **50V** electrolytic | TPSM Vin (12V input protection — 50V minimum for transient headroom) | 1 | **To build** |
 | 2× 47µF **50V** ceramic | TPSM Vout (TI min 94µF total at 5V — 50V overspecs but safe) | 2 | **To build** |
 | 10µF 50V electrolytic | AMS1117 Vin, from TPSM (≥10mm from pins) | 1 | **To build** |
