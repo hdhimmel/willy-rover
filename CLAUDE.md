@@ -383,6 +383,36 @@ Set `ENABLE_AUTONOMOUS_ROAM` back to `False` if unattended `STALL_FAULT`s reappe
 
 ---
 
+**Audio: two USB devices, split by role (mic swap 2026-09-09).** They are
+distinguishable by ONE WORD, and getting them backwards is silent — read this before
+touching anything audio.
+
+| Role | Name in `arecord -l` | USB ID | Card (2026-09-09) |
+|------|----------------------|--------|-------------------|
+| **Microphone** — input | USB PnP **Sound** Device | `08bb:2902` | 3 |
+| **Speaker** — output | USB PnP **Audio** Device (the puck) | `0c76:1203` | 2 |
+
+- **Never disable the puck.** Owner wants its speakers; only its *microphone* is
+  retired. It is the only non-HDMI playback device on the rover — disabling it leaves
+  Willy mute, including the spoken roam-permission ask.
+- **The mic cannot do 16kHz.** Its hardware offers 48000/44100 only, and openwakeword
+  needs 16000. PortAudio exposes the raw `hw:` devices with NO plug/default/PipeWire
+  route, so ALSA will not resample — `voice.py` captures at 48k and decimates 3:1 via
+  `downsample_to_16k()`. Do not "simplify" that to `samples[::3]`: striding aliases
+  everything above 8kHz into the speech band and degrades wake scoring while looking
+  exactly like a flaky mic.
+- **Never pin `hw:2,0`/`hw:3,0`.** Card indices follow USB enumeration and can swap on
+  reboot. Capture is selected by NAME (`config.AUDIO_INPUT_DEVICE`); `_loop()` logs the
+  resolved name at startup — check that line first when voice misbehaves.
+- `config.AUDIO_OUTPUT_DEVICE` is **inert**. Nothing reads it. All playback is `pw-play`
+  → PipeWire's default sink. To change the output device, change the default sink.
+- **Whether this fixes the wake word is still open.** It has been unexplained since
+  2026-08-21, and `hey_willie.onnx` was trained through the OLD puck mic — a new capsule
+  plus a new decimation stage change what the model scores. May need a retrain. Do not
+  record it as fixed without a live trigger test.
+
+---
+
 ## Power
 
 - Pi 5V rail measured 5.144V under boot load, `vcgencmd get_throttled` = 0x0.

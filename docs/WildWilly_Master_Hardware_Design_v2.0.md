@@ -892,10 +892,32 @@ architectural constraint on how it may be used is §12 rule 18.
 
 ### 5.3 GPIO breakout
 
-Seengreat RPi PX00 Expansion A, ribbon-connected to the Pi 5. Passive 1:1
-passthrough — standard 40-pin layout, no buffers, level shifters or added
-pull-ups. Its passivity is a requirement, not a convenience: anything added to
-GP2/GP3 counts against the ISO1540 Side 1 budget.
+**The Seengreat RPi PX00 Expansion A and its ribbon are OUT of the build** (§1),
+removed 2026-09-08 with the rest of the isolated-bus hardware. Until its
+replacement arrives the header has no breakout: everything lands on the Pi's
+40-pin header directly.
+
+**Replacement: a screw-terminal breakout HAT — ON ORDER as of 2026-09-09.**
+Eleven lines have to land on it:
+
+| # | Line | Pi pin | Notes |
+|---|------|--------|-------|
+| 1–2 | Sonar front TRIG / ECHO | GP5 / GP26 | ECHO via divider — see below |
+| 3–4 | Sonar left TRIG / ECHO | GP13 / GP14 | ECHO via divider |
+| 5–6 | Sonar right TRIG / ECHO | GP4 / GP21 | ECHO via divider |
+| 7–8 | I²C SDA / SCL | GP2 / GP3 | to the GODIY hubs (§3.1) |
+| 9 | 5V | pin 2/4 | HC-SR04 VCC |
+| 10 | 3V3 | pin 1 | |
+| 11 | GND | — | |
+
+**The ECHO dividers stay on the sensor side of the terminals.** HC-SR04 ECHO
+idles at 5V and the Pi's GPIO is not 5V tolerant, so the divider must never end
+up downstream of the breakout — §16.13 check 6 is the bench test for this
+(3.2–3.4V at each junction).
+
+Passivity remains a requirement, not a convenience: whatever the replacement is,
+anything it adds to GP2/GP3 counts against the bus budget (§3.2), and the bus has
+no isolation left to spend.
 
 ### 5.4 Vision and display
 
@@ -907,6 +929,31 @@ GP2/GP3 counts against the ISO1540 Side 1 budget.
 | AI HAT+ 2 | PCIe FFC |
 
 ---
+
+### 5.5 Audio I/O
+
+Two USB audio devices, split by role since the mic swap of 2026-09-09. They are
+distinguishable in `arecord -l` only by one word — *Audio* vs *Sound* — so read
+carefully before changing anything.
+
+| Role | Device | USB ID | Capability |
+|------|--------|--------|------------|
+| **Speaker** (output) | USB PnP **Audio** Device (the puck) | `0c76:1203` | capture + playback |
+| **Microphone** (input) | USB PnP **Sound** Device | `08bb:2902` | capture only |
+
+The puck's own microphone is **deliberately unused** (owner decision 2026-09-09):
+its speaker is kept, its mic is not. It remains the only non-HDMI playback device
+on the rover, so disabling the puck outright would leave Willy mute.
+
+**The capture mic cannot do 16 kHz.** Its hardware offers 48000 and 44100 only
+(`cat /proc/asound/card*/stream0`), while openwakeword requires 16 kHz, and
+PortAudio exposes the raw `hw:` devices with no plug/default/PipeWire route — so
+ALSA cannot convert. `voice.py` captures at 48 kHz and decimates 3:1 in software.
+See Software Design §6.4.
+
+Card *indices* follow USB enumeration order and can change across reboots, so
+nothing may be pinned to `hw:2,0` / `hw:3,0`. Capture is selected by device name;
+playback follows PipeWire's default sink.
 
 ## 6. Sensors
 
@@ -1471,8 +1518,9 @@ listed in §15.8 rather than carried as a line item.
 | 5" DSI touch display, 800×480 | Face / UI | 1 | Installed |
 | Arducam IMX708 (CSI) | Front camera | 1 | Installed |
 | OV9782 (USB) | Rear camera | 1 | Installed |
-| ReSpeaker USB mic + speaker | Voice I/O | 1 | Installed |
-| Seengreat RPi PX00 Expansion A | 40-pin passive GPIO breakout | 1 | Installed |
+| USB PnP **Audio** Device puck (`0c76:1203`) | Voice OUTPUT — speaker. Its mic is unused (§5.5) | 1 | Installed |
+| USB PnP **Sound** Device (`08bb:2902`) | Voice INPUT — microphone, capture-only, 48kHz native | 1 | Installed |
+| Screw-terminal GPIO breakout HAT | 40-pin breakout, 11 lines (§5.3). Replaces the removed Seengreat | 1 | **On order 2026-09-09** |
 | Raspberry Pi Active Cooler | Pi 5 blower + heatsink | 1 | Installed |
 | 5V case fan, 30–40mm | Head assembly exhaust | 1 | Installed |
 | SanDisk Extreme PRO SSD 500GB | Boot drive | 1 | Installed |

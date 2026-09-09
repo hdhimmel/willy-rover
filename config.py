@@ -423,7 +423,28 @@ ENABLE_HAILO_LLM=True   # PRIMARY on-device reasoning (Hailo-10H NPU). 2026-09-0
                         # STUCK state tries this first; falls back to Claude only if confidence < HAILO_LLM_CONFIDENCE_FLOOR.
 HAILO_LLM_MODEL_PATH='models/hailo_qwen2_1_5b.hef'  # qwen2:1.5b, Hailo GenAI Model Zoo. ~1.6GB, not tracked in git.
 HAILO_LLM_CONFIDENCE_FLOOR=0.7  # 70% confidence on Hailo decision = proceed without Claude. Below = escalate to cloud.
-AUDIO_INPUT_DEVICE=None; AUDIO_OUTPUT_DEVICE=None  # None = system default
+# --- Audio device selection. Mic swap 2026-09-09: capture moved OFF the Waveshare mic+speaker
+# puck and onto a dedicated capture-only USB mic. The puck stays as the SPEAKER (owner decision
+# 2026-09-09) -- it is the only non-HDMI playback device on the rover.
+#
+# Matched by NAME, not by card index. `arecord -l` order follows USB enumeration and can change
+# across reboots, so a pinned `hw:3,0` would silently start listening to the wrong device. The two
+# names differ by exactly one word, so read this carefully before editing:
+#     'USB PnP Sound Device'  = the capture-only mic   (08bb:2902, card 3 as of 2026-09-09)  <- IN
+#     'USB PnP Audio Device'  = the Waveshare puck     (0c76:1203, card 2 as of 2026-09-09)
+AUDIO_INPUT_DEVICE='USB PnP Sound Device'
+# The mic's hardware offers ONLY 48000 and 44100 (`cat /proc/asound/card3/stream0`) -- it cannot do
+# the 16000 openwakeword requires, and PortAudio exposes the raw `hw:` devices only (no plug, no
+# default, no PipeWire route), so ALSA will not convert for us. voice.py captures at this rate and
+# decimates to 16k itself. 48000 is chosen over 44100 because it is an exact 3:1 integer ratio;
+# 44100 would force fractional resampling on the wake-word hot path. Must be a whole multiple of
+# 16000 -- validate() enforces it. A future 16kHz-native mic sets this to 16000 and the conversion
+# becomes a passthrough.
+AUDIO_INPUT_RATE=48000
+# NOT USED. Kept only to document that it is inert: all three playback sites in voice.py call
+# `pw-play`, which routes to PipeWire's default sink, and nothing anywhere reads this value.
+# Setting it does nothing. To change the output device, change PipeWire's default sink.
+AUDIO_OUTPUT_DEVICE=None
 VOICE_TONE_DEFAULT='neutral'  # 'neutral'|'funny'|'silly'|'bashful' — FR-1500-008/009/010
 # --- Voice latency, 2026-08-21. Measured live on this rover, "What time is it?":
 # stt=12.1s intent=0.0s tts=4.6s total=16.7s. ~4.0s of that stt bucket was the old fixed capture
@@ -600,6 +621,12 @@ def validate():
     for name,addr in i2c_addrs.items():
         if addr in seen: problems.append(f'duplicate I2C address {addr:#x}: {seen[addr]} and {name}')
         else: seen[addr]=name
+
+    # 44100 is the trap here: the mic advertises it, it looks perfectly reasonable, and it is not
+    # an integer ratio to openwakeword's 16000. Catch it here rather than on the audio thread.
+    if AUDIO_INPUT_RATE%16000:
+        problems.append(f'AUDIO_INPUT_RATE={AUDIO_INPUT_RATE} is not a whole multiple of 16000 '
+                        f'(openwakeword frame rate); decimation would be fractional')
 
     gpio_pins={'SONAR_FRONT_TRIG':SONAR_FRONT_TRIG,'SONAR_FRONT_ECHO':SONAR_FRONT_ECHO,
                'SONAR_LEFT_TRIG':SONAR_LEFT_TRIG,'SONAR_LEFT_ECHO':SONAR_LEFT_ECHO,

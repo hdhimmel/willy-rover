@@ -444,6 +444,56 @@ response, world-state summarisation.
 
 ---
 
+## 6.4 Audio capture chain
+
+Changed 2026-09-09 by the mic swap. Capture moved off the Waveshare puck's
+microphone onto a dedicated capture-only USB mic; the puck stays as the speaker
+and is the only non-HDMI playback device on the rover, so it could not simply be
+disabled.
+
+The new mic **cannot produce 16 kHz**, which is the only rate openwakeword
+accepts. Its hardware advertises 48000 and 44100 only, and PortAudio exposes the
+raw ALSA `hw:` devices with no plug, default or PipeWire route, so ALSA will not
+resample on our behalf. `voice.py` therefore captures at the mic's native rate
+and converts in software:
+
+```
+mic (48 kHz mono, 3840-sample block)
+  -> VoiceInterface._read_frame()
+       -> downsample_to_16k(block, factor=3)   # scipy.signal.decimate, FIR, zero_phase
+  -> 1280 samples @ 16 kHz  ->  wake scoring / noise floor / endpointer / Whisper
+```
+
+`_read_frame()` is the single rate boundary, and both capture paths go through
+it — the wake-scoring loop in `_loop()` and the utterance capture in
+`_handle_wake()`. That is what lets every downstream calculation keep assuming
+16 kHz/1280: `_handle_wake()`'s `fps = 16000.0/frame_len`, the endpointer's
+silence and minimum-length frame counts, and `_update_noise()`'s per-frame RMS
+are all unchanged by the swap.
+
+Three decisions worth keeping:
+
+- **48000 over 44100.** Both are offered; only 48000 is a whole-number ratio to
+  16000. 44100 would put fractional resampling on the wake-word hot path.
+  `config.validate()` rejects any `AUDIO_INPUT_RATE` that is not a multiple of
+  16000, so 44100 fails loudly at startup instead of subtly at runtime.
+- **`scipy.signal.decimate`, never `samples[::3]`.** Striding folds everything
+  above the new 8 kHz Nyquist back into the speech band as phantom tones. That
+  degrades wake scoring while looking exactly like a flaky microphone, which is
+  the most expensive kind of bug this project has already paid for once.
+- **Selected by name, not card index.** `arecord -l` ordering follows USB
+  enumeration and can change across reboots. The two devices differ by a single
+  word — the mic is "USB PnP **Sound** Device", the puck is "USB PnP **Audio**
+  Device" — so `_loop()` logs the resolved device name once at startup. Picking
+  the wrong mic is otherwise completely invisible and presents as "the wake word
+  just doesn't work".
+
+Playback is untouched and does not go through this path at all: all three
+`speak`/ack sites shell out to `pw-play`, which targets PipeWire's default sink
+(the puck). `config.AUDIO_OUTPUT_DEVICE` is inert — nothing reads it.
+
+---
+
 ## 7. Perception and the Accelerator
 
 **Vision — shipped on the Hailo-10H NPU, 2026-08-21.** `vision.py`'s

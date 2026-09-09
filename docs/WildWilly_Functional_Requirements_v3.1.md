@@ -1447,6 +1447,25 @@ section behind it until now. Added 2026-08-02, v1.4.
 -   Recognition failures are reported rather than silently ignored, so an
     unheard command is never mistaken for a refused one.
 
+**Capture hardware changed 2026-09-09.** Voice input moved off the Waveshare
+mic+speaker puck's microphone and onto a dedicated capture-only USB mic. The
+puck is retained as the speaker (owner decision) --- it is the only non-HDMI
+playback device on the rover, so disabling it outright would leave Willy mute.
+
+The new mic cannot produce the 16 kHz openwakeword requires; its hardware offers
+48000 and 44100 only, and no ALSA/PipeWire resampling route is reachable from
+the capture path. `voice.py` therefore captures at 48 kHz and decimates 3:1 in
+software, behind a single rate boundary so that every downstream assumption of
+16 kHz still holds. See Software Design §6.4 and Master Hardware Design §5.5.
+
+**This is not yet established as the fix for the wake word.** The wake word
+failing to trigger has been open and unexplained since 2026-08-21, and a better
+microphone is a plausible but unproven remedy: `hey_willie.onnx` was trained on
+data captured through the *old* puck mic, so a different capsule and a new
+decimation stage both change what the model is being asked to score. Whether
+this closes that gap, leaves it unmoved, or requires retraining the wake model
+is an open question to be settled live, not a claim made here.
+
 # FR-1600 Facial Expression / Display Feedback
 
 Covers runtime use of the RPi Touch Display 2 (already wired, §7.x) for

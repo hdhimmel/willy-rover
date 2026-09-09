@@ -24,6 +24,26 @@ _INTENT_SCHEMA={'intent':str,'args':dict,'reply':str}  # §14/§15 -- required k
 # even if the caller asked for a personality tone — mirrors the layered-allowlist pattern used
 # in email_client.py's FR-2000 boundaries rather than trusting a single call site to always pass
 # tone='neutral' correctly.
+_WAKE_FRAME=1280      # openwakeword's 80ms block, always at 16kHz
+
+
+def downsample_to_16k(samples,factor):
+    """One captured block at 16000*factor Hz -> the same 80ms at 16kHz, int16.
+
+    Mic swap 2026-09-09. The capture-only USB mic that replaced the Waveshare puck's microphone
+    cannot do 16kHz at all -- its hardware offers 48000 and 44100 only -- and PortAudio exposes
+    the raw `hw:` devices with no plug/default/PipeWire route, so ALSA will not resample for us.
+
+    scipy's decimate, not `samples[::factor]`. Plain striding folds everything above the new
+    8kHz Nyquist back down into the speech band as phantom tones, which would degrade wake
+    scoring in a way that looks like a flaky mic rather than a bug. zero_phase keeps the filter
+    from shifting the block in time, which matters because the endpointer measures per-frame RMS.
+    """
+    if factor==1: return samples          # 16kHz-native mic: cost nothing
+    from scipy.signal import decimate
+    return decimate(samples,factor,ftype='fir',zero_phase=True).astype(np.int16)
+
+
 _SAFETY_PATTERN=re.compile(
     r'\b(e-?stop|estop|emergency|fault|shutdown|shutting down|battery critical|low battery|'
     r'safe mode|stall|tilt|obstacle detected|confirm.*(move|drive|forward|reverse))\b',re.I)
@@ -264,19 +284,37 @@ class VoicePipeline:
                     except Exception as e: log.warning(f'Wake model reset failed: {e}')
                 self._speaking.clear()
 
+    def _read_frame(self,stream):
+        # THE rate boundary. Everything downstream of this -- wake scoring, the noise floor, the
+        # endpointer's fps math, Whisper -- assumes 16kHz/1280, and this is what keeps that true
+        # no matter what the mic's native rate is. Both capture paths go through it.
+        raw,_=stream.read(self._blocksize)
+        return downsample_to_16k(raw.flatten(),self._rate_factor)
+
     def _loop(self):
         import sounddevice as sd
-        frame_len=1280  # openwakeword expects 80ms @16kHz frames
+        frame_len=_WAKE_FRAME  # what the REST of the pipeline sees: openwakeword's 80ms @16kHz
+        # The mic may not support 16kHz (2026-09-09: the current one supports only 48000/44100),
+        # so capture natively and convert in _read_frame(). Validated in config.validate().
+        self._rate_factor=int(config.AUDIO_INPUT_RATE)//16000
+        self._blocksize=frame_len*self._rate_factor
         try:
-            with sd.InputStream(samplerate=16000,channels=1,dtype='int16',
-                                 device=config.AUDIO_INPUT_DEVICE,blocksize=frame_len) as stream:
+            with sd.InputStream(samplerate=int(config.AUDIO_INPUT_RATE),channels=1,dtype='int16',
+                                 device=config.AUDIO_INPUT_DEVICE,blocksize=self._blocksize) as stream:
+                # Logged once, by resolved name: picking the wrong mic is otherwise invisible and
+                # presents as "the wake word just doesn't work" -- see the 2026-08-21 hunt.
+                try:
+                    import sounddevice as _sd
+                    log.info('Voice capture on %r @ %dHz (decimating %dx to 16k)',
+                             _sd.query_devices(config.AUDIO_INPUT_DEVICE,'input')['name'],
+                             int(config.AUDIO_INPUT_RATE),self._rate_factor)
+                except Exception: pass
                 while self._running:
                     if not privacy.mic_enabled():
                         time.sleep(1.0); continue  # FR-1800-005, re-checked continuously
-                    frame,_=stream.read(frame_len)
+                    flat=self._read_frame(stream)
                     if self._speaking.is_set():
                         continue  # still drain the buffer, just don't score our own echo
-                    flat=frame.flatten()
                     self._update_noise(flat)
                     scores=self._wakeword.predict(flat)
                     if max(scores.values(),default=0.0)>=config.WAKEWORD_THRESHOLD:
@@ -381,7 +419,7 @@ class VoicePipeline:
         # endpointer either.
         audio=[]; heard=False; silent=0; loud=0
         for i in range(max_frames):
-            f,_=stream.read(frame_len); s=f.flatten(); audio.append(s)
+            s=self._read_frame(stream); audio.append(s)
             rms=float(np.sqrt(np.mean((s.astype(np.float32)/32768.0)**2)))
             if i<deaf_frames: continue
             if rms>=thresh:
