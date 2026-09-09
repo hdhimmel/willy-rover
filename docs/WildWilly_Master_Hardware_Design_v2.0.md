@@ -253,7 +253,7 @@ graph TD
 | R2 | 5V | **DROK-5V** buck | Steering servo distribution, sonar VCC, Pi screen | INA260 **0x40** |
 | R3 | 6V | **DROK-6V** buck | Arm servo distribution | — |
 | R5 | **⚠ 3V or 5V?** | **DROK-4** buck | Motor Hall encoders (JGA25-370B) — **voltage TBD, see warning below** | — |
-| R4 | 3V3 | Pi header pin 1 | ISO1540 Side 1 VCC only | — |
+| ~~R4~~ | ~~3V3~~ | ~~Pi header pin 1~~ | **NO CONSUMER AS-BUILT.** Fed ISO1540 Side 1 VCC only, and the ISO1540 is out of the build (§1, 2026-09-08). Nothing loads Pi 3V3 now — see §2.1 and §5.3. Retained as history; do not wire from this row. | — |
 | — | 3V3 (VCC2) | **Two-stage chain** (§3): TPSM84205 (12V→5V) → AMS1117-3.3 (5V→3.3V) | Entire isolated I²C bus (devices, not encoders) | — |
 | — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | INA260 **0x44** (P3 monitoring) |
 | — | +12V main | Battery via F1/KCD4/Q1 | All four DROK inputs + isolated power chain (P8) | — |
@@ -906,9 +906,20 @@ Eleven lines have to land on it:
 | 3–4 | Sonar left TRIG / ECHO | GP13 / GP14 | ECHO via divider |
 | 5–6 | Sonar right TRIG / ECHO | GP4 / GP21 | ECHO via divider |
 | 7–8 | I²C SDA / SCL | GP2 / GP3 | to the GODIY hubs (§3.1) |
-| 9 | 5V | pin 2/4 | HC-SR04 VCC |
-| 10 | 3V3 | pin 1 | |
-| 11 | GND | — | |
+| 9 | **BNO085 INT** | **GP15**, header pin 10 | §6.3. Wired but **unused by the driver** — the library polls over I²C (§16 open-items table) |
+| 10 | 5V | pins 2/4 | HC-SR04 VCC |
+| 11 | GND | pins 6/9 | |
+
+**The Pi's 3V3 (header pin 1) is NOT in the list, and that is deliberate.** Its
+only consumer was ISO1540 Side 1 VCC (rails table, R4), and the ISO1540 is out
+of the build (§1). Nothing loads Pi 3V3 as-built — §2.1 states this directly —
+and device logic is fed from the DROK R5 3.3V rail instead. Do not land a 3V3
+line here on the strength of the R4 row alone; that row describes a removed
+part.
+
+**The BNO085's other GPIO line does not land here either.** RST runs to
+MCP23017 **GPB4**, not to the Pi header (§6.3), which is why the expander must
+be initialised before the IMU can be reset.
 
 **The ECHO dividers stay on the sensor side of the terminals.** HC-SR04 ECHO
 idles at 5V and the Pi's GPIO is not 5V tolerant, so the divider must never end
