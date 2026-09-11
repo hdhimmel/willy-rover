@@ -164,6 +164,52 @@ Announcing a stranger therefore requires **positive evidence of dissimilarity**,
 merely the absence of a match. The middle band is what protects an enrolled person
 having a bad-lighting day, and it is why this is not simply "else: say stranger".
 
+**He asks before he accuses (owner decision 2026-09-11).** A confidently-unknown face
+does not go straight to "Stranger Danger!". He asks first:
+
+```
+confidently unknown, confirmed over N frames
+  → "Hello — who are you?"        (prompted listen, no wake word)
+  → heard a name?
+       resolves to an enrolled identity → "Hi, Carolyn"   [+ see below]
+       unknown name, or no reply before FACE_ASK_TIMEOUT_S → "Stranger Danger!"
+```
+
+This is the recovery path for the failure that actually matters. Face recognition's
+common error is a false reject — an enrolled person in poor light, a new haircut, a
+hat — and without this, that error is indistinguishable from an intruder and just as
+loud. Letting the person speak costs one question and rescues the case entirely.
+
+**This is the first behaviour in which Willy initiates a conversation.** Every other
+speech path today is wake-word triggered; he talks only after "Hey Willie". Asking a
+question and then listening requires a **prompted capture** that bypasses the wake
+word — `voice.py` currently reaches `_handle_wake()` only from a wake detection. That
+is new capability in the voice pipeline, not a tweak, and it should be built as an
+explicit, narrow entry point rather than by loosening the wake gate. One useful
+side-effect: the unreliable wake word does not affect this path, because he is
+already listening.
+
+**A spoken name may RESOLVE an identity; it may never CREATE one.** Enrolment stays
+owner-initiated ("Willy, this is Carolyn"). If a name could enrol, anyone could enrol
+themselves by walking in and announcing one. A name that matches nothing on file is
+treated as unknown — the stranger response — regardless of how confidently it is
+given.
+
+**Strengthen the identity, but only from the uncertain band.** When someone rescues
+themselves this way, that frame is a genuinely valuable vector: it is them, under
+exactly the conditions that just failed to match. Adding it lets recognition improve
+with use rather than staying as good as enrolment day.
+
+Gate it on which band the face was in:
+
+| Band when they gave the name | Greet? | Store the new vector? |
+|---|---|---|
+| Uncertain — plausibly them | Yes | **Yes.** The face already nearly matched; the name confirms it |
+| Confidently unknown | Yes, politely | **No.** A stranger claiming to be Carolyn must not be able to poison her identity |
+
+Cap the vectors per identity and evict oldest, or a person accumulates hundreds over
+time and matching slows for no accuracy gain.
+
 Three further guards:
 
 - **Confirm over consecutive detections.** A single frame must never trigger it; require
