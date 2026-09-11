@@ -1256,6 +1256,64 @@ separately under FR-1200.
     §6.5), which is deterministic and does not depend on pose being right.
     FR-1000-002's rule holds unchanged: vision informs, it never gates the stop.
 
+# FR-2000-012/013 Acceptance Criteria — email as a command channel
+
+**Owner decision 2026-09-11, taken against advice, and recorded as such.** Willy may
+act on email from the owner, *including motion commands*. The alternative offered was
+non-physical actions only; the owner chose the full channel. The reasoning against it
+is preserved below so the risk is visible rather than forgotten, and the mitigations
+exist because the decision stands.
+
+**Why this was advised against.** Three existing guards are crossed:
+
+1.  `brain.py`'s standing rule that inbound email is "surfaced, never acted on".
+2.  FR-2000-006, the prompt-injection boundary, which wraps email bodies as untrusted
+    data and instructs the model not to treat them as commands. Acting on mail is the
+    thing that requirement was written to prevent.
+3.  `_sender_allowed()` is a lowercase string comparison of the From header. It is not
+    authentication. `email_client.py`'s own header already flags the analogous gap:
+    "there is no voiceprint/biometric auth anywhere in this codebase --- flag this as
+    a real gap, not a solved one."
+
+And the repo's own precedent argues against motion specifically.
+`VOICE_COMMAND_MAX_AGE_S` exists because "acting late on a motion command is worse
+than not acting at all" --- a command executing in a situation the sender has stopped
+watching. Email is inherently late: minutes, sometimes hours. Motion by email is that
+hazard by construction.
+
+**FR-2000-013 (verify authentication results).** The mitigation that closes most of
+the gap at no cost to capability. Gmail stamps every inbound message with an
+`Authentication-Results` header carrying SPF, DKIM and DMARC outcomes. Willy MUST
+parse it and refuse to act on any message that did not pass DKIM, regardless of what
+the From header claims. This converts a spoofable string match into real
+authentication. Surfacing (FR-2000-003) is unaffected --- a failed message may still
+be read aloud as "an email claiming to be from...", it simply may not act.
+
+**FR-2000-012 (act on owner email).** Subject to all of the following:
+
+-   **Freshness.** A command whose `Date` is older than `EMAIL_COMMAND_MAX_AGE_S` is
+    dropped with a spoken and logged reason, mirroring `VOICE_COMMAND_MAX_AGE_S`
+    exactly. This is the single most important guard on motion and is not optional.
+-   **Directives 1--5 still gate it.** Email commands enter `pending_commands` and are
+    drained at Directive 6 like any voice command. Nothing bypasses
+    `SafetyController`. A tilt, battery or sensor fault pre-empts an emailed motion
+    command exactly as it pre-empts a spoken one.
+-   **Announced aloud before acting.** "Howard emailed: go to the kitchen. Starting
+    now." A rover that begins driving with no audible reason, while its owner is out,
+    is indistinguishable from a malfunction to whoever is actually in the room.
+-   **Logged as a distinct event** (`EMAIL_COMMAND`), and confirmed back by reply, so
+    there is an audit trail on both ends.
+-   **One command per poll cycle.** A mailbox cannot queue a sequence of moves.
+-   **Gated by `ENABLE_EMAIL_COMMANDS`**, default `False` in `config.py` per the
+    convention used by `ENABLE_HAILO_LLM` and `ENABLE_OBJECT_RETRIEVAL`, set `True` by
+    this owner decision.
+
+**Residual risk, stated plainly.** With FR-2000-013 in place the realistic attack is
+no longer spoofing but compromise of the owner's Gmail account --- which would grant
+an attacker the ability to drive a robot around an occupied house. That risk is
+accepted by the owner. It is also why `ENABLE_EMAIL_COMMANDS` exists as a single
+switch: if the account is ever suspected compromised, set it `False` and redeploy.
+
 # FR-1300 Smart Home Integration (Google Home)
 
 DIRECTION CONFIRMED WITH OWNER 2026-08-18 (was an open assumption since
@@ -1950,6 +2008,12 @@ expand who\'s trusted enough to be read.
                     for new messages                                  
 
   FR-2000-003       Surface relevant email content  Medium            Test
+
+  FR-2000-012       Execute commands from the owner  High             Test
+                    by email, including motion
+
+  FR-2000-013       Verify inbound authentication    High             Test
+                    results before acting
                     to the owner via voice                            
                     (FR-1500) and/or display                          
                     (FR-1600) summary, rather than                    

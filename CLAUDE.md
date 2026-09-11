@@ -418,6 +418,36 @@ touching anything audio.
 
 ---
 
+**Email is a COMMAND channel now (owner decision 2026-09-11, FR-2000-012/013).** This
+reverses `brain.py`'s long-standing "surfaced, never acted on" rule, so read this before
+touching `email_client.py` or the email path in `brain.py`.
+
+- **Willy acts on email from the owner, INCLUDING MOTION.** The owner chose the full
+  channel over the non-physical-only option, against advice. Do not quietly narrow it
+  back; do not quietly widen it either.
+- **`_sender_allowed()` is a string match on the From header. That is NOT authentication.**
+  The real check is FR-2000-013: parse Gmail's `Authentication-Results` header and refuse
+  to act on anything that did not pass DKIM. If you touch this path and that check is
+  missing, it is a bug, not a simplification.
+- **Freshness is not optional.** An emailed motion command older than
+  `EMAIL_COMMAND_MAX_AGE_S` must be dropped, for the same reason
+  `VOICE_COMMAND_MAX_AGE_S` exists — "acting late on a motion command is worse than not
+  acting at all". Email is inherently late; this is the guard that makes motion-by-email
+  tolerable at all.
+- **Directives 1–5 still gate it.** Email commands go onto `pending_commands` and drain at
+  Directive 6 like voice. Nothing bypasses `SafetyController` — not this, not anything.
+- **He announces aloud before acting.** A rover that starts driving with no audible reason
+  while its owner is out is indistinguishable from a malfunction to whoever is in the room.
+- **`ENABLE_EMAIL_COMMANDS` is the kill switch.** If the owner's Gmail is ever suspected
+  compromised, set it `False` and redeploy — that account can drive the robot.
+
+Note this sits alongside FR-2000-006, the prompt-injection boundary, which still stands:
+email bodies are untrusted data and must still be wrapped by `build_summary_prompt()`
+before reaching any model. Acting on a *parsed intent* from the owner is not licence to
+feed raw email text to an LLM as instructions.
+
+---
+
 ## Power
 
 - Pi 5V rail measured 5.144V under boot load, `vcgencmd get_throttled` = 0x0.
