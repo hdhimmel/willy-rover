@@ -189,6 +189,69 @@ explicit, narrow entry point rather than by loosening the wake gate. One useful
 side-effect: the unreliable wake word does not affect this path, because he is
 already listening.
 
+**Only Howard or Carolyn may introduce someone (owner decision 2026-09-11), and it
+is confirmed by email.** This is the one place identity gates an action, and it is
+scoped deliberately narrowly — see the note at the end of this subsection on why §2
+survives.
+
+It cannot be enforced on the speaker today. §5.1 already records why: "who am I
+talking to" is inferred from the last face seen, and when the owner says "Willy, this
+is Carolyn" the camera is looking at *Carolyn*, not at the owner. Face recognition
+cannot tell you who is speaking. So the gate is two parts, one weak and one strong:
+
+```
+"Willy, this is Dave"
+  1. SOFT GATE   was Howard or Carolyn seen < FACE_ENROL_SEEN_WINDOW_S ago?
+                   no  → refuse, spoken reason. Nothing stored.
+                   yes → enrol Dave as PENDING (vectors stored, NOT matchable)
+  2. EMAIL       Willy emails the owner: name, timestamp, one-time code
+  3. APPROVAL    owner replies "APPROVE <code>" from an allowlisted sender
+                   → identity becomes ACTIVE
+                 no reply before FACE_ENROL_APPROVAL_TTL_S → vectors deleted
+```
+
+**The soft gate is a deterrent, not a control, and must be documented as one.** It
+stops a visitor casually enrolling people while the house is empty. It does not stop
+anyone determined, because the person in frame is the subject, not the speaker. Voice
+/ speaker identification is the proper fix and §4's boundaries already leave room for
+a voice-embedding source; until that exists, do not describe this as enforcement.
+
+**The email is what actually carries the authority**, because it is the only channel
+here that is authenticated. FR-2000-009 already hard-codes the single outbound
+recipient in `email_client.py` itself, so Willy can only ever ask the owner, and
+FR-2000-010/011's inbound sender allowlist already gates who may be listened to. The
+one-time code prevents an old approval being replayed.
+
+**PENDING is inert, and that is the real safety property.** An unapproved identity is
+stored but takes no part in matching: Willy will not greet that person by name, will
+not scope memory to them, and will treat them as unknown. So a soft-gate bypass buys
+an attacker a row in a database that does nothing until the owner approves it by
+email. That is what keeps the failure embarrassing rather than dangerous, exactly as
+§2 requires.
+
+**This is a deliberate, narrow exception to "never acted on."** `brain.py:926`
+records the standing rule that inbound email is surfaced and never acted upon. The
+exception is scoped as tightly as it can be:
+
+- The **only** thing an inbound email may do is flip an already-pending enrolment to
+  active. It may not enrol, delete, configure, or move anything.
+- It can only confirm an action **already initiated in person, at the rover**. Email
+  is a confirmation channel, not a command channel — nothing originates there.
+- It must carry a valid unexpired one-time code, from an allowlisted sender.
+- It can never cause physical action. No motion, no arm, under any circumstances.
+
+Like §7's biometric persistence, **this warrants its own FRD requirement rather than
+stretching FR-2000-003**, and should be added before implementation.
+
+**Fails closed.** No network, no mail, or an unreadable allowlist all leave the
+identity pending and therefore inert. An approval that cannot be checked is never
+assumed.
+
+**Why §2 still holds.** §2 excludes identity from gating *physical* action — motion,
+the arm, shutdown — so that a misidentification is never dangerous. This gates
+*enrolment*, whose false-accept costs a wipeable database row and whose false-reject
+costs a retry. No physical capability is behind an identity check, and none may be.
+
 **A spoken name may RESOLVE an identity; it may never CREATE one.** Enrolment stays
 owner-initiated ("Willy, this is Carolyn"). If a name could enrol, anyone could enrol
 themselves by walking in and announcing one. A name that matches nothing on file is
@@ -260,6 +323,14 @@ connector(s) found disconnected on 2026-08-20 are still unresolved, so `_wave()`
 currently dispatches correctly and produces no physical motion. The spoken half must
 not be conditional on the moving half — the same rule §4 already applies to the two
 embedding sources degrading independently.
+
+**Bootstrap.** The gate above is circular at first run: enrolling requires an
+authorised person to be recognised, and at first run nobody is enrolled. Howard and
+Carolyn are therefore enrolled by a **local script on the rover**
+(`scripts/enrol_identity.py`), run over SSH with photos or a live capture. Physical
+or SSH access to the rover is the root of trust; voice enrolment is gated from then
+on. The script must refuse to run if the store is non-empty unless explicitly forced,
+so it cannot be used to quietly bypass the email approval later.
 
 **Un-enrolment.** A `forget everyone` command deletes `identities.db`. Enrolment is
 voice-driven, so un-enrolment must be too; otherwise the only way to undo it is SSH.
