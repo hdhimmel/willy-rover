@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Willy recognises Howard and Carolyn by face and greets them by name, and records who was last seen and when.
+**Goal:** Willie recognises Howard and Carolyn by face and greets them by name, and records who was last seen and when.
 
 **Architecture:** Person detection stays on the existing Hailo YOLO pipeline. When a `person` box appears, a dedicated worker thread (never the tick thread) runs YuNet face detection on that box, aligns the face with `cv2.FaceRecognizerSF.alignCrop()`, embeds it with SFace, and matches it by nearest-neighbour against enrolled vectors in a standalone `identities.db`. `identity.py` holds vectors and names and knows nothing about cameras; `recognition.py` holds models and knows nothing about names.
 
@@ -21,7 +21,7 @@
 - **Fail closed.** Missing models or absent hardware mean log-and-disable, never an exception escaping into a caller. Mirror `vision.py::_detect_hailo()`.
 - **Default off:** `ENABLE_FACE_RECOGNITION=False`, matching `ENABLE_HAILO_LLM` and `ENABLE_OBJECT_RETRIEVAL`.
 - **Embeddings only.** Enrolment images are embedded and deleted immediately. Never persist a face image.
-- **Bias to unknown.** An uncertain match returns `None` and Willy says nothing. Greeting the wrong person by name is the failure that matters.
+- **Bias to unknown.** An uncertain match returns `None` and Willie says nothing. Greeting the wrong person by name is the failure that matters.
 - **Do not run the full test suite against a live service.** On 2026-08-25 a 110-second suite run starved the CPU and made the wake word unresponsive. Stop `willy-rover` first, or run only the specific test file.
 - **The rover pushes to `origin/main` on cron** (`scripts/auto_backup.sh` runs `git add -A`). Never leave uncommitted work in `/home/hhimmel/rover`; stage scratch files in `/tmp`.
 
@@ -430,7 +430,7 @@ Expected: the 8 new tests FAIL with `AttributeError: 'IdentityStore' object has 
 
 Add to `IdentityStore`. Presence is deliberately in memory, not SQLite: it is a decaying
 observation, not a durable record, and it should not survive a restart claiming someone is
-present when Willy has not actually seen them since booting.
+present when Willie has not actually seen them since booting.
 
 ```python
     # --- presence: "last seen", not tracking (spec section 5) ---
@@ -465,7 +465,7 @@ And in `__init__`, before the sqlite connect:
 - [ ] **Step 4: Add the config constant**
 
 ```python
-GREET_SESSION_GAP_S=600.0  # 10 min. How long someone must be unseen before Willy greets them
+GREET_SESSION_GAP_S=600.0  # 10 min. How long someone must be unseen before Willie greets them
                            # again. Without a gap he greets on every frame he sees a face.
 ```
 
@@ -487,7 +487,7 @@ Presence is in-memory on purpose: a sighting is a decaying observation, and
 a restart should forget who was around rather than assert a stale sighting
 as current.
 
-should_greet() fires at most once per session so Willy does not greet on
+should_greet() fires at most once per session so Willie does not greet on
 every frame in which he sees a face."
 ```
 
@@ -583,7 +583,7 @@ class FaceEmbedder:
 
 WHY THIS EXISTS: config.FACE_MATCH_MAX_DISTANCE was set provisionally. The real value has to
 come from measured distances between and within people, not from a guess -- too tight and
-Willy never greets anyone, too loose and he greets the wrong person, which is the failure
+Willie never greets anyone, too loose and he greets the wrong person, which is the failure
 that matters (spec section 7).
 
 Run with the rover seeing one person at a time:
@@ -635,7 +635,7 @@ if __name__=='__main__':
 
 ```python
 ENABLE_FACE_RECOGNITION=False  # default off, same convention as ENABLE_HAILO_LLM. Turning it
-                               # on makes Willy greet enrolled people by name.
+                               # on makes Willie greet enrolled people by name.
 # Both provisioned by Task 1, not tracked in git (models/ is gitignored). Run through cv2's
 # built-in FaceDetectorYN/FaceRecognizerSF -- no onnxruntime session handling needed.
 FACE_DETECT_MODEL_PATH='models/face_detection_yunet.onnx'

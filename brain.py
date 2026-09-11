@@ -215,7 +215,7 @@ class RoverBrain:
         self._shutdown_pending=False; self._shutdown_deadline=0.0  # FR-900-005 voice-commanded shutdown confirm
         # Roam permission (owner decision 2026-09-09). ENABLE_AUTONOMOUS_ROAM means "allowed to
         # ask"; this grant is what actually opens the gate, and it starts false at EVERY boot --
-        # unattended roaming is never the state Willy powers up in. See _roam_allowed().
+        # unattended roaming is never the state Willie powers up in. See _roam_allowed().
         self._roam_permission=False
         self._roam_ask_pending=False; self._roam_ask_deadline=0.0
         self._roam_ask_next=0.0     # earliest time a new ask may open, after a decline/lapse
@@ -447,7 +447,7 @@ class RoverBrain:
         # On-screen STOP SVC button (owner request 2026-08-24). Checked first, before any
         # Directive gating: this is an operator explicitly asking the service to stop, and it
         # must work even when the rover is faulted, wedged, or off the network -- which is the
-        # whole reason it exists (2026-08-24: Willy sat healthy but unreachable with no way to
+        # whole reason it exists (2026-08-24: Willie sat healthy but unreachable with no way to
         # stop him from the panel). display.py's two-step confirm means this only fires on a
         # deliberate second tap. Brake first, then let main.py's normal shutdown path run.
         if self.display.stop_tapped():
@@ -1145,8 +1145,8 @@ class RoverBrain:
                   f"Battery: {self.adc.battery_volts:.2f}V\n"
                   f"Stuck episodes this run: {self._stuck_count}\n"
                   f"Alert {self._stuck_alert_count} of {config.STUCK_ALERT_MAX_PER_SESSION} this session.\n\n"
-                  f"{'Photo attached from my front camera.' if photo else 'No photo — camera unavailable or privacy-disabled.'}\n\n-- Willy")
-            self.email.send_alert('Willy is stuck and needs help',body,image_bytes=photo,
+                  f"{'Photo attached from my front camera.' if photo else 'No photo — camera unavailable or privacy-disabled.'}\n\n-- Willie")
+            self.email.send_alert('Willie is stuck and needs help',body,image_bytes=photo,
                                    image_name='willy_stuck.jpg')
         except Exception:
             log.warning('STUCK alert email failed',exc_info=True)
@@ -1162,7 +1162,7 @@ class RoverBrain:
     def _roam_allowed(self):
         """Gate on the two unprompted-ROAM triggers (idle timeout, charged-at-dock).
 
-        Owner decision 2026-09-09: Willy asks before wandering off on his own. Returns True only
+        Owner decision 2026-09-09: Willie asks before wandering off on his own. Returns True only
         once permission has been granted for this session; otherwise it opens the ask as a side
         effect and returns False, so the caller simply does not transition this tick. Both callers
         fire repeatedly (the idle timeout every tick once it trips), which is why the pending and

@@ -260,7 +260,7 @@ class VoicePipeline:
             self._speaking.set()
             try: self._synthesize_and_play(text,timing)
             finally:
-                self._play_done()  # owner-requested: signals Willy has finished and is listening
+                self._play_done()  # owner-requested: signals Willie has finished and is listening
                 # 2026-08-23: was hardcoded 0.6s. Live symptom: 2-3 spurious wake-word triggers
                 # firing ~8s after a real reply, each producing an empty transcript ("How can I
                 # help?" spoken each time). Raising this to 2.0s and separately raising

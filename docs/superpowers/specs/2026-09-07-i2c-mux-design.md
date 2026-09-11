@@ -141,7 +141,7 @@ constructions:
 | `diagnostics.py` | all segments |
 | `scripts/wheel_current_test.py` | `trunk()` |
 
-**Thread safety.** Channel selection is mux state, and Willy runs a tick thread
+**Thread safety.** Channel selection is mux state, and Willie runs a tick thread
 alongside AI worker threads. `adafruit_tca9548a` takes the I²C lock for the
 duration of a transaction, which is sufficient — provided nothing bypasses the
 channel objects to touch the trunk directly while a channel is selected. No

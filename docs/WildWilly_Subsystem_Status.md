@@ -77,7 +77,7 @@ Voice (ENABLE_VOICE=False, disabled)         Vision (ENABLE_OBJECT_RETRIEVAL=Fal
                      or hw_sim.py under WILLY_SIMULATE=1)
 ```
 
-Every arrow into `SafetyController` is a *request*, never a bypass — §25's rule ("Willy's AI may
+Every arrow into `SafetyController` is a *request*, never a bypass — §25's rule ("Willie's AI may
 decide what it wants to accomplish, but it may never decide whether it is safe to move") holds
 structurally: nothing added since Phase 1 gained a second path to the motors.
 

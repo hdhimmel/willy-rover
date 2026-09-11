@@ -552,7 +552,7 @@ LocalAIProvider
 CloudAIProvider
 ```
 
-The rest of Willy should not care which model is used.
+The rest of Willie should not care which model is used.
 
 The AI should receive a structured world state rather than raw random sensor values.
 
@@ -918,7 +918,7 @@ Use this order:
 
 The final architecture must enforce this rule:
 
-> **Willy's AI may decide what it wants to accomplish, but it may never decide whether it is safe to move.**
+> **Willie's AI may decide what it wants to accomplish, but it may never decide whether it is safe to move.**
 
 The hierarchy must be:
 
@@ -946,7 +946,7 @@ Real-time motor protection must continue operating if the AI disappears complete
 
 # 26. Do Not Overbuild the First Milestone
 
-The immediate target is NOT "finish autonomous Willy."
+The immediate target is NOT "finish autonomous Willie."
 
 The immediate target is:
 

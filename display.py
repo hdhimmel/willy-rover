@@ -53,7 +53,7 @@ class WillyFace:
         # Network status (owner request 2026-08-24). Sampled on a background thread, never in
         # _draw() -- reading interface state costs a syscall/subprocess and the render loop runs
         # at DISPLAY_FPS. Cached value only. This exists because a rover that is up but off the
-        # network is otherwise completely silent about it: on 2026-08-24 Willy sat healthy with
+        # network is otherwise completely silent about it: on 2026-08-24 Willie sat healthy with
         # blue eyes and a smile while being entirely unreachable, and there was no way to tell
         # from the face whether he thought he was connected.
         self._net_text='NET ...'; self._net_color=C_DIM

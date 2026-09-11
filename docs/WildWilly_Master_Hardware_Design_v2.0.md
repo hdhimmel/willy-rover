@@ -973,7 +973,7 @@ carefully before changing anything.
 
 The puck's own microphone is **deliberately unused** (owner decision 2026-09-09):
 its speaker is kept, its mic is not. It remains the only non-HDMI playback device
-on the rover, so disabling the puck outright would leave Willy mute.
+on the rover, so disabling the puck outright would leave Willie mute.
 
 **The capture mic cannot do 16 kHz.** Its hardware offers 48000 and 44100 only
 (`cat /proc/asound/card*/stream0`), while openwakeword requires 16 kHz, and
@@ -1889,7 +1889,7 @@ names were always right; only the two address values were swapped).
 0x45 reads ~0A whenever the Pi is running on AC rather than battery — that is
 correct behaviour, not a fault: the DROK feed is simply unloaded.
 
-**Physical placement (owner, 2026-08-24).** Viewed from the **front** of Willy,
+**Physical placement (owner, 2026-08-24).** Viewed from the **front** of Willie,
 left to right:
 
 | Position | Addr | Voltage | Rail |

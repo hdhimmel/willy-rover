@@ -217,7 +217,7 @@ INA260_PI_ADDR=0x45      # Pi supply feed: DROK 9V -> Witty Pi VIN -> Pi. VERIFI
 # manual), no other GPIO — confirmed no conflict with anything else on this bus. Physically
 # installed, `wp5`/`wp5d` software installed and configured 2026-08-21: power source priority
 # VUSB first (matches wiring — Pi powered via USB-C, then Witty Pi outputs that same 5V to the
-# Pi via its own VUSB output). "Default state when powered" set to ON with a 2s delay (so Willy
+# Pi via its own VUSB output). "Default state when powered" set to ON with a 2s delay (so Willie
 # boots when power is connected), hardware watchdog enabled at 200 missed heartbeats (~10-20s).
 # ENABLE_WITTY_PI now True — 0x51 is included in brain.py's _EXPECTED_I2C self-test set.
 # Witty Pi's 9V input (INA260_PI_ADDR monitoring) comes from DROK-Pi (9V adjustable buck, R1).
@@ -296,7 +296,7 @@ BAT_ADC_STALE_S=5.0         # 2026-08-24: how long ADC.battery_volts may go with
                             # out a transient I2C glitch, short enough that a genuinely dead bus is
                             # caught within a few seconds. Before this existed, a failed read was
                             # forced to 0.00V and read as a flat pack, silently powering the rover
-                            # off (happened for real: a loose I2C wire self-terminated Willy with
+                            # off (happened for real: a loose I2C wire self-terminated Willie with
                             # no warning). Staleness now escalates via SENSOR_FAULT instead.
 # Self-test override (owner request 2026-08-24). While motion is gated off by a failed startup
 # self-test, brain.py re-runs the test every SELFTEST_RETRY_S; after SELFTEST_OVERRIDE_AFTER
@@ -306,10 +306,10 @@ BAT_ADC_STALE_S=5.0         # 2026-08-24: how long ADC.battery_volts may go with
 SELFTEST_RETRY_S=30.0
 SELFTEST_OVERRIDE_AFTER=3
 
-# STUCK help-photo alert (owner request 2026-08-24). When Willy enters STUCK -- he has exhausted
+# STUCK help-photo alert (owner request 2026-08-24). When Willie enters STUCK -- he has exhausted
 # his own avoidance attempts and escalated -- he emails the owner a photo from the front camera
 # plus pose/sonar/battery context, so the situation can be seen rather than guessed at.
-# This is the ONLY path where Willy sends outbound mail without a human confirmation step (see
+# This is the ONLY path where Willie sends outbound mail without a human confirmation step (see
 # email_client.py::send_alert for why that's a bounded exception to FR-2000-004). It can only
 # ever send to EMAIL_OUTBOUND_ALLOWLIST[0], and it reports -- it never acts.
 # Both limits below are load-bearing, not boilerplate: _go('STUCK') can recur, and this codebase
@@ -482,7 +482,7 @@ VOICE_ECHO_DECAY_S=0.6        # 2026-08-24: back at 0.6 (its original value). It
                               # raising it did NOT stop the false wakes. The real fix was
                               # Model.reset() (see voice.py::_speaker_loop). Reverted because at
                               # 2.0 this was a ~2.4s window (decay + blocking done-chirp) where
-                              # Willy could not hear "Hey Willie, stop" after every reply. That
+                              # Willie could not hear "Hey Willie, stop" after every reply. That
                               # was tolerable while he could not move; with motion enabled and
                               # vision arming come_here/follow/retrieve, it is not.
 # Perceived latency: a short chirp the instant the wake word fires, so the interaction *starts*
@@ -501,7 +501,7 @@ VOICE_ECHO_DECAY_S=0.6        # 2026-08-24: back at 0.6 (its original value). It
 VOICE_COMMAND_MAX_AGE_S=10.0
 VOICE_ACK_ENABLED=True
 VOICE_ACK_PATH='models/ack.wav'  # generated on first use, not provisioned -- models/ is gitignored
-# 2026-08-23: owner-requested -- a second, audibly distinct chirp signalling Willy has finished
+# 2026-08-23: owner-requested -- a second, audibly distinct chirp signalling Willie has finished
 # speaking and is listening again. Two 660Hz pulses (vs. the single 880Hz wake chirp) so the two
 # are never confused by ear. Plays while still muted (_speaking held) so its own sound can't
 # self-trigger the wake word, same defensive shape as the wake chirp's deaf_frames handling.
@@ -595,11 +595,11 @@ STUCK_TIMEOUT=3.0; BACK_UP_TIME=0.8; TURN_TIME_90=1.2; IDLE_TIMEOUT=30.0
 #      since. In practice most STUCK episodes will fall through to Claude, so unattended
 #      roaming is cloud-dependent for recovery despite ENABLE_HAILO_LLM being primary.
 #   3. HAILO_LLM_CONFIDENCE_FLOOR=0.7 is a guessed number, never tuned against real output.
-# Set back to False if Willy starts tripping STALL_FAULTs unattended.
+# Set back to False if Willie starts tripping STALL_FAULTs unattended.
 ENABLE_AUTONOMOUS_ROAM=True
 
 # OWNER DECISION 2026-09-09 -- ENABLE_AUTONOMOUS_ROAM above no longer means "roams unattended"; it
-# means "allowed to ASK". Willy now requests permission before starting an unprompted wander, and
+# means "allowed to ASK". Willie now requests permission before starting an unprompted wander, and
 # the grant lives for the session only (brain.py::_roam_allowed and friends). This does not fix any
 # of the three open items listed above -- obstacle avoidance is still sonar-only and MOTOR_PORT is
 # still unverified -- it puts a human in the loop each boot so those limitations are accepted

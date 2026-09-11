@@ -1,10 +1,10 @@
-# Willy — User Guide
+# Willie — User Guide
 
 *For the household, not the workbench. For the engineering details behind any of this, see
 `WildWilly_Functional_Requirements_v3.1.md`, `WildWilly_Master_Hardware_Design_v2.0.md`, and
 `WildWilly_Software_Design_v1.0.md`.*
 
-**Status as of 2026-09-10.** Willy now drives on his own, which is the big change since the
+**Status as of 2026-09-10.** Willie now drives on his own, which is the big change since the
 last version of this guide. He asks permission first — see the next section, it's the thing
 most worth reading.
 
@@ -22,9 +22,9 @@ arm directly, with no software involved, so it works even if he's frozen or conf
 
 ---
 
-## Willy asking to go exploring
+## Willie asking to go exploring
 
-**New on 2026-09-09.** Willy no longer wanders off by himself. When he's been idle a while and
+**New on 2026-09-09.** Willie no longer wanders off by himself. When he's been idle a while and
 wants to explore, he asks:
 
 > *"I would like to go explore. Is that okay?"*
@@ -43,14 +43,14 @@ revokes it, so he has to ask again.
 
 He always starts up with permission switched off, so a reboot never leaves him roaming.
 
-## Waking Willy up
+## Waking Willie up
 
 Say **"Hey Willie"**, then your request, the same way you'd talk to any voice assistant. Wait
 for a response before your next request — talking over him won't help.
 
 If voice doesn't seem to respond at all, that's a known open item, not something you're doing
 wrong. His microphone was replaced on 2026-09-09 to try to improve this; whether it actually
-fixed it hasn't been confirmed yet. Check with whoever's maintaining Willy.
+fixed it hasn't been confirmed yet. Check with whoever's maintaining Willie.
 
 ## What you can ask him
 
@@ -95,8 +95,16 @@ fixed it hasn't been confirmed yet. Check with whoever's maintaining Willy.
 - *"Shut down"* / *"Power off"* / *"Go to sleep"* — he'll ask you to confirm first. Say *"yes"*
   to go ahead. If you don't answer within about thirty seconds he cancels it himself.
 
-**Email:** if new mail arrives, Willy reads out who it's from and the subject. He only ever
-tells you — he never acts on an email.
+**Email:** if new mail arrives, Willie reads out who it's from and the subject.
+
+**He also now acts on email from Howard — including driving.** Nobody else's mail can make
+him do anything, and he checks the message really came from Howard's account rather than
+just claiming to. He says out loud what he's about to do before he does it, so if he starts
+moving on his own there'll be an audible reason. Old messages are ignored rather than obeyed
+late.
+
+**He may also email Howard asking for a new feature**, usually when something has failed a
+few times. Howard approves or ignores it; nothing changes until someone writes the code.
 
 **Teaching him something:**
 - *"Remember that [something]"* — stores a fact he can recall later.
@@ -123,7 +131,7 @@ tells you — he never acts on an email.
 - Say **"stop"** first. It's the fastest path and the one most carefully checked in code.
 - **There's a physical emergency-stop cutoff on the unit.** It kills power to the motors and arm
   outright, with no software involved, so it works even if he's frozen or ignoring you. Ask
-  whoever maintains Willy where it is if you don't know — worth knowing *before* you need it.
+  whoever maintains Willie where it is if you don't know — worth knowing *before* you need it.
 - **Don't yank the power** if you can avoid it — an abrupt cut can corrupt his storage, the same
   as any small computer. If he needs turning off and voice isn't working, ask the maintainer for
   the safe shutdown steps.
@@ -141,6 +149,6 @@ come and find you".**
 
 ---
 
-*This guide describes current, real capability only — deliberately not a wishlist. If Willy's
+*This guide describes current, real capability only — deliberately not a wishlist. If Willie's
 capabilities change, update this file alongside that work rather than leaving it describing an
 older version of him. Last reviewed against the code on 2026-09-10.*

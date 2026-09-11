@@ -7,29 +7,29 @@
 
 ## 1. Purpose
 
-Willy has no Bluetooth code or hardware documentation today — this is greenfield. The Pi 5 has
+Willie has no Bluetooth code or hardware documentation today — this is greenfield. The Pi 5 has
 onboard Bluetooth 5.0/BLE hardware (per its published spec; **not yet confirmed working on this
 specific unit** — first implementation step is a live check, not an assumption to build past).
 The owner wants two things, both narrowed during design to what a single BLE radio can honestly
 support:
 
-1. **Off-network status alerts** — Willy pushes short alerts (battery low, stuck, task done) to
+1. **Off-network status alerts** — Willie pushes short alerts (battery low, stuck, task done) to
    the owner's phone over a direct Bluetooth link, independent of the home network/internet.
 2. **Rough proximity, reframed as "last seen near you"** — a single radio's signal strength gives
    presence/absence and closer/farther, not a bearing. Rather than overclaim navigation
-   assistance the hardware can't deliver, this ships as: Willy logs its own position whenever
+   assistance the hardware can't deliver, this ships as: Willie logs its own position whenever
    the phone is in strong-signal range, so "where did you last see me?" has a real answer.
 
 **Explicitly one-directional and command-free**, per the owner's own scoping: no commands travel
-phone→Willy in this design. That removes the whole "how do we safety-gate an inbound BLE
+phone→Willie in this design. That removes the whole "how do we safety-gate an inbound BLE
 command" question — there isn't one to answer, because there's no inbound command path at all.
 
 ## 2. Why one connection serves both halves
 
 Both capabilities ride the same BLE link: once the owner's phone (via a bookmarked webpage using
 Chrome's Web Bluetooth API — no app-store install, same style as the existing Cockpit terminal
-workflow) connects to Willy's BLE peripheral service, that connection is both the notification
-channel (§3) *and* the thing whose signal strength Willy reads for proximity (§4). No separate
+workflow) connects to Willie's BLE peripheral service, that connection is both the notification
+channel (§3) *and* the thing whose signal strength Willie reads for proximity (§4). No separate
 scanning step, no second radio role.
 
 **Android only, by design.** Web Bluetooth doesn't exist on iOS Safari at all. This is a real
@@ -94,7 +94,7 @@ periodically (throttled — matching the existing sonar-observation cadence, not
 ### 4.3 Answering "where did you last see me?"
 
 A new voice intent (name TBD at implementation time — not `where_are_you`, which already means
-Willy's *own* position) queries the most recent `phone_nearby` observation and answers primarily
+Willie's *own* position) queries the most recent `phone_nearby` observation and answers primarily
 with **elapsed time** ("I last had your phone nearby about 4 minutes ago"), not a room name (no
 room-identification exists anywhere in this codebase — that's an explicit, separate, still-open
 gap) and not a precise position claim (odometry drifts — `WHEEL_DIAMETER_M`/`TRACK_WIDTH_M` are
@@ -103,11 +103,11 @@ still unconfirmed placeholders per `config.py`'s own comments). A rough relative
 
 ## 5. Privacy and scope boundaries
 
-- This is **not** a general BLE scanner. Willy never scans for or logs any device besides the one
+- This is **not** a general BLE scanner. Willie never scans for or logs any device besides the one
   phone actively connected to his peripheral service — no passive tracking of other people's
   devices, ever. Worth stating explicitly since "Bluetooth" and "scanning for nearby devices"
   are easy to conflate.
-- No commands travel phone→Willy (§1). No motion is ever triggered by this feature.
+- No commands travel phone→Willie (§1). No motion is ever triggered by this feature.
 - `ENABLE_BLUETOOTH` defaults off; needs explicit owner confirmation before shipping enabled,
   same precedent as the other `ENABLE_*` flags that default to a live capability.
 - Coexistence with the Pi 5's WiFi (shared RF front-end on most combo chips) should be checked

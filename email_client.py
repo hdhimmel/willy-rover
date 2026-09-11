@@ -118,7 +118,7 @@ class EmailClient:
 
         Why that's a defensible exception to FR-2000-004's "never acts autonomously": this can
         only ever send TO an already-allowlisted address (the owner's own), it is triggered only
-        by Willy's own fault states rather than by anything inbound, and it cannot act on the
+        by Willie's own fault states rather than by anything inbound, and it cannot act on the
         world -- it reports. Acting on inbound instructions still requires confirmation, which is
         what FR-2000-004 is actually protecting against. Callers own rate limiting; this method
         deliberately has none, so a caller in a tick loop MUST throttle (see brain.py's cooldown).

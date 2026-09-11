@@ -7,11 +7,11 @@
 
 ## 1. Purpose
 
-Today, teaching Willy a new voice command means a developer edits `voice.py`'s intent-recognition
+Today, teaching Willie a new voice command means a developer edits `voice.py`'s intent-recognition
 prompt and `brain.py`'s dispatch code by hand, then redeploys. The owner wants two things instead:
 
 1. **Recombinations of existing capabilities** learnable live, with no code change or redeploy.
-2. **Genuinely new capabilities** (requiring new code) to be *requested* by Willy automatically,
+2. **Genuinely new capabilities** (requiring new code) to be *requested* by Willie automatically,
    approved by the owner via email reply, and then implemented by an unattended coding agent that
    stops at a pull request for human review — never deployed to the rover without that review.
 
@@ -40,14 +40,14 @@ trigger phrase or a normalized key), `steps` (JSON array of `{intent, args}`), `
 
 ### 2.3 Defining a macro
 
-The owner (or eventually anyone) says something like *"Willy, when I say 'clean sweep,' go to
+The owner (or eventually anyone) says something like *"Willie, when I say 'clean sweep,' go to
 the kitchen then come find me."* `voice.py`'s existing local-LLM interpretation gains one more
 recognized
 intent, `define_macro`, whose args are `{"name": "...", "steps": [{"intent": "...", "args": {...}}, ...]}` —
 the LLM decomposes the spoken definition into steps using the *exact same* intent vocabulary it
 already uses for direct commands (§2.4 explains how new intents can still be added, so this
 vocabulary can grow, but macros are never required to invent an intent that doesn't exist).
-Willy confirms back ("I'll remember that as 'clean sweep': go to the kitchen, then come find
+Willie confirms back ("I'll remember that as 'clean sweep': go to the kitchen, then come find
 you. Say 'confirm' to save it.") before persisting — no macro is saved from a single ambiguous
 utterance.
 
@@ -92,7 +92,7 @@ all run every tick regardless of what's driving `_tick()`'s dispatch that cycle.
 
 It cannot create a new *intent* — every step must name an intent that already exists in
 `voice.py`'s recognized set. That boundary is what keeps this component entirely within "already
-reviewed, already safety-gated code," with zero new attack surface. Teaching Willy to do
+reviewed, already safety-gated code," with zero new attack surface. Teaching Willie to do
 something with no existing primitive for it is Component 2's job.
 
 ## 3. Component 2 — Capability-gap request → owner approval → unattended PR
@@ -126,7 +126,7 @@ without a new dependency. `status` is one of `pending` / `approved` / `rejected`
 
 ### 3.3 Dedup
 
-Before creating a new file, Willy checks existing `pending`/`approved` requests for a
+Before creating a new file, Willie checks existing `pending`/`approved` requests for a
 transcript/guess that's a near-duplicate (same normalized intent guess) and, if found, does not
 create a second request or send a second email — it just logs that the existing request N still
 covers this.

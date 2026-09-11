@@ -213,7 +213,7 @@ permission it was given.
 
 `_roam_allowed()` short-circuits on a pending request and on the cooldown
 *before* it would open a new one. Both callers fire repeatedly (the idle timeout
-stays tripped every tick once it elapses), so without those two checks Willy
+stays tripped every tick once it elapses), so without those two checks Willie
 would re-ask at tick rate.
 
 The request has one exit, `_end_roam_ask()`, reached four ways: a panel tap or a
@@ -316,7 +316,7 @@ legitimately needs one where passive observation does not.
      daemon, auto-starts) already handles RTC sync, scheduled power on/off, the low-voltage
      cutoff, and — critically — reacting to its own shutdown-request register. No custom code
      was written for any of that; `wp5d` already watches for it.
-   - **`witty_pi.py`'s one job**: feed Willy's own per-tick liveness into Witty Pi 5's
+   - **`witty_pi.py`'s one job**: feed Willie's own per-tick liveness into Witty Pi 5's
      *independent* hardware watchdog (register #70), alongside the existing systemd
      `WATCHDOG=1` notify in `brain.py`'s tick loop (`self._sd.notify('WATCHDOG=1');
      self.witty.heartbeat()`, same call site). The reason for a second, independent watchdog:
@@ -860,7 +860,7 @@ wants it.
 6. **Bench-confirm `ENCODER_COUNTS_PER_REV`, `WHEEL_DIAMETER_M`,
    `TRACK_WIDTH_M` (S-2, S-3).**
 7. ~~Confirm smart-home direction with the owner (S-8).~~ Done 2026-08-18 —
-   outbound (Willy sends commands out) confirmed correct.
+   outbound (Willie sends commands out) confirmed correct.
 8. ~~Integrate the accelerator into `vision.py` (§7).~~ Done 2026-08-21 —
    Hailo YOLOv8 backend shipped, live-verified, enabled (`ENABLE_HAILO_VISION`).
 9. **Steering kinematics (crab/point-turn/arc turning).** Owner decision

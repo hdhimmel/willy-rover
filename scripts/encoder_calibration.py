@@ -9,7 +9,7 @@ counts per wheel revolution is likely in the 700-850 region and the configured v
 five times too high.
 
 That matters more than it sounds. odometry.py computes distance as
-counts x circumference / ENCODER_COUNTS_PER_REV, so a value 4x too high makes Willy report about
+counts x circumference / ENCODER_COUNTS_PER_REV, so a value 4x too high makes Willie report about
 a quarter of the distance he actually travels -- a larger error than the wheel-diameter fix
 applied the same day, and in the same direction.
 

@@ -1,4 +1,4 @@
-**Willy Functional Requirements Document (FRD)\
+**Willie Functional Requirements Document (FRD)\
 Version 3.1**
 
 **Document control**
@@ -1224,7 +1224,7 @@ separately under FR-1200.
 # Acceptance Criteria
 
 -   **FR-1200-005 (stair standoff).** Owner decision 2026-09-11. Stairs are
-    recorded during the mapping run and Willy holds **0.15 m** clear of a mapped
+    recorded during the mapping run and Willie holds **0.15 m** clear of a mapped
     stair edge whenever `floor` mode is selected (FR-1200-002). The standoff is
     released only by an explicit switch to `stair` mode — it is a capability
     gate, not a permanent exclusion. **Stairs are a feature of this chassis, not
@@ -1258,7 +1258,7 @@ separately under FR-1200.
 
 # FR-2000-012/013 Acceptance Criteria — email as a command channel
 
-**Owner decision 2026-09-11, taken against advice, and recorded as such.** Willy may
+**Owner decision 2026-09-11, taken against advice, and recorded as such.** Willie may
 act on email from the owner, *including motion commands*. The alternative offered was
 non-physical actions only; the owner chose the full channel. The reasoning against it
 is preserved below so the risk is visible rather than forgotten, and the mitigations
@@ -1283,7 +1283,7 @@ hazard by construction.
 
 **FR-2000-013 (verify authentication results).** The mitigation that closes most of
 the gap at no cost to capability. Gmail stamps every inbound message with an
-`Authentication-Results` header carrying SPF, DKIM and DMARC outcomes. Willy MUST
+`Authentication-Results` header carrying SPF, DKIM and DMARC outcomes. Willie MUST
 parse it and refuse to act on any message that did not pass DKIM, regardless of what
 the From header claims. This converts a spoofable string match into real
 authentication. Surfacing (FR-2000-003) is unaffected --- a failed message may still
@@ -1549,7 +1549,7 @@ section behind it until now. Added 2026-08-02, v1.4.
 **Capture hardware changed 2026-09-09.** Voice input moved off the Waveshare
 mic+speaker puck's microphone and onto a dedicated capture-only USB mic. The
 puck is retained as the speaker (owner decision) --- it is the only non-HDMI
-playback device on the rover, so disabling it outright would leave Willy mute.
+playback device on the rover, so disabling it outright would leave Willie mute.
 
 The new mic cannot produce the 16 kHz openwakeword requires; its hardware offers
 48000 and 44100 only, and no ALSA/PipeWire resampling route is reachable from

@@ -15,7 +15,7 @@ Date: 2026-08-21 (revised same day — see §10)
 
 ## 1. Problem
 
-Willy's voice pipeline is unacceptably slow. Live-measured 2026-08-20: a fast-path
+Willie's voice pipeline is unacceptably slow. Live-measured 2026-08-20: a fast-path
 command (skips the LLM) takes ~16.4s total, dominated by STT alone at ~11.6s. A
 command that needs LLM intent parsing takes ~56.5s total, with the LLM step alone
 at ~40.9s. The owner's explicit requirement is that voice response feel "immediate,"

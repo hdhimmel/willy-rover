@@ -2,7 +2,7 @@ import time,config,logsetup
 from logsetup import log_event
 log=logsetup.setup('safety')
 
-# WildWilly_Claude_Fix_Implementation_Plan.md §3/§25: "Willy's AI may decide what it wants to
+# WildWilly_Claude_Fix_Implementation_Plan.md §3/§25: "Willie's AI may decide what it wants to
 # accomplish, but it may never decide whether it is safe to move." SafetyController is the single
 # authoritative gate between any motion source (reactive FSM, retrieval task, Claude-proposed
 # action) and the physical motors — nothing else is allowed to call DriveBase directly.

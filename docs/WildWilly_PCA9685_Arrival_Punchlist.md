@@ -35,7 +35,7 @@ Work in this order — deepest/most failure-prone first:
 - [ ] IMU: confirm tilt/heading reads sane.
 
 ## 6. If it all passes
-- Willy drives, steers, and the arm moves under manual/teleop command. That's the realistic "alive" milestone for today — not autonomy, not the handoff pose, not YOLO.
+- Willie drives, steers, and the arm moves under manual/teleop command. That's the realistic "alive" milestone for today — not autonomy, not the handoff pose, not YOLO.
 - Log actual pass values (voltages, PPR measured vs. the 823 PPR starting estimate, servo end-stops vs. the 500–2500µs starting values) back into the master engineering package so the next session isn't re-deriving them.
 
 ## If something goes sideways

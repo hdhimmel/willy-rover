@@ -4,7 +4,7 @@ log=logsetup.setup('smart_home')
 # FR-1300 Smart Home Integration (Google Home).
 #
 # DIRECTION CONFIRMED WITH OWNER 2026-08-18: Willie sends commands OUT to existing Google Home
-# devices, not the reverse (Willie controlled BY Google Assistant, e.g. "Hey Google, ask Willy to
+# devices, not the reverse (Willie controlled BY Google Assistant, e.g. "Hey Google, ask Willie to
 # come here") — that would be a different, unbuilt capability (an Actions-on-Google integration),
 # not this class. The assumption the FRD flagged since 2026-08-01 is resolved; this is the
 # correct, intended direction, not a guess anymore.

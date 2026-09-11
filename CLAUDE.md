@@ -85,7 +85,7 @@ VIN-vs-VUSB low-voltage-threshold question that needs live testing, not a guesse
 + `wp5d` (daemon, `systemctl status wp5d.service`) are installed and running, confirmed talking
 to the HAT (`/var/log/wp5d.log`: "Connected to Witty Pi 5", firmware v1.4). RTC synced. Via
 `wp5`'s "Other settings..." submenu, configured 2026-08-21:
-- **Default state when powered → ON, 2s delay** — Willy now boots when power is connected
+- **Default state when powered → ON, 2s delay** — Willie now boots when power is connected
   rather than requiring the HAT's physical button; the 2s delay is just a debounce against a
   brief power blip triggering a full boot.
 - **Power source priority → V-USB first** (matches actual wiring).
@@ -348,7 +348,7 @@ arming it on a rover anyone is standing next to.
 **Autonomous ROAM — gated off 2026-08-20, re-enabled 2026-09-07.** `brain.py::_idle()`'s
 idle-timeout auto-wander and the post-charging auto-resume (`_tick()`'s `DOCK` handling) both
 check `config.ENABLE_AUTONOMOUS_ROAM` before calling `_go('ROAM')`.
-Found live 2026-08-20: with only sonar for obstacle sensing (no vision yet), Willy was wandering
+Found live 2026-08-20: with only sonar for obstacle sensing (no vision yet), Willie was wandering
 unprompted and tripping repeated `STALL_FAULT`s against things sonar didn't catch — sometimes
 5 of 6 wheels at once. Owner decision then: no unprompted autonomous driving until vision is
 live-verified working. Manual/voice-commanded driving was never affected; the flag only ever
@@ -358,7 +358,7 @@ gated the unprompted idle/post-charge wander.
 accepted, not fixed.** Obstacle avoidance is still sonar-only — vision is deliberately kept
 out of the reflex path (see "keep the NPU out of the safety path" above), so live-verified
 vision never satisfied this gate and does not now. Two open items make that worse and both
-are worth knowing before leaving Willy alone: `MOTOR_PORT` is unverified since 2026-09-04 (a
+are worth knowing before leaving Willie alone: `MOTOR_PORT` is unverified since 2026-09-04 (a
 stall may be attributed to the wrong wheel — see the motor-port pitfall above), and the
 STUCK-state on-device reasoning that recovery depends on is FRD v3.1 G-6, last benchmarked at
 0%. Expect most STUCK episodes to fall through to Claude, i.e. unattended recovery currently
@@ -399,7 +399,7 @@ touching anything audio.
 
 - **Never disable the puck.** Owner wants its speakers; only its *microphone* is
   retired. It is the only non-HDMI playback device on the rover — disabling it leaves
-  Willy mute, including the spoken roam-permission ask.
+  Willie mute, including the spoken roam-permission ask.
 - **The mic cannot do 16kHz.** Its hardware offers 48000/44100 only, and openwakeword
   needs 16000. PortAudio exposes the raw `hw:` devices with NO plug/default/PipeWire
   route, so ALSA will not resample — `voice.py` captures at 48k and decimates 3:1 via
@@ -422,7 +422,7 @@ touching anything audio.
 reverses `brain.py`'s long-standing "surfaced, never acted on" rule, so read this before
 touching `email_client.py` or the email path in `brain.py`.
 
-- **Willy acts on email from the owner, INCLUDING MOTION.** The owner chose the full
+- **Willie acts on email from the owner, INCLUDING MOTION.** The owner chose the full
   channel over the non-physical-only option, against advice. Do not quietly narrow it
   back; do not quietly widen it either.
 - **`_sender_allowed()` is a string match on the From header. That is NOT authentication.**

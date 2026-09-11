@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Standalone rail logger — captures the power trace across a shutdown.
 
-WHY THIS EXISTS: on 2026-08-24 Witty Pi powered Willy down three times with
+WHY THIS EXISTS: on 2026-08-24 Witty Pi powered Willie down three times with
 `Shutdown reason: Vin < Vlow` (8.0V threshold against the DROK 9V feed) at 84%
 battery. Each event destroyed its own evidence: journald on this machine runs
 volatile (`--list-boots` only ever shows boot 0), so nothing survived the

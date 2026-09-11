@@ -150,7 +150,7 @@ class ADC:
         # 2026-08-24: a failed read used to set _bat_raw=0, which brain.py's tier ladder read as
         # 0.00V -> below BAT_SHUTDOWN_V -> silent controlled shutdown. That made "the I2C bus
         # hiccupped" indistinguishable from "the pack is flat", and it fired for real: a loose
-        # I2C wire took the bus down and Willy powered himself off believing the battery was
+        # I2C wire took the bus down and Willie powered himself off believing the battery was
         # empty, with no low-battery warning and no fault state -- destroying the evidence and,
         # with WiFi as the only link, taking him fully offline. Now a failed read HOLDS the last
         # good value and marks the reading stale; brain.py escalates staleness through the normal

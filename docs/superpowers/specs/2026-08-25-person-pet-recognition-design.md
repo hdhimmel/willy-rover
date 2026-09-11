@@ -10,7 +10,7 @@ Date: 2026-08-25
 
 ## 1. Problem
 
-Willy cannot tell people apart. `vision.py` detects the COCO `person` and `dog` classes
+Willie cannot tell people apart. `vision.py` detects the COCO `person` and `dog` classes
 (both present in `models/coco.txt` and live today), so he knows *a* human is present and
 *a* dog is present, but every human is interchangeable and Storm is indistinguishable from
 any visiting dog.
@@ -19,7 +19,7 @@ any visiting dog.
 and `get_context_for()` surfaces them by substring match on the fact key. That is
 knowledge, not recognition. Nothing connects a name to a face.
 
-The owner wants Willy to know three individuals: Howard, Carolyn, and the dog Storm.
+The owner wants Willie to know three individuals: Howard, Carolyn, and the dog Storm.
 
 ## 2. Scope
 
@@ -149,7 +149,7 @@ This **conflicts with §7 as originally written** and the conflict has to be res
 rather than papered over. §7 biases uncertain matches toward "unknown" specifically
 because the unknown branch is *silent* — saying nothing is the safe failure. Making
 unknown the loud branch inverts that: every uncertain match on an enrolled person in
-poor light becomes Willy announcing an intruder at a member of the household. The
+poor light becomes Willie announcing an intruder at a member of the household. The
 bias and the announcement cannot both be naive.
 
 So matching resolves into three bands, not a threshold:
@@ -180,7 +180,7 @@ common error is a false reject — an enrolled person in poor light, a new hairc
 hat — and without this, that error is indistinguishable from an intruder and just as
 loud. Letting the person speak costs one question and rescues the case entirely.
 
-**This is the first behaviour in which Willy initiates a conversation.** Every other
+**This is the first behaviour in which Willie initiates a conversation.** Every other
 speech path today is wake-word triggered; he talks only after "Hey Willie". Asking a
 question and then listening requires a **prompted capture** that bypasses the wake
 word — `voice.py` currently reaches `_handle_wake()` only from a wake detection. That
@@ -195,16 +195,16 @@ scoped deliberately narrowly — see the note at the end of this subsection on w
 survives.
 
 It cannot be enforced on the speaker today. §5.1 already records why: "who am I
-talking to" is inferred from the last face seen, and when the owner says "Willy, this
+talking to" is inferred from the last face seen, and when the owner says "Willie, this
 is Carolyn" the camera is looking at *Carolyn*, not at the owner. Face recognition
 cannot tell you who is speaking. So the gate is two parts, one weak and one strong:
 
 ```
-"Willy, this is Dave"
+"Willie, this is Dave"
   1. SOFT GATE   was Howard or Carolyn seen < FACE_ENROL_SEEN_WINDOW_S ago?
                    no  → refuse, spoken reason. Nothing stored.
                    yes → enrol Dave as PENDING (vectors stored, NOT matchable)
-  2. EMAIL       Willy emails the owner: name, timestamp, one-time code
+  2. EMAIL       Willie emails the owner: name, timestamp, one-time code
   3. APPROVAL    owner replies "APPROVE <code>" from an allowlisted sender
                    → identity becomes ACTIVE
                  no reply before FACE_ENROL_APPROVAL_TTL_S → vectors deleted
@@ -218,12 +218,12 @@ a voice-embedding source; until that exists, do not describe this as enforcement
 
 **The email is what actually carries the authority**, because it is the only channel
 here that is authenticated. FR-2000-009 already hard-codes the single outbound
-recipient in `email_client.py` itself, so Willy can only ever ask the owner, and
+recipient in `email_client.py` itself, so Willie can only ever ask the owner, and
 FR-2000-010/011's inbound sender allowlist already gates who may be listened to. The
 one-time code prevents an old approval being replayed.
 
 **PENDING is inert, and that is the real safety property.** An unapproved identity is
-stored but takes no part in matching: Willy will not greet that person by name, will
+stored but takes no part in matching: Willie will not greet that person by name, will
 not scope memory to them, and will treat them as unknown. So a soft-gate bypass buys
 an attacker a row in a database that does nothing until the owner approves it by
 email. That is what keeps the failure embarrassing rather than dangerous, exactly as
@@ -253,7 +253,7 @@ the arm, shutdown — so that a misidentification is never dangerous. This gates
 costs a retry. No physical capability is behind an identity check, and none may be.
 
 **A spoken name may RESOLVE an identity; it may never CREATE one.** Enrolment stays
-owner-initiated ("Willy, this is Carolyn"). If a name could enrol, anyone could enrol
+owner-initiated ("Willie, this is Carolyn"). If a name could enrol, anyone could enrol
 themselves by walking in and announcing one. A name that matches nothing on file is
 treated as unknown — the stranger response — regardless of how confidently it is
 given.
@@ -290,13 +290,13 @@ and §7's position that this is "a deliberate, explicit addition to what FR-1800
 permits" covers enrolled identities only. Building a silent embedding record of everyone
 who passes the camera is a different thing entirely and is out of scope.
 
-**This is personality, not security.** Willy takes no action on a stranger: he does not
+**This is personality, not security.** Willie takes no action on a stranger: he does not
 alert, log an event, photograph, or change behaviour. It must not be described anywhere —
 docs, user guide, or release notes — in terms that suggest he is monitoring for intruders,
 because someone will otherwise rely on it. He is a rover that says a funny thing when he
 sees a face he does not know.
 
-**Enrolment.** "Willy, this is Carolyn" enters through the voice fast path, captures
+**Enrolment.** "Willie, this is Carolyn" enters through the voice fast path, captures
 several frames over roughly two seconds, embeds each, and stores **multiple vectors per
 identity** — matching against a handful of poses is markedly more robust than against one
 shot. He refuses cleanly, with a spoken reason, when he sees no face or sees more than one
@@ -446,15 +446,15 @@ coming back after lunch feels like being noticed.
 **5. Per-person scoping applies to FACTS ONLY. Instructions stay global.** A fact is
 personal — "my car is the blue one" means different cars for different people, and
 collision is the problem being solved. An instruction is a capability: if Howard
-teaches Willy to do something, Carolyn asking for it should work. Scoping
+teaches Willie to do something, Carolyn asking for it should work. Scoping
 instructions would also mean identity silently determining what the rover will do,
 which is permissions by the back door — excluded by §2, and excluded for the reason
 that keeps a misidentification embarrassing rather than dangerous.
 
 ## 9.1 Still open
 
-- **Which name does he use for himself?** "Willy" and "Willie" both appear across the
-  repo, the wake word is `hey_willie.onnx`, and the user guide says "Willy". Pick one
+- **Which name does he use for himself?** "Willie" and "Willie" both appear across the
+  repo, the wake word is `hey_willie.onnx`, and the user guide says "Willie". Pick one
   for the spoken self-introduction.
 
 ## 10. Prerequisite spike — run before building the pet half

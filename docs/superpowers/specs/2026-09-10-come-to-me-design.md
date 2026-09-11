@@ -10,7 +10,7 @@ labelled and routed through.
 
 ## 1. Goal
 
-One spoken command — *"Willie, I'm in the kitchen, come to me"* — sends Willy to a
+One spoken command — *"Willie, I'm in the kitchen, come to me"* — sends Willie to a
 named room and then has him find the speaker inside it, stopping a polite distance
 away.
 
@@ -25,7 +25,7 @@ unit-testing the software; both prevent live validation of the part they gate.
 
 **A — the navigate leg cannot be live-validated until the wheel encoders work.**
 `Navigator` steers by `odometry.pose`, and the encoders have produced no edges on
-any of six channels since 2026-08-25. With no pose updates Willy cannot know he has
+any of six channels since 2026-08-25. With no pose updates Willie cannot know he has
 moved, let alone arrived. The odometry constants were corrected on 2026-08-25 but
 have never been confirmed by a driven, measured run.
 
@@ -42,7 +42,7 @@ the hardware. Build it, test it in simulation, and hold the live acceptance test
 §7.
 
 Note the two blockers are independent: the find leg (§4.5, §4.6) is gated by
-neither, so it can be built *and* live-tested today by standing in front of Willy
+neither, so it can be built *and* live-tested today by standing in front of Willie
 and letting him approach.
 
 Secondary: the wake word has been unreliable and unexplained since 2026-08-21. The
@@ -150,7 +150,7 @@ here too.
 
 ### 4.5 The find leg needs a search sweep
 
-Arriving in the kitchen, Willy faces an arbitrary direction.
+Arriving in the kitchen, Willie faces an arbitrary direction.
 `PursuitTask._localize()` currently takes a frame, and if no person is in it,
 increments a counter and looks at the *same view* again — failing after 20 ticks
 without ever moving. It can approach a person it can already see; it cannot look for
@@ -164,7 +164,7 @@ again, up to one full rotation before reporting failure.
 `vision.py::localize()` computes range from bounding-box width using
 `_ASSUMED_OBJECT_WIDTH_CM = 8.0`, commented as "generic small handheld object — no
 real per-class size table". A person is roughly 50 cm across, so distance comes out
-about 6× too near, and Willy decides he has "arrived" while still across the room.
+about 6× too near, and Willie decides he has "arrived" while still across the room.
 
 Add a minimal per-class width table with an entry for `person`, falling back to the
 existing 8.0 for anything else. Without this the find leg cannot work, so it belongs
@@ -181,7 +181,7 @@ previously in §8.
 
 **Detection.** Only ever at a **labelled doorway waypoint** — never at an arbitrary
 blocked path, or a sofa in the hallway gets politely knocked on. The condition is:
-the current waypoint is a doorway, Willy is within `NAV_ARRIVAL_RADIUS_M` of it, and
+the current waypoint is a doorway, Willie is within `NAV_ARRIVAL_RADIUS_M` of it, and
 front sonar reads an obstacle inside the stop threshold. That is a heuristic, and it
 will also fire for a person standing in the doorway or a box left there. Both cases
 degrade acceptably — he knocks and asks, which is a reasonable thing to do at a
@@ -215,7 +215,7 @@ to respect that:
 
 Therefore: the knock is a fixed sequence of pulse offsets with a fixed dwell,
 modelled directly on `brain.py::_wave()` (`_WAVE_OFFSETS_US` / `_WAVE_DELAY_S`,
-non-blocking, stepped on the tick thread, returns to centre). Willy positions himself
+non-blocking, stepped on the tick thread, returns to centre). Willie positions himself
 by **sonar** so that the tap lands at the end of the arm's travel rather than
 pressing through it. There is no contact detection anywhere in the loop, and the code
 must never be written as though there is.
@@ -254,7 +254,7 @@ this codebase; no path ends in a quiet stop.
 
 **Odometry drift is expected and tolerated by design.** The navigate leg is
 dead-reckoned with no loop closure, so error accumulates across a multi-room route.
-The find leg is what rescues it: Willy does not need to land on the kitchen
+The find leg is what rescues it: Willie does not need to land on the kitchen
 centroid, only close enough to see a person. This is why the feature can work on
 odometry that will never be excellent — and also why the sweep in §4.5 is
 load-bearing rather than cosmetic.
@@ -292,7 +292,7 @@ hardware.
 
 **Available now — no blocker (find leg only):**
 
-1. Stand in front of Willy, off to one side so he is not already facing you. He
+1. Stand in front of Willie, off to one side so he is not already facing you. He
    sweeps, finds you, approaches, stops at `PURSUIT_STANDOFF_CM`, says *"Found you."*
    Confirms the sweep (§4.5) and the person-width fix (§4.6) — check he stops at a
    sensible distance, not across the room.

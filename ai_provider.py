@@ -8,7 +8,7 @@ log=logsetup.setup('ai_provider')
 # (motion-decision JSON, brain.py's STUCK state), cloud_ai.py::CloudAIClient (free-text fallback,
 # voice.py), and a bare llama_cpp.Llama instance inlined directly in voice.py::_interpret_local().
 # The first two independently POSTed to the same Anthropic endpoint with duplicated transport
-# code. "The rest of Willy should not care which model is used" (§14): callers pass a
+# code. "The rest of Willie should not care which model is used" (§14): callers pass a
 # prompt/system/schema, get back a structured AIResult regardless of which provider answered.
 #
 # §15's named anti-pattern -- "do not use 'valid JSON' as AI confidence" -- is what AIResult
