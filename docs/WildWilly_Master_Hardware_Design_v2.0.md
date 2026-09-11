@@ -1056,12 +1056,37 @@ The same reasoning applies to a lidar later: it shares the ToF's glass problem.
 init; that is a lot of traffic for a flat, unisolated segment that took the whole
 bus down twice on 2026-09-07/08. The mux gives containment for exactly this.
 
-**Floor zones must be masked.** With a wide vertical FoV aimed forward, the lower
-rows of the 8×8 grid see the carpet a metre ahead and return a solid ~60–80cm
-constantly. Fed into the fusion below, that reads as a permanent obstacle and the
-rover never moves. The mask is geometric — it depends on mount height and
-down-angle — so **the mount must be rigid**; a sensor that droops re-aims the mask
-and silently re-blocks the rover.
+**The floor is always in view, and must be subtracted — not masked.** With a wide
+vertical FoV aimed forward, the lower rows of the 8×8 grid see carpet ahead and
+return a constant reading. Fed straight into the fusion below, that is a permanent
+obstacle and the rover never moves.
+
+The obvious fix — drop the bottom rows — is the wrong one, and §6.5 said so until
+2026-09-11. Blanket-masking a row throws away real obstacles in it: mounted around
+20cm the floor first appears about 32cm out, inside `DIST_SLOW`, so the masked rows
+are exactly where a shoe or a cable at close range would show up.
+
+**Use a per-zone floor profile instead.** Park the rover on clear, level floor,
+record what each of the 64 zones returns, and store that as the expected floor
+distance for that zone. At runtime a zone counts as an obstacle only when it
+returns **meaningfully shorter** than its stored value. Low obstacles stay visible
+in the very zones a mask would have discarded, and mount height stops being
+critical — the calibration absorbs the geometry instead of the code encoding it.
+
+Consequences worth knowing:
+
+- **The mount must still be rigid, for a different reason.** The profile is tied to
+  the sensor's exact pose. A bracket that droops invalidates it — which now shows
+  up as phantom obstacles rather than silent blindness, so it fails loudly. Better,
+  but it still means re-running the calibration after any mechanical change.
+- **The profile is floor-dependent.** A thick rug returns shorter than bare boards.
+  Calibrate on the surface he actually roams, and use a margin generous enough to
+  cover the range of floors in the house rather than one room's.
+- **Aim horizontal, never angled down.** A down-angle brings the floor closer in
+  every zone and compresses the margin between "floor" and "obstacle".
+- **No window in front of the sensor.** ToF parts are very sensitive to cover-glass
+  crosstalk; a printed bezel or clear plastic over the aperture will corrupt both
+  the calibration and the live readings. Mount the face flush or slightly proud.
 
 **Do NOT use it as the cliff sensor.** The wide vertical FoV does see the floor,
 and a drop does read as the floor suddenly being further away, so the temptation

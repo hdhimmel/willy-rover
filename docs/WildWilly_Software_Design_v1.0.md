@@ -501,8 +501,17 @@ the part and the mounting constraints. The software consequence is deliberately
 small.
 
 `SonarArray.distances()` is the single fusion point. `'front'` becomes the minimum
-of the sonar reading and the nearest valid unmasked ToF zone, so whichever sensor
-sees something closer wins. That is fail-safe by construction and needs no
+of the sonar reading and the nearest ToF zone **reporting an obstacle**, so
+whichever sensor sees something closer wins.
+
+"Reporting an obstacle" is not "returning a range". Every lower zone always sees the
+floor, so a zone counts only when it returns meaningfully shorter than its stored
+per-zone floor distance (Master Hardware Design §6.5). That calibration — 64 values,
+captured on clear floor — belongs with the other persisted state, and a
+`scripts/calibrate_tof_floor.py` re-run is the documented fix after any bracket
+change. An uncalibrated sensor must report *nothing* rather than raw ranges:
+defaulting to raw would make the floor a permanent obstacle and immobilise the rover
+on first boot after a rebuild. That is fail-safe by construction and needs no
 arbitration logic, no new FSM state and no threshold changes: `DIST_STOP`,
 `DIST_SLOW`, `DIST_CLEAR`, `_roam()`, `_slow()` and `_avoid()` all keep working
 against the same dict key.
