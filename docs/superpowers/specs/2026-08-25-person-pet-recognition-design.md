@@ -3,6 +3,9 @@
 Status: **DESIGN APPROVED, NOT IMPLEMENTED.** No code written. §10's spike must run
 before the pet half of §4/§5 is built — it can invalidate that half's approach.
 
+**Updated 2026-09-11:** §5 gains the spoken self-introduction and arm wave on
+enrolment; §9's five open questions are settled. The human half is cleared to build.
+
 Date: 2026-08-25
 
 ## 1. Problem
@@ -141,8 +144,30 @@ enqueues and returns immediately.
 **Enrolment.** "Willy, this is Carolyn" enters through the voice fast path, captures
 several frames over roughly two seconds, embeds each, and stores **multiple vectors per
 identity** — matching against a handful of poses is markedly more robust than against one
-shot. He speaks confirmation. He refuses cleanly, with a spoken reason, when he sees no
-face or sees more than one person.
+shot. He refuses cleanly, with a spoken reason, when he sees no face or sees more than one
+person.
+
+**He then introduces himself back, and waves** (owner decision 2026-09-11). Being
+introduced to someone is a social exchange, not a database write, and a bare
+"enrolled" ack reads as exactly the latter. So: a spoken self-introduction addressed
+to the new person by name, plus `brain.py::_wave()` — which already exists as a
+non-blocking step machine on its own FSM state, so this is reuse, not new motion code.
+
+**The wave runs AFTER the capture completes, never during it.** An arm sweeping
+through frame while he is embedding a face risks occluding the face he is trying to
+learn, and the failure would present as "enrolment is unreliable" rather than as an
+obvious ordering bug. Sequence is: capture → embed → store → speak → wave.
+
+**Waving is for introductions only, not for routine greetings.** He meets a person
+once; he sees them every day. A rover that waves every time someone walks past the
+camera stops being charming within an hour, and `_wave()` occupies an FSM state while
+it runs. Routine recognition greets by voice alone.
+
+**If the arm is unavailable the introduction still happens.** The arm servo
+connector(s) found disconnected on 2026-08-20 are still unresolved, so `_wave()`
+currently dispatches correctly and produces no physical motion. The spoken half must
+not be conditional on the moving half — the same rule §4 already applies to the two
+embedding sources degrading independently.
 
 **Un-enrolment.** A `forget everyone` command deletes `identities.db`. Enrolment is
 voice-driven, so un-enrolment must be too; otherwise the only way to undo it is SSH.
@@ -215,16 +240,52 @@ of `c6473ee`. The time/date patterns regressed three times for want of exactly t
 
 **Migration — tested against a copy of the real `memory.db`**, not a synthetic one.
 
-## 9. Open questions for implementation
+## 9. Implementation decisions — settled 2026-09-11
 
-1. Which ArcFace ONNX model, and where does it come from? Not present on the rover; must
-   be fetched. `models/` is gitignored.
-2. Face *detection* on CPU: SCRFD ONNX, or crop from the YOLO person box? The latter needs
-   no new model but gives a looser crop, which costs embedding quality.
-3. What exactly is the match threshold, in the chosen model's distance metric? §7 fixes the
-   *direction*; the number needs measuring against real enrolments.
-4. How long is a greeting "session"?
-5. Does per-person scoping apply to learned *instructions* as well as facts, or facts only?
+These were open questions; the owner delegated them. Recorded with reasoning so they
+can be revisited on evidence rather than re-argued.
+
+**1. Model: InsightFace ArcFace, the MobileFaceNet variant (`w600k_mbf`, buffalo_s),
+not the ResNet100.** §3 rejected all-CPU specifically because contention degrades
+voice — that was observed live on 2026-08-25, when a test run made the wake word
+unresponsive. A MobileFaceNet embedder is roughly an order of magnitude cheaper than
+ResNet100 on CPU for a small accuracy cost, and §2 already excludes permissions, so
+accuracy is the cheap axis to trade. Fetched to `models/`, which is gitignored — so
+provisioning is a documented setup step, not a repo artifact.
+
+**2. Face detection: SCRFD. This is not a trade-off, it is a requirement.** ArcFace
+does not accept an arbitrary crop — it expects a 112×112 face aligned on five
+landmarks. A YOLO person box has no landmarks and no alignment, and feeding one in
+produces embeddings that cluster by pose rather than by identity. Question 2 was
+posed as "looser crop costs quality"; that understates it. A face detector that
+returns landmarks is mandatory.
+
+**3. Threshold: start at cosine 0.40, and MEASURE IT.** Ship
+`scripts/tune_face_threshold.py` alongside the feature, which sweeps the threshold
+against real enrolments and reports the false-accept / false-reject curve.
+
+> This project already has a guessed threshold that was never tuned:
+> `HAILO_LLM_CONFIDENCE_FLOOR=0.7`, which FRD G-6 records as "a guessed number, never
+> tuned against real output" and which is still cited as an open risk. Do not add a
+> second one. 0.40 is a starting point for tuning, not a value to ship and forget.
+
+**4. Greeting session: 30 minutes**, `FACE_GREET_SESSION_S=1800`. Long enough that
+walking in and out of the room does not re-trigger a greeting, short enough that
+coming back after lunch feels like being noticed.
+
+**5. Per-person scoping applies to FACTS ONLY. Instructions stay global.** A fact is
+personal — "my car is the blue one" means different cars for different people, and
+collision is the problem being solved. An instruction is a capability: if Howard
+teaches Willy to do something, Carolyn asking for it should work. Scoping
+instructions would also mean identity silently determining what the rover will do,
+which is permissions by the back door — excluded by §2, and excluded for the reason
+that keeps a misidentification embarrassing rather than dangerous.
+
+## 9.1 Still open
+
+- **Which name does he use for himself?** "Willy" and "Willie" both appear across the
+  repo, the wake word is `hey_willie.onnx`, and the user guide says "Willy". Pick one
+  for the spoken self-introduction.
 
 ## 10. Prerequisite spike — run before building the pet half
 
