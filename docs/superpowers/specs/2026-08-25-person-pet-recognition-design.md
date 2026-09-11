@@ -137,9 +137,55 @@ frames, and no attempt to follow a person between detections. Presence queries r
 decaying record.
 
 **Greeting.** Debounced off the same record: a person is greeted once per *session*, where
-a session ends once they have been unseen for a configured number of minutes. Without this
-he greets on every frame in which he sees a face. Greeting uses `voice.speak()`, which
-enqueues and returns immediately.
+a session ends once they have been unseen for `FACE_GREET_SESSION_S` (1800s). Without
+this he greets on every frame in which he sees a face. Greeting uses `voice.speak()`,
+which enqueues and returns immediately. A recognised person gets "Hi, Carolyn" — by
+name, voice only, no wave (§5's enrolment note).
+
+**Strangers — three bands, not two (owner decision 2026-09-11).** The owner wants an
+unrecognised person to get "Stranger Danger!".
+
+This **conflicts with §7 as originally written** and the conflict has to be resolved
+rather than papered over. §7 biases uncertain matches toward "unknown" specifically
+because the unknown branch is *silent* — saying nothing is the safe failure. Making
+unknown the loud branch inverts that: every uncertain match on an enrolled person in
+poor light becomes Willy announcing an intruder at a member of the household. The
+bias and the announcement cannot both be naive.
+
+So matching resolves into three bands, not a threshold:
+
+| Distance to nearest enrolled vector | Result | Behaviour |
+|---|---|---|
+| Below `FACE_MATCH_THRESHOLD` | Recognised | "Hi, Carolyn" — once per session |
+| Between the two | **Uncertain** | **Silent.** Recorded present, unnamed. §7's bias, unchanged |
+| Above `FACE_STRANGER_THRESHOLD` | Confidently unknown | "Stranger Danger!" |
+
+Announcing a stranger therefore requires **positive evidence of dissimilarity**, not
+merely the absence of a match. The middle band is what protects an enrolled person
+having a bad-lighting day, and it is why this is not simply "else: say stranger".
+
+Three further guards:
+
+- **Confirm over consecutive detections.** A single frame must never trigger it; require
+  `FACE_STRANGER_CONFIRM_N` consecutive confidently-unknown results. Face embeddings are
+  noisy on one bad frame and the cost of a false positive here is entirely social.
+- **Once per session**, on the same debounce as greetings. Repeating it every few seconds
+  at a guest is worse than saying it once.
+- **Never when the store is empty.** With nobody enrolled, everyone is confidently
+  unknown. Shouting at the whole household because enrolment has not happened yet is a
+  bad first impression of the feature.
+
+**Do not persist embeddings of unrecognised people.** Match and discard. Enrolment is
+consented — a person is introduced deliberately. A visitor walking through frame is not,
+and §7's position that this is "a deliberate, explicit addition to what FR-1800-002
+permits" covers enrolled identities only. Building a silent embedding record of everyone
+who passes the camera is a different thing entirely and is out of scope.
+
+**This is personality, not security.** Willy takes no action on a stranger: he does not
+alert, log an event, photograph, or change behaviour. It must not be described anywhere —
+docs, user guide, or release notes — in terms that suggest he is monitoring for intruders,
+because someone will otherwise rely on it. He is a rover that says a funny thing when he
+sees a face he does not know.
 
 **Enrolment.** "Willy, this is Carolyn" enters through the voice fast path, captures
 several frames over roughly two seconds, embeds each, and stores **multiple vectors per
@@ -213,6 +259,13 @@ already check `privacy.camera_enabled()` before opening the device, so setting
 **Accuracy biases toward "unknown".** Greeting the wrong person by name is the failure that
 actually stings, so an uncertain match resolves to `None` and he says nothing rather than
 guessing. Unknown people are still recorded present, unnamed.
+
+**Amended 2026-09-11.** The "Stranger Danger!" response (§5) means "unknown" is no longer
+a silent branch, so this bias alone is no longer sufficient. Uncertainty now resolves to a
+**middle band that stays silent**, and announcing a stranger requires positive evidence of
+dissimilarity plus confirmation across consecutive frames. The principle is intact — an
+uncertain match still produces no speech — but it now needs two thresholds rather than
+one to deliver it.
 
 Defaults: `ENABLE_FACE_RECOGNITION=False`, matching the convention already used by
 `ENABLE_HAILO_LLM` and `ENABLE_OBJECT_RETRIEVAL`.
