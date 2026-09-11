@@ -22,11 +22,55 @@ Willie observes something failing repeatedly
   → composes a request, emails the owner + one-time code
   → owner replies "APPROVE <code>"      (FR-2000-013 DKIM check applies)
   → Willie writes docs/feature-requests/YYYY-MM-DD-<slug>.md   status: approved
-  → scripts/auto_backup.sh commits and pushes it (hourly cron, already exists)
+  → Willie commits THAT FILE ONLY and pushes it
   → next development session reads the queue
 ```
 
 Every piece of that except the queue directory and the composer already exists.
+
+### 1.1 Willie commits it himself — and never with `git add -A`
+
+The approval comes back to Willie, and Willie is what puts it in GitHub. He does not
+wait for `scripts/auto_backup.sh`.
+
+**He must stage exactly the one file**, commit it with a real message, and push:
+
+```
+git add docs/feature-requests/<file>.md
+git commit -m "Feature request approved by owner: <title>"
+git push origin main
+```
+
+**Never `git add -A`.** The hourly backup cron does exactly that, and on 2026-09-09 it
+swept a session's in-progress, still-untested work into a commit titled "Automated
+backup: <timestamp>". It only failed to reach GitHub because the rover happened to be
+behind and the push was rejected. A targeted `git add <path>` cannot do that, and the
+narrower command is the safer one.
+
+If the push fails — offline, or the rover is behind — the file stays committed locally
+and is retried. It must not be left uncommitted for the backup cron to find, because
+that reintroduces exactly the sweep this avoids. If the rover is behind origin, rebase
+before retrying rather than force-pushing.
+
+### 1.2 The file carries its own provenance
+
+The request file is the audit trail, so it records how it got there — not just what was
+asked for:
+
+```markdown
+---
+proposed:  2026-09-11T14:02Z
+approved:  2026-09-11T18:40Z
+channel:   email, DKIM verified, code a3f1
+evidence:  17 STALL_FAULT events, left-middle wheel, 2026-09-04 to 2026-09-11
+status:    approved
+---
+```
+
+Without this, a queue entry is indistinguishable from something a person typed, and
+"the owner agreed to this" becomes an unverifiable claim months later. With it, anyone
+picking the queue up can see it was machine-proposed, human-approved, and on what
+evidence.
 
 ## 2. What Willie may and may not do
 
