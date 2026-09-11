@@ -494,6 +494,31 @@ Playback is untouched and does not go through this path at all: all three
 
 ---
 
+## 6.5 Front obstacle fusion (VL53L7CX, hardware due 2026-09-12)
+
+A multi-zone ToF sensor joins the front sonar — see Master Hardware Design §6.5 for
+the part and the mounting constraints. The software consequence is deliberately
+small.
+
+`SonarArray.distances()` is the single fusion point. `'front'` becomes the minimum
+of the sonar reading and the nearest valid unmasked ToF zone, so whichever sensor
+sees something closer wins. That is fail-safe by construction and needs no
+arbitration logic, no new FSM state and no threshold changes: `DIST_STOP`,
+`DIST_SLOW`, `DIST_CLEAR`, `_roam()`, `_slow()` and `_avoid()` all keep working
+against the same dict key.
+
+**This sensor may live in the reflex layer, and vision may not.** §2.1's rule is
+that an obstacle stop must never depend on something with variable latency. At 15Hz
+with deterministic timing the ToF qualifies; the NPU does not. This is the first
+addition that improves obstacle detection without weakening that separation.
+
+**Unavailability is not a fault.** A wedged bus, a deselected mux channel or a
+failed firmware upload means `distances()` returns sonar alone and logs it —
+it must not raise, and must not route through `SENSOR_FAULT`. The rover's
+availability floor stays exactly where it is today; the ToF only ever adds.
+
+---
+
 ## 7. Perception and the Accelerator
 
 **Vision — shipped on the Hailo-10H NPU, 2026-08-21.** `vision.py`'s

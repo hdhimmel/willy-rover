@@ -1031,6 +1031,56 @@ default is usually more effective than lowering it.
 
 ---
 
+### 6.5 Multi-zone ToF — VL53L7CX (ON ORDER, arriving 2026-09-12)
+
+Ordered 2026-09-10 (MusRock breakout, $24.99). **Added alongside the front sonar,
+not replacing it** — owner decision 2026-09-10.
+
+| | |
+|---|---|
+| Part | VL53L7CX, 8×8 multi-zone ToF |
+| Zones | 64, ~90° diagonal FoV — roughly 7.5°/zone, ~13cm at 1m |
+| Range | ~3.5m. Thresholds are `DIST_STOP=20` / `DIST_SLOW=40` / `DIST_CLEAR=60`cm, so range is not a constraint even on dark, low-reflectance targets |
+| Rate | 15Hz at 8×8 — deterministic, so it may sit in the REFLEX layer (unlike vision) |
+| Interface | I²C only. Default address **0x29**, which is free on this bus (§3.3 roll-call) |
+| Supply | 3.3V part. Verify the breakout's regulator and level shifting before connecting — no documentation ships with it |
+
+**Why both, and not a swap.** The two sensors fail in opposite directions.
+Sonar is blind to chair legs, soft furnishings and angled surfaces. ToF is blind
+to **glass** — it looks straight through a glass table or patio door, which sonar
+reflects off perfectly well. Neither covers the other's blind spot, so both stay.
+The same reasoning applies to a lidar later: it shares the ToF's glass problem.
+
+**Mount behind the TCA9548A multiplexer** (strapped 0x74, on the shelf since
+2026-09-08 — see §0). The VL53L7CX uploads ~84KB of firmware over I²C at *every*
+init; that is a lot of traffic for a flat, unisolated segment that took the whole
+bus down twice on 2026-09-07/08. The mux gives containment for exactly this.
+
+**Floor zones must be masked.** With a wide vertical FoV aimed forward, the lower
+rows of the 8×8 grid see the carpet a metre ahead and return a solid ~60–80cm
+constantly. Fed into the fusion below, that reads as a permanent obstacle and the
+rover never moves. The mask is geometric — it depends on mount height and
+down-angle — so **the mount must be rigid**; a sensor that droops re-aims the mask
+and silently re-blocks the rover.
+
+**Do NOT use it as the cliff sensor.** The wide vertical FoV does see the floor,
+and a drop does read as the floor suddenly being further away, so the temptation
+is real. But cliff detection is the one failure with unrecoverable consequences,
+and it must not depend on an I²C device on this bus. Dedicated GPIO cliff sensors
+stay on the list; treat this as a cross-check only.
+
+**Fusion — one line, at `sensors.py::SonarArray.distances()`.** `'front'` becomes
+the **minimum** of the sonar reading and the nearest valid unmasked zone. Whichever
+sensor sees something closer wins: fail-safe by construction, no arbitration, no new
+state. Everything downstream — `DIST_STOP`/`DIST_SLOW`/`DIST_CLEAR`, `_roam()`,
+`_slow()`, `_avoid()` — is untouched. If the sensor is unavailable (bus wedge, mux
+channel deselected, firmware upload failed), fall back to sonar alone and log it:
+**adding a sensor must never make the rover less available than it is today.**
+
+A note for whoever fits a lidar later: that same `min()` is where it fuses in too.
+
+---
+
 ## 7. Drive and Steering
 
 ### 7.1 Motors
@@ -1546,6 +1596,7 @@ listed in §15.8 rather than carried as a line item.
 | USB PnP **Audio** Device puck (`0c76:1203`) | Voice OUTPUT — speaker. Its mic is unused (§5.5) | 1 | Installed |
 | USB PnP **Sound** Device (`08bb:2902`) | Voice INPUT — microphone, capture-only, 48kHz native | 1 | Installed |
 | Screw-terminal GPIO breakout HAT | 40-pin breakout, 11 lines (§5.3). Replaces the removed Seengreat | 1 | **On order 2026-09-09** |
+| VL53L7CX 8×8 multi-zone ToF (MusRock) | Front obstacle sensing ALONGSIDE sonar, not replacing it (§6.5) | 1 | **Ordered 2026-09-10, due 2026-09-12** |
 | Raspberry Pi Active Cooler | Pi 5 blower + heatsink | 1 | Installed |
 | 5V case fan, 30–40mm | Head assembly exhaust | 1 | Installed |
 | SanDisk Extreme PRO SSD 500GB | Boot drive | 1 | Installed |
