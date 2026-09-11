@@ -528,6 +528,37 @@ availability floor stays exactly where it is today; the ToF only ever adds.
 
 ---
 
+## 6.6 Stair standoff (FR-1200-005)
+
+Owner decision 2026-09-11: hold `STAIR_STANDOFF_M = 0.15` from a mapped stair edge
+while in `floor` mode, released by an explicit switch to `stair` mode.
+
+**This lives in the deliberative layer, and that is deliberate.** The standoff is
+arithmetic on a mapped position against an estimated pose — both of which can be
+wrong. It informs planning: routes do not cross it, and `ROAM` will not enter it.
+It is never what stops the rover. §2.1's rule is unchanged, and this is exactly the
+case it exists for: the consequence of being wrong here is unrecoverable, so the
+stop stays with the reflex layer (the VL53L7CX, §6.5), which does not consult the
+map, the camera, or the pose.
+
+Three inputs, three distinct jobs — worth keeping straight because they are easy to
+conflate:
+
+| Input | Job | Layer |
+|---|---|---|
+| Mapping | Where the stairs are | Deliberative |
+| Vision (15° down) | Propose stair candidates during a mapping run; discontinuities at range | Deliberative |
+| Lidar (when fitted) | **Localisation.** Scan matching, so the pose the standoff is measured from is trustworthy | Deliberative |
+| VL53L7CX | The actual drop detector | **Reflex** |
+
+A 2D lidar cannot see a descending staircase — it is empty space in a horizontal
+scan plane. Its contribution is knowing where the rover is well enough for a 15cm
+margin to be meaningful, which dead reckoning cannot deliver.
+
+**The gate must fail closed.** If pose is unknown or stale, the standoff cannot be
+computed, and the correct response is to refuse to roam rather than to proceed as
+though the zone were clear. An uncomputable keep-out is not an absent keep-out.
+
 ## 7. Perception and the Accelerator
 
 **Vision — shipped on the Hailo-10H NPU, 2026-08-21.** `vision.py`'s

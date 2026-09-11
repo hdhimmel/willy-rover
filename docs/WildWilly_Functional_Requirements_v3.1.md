@@ -1213,7 +1213,48 @@ separately under FR-1200.
                     navigation                          
                     through the world                   
                     model                               
+
+  FR-1200-005       Hold a standoff   High              Test
+                    from mapped                         
+                    stairs until                        
+                    stair mode is                       
+                    enabled                             
   -----------------------------------------------------------------------
+
+# Acceptance Criteria
+
+-   **FR-1200-005 (stair standoff).** Owner decision 2026-09-11. Stairs are
+    recorded during the mapping run and Willy holds **0.15 m** clear of a mapped
+    stair edge whenever `floor` mode is selected (FR-1200-002). The standoff is
+    released only by an explicit switch to `stair` mode — it is a capability
+    gate, not a permanent exclusion. **Stairs are a feature of this chassis, not
+    a hazard to be walled off**: the rocker-bogie is designed to climb them, and
+    the same mapped geometry that keeps him clear today is what he will approach
+    deliberately under FR-1200-001/002.
+
+    Three sources contribute, and they do different jobs. **Mapping** records
+    where the stairs are. **Vision** (both cameras are mounted 15° downward, so
+    the ground plane is in frame) detects floor-plane discontinuities at range
+    and is what makes stair candidates proposable during a mapping run rather
+    than hunted for by hand. **Lidar**, when fitted, contributes *localisation* —
+    scan matching gives a far better position estimate than dead reckoning, and
+    that is what makes a margin this tight mean anything.
+
+    **Note what lidar does NOT do here.** A 2D lidar sweeps a horizontal plane;
+    a descending staircase is empty space in that plane and is indistinguishable
+    from an open doorway. It cannot see the drop. Its role is knowing where the
+    rover is, not what is underfoot. Do not record it as a cliff sensor.
+
+    **0.15 m must be validated, not assumed.** Measure the real localisation
+    error once lidar SLAM is running and widen the standoff if it exceeds the
+    margin. Until then, pose is dead-reckoned from encoders that have produced
+    nothing since 2026-08-25, so the standoff is *arithmetic without a position
+    to apply it to* and must not be relied on. A physical stair gate is the
+    backstop until this is measured on the real rover.
+
+    The reflex-layer drop detector is the VL53L7CX (Master Hardware Design
+    §6.5), which is deterministic and does not depend on pose being right.
+    FR-1000-002's rule holds unchanged: vision informs, it never gates the stop.
 
 # FR-1300 Smart Home Integration (Google Home)
 

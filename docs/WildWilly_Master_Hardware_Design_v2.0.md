@@ -941,12 +941,24 @@ no isolation left to spend.
 
 | Device | Interface |
 |--------|-----------|
-| Front camera | CSI FFC |
-| Rear camera | USB |
+| Front camera | CSI FFC — **mounted 15° downward** (owner-stated 2026-09-11) |
+| Rear camera | USB — **mounted 15° downward** |
 | Display | DSI ribbon + separate 3-pin GPIO power |
 | AI HAT+ 2 | PCIe FFC |
 
 ---
+
+**The 15° down-angle was undocumented until 2026-09-11** and is load-bearing for
+FR-1200-005: it is what puts the ground plane in frame, which is what makes
+camera-based stair-edge detection possible at all. Mount height is still
+unrecorded — **measure it**, because a ground-plane model needs both numbers and
+anyone building floor detection will otherwise guess.
+
+`vision.py::localize()` does **not** model this tilt. It computes bearing from
+horizontal pixel offset and range from bounding-box width, with no ground plane
+anywhere in it. That is adequate for what it does today and wrong for floor
+geometry — do not extend it for stair detection without adding the tilt and the
+height explicitly.
 
 ### 5.5 Audio I/O
 

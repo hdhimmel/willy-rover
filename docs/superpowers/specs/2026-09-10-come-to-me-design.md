@@ -75,8 +75,22 @@ scripts/export_map.py     → map.json
 tools/label_rooms.html    → drag in map.json; click to name a room;
                              click room A then room B to drop a doorway between them
                           → rooms.json
-scripts/import_rooms.py   → add_room()/add_doorway() → world_model.db
+scripts/import_rooms.py   → add_room()/add_doorway()/add_stair() → world_model.db
 ```
+
+**Stairs are labelled in the same pass (FR-1200-005, added 2026-09-11).** The
+cameras are mounted 15° downward, so the ground plane is in frame and the mapping
+run can *propose* stair candidates from floor-plane discontinuities rather than
+leaving you to hunt for them — you confirm rather than hunt.
+
+A stair label carries **position, heading and width**, not just a position. A
+circle is enough to stay away from and useless for climbing, and FR-1200 says this
+chassis will eventually climb them: he will need an approach heading to line up.
+Capture it now or the house gets re-labelled later.
+
+`world_model.py` needs a sixth table for this — it currently has `rooms`,
+`doorways`, `landmarks`, `objects` and `routes`, and no concept of a hazard,
+keep-out or stair anywhere in the codebase.
 
 The labeller is a **local HTML file, not a hosted page**. It has to write
 `rooms.json` back to disk, which a sandboxed hosted artifact cannot do. A plain file
