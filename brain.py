@@ -66,8 +66,11 @@ _EXPECTED_I2C={config.ENCODER_ADDR,config.INA260_SERVO_ADDR,config.STEER_PCA_ADD
                config.INA260_PI_ADDR,config.INA260_MOTOR_ADDR,config.ADS_ADDR,config.IMU_ADDR,
                config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR}
 # Witty Pi 5 only joins the expected-device set once it's actually installed and enabled --
-# adding it unconditionally now (hardware doesn't exist on this unit yet) would make the
-# self-test report a real device as missing every single run.
+# adding it unconditionally when the hardware is absent would make the self-test report a
+# real device as missing every single run. The gate is still correct; the hardware IS now
+# fitted and ENABLE_WITTY_PI is True (config.py), so 0x51 is expected and the self-test
+# looks for eleven devices, not ten. (Comment corrected 2026-09-11 -- it still said the
+# hardware did not exist on this unit.)
 if config.ENABLE_WITTY_PI: _EXPECTED_I2C.add(config.WITTY_PI_ADDR)
 
 # Battery ladder (§13.2), most severe first. Each entry's threshold is the "below this" boundary;

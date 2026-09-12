@@ -12,10 +12,10 @@
 |-------|-------|
 | Project | WildWilly Autonomous Rover |
 | Document | Software Design — as-built implementation |
-| Revision | 1.0 |
-| Date | 2026-08-18 |
+| Revision | 1.1 |
+| Date | 2026-09-11 |
 | Owner | Howard Himmel |
-| Status | Implemented and off-hardware tested; not live-verified |
+| Status | Implemented and off-hardware tested; partially live-verified. **Filename retains `v1.0` deliberately** — renaming breaks cross-references in the Master Hardware Design, the FRD and `CLAUDE.md`. The Revision field is authoritative. |
 | Supersedes | Nothing. First revision. |
 | Companions | Master Hardware Design v2.0; Functional Requirements v3.1 |
 
@@ -308,8 +308,9 @@ legitimately needs one where passive observation does not.
    first import everywhere in this codebase, not a live re-read — don't assume setting the env
    var later in the same process affects code that already imported `config`.**
 
-   **Added 2026-08-20: Witty Pi 5 HAT+ (RTC and power management), software prepared ahead of
-   physical installation — not yet on the unit as of this commit.** Per its own user manual
+   **Witty Pi 5 HAT+ (RTC and power management). Software was prepared ahead of physical
+   installation on 2026-08-20; the hardware IS NOW INSTALLED and live at 0x51 — corrected
+   2026-09-11, having said "not yet on the unit" for three weeks after it was fitted.** Per its own user manual
    (UUGear, rev 1.03), it's an I²C-only device at 0x51 (`config.WITTY_PI_ADDR`) using no other
    GPIO. Two integration points, deliberately scoped narrow:
    - **Vendor software handles almost everything.** The `.deb` install (`wp5` CLI + `wp5d`
@@ -326,7 +327,8 @@ legitimately needs one where passive observation does not.
      (a register *read*, per the manual's literal "the software periodically polls a register"
      wording, not a write) is best-effort against the documentation — **not independently
      confirmed, since the hardware doesn't exist on this unit yet.**
-   - `config.ENABLE_WITTY_PI` stays `False`, and 0x51 stays out of `_EXPECTED_I2C` (§4.1 step 3),
+   - `config.ENABLE_WITTY_PI` is **`True`** (`config.py:227`), so `brain.py:71` adds 0x51 to
+     `_EXPECTED_I2C` and the self-test expects it. ~~stays `False`, and 0x51 stays out of `_EXPECTED_I2C`~~ (§4.1 step 3),
      until the hardware is actually installed — flip both on then, not before, or the self-test
      will report a real device as missing every single run.
    - **Open, unresolved**: the battery is wired via VUSB (USB-C), not the VIN screw terminal —
@@ -342,7 +344,8 @@ legitimately needs one where passive observation does not.
    self-test runs, and why it is excluded from the expected-address set.
 2. `start()` brings up display, sensors, encoders, current monitors; centres
    steering and arm; starts voice and email background threads.
-3. `_self_test()` runs the I²C scan against `_EXPECTED_I2C` (ten addresses,
+3. `_self_test()` runs the I²C scan against `_EXPECTED_I2C` (**eleven** addresses —
+   ten plus 0x51, conditional on `ENABLE_WITTY_PI`, which is now True,
    0x70 deliberately excluded), plus `config.validate()` and
    `storage.check_storage()`.
 4. `_motion_enabled` is set from the self-test result. It gates every call into
@@ -873,18 +876,26 @@ wants it.
     prompt/schema helps (the model is echoing the prompt's own placeholder
     syntax literally), or whether this model/path is not viable for this
     task. `ENABLE_HAILO_LLM` stays off until this is understood.
-11. **A real, separate I2C hardware fault found 2026-08-23** — a loose
-    3.3V wire to the encoder/IMU/PCA9685 peripheral bus (reseated, root
-    cause identified; permanent fix — hot glue — pending). One current
-    monitor (I2C `0x40`) still not responding as of this checkpoint;
-    self-test fails on it and motion is disabled as a safety response.
-    Needs physical inspection.
-12. **Power delivery reworked 2026-08-23.** Witty Pi now fed via its VIN
-    screw terminal from a DROK buck converter set to ~9V (was USB-C at 5V),
-    intended to reduce the voltage drop that was causing under-voltage
-    brownouts during voice commands. Witty Pi's low-voltage cutoff moved
-    from 4.5V (meaningless against a 9V input) to 8.0V. Effectiveness not
-    yet fully confirmed independent of item 11's I2C fault.
+11. ~~**A real, separate I2C hardware fault found 2026-08-23**~~ — **CLOSED
+    2026-09-11.** Superseded by the 2026-09-08 bus rebuild: the isolator, the
+    isolated rail and the Seengreat breakout are all out, and the rebuilt flat
+    topology verified eleven devices across 20 consecutive scans with zero errors
+    (Master Hardware Design §0). The loose 3.3V wire and the non-responding 0x40
+    both belonged to a bus that no longer exists.
+12. ~~**Power delivery reworked 2026-08-23.**~~ — **CLOSED 2026-09-11.** Witty Pi
+    is fed from DROK-Pi, and Master Hardware Design §0 records that rail as
+    **9.5V**, not the ~9V written here. The under-voltage problem it was chasing
+    was separately root-caused to a degraded AMS1117 (2026-08-21) and the rail has
+    since been rebuilt entirely.
+13. **Battery divider has no feed — a SOFTWARE gap, not only a hardware one.**
+    Master Hardware Design §0 records ADS1115 A0 reading 0.0146V because the
+    divider is unfed. `sensors.py`'s guard catches a *failed* read; it does not
+    catch a *successful zero*. So `brain.py` scales 0.0146V into a pack voltage of
+    roughly 0.06V, walks the battery ladder to `shutdown`, and powers the rover
+    off — from a reading that is structurally impossible for a connected pack.
+    **A plausibility floor is needed**: a pack reading below any credible value is
+    a broken sensor, not a flat battery, and must raise `SENSOR_FAULT` rather than
+    drive the shutdown ladder. Recorded 2026-09-11.
 
 ---
 

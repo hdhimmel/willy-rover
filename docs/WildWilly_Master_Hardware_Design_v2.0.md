@@ -2207,11 +2207,19 @@ None of these touch the 40-pin header except the display's power tap.
 | Software Design | 1.0 | Module architecture, control layering, FSM, safety gate |
 | Master Engineering Package | rev 6.2.0 | **Historical record only** — incident narrative, superseded designs, revision lineage. Retain; do not treat as current. |
 
-### 17.2 Reference-integrity defect in `CLAUDE.md` — open
+### 17.2 Reference-integrity defect in `CLAUDE.md` — CLOSED 2026-08-18
 
-The repository's `CLAUDE.md` names *Master Engineering Package rev 6.0.7* as
-the authoritative source and states that its §5.7, §9.1, §11.1 and §17.4
-citations refer to it.
+**Verified closed 2026-09-11 by reading `CLAUDE.md` itself.** It now states "Do
+not cite the old Master Engineering Package (any revision) as authoritative",
+explains that rev 6.0.7 contains no §5.7/§17.4, and records the correction. This
+section stayed titled "open" for three weeks after the fix landed, and Software
+Design §12 item 1 — which said "Done 2026-08-18" — was right all along.
+
+The finding is retained below because the *failure mode* is worth keeping.
+
+At the time, `CLAUDE.md` named *Master Engineering Package rev 6.0.7* as
+the authoritative source and stated that its §5.7, §9.1, §11.1 and §17.4
+citations referred to it.
 
 Verified against the file: `docs/WildWilly_Master_Engineering_Package_rev6.0.7.md`
 contains §9.1 and §11.1, but contains **no §5.7 and no §17.4 or §17.5**. Those
