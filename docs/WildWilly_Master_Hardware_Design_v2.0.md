@@ -12,10 +12,10 @@
 |-------|-------|
 | Project | WildWilly Autonomous Rover |
 | Document | Master Hardware Design — as-built, current configuration only |
-| Revision | 2.0 |
-| Date | 2026-08-18 |
+| Revision | 2.1 |
+| Date | 2026-09-11 |
 | Owner | Howard Himmel |
-| Status | Build complete; AI accelerator bonded; live verification in progress |
+| Status | Build complete; AI accelerator bonded; live verification in progress. **Filename retains `v2.0` deliberately** — renaming would break every cross-reference in Software Design, the FRD and `CLAUDE.md`. The revision field above is authoritative. |
 | Supersedes | As-Built Design Document v1.0 (2026-08-15) |
 | Companions | Functional Requirements v3.1; Software Design v1.0 |
 | Historical record | Master Engineering Package rev 6.2.0 retains all incident history, superseded designs, and revision lineage. Retain it. |
@@ -24,6 +24,16 @@
 It contains no incident narrative, no superseded design options, and no
 revision archaeology. Where a past failure produced a standing rule, the rule
 appears in §12 as a constraint — without the story behind it.
+
+**Changes in revision 2.1 (2026-09-11).** A consistency pass against §0. Revision
+2.0 carried most of v1.0 forward unchanged, and §0's 2026-09-08 as-built capture then
+contradicted a dozen of those carried-forward sections without correcting them. This
+revision reconciles them: §1's bus description, §2.2's R1 and R5 rows, §9's pin
+assignments, §11.2's device count, §12 rules 2/3/5, §13's verification table, §14
+item 6, and six §15 BOM rows. Sections describing removed hardware are struck and
+marked rather than deleted, matching the treatment already used in §16.1/§16.2. One
+item — whether the 4.7kΩ pull-ups are fitted — is left **disputed pending
+measurement** rather than resolved by guesswork; see §0.
 
 **Changes in revision 2.0.** §5.2 rewritten: the AI HAT+ 2 is now PCIe-bonded
 and enumerating, and the driver package line that made it fail to bind is
@@ -73,7 +83,17 @@ Both hubs are **passive fan-outs**, so this is **one electrical segment**. There
 is no segmentation and no containment: any device holding SDA or SCL low takes
 the entire bus down. That happened repeatedly on 2026-09-07/08.
 
-The 4.7kΩ Side-2 rail pull-ups are re-fitted. A TCA9548A multiplexer (strapped
+⚠ **DISPUTED — DO NOT ACT ON THIS LINE WITHOUT A METER.** This section says the
+4.7kΩ Side-2 rail pull-ups are re-fitted. **§3.2 and the §15 BOM both say they were
+REMOVED on 2026-09-07 and must not be re-fitted.** Two sources against one, and the
+one in the minority is this one — the section everyone is told to read first, which
+makes it the most dangerous place for the error to sit. It decides whether the bus can
+clock at this cabling's capacitance, so it cannot be settled by reading. Meter
+SDA↔VCC and SCL↔VCC with power off: ~4.7kΩ (or ~3.2kΩ in parallel with the LTC4311)
+means fitted; ~10kΩ means not. Correct whichever section is wrong, here and in §3.2,
+and strike this warning.
+
+A TCA9548A multiplexer (strapped
 `0x74`) was bought, wired and proven working during the 2026-09-07/08 debugging,
 then removed in favour of this simpler topology — see
 `docs/superpowers/specs/2026-09-07-i2c-mux-design.md`, which describes a design
@@ -141,7 +161,7 @@ accelerator for vision and speech.
 | Orientation | BNO085 9-DoF IMU with on-chip fusion |
 | Vision | Front CSI camera, rear USB camera |
 | Power | 2 × 3S 8000mAh LiPo in parallel |
-| Bus | Galvanically isolated I²C, 10 devices |
+| Bus | **Single non-isolated I²C segment, 11 devices** (see §0). The ISO1540 was removed 2026-09-08 — there is no isolation and no second rail domain |
 
 Physical layout: Pi 5, SI board and audio HAT in the head assembly; power
 distribution, bus node board and motor drivers in the body tray.
@@ -256,16 +276,26 @@ graph TD
 
 | ID | Rail | Source | Feeds | Monitor |
 |----|------|--------|-------|---------|
-| R1 | 9V | **DROK-Pi** buck | Witty Pi 5 VIN (KF350-2P) → Witty Pi → Pi 5 | INA260 **0x45** |
+| R1 | **9.5V** | **DROK-Pi** buck | Witty Pi 5 VIN (KF350-2P) → Witty Pi → Pi 5 | INA260 **0x45** |
 | R2 | 5V | **DROK-5V** buck | Steering servo distribution, sonar VCC, Pi screen | INA260 **0x40** |
 | R3 | 6V | **DROK-6V** buck | Arm servo distribution | — |
-| R5 | **⚠ 3V or 5V?** | **DROK-4** buck | Motor Hall encoders (JGA25-370B) — **voltage TBD, see warning below** | — |
+| R5 | **3.3V** | **DROK-4** buck | Motor Hall encoders (JGA25-370B) **and all I²C device logic**. Settled 2026-09-08, see §0 — the "3V or 5V" question below is closed | — |
 | ~~R4~~ | ~~3V3~~ | ~~Pi header pin 1~~ | **NO CONSUMER AS-BUILT.** Fed ISO1540 Side 1 VCC only, and the ISO1540 is out of the build (§1, 2026-09-08). Nothing loads Pi 3V3 now — see §2.1 and §5.3. Retained as history; do not wire from this row. | — |
 | — | 3V3 (VCC2) | **Two-stage chain** (§3): TPSM84205 (12V→5V) → AMS1117-3.3 (5V→3.3V) | Entire isolated I²C bus (devices, not encoders) | — |
 | — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | INA260 **0x44** (P3 monitoring) |
 | — | +12V main | Battery via F1/KCD4/Q1 | All four DROK inputs + isolated power chain (P8) | — |
 
-⚠ **DROK inventory status (2026-08-28).** Four DROK adjustable units total: DROK-Pi (9V), DROK-5V, DROK-6V, and DROK-4 (encoder rail, R5). Set each off-load to rated voltage before connecting downstream. **DROK-4 voltage still unresolved:** encoders may want 3.3V, 5V, or the recorded 3.0V — vendor part number was never captured, and 3.0V is dangerously close to the 2.83V that killed them. Meter before connecting.
+⚠ **DROK inventory status — updated 2026-09-11.** Four DROK adjustable units, **all
+four now fitted and live** (§0): DROK-Pi (**9.5V**, R1), DROK-5V (R2), DROK-6V (R3),
+DROK-4 (**3.3V**, R5). The rail voltages are settled; the note below is retained only
+because one question inside it is still genuinely open.
+
+**Still open: what the encoders themselves want.** R5 is set to 3.3V and also feeds
+all I²C device logic, so the rail voltage is not in question. Whether these Hall
+encoders need 3.3V or 5V is — the vendor part number was never captured, and the
+2.83V that killed them is uncomfortably close to 3.3V's lower tolerance. If they turn
+out to want 5V, note the MCP23017 runs at 3.3V and its inputs are NOT 5V tolerant, so
+moving them is not a rail change but a level-shifting job on twelve signal lines.
 
 ⚠ **Isolated rail VCC2 — two-stage power chain (2026-08-28 repair).** The 2026-08-25
 root cause stands: the old AMS1117-3.3, fed 5.14V from the servo rail, degraded
@@ -305,8 +335,11 @@ Moving the encoders off VCC2 onto R5 frees six GND and six 3V3 taps in §4.1 row
 
 ⚠ **R4 corrected 2026-08-25 (owner).** This table previously listed encoder
 distribution on R4, the Pi's own 3V3 header pin. That is wrong as-built: **the
-encoders are powered from the isolated bus rail (VCC2/GND2), the same domain as
-the MCP23017 expander that reads them.** Header pin 1 feeds ISO1540 Side 1 only.
+encoders are powered from the same rail as the MCP23017 expander that reads
+them**, so they share a reference. As-built that rail is **R5, the DROK-4 3.3V
+supply** (§0) — the text below says "isolated bus rail (VCC2/GND2)", which was true
+before 2026-09-08 and is retained because the *point* it makes still stands. Header
+pin 1 now feeds nothing at all.
 
 The distinction matters and cost real time on 2026-08-25. If the encoders had
 been on R4, they would have been driving GND1-referenced signals into
@@ -1369,10 +1402,10 @@ desoldering.
 
 | Pin | BCM | Connects to |
 |-----|-----|-------------|
-| 1 | 3V3 | ISO1540 Side 1 VCC (**not** encoder distribution — see §2.2) |
+| 1 | 3V3 | ~~ISO1540 Side 1 VCC~~ — **NO CONSUMER AS-BUILT.** The ISO1540 is out of the build (§0); nothing loads Pi 3V3. Do not wire from this row — see §5.3 |
 | 2, 4 | 5V | Pi buck output |
-| 3 | GP2 | ISO1540 Side 1 SDA |
-| 5 | GP3 | ISO1540 Side 1 SCL |
+| 3 | GP2 | I²C SDA → GODIY hubs → all devices (§0) |
+| 5 | GP3 | I²C SCL → GODIY hubs → all devices (§0) |
 | 6, 9 | GND | Pi return → star |
 | 7 | GP4 | Sonar RIGHT TRIG |
 | 8 | GP14 | Sonar LEFT ECHO (÷) |
@@ -1431,7 +1464,8 @@ An obstacle stop must never depend on a detection frame arriving.
 
 ### 11.2 Startup self-test
 
-Enumerate all ten I²C devices, confirm the BNO085 interrupt is live on GP15,
+Enumerate all eleven I²C devices (ten plus the Witty Pi 5 at 0x51 — see §0's
+roll-call), confirm the BNO085 interrupt is live on GP15,
 and confirm all six encoder channels change count under manual rotation.
 Motion stays inhibited unless every check passes.
 
@@ -1459,14 +1493,14 @@ not obvious from the schematic.
 
 1. Motor− (white) lands on a FeatherWing motor terminal. Never on an
    MCP23017 GPIO or any logic pin.
-2. **The isolated-bus power chain (P8) uses TPSM84205 (5V output), NOT 84203 (3.3V) or 84212 (12V).** 
+2. ~~**The isolated-bus power chain (P8) uses TPSM84205 (5V output), NOT 84203 (3.3V) or 84212 (12V).**~~ **SUPERSEDED 2026-09-08 — the P8 chain is out of service (§0). The TPSM84205 is still physically fitted but has no consumers. Retained because it still governs anyone re-energising this path.** 
    The TPSM84205 draws from +12V via F6 polyfuse, pre-regulates to 5V (~95% efficient), 
    then feeds AMS1117-3.3 (5V → 3.3V at ~80% efficient). **Do not use a 84203 or 84212** — 
    the 84203 outputs only 3.3V and cannot feed the AMS1117 (which needs ≥4.5V in); the 84212 
    outputs 12V and bypasses the pre-regulation that prevents thermal foldback. Verify the part 
    marking before fitting. The two-stage design removes the dissipation that killed the 
    previous single-stage AMS1117 and makes the bus independent of servo load.
-3. ISO1540 sides are not interchangeable. Side 1 takes 40pF and one device;
+3. ~~ISO1540 sides are not interchangeable.~~ **SUPERSEDED 2026-09-08 — the ISO1540 is removed (§0).** Retained as history: Side 1 took 40pF and one device;
    Side 2 takes 400pF and multiple nodes. The device bus goes on Side 2.
    Identify Side 1 by the SOIC-8 pin-1 marker — pins 1–4 are VCC1, SDA1,
    SCL1, GND1 — and mark the board physically.
@@ -1475,7 +1509,7 @@ not obvious from the schematic.
 
 **Before power-up**
 
-5. **TPSM84205 decoupling (P8 path):** **10µF 50V** on 12V input (50V minimum for transient headroom), 
+5. ~~**TPSM84205 decoupling (P8 path):**~~ **SUPERSEDED 2026-09-08 — P8 is out of service (§0).** Retained for anyone re-energising it: **10µF 50V** on 12V input (50V minimum for transient headroom), 
    2× **47µF 50V ceramic** on 5V output (TI minimum 94µF total). **AMS1117-3.3 decoupling:** **10µF 50V** 
    on 5V input (from TPSM, same part as Vin), **10µF 10V+ ceramic** on 3.3V output (≥10mm from pins). 
    **Voltage rating rule:** Input stages (Vin) need 50V for transient protection; output stages can be lower 
@@ -1524,17 +1558,16 @@ not obvious from the schematic.
 
 ## 13. Verification Status
 
-| Item | Status |
-|------|--------|
-Status as of 2026-08-18.
+Status as of **2026-09-11**. Rows carried from 2026-08-18 that §0 has since
+overtaken are corrected below rather than left standing.
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Full ten-device roll-call through the isolator | PASS | `i2cdetect -y 1` returns 0x27, 0x40, 0x42, 0x43, 0x44, 0x45, 0x48, 0x4A, 0x60, 0x61, plus 0x70 All-Call |
+| Full **eleven**-device roll-call, **no isolator** | PASS 2026-09-08 | `i2cdetect -y 1` returns 0x27, 0x40, 0x42, 0x43, 0x44, 0x45, 0x48, 0x4A, **0x51**, 0x60, 0x61, plus 0x70 All-Call. 20 consecutive scans, zero bus errors, stable across power cycles. 0x51 (Witty Pi) was never counted in the old ten |
 | Pi boots from battery, not USB-C | PASS | Rail 5.144V against a 4.85V floor; `vcgencmd get_throttled` = 0x0, clearing the sticky since-boot bit as well as the live one |
 | Serial console disabled, GP14/GP15 free | PASS | `gpioinfo` shows both unused on the header gpiochip |
 | Bus node board fully populated | PASS | All rail positions landed |
-| Breakout connections verified | PASS | Seengreat PX00 in the path during the clean roll-call |
+| Breakout connections verified | **SUPERSEDED** | The Seengreat PX00 is out of the build (§0). Its replacement screw-terminal HAT is on order — §5.3 |
 | AI accelerator PCIe bond | PASS | `/dev/hailo0`; firmware 5.1.1, HAILO10H |
 | Pi-rail INA260 address | PASS — 0x44 | 0x46 does not answer; `config.INA260_PI_ADDR=0x44` agrees |
 | Sonars connected | Connected, not range-tested | — |
@@ -1546,8 +1579,12 @@ Status as of 2026-08-18.
 | Motor direction and mapping | Not tested | — |
 | Motor crimps | 1 of 6 verified | — |
 
-**Nothing in the hardware build is outstanding.** Every remaining row is a
-measurement, not a construction task.
+⚠ **This section previously read "Nothing in the hardware build is outstanding."
+That is false and was corrected 2026-09-11.** It was true on 2026-08-18 and was
+carried forward without review. §0 lists live construction items — the battery
+divider has no feed, and the GPIO breakout is on order — and the 4.7kΩ pull-up
+question is unresolved. Construction work remains; do not read this section as a
+clean bill of health.
 
 ---
 
@@ -1576,7 +1613,7 @@ measurement, not a construction task.
    so the thermal watch is moot. This closes on the load being gone, NOT on the
    2026-08-28 premise that the part was replaced — that replacement was never
    built. If anything is ever put back on this chain, reopen the watch.
-   What genuinely improved: the TPSM84205 pre-regulator is now installed
+   ~~What genuinely improved: the TPSM84205 pre-regulator is now installed
    (owner-confirmed 2026-09-07), so the AMS1117 drops ~1.7V instead of ~1.9V and
    no longer sits downstream of servo load. That reduces the thermal stress that
    killed it twice; it does not remove it.
@@ -1585,7 +1622,12 @@ measurement, not a construction task.
    panel. Dissipation is 1.7V × total current, and this part has already failed
    twice by thermal foldback. **Measure the actual AMS1117 current and case
    temperature with the touch sensor active** before treating the two-stage
-   chain as having closed the risk. Neither figure is recorded anywhere yet.
+   chain as having closed the risk. Neither figure is recorded anywhere yet.~~
+
+   **The struck text above is retained only as history.** It described the chain
+   as live and argued about its thermal margin; the chain has no input and no
+   consumers, so none of it applies. Struck 2026-09-11 — it directly contradicted
+   the closure immediately above it.
 7. **Pi-rail buck identity** — DROK 12A LCD versus Elecbee 5V/5A across older
    documents. Electrically settled: the rail measures correctly and its
    monitor is confirmed at 0x44. This is a labelling question only. Identify
@@ -1626,7 +1668,7 @@ listed in §15.8 rather than carried as a line item.
 | Component | Role | Qty | Status |
 |-----------|------|-----|--------|
 | Raspberry Pi 5 (8GB) | Host controller | 1 | Installed |
-| AI HAT+ 2 (Hailo-10H, 8GB) | NPU — vision, speech, VLM | 1 | On order |
+| AI HAT+ 2 (Hailo-10H, 8GB) | NPU — vision, speech, VLM | 1 | **Installed** — PCIe-bonded and enumerating since 2026-08-16 (§5.2) |
 | 5" DSI touch display, 800×480 | Face / UI | 1 | Installed |
 | Arducam IMX708 (CSI) | Front camera | 1 | Installed |
 | OV9782 (USB) | Rear camera | 1 | Installed |
@@ -1662,7 +1704,7 @@ listed in §15.8 rather than carried as a line item.
 
 | Component | Role | Qty | Status |
 |-----------|------|-----|--------|
-| Adafruit ISO1540 (#4903) | Galvanic I²C isolator | 1 | Installed |
+| ~~Adafruit ISO1540 (#4903)~~ | ~~Galvanic I²C isolator~~ | 1 | **REMOVED from the build 2026-09-08 (§0).** There is no isolation on the bus |
 | ~~4.7kΩ resistor~~ | SDA2 / SCL2 rail pull-ups | 2 | **REMOVED — no longer fitted (§3.2, recorded 2026-09-07)** |
 | Adafruit LTC4311 | I²C accelerator — no address | 1 | Installed |
 | MCP23017 | Encoder GPIO expander, 0x27 | 1 | Installed |
@@ -1694,10 +1736,10 @@ listed in §15.8 rather than carried as a line item.
 | 3S BMS 40–60A with balance | One per pack | 2 | Installed |
 | ~~FEICHAO 8A UBEC~~ | Replaced 2026-08-28 — see §15.8 | — | Removed |
 | ~~DZS Elec 12A adjustable buck~~ | Replaced 2026-08-28 — see §15.8 | — | Removed |
-| **DROK-Pi** adjustable buck | 12V → 9.0V for Witty Pi VIN (R1) | 1 | To fit |
-| **DROK-5V** adjustable buck | 12V → 5.0V for steering servos (R2, INA260 0x40) | 1 | To fit |
-| **DROK-6V** adjustable buck | 12V → 6.0V for arm servos (R3) | 1 | To fit |
-| **DROK-4** adjustable buck | Encoder distribution (R5) — **⚠ voltage TBD: 3.3V or 5V?** (§2.2) | 1 | **Pending voltage decision** |
+| **DROK-Pi** adjustable buck | 12V → **9.5V** for Witty Pi VIN (R1) | 1 | **Installed** — live rail (§0) |
+| **DROK-5V** adjustable buck | 12V → 5.0V for steering servos, sonar VCC, screen (R2, INA260 0x40) | 1 | **Installed** — live rail (§0) |
+| **DROK-6V** adjustable buck | 12V → 6.0V for arm servos (R3) | 1 | **Installed** — live rail (§0) |
+| **DROK-4** adjustable buck | R5 — **3.3V**, Hall encoders **and all I²C device logic**. Voltage settled 2026-09-08 (§0) | 1 | **Installed** — live rail |
 | **Isolated bus power chain (P8):** | — | — | — |
 | **TI TPSM84205** | 12V → 5.0V pre-regulator (1.5A) — **NOT 84203 or 84212** | 1 | **Fitted, but OUT OF SERVICE** — no consumers since 2026-09-08 (§0) |
 | RXEF110 1.1A polyfuse | F6, TPSM 12V input, PTC resettable | 1 | **Installed 2026-09-07** |
