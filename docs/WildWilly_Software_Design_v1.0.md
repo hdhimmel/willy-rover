@@ -524,8 +524,8 @@ that an obstacle stop must never depend on something with variable latency. At 1
 with deterministic timing the ToF qualifies; the NPU does not. This is the first
 addition that improves obstacle detection without weakening that separation.
 
-**Unavailability is not a fault.** A wedged bus, a deselected mux channel or a
-failed firmware upload means `distances()` returns sonar alone and logs it —
+**Unavailability is not a fault.** A wedged bus, a dropped UART, or the sensor's
+own RP2040 resetting means `distances()` returns sonar alone and logs it —
 it must not raise, and must not route through `SENSOR_FAULT`. The rover's
 availability floor stays exactly where it is today; the ToF only ever adds.
 

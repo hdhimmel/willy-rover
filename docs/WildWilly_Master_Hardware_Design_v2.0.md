@@ -1076,19 +1076,44 @@ default is usually more effective than lowering it.
 
 ---
 
-### 6.5 Multi-zone ToF — VL53L7CX (ON ORDER, arriving 2026-09-12)
+### 6.5 Multi-zone ToF — DFRobot SEN0628 (ON ORDER, 2026-09-13)
 
-Ordered 2026-09-10 (MusRock breakout, $24.99). **Added alongside the front sonar,
-not replacing it** — owner decision 2026-09-10.
+**Part changed 2026-09-13.** A bare MusRock VL53L7CX breakout was ordered 2026-09-10
+and did not arrive. Replaced with **DFRobot SEN0628** ($22) — same VL53L7CX sensor,
+but with an **RP2040 in front of it**, which changes three things this section had
+designed around. **Added alongside the front sonar, not replacing it** — owner
+decision 2026-09-10, unchanged.
 
 | | |
 |---|---|
-| Part | VL53L7CX, 8×8 multi-zone ToF |
-| Zones | 64, ~90° diagonal FoV — roughly 7.5°/zone, ~13cm at 1m |
-| Range | ~3.5m. Thresholds are `DIST_STOP=20` / `DIST_SLOW=40` / `DIST_CLEAR=60`cm, so range is not a constraint even on dark, low-reflectance targets |
-| Rate | 15Hz at 8×8 — deterministic, so it may sit in the REFLEX layer (unlike vision) |
-| Interface | I²C only. Default address **0x29**, which is free on this bus (§3.3 roll-call) |
-| Supply | 3.3V part. Verify the breakout's regulator and level shifting before connecting — no documentation ships with it |
+| Part | DFRobot SEN0628 — VL53L7CX + onboard RP2040 |
+| Zones | 64. **60° H × 60° V, 90° diagonal** — ~7.5°/zone, ~13cm at 1m |
+| Range | 20mm – 3500mm. Thresholds are `DIST_STOP=20` / `DIST_SLOW=40` / `DIST_CLEAR=60`cm, so range is not a constraint |
+| Rate | 15–60Hz — deterministic, so it may sit in the REFLEX layer (unlike vision) |
+| Interface | **UART or I²C, set by an on-board DIP switch.** UART 115200 fixed. I²C 0x30/0x31/0x32/0x33, all free on this bus |
+| Supply | 3.3–5V, <80mA |
+| In the box | Sensor, PH2.0-4P cable, aluminium bracket + support, M3 screws and standoffs |
+| Docs | SKU SEN0628 — DFRobot wiki, `DFRobot_MatrixLidar` GitHub library, UF2 firmware over USB-C |
+
+**The FOV in the previous revision was wrong.** It recorded ~90° as the vertical
+spread, from the MusRock listing's "90° × 90°" claim. ST's real figure, which DFRobot
+states correctly, is **60° H × 60° V**, 90° on the *diagonal*. That matters: a 60°
+vertical puts the floor intersection at roughly **1.7× the mounting height**, not 1×,
+so materially fewer zones see carpet than the floor-profile section below assumed.
+
+**What the RP2040 changes:**
+
+- **No firmware upload on the Pi's bus.** A bare VL53L7CX needs ~84KB pushed at every
+  init; the RP2040 does that locally. That was the entire reason the previous revision
+  mandated the TCA9548A, and **that requirement is withdrawn**.
+- **UART is available**, so the sensor can stay off the I²C bus completely.
+- **A firmware layer now sits between us and the sensor.** It does expose the raw 8×8
+  matrix (confirmed in a purchaser's account of the serial output — rows y0–y7, eight
+  columns each), which is what the floor profile needs. But firmware v1.3 is required,
+  and one of six reviewers reports the board reset-looping every few seconds on both
+  I²C and USB even after flashing it. **Prove a stable multi-minute stream before
+  wiring it into the reflex path**, and return it inside 30 days if it will not hold
+  one.
 
 **Why both, and not a swap.** The two sensors fail in opposite directions.
 Sonar is blind to chair legs, soft furnishings and angled surfaces. ToF is blind
@@ -1096,10 +1121,33 @@ to **glass** — it looks straight through a glass table or patio door, which so
 reflects off perfectly well. Neither covers the other's blind spot, so both stay.
 The same reasoning applies to a lidar later: it shares the ToF's glass problem.
 
-**Mount behind the TCA9548A multiplexer** (strapped 0x74, on the shelf since
-2026-09-08 — see §0). The VL53L7CX uploads ~84KB of firmware over I²C at *every*
-init; that is a lot of traffic for a flat, unisolated segment that took the whole
-bus down twice on 2026-09-07/08. The mux gives containment for exactly this.
+**The TCA9548A is no longer required.** The mux was mandated because of the
+84KB-per-init upload; the RP2040 removes it, so the containment argument falls away.
+
+**Set the DIP switch before wiring anything.** Three positions, selecting interface
+(UART or I²C) and address. Wrong setting = a silent device that looks like a wiring
+fault.
+
+**Power it from 3.3V, not 5V.** It accepts 3.3–5V, but on UART the logic level
+follows the supply and the Pi's RX is not 5V tolerant. At <80mA it can come off Pi
+header **pin 1 (3V3)**, which §5.3 notes has had no consumer since the ISO1540 was
+removed — this is its first one. The R5 DROK 3.3V rail is the alternative.
+
+**Bench bring-up over USB-C first**, before wiring it to Willie at all: a serial
+monitor shows the 8×8 grid directly, which proves the board and the firmware without
+involving the rover. Note also that the sensor ships with a small protective film over
+the optics that the documentation does not mention.
+
+**Then either interface is acceptable:**
+
+- **UART (preferred)** — keeps it off a bus that took the whole rover down twice.
+  `GP14`/`GP15` are UART0 and both are taken (sonar left ECHO, BNO085 INT — §9), so
+  this needs one of the Pi 5's alternate UARTs. **Confirm the Pi 5 overlay and pin
+  mapping before wiring** — the BCM2711 mapping commonly quoted for the Pi 4 does not
+  carry over unchanged, and `GP7–GP11` being free does not make them a UART.
+- **I²C (acceptable fallback)** — four wires onto the existing GODIY hubs, address
+  0x30. Without the firmware upload this is just 64 values per frame, which is not the
+  hazard it was. Take this route if the alternate-UART question stalls the build.
 
 **The floor is always in view, and must be subtracted — not masked.** With a wide
 vertical FoV aimed forward, the lower rows of the 8×8 grid see carpet ahead and
@@ -1675,7 +1723,7 @@ listed in §15.8 rather than carried as a line item.
 | USB PnP **Audio** Device puck (`0c76:1203`) | Voice OUTPUT — speaker. Its mic is unused (§5.5) | 1 | Installed |
 | USB PnP **Sound** Device (`08bb:2902`) | Voice INPUT — microphone, capture-only, 48kHz native | 1 | Installed |
 | Screw-terminal GPIO breakout HAT | 40-pin breakout, 11 lines (§5.3). Replaces the removed Seengreat | 1 | **On order 2026-09-09** |
-| VL53L7CX 8×8 multi-zone ToF (MusRock) | Front obstacle sensing ALONGSIDE sonar, not replacing it (§6.5) | 1 | **Ordered 2026-09-10, due 2026-09-12** |
+| **DFRobot SEN0628** — VL53L7CX + RP2040, 8×8 ToF | Front obstacle sensing ALONGSIDE sonar, not replacing it (§6.5). UART or I²C | 1 | **Ordered 2026-09-13.** Replaces the MusRock breakout ordered 2026-09-10, which did not arrive |
 | Raspberry Pi Active Cooler | Pi 5 blower + heatsink | 1 | Installed |
 | 5V case fan, 30–40mm | Head assembly exhaust | 1 | Installed |
 | SanDisk Extreme PRO SSD 500GB | Boot drive | 1 | Installed |
