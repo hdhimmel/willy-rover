@@ -1249,8 +1249,8 @@ stay on the list; treat this as a cross-check only.
 the **minimum** of the sonar reading and the nearest valid unmasked zone. Whichever
 sensor sees something closer wins: fail-safe by construction, no arbitration, no new
 state. Everything downstream — `DIST_STOP`/`DIST_SLOW`/`DIST_CLEAR`, `_roam()`,
-`_slow()`, `_avoid()` — is untouched. If the sensor is unavailable (bus wedge, mux
-channel deselected, firmware upload failed), fall back to sonar alone and log it:
+`_slow()`, `_avoid()` — is untouched. If the sensor is unavailable (dropped UART, or
+the sensor's own RP2040 resetting), fall back to sonar alone and log it:
 **adding a sensor must never make the rover less available than it is today.**
 
 A note for whoever fits a lidar later: that same `min()` is where it fuses in too.

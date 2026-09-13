@@ -17,7 +17,7 @@
 | Owner | Howard Himmel |
 | Status | Implemented and off-hardware tested; partially live-verified. **Filename retains `v1.0` deliberately** — renaming breaks cross-references in the Master Hardware Design, the FRD and `CLAUDE.md`. The Revision field is authoritative. |
 | Supersedes | Nothing. First revision. |
-| Companions | Master Hardware Design v2.0; Functional Requirements v3.1 |
+| Companions | Master Hardware Design **rev 2.1**; Functional Requirements v3.1 |
 
 **Scope of this document.** This describes the software as it is currently
 written, in the repository `hdhimmel/willy-rover`. It describes structure and
@@ -179,7 +179,10 @@ the inconsistency between this threshold and the systemd watchdog interval.
 
 ### 3.1 Top-level states
 
-`brain.py` dispatches on fifteen states through a table in `_tick()`.
+`brain.py`'s dispatch table in `_tick()` has **fifteen entries**. The full state set is
+**seventeen**: `INIT` and `SENSOR_FAULT` are real states handled outside that table, and
+the table below lists all of them. (Corrected 2026-09-13 — the text said "fifteen states"
+while the table listed sixteen rows and omitted `WAVE` entirely.)
 
 | State | Class | Entered when |
 |-------|-------|--------------|
@@ -199,6 +202,7 @@ the inconsistency between this threshold and the systemd watchdog interval.
 | `NAVIGATE` | Task | `go_to` intent, delegates to `navigation.py` |
 | `RETRIEVE` | Task | `retrieve` intent, delegates to `retrieval_task.py` |
 | `PURSUE` | Task | `come_here`/`follow` intent, delegates to `pursuit_task.py` |
+| `WAVE` | Task | `wave` intent — `_WAVE_OFFSETS_US` step machine, non-blocking. **Was missing from this table until 2026-09-13** |
 
 ### 3.1.1 Permission to enter ROAM unprompted (FR-1000-005)
 
@@ -234,9 +238,12 @@ is not what "stop" means.
 
 The panel side is `display.py::offer_roam()` / `roam_tapped()`, the same
 Event-across-threads contract as `reset_tapped()` and `override_tapped()`.
-Single tap, unlike the two-step `STOP SVC` and self-test override: this starts
-motion the owner could have commanded anyway, so a stray touch costs a wander
-they can stop rather than a safety check they bypassed. There is deliberately no
+Single tap, unlike the two-step `STOP SVC` and self-test override buttons — **neither
+of which is described anywhere else in this document; both live in `display.py`
+(`_handle_stop_tap`, `_handle_override_tap`) and are two-step because one stops the
+service and the other enables motion on a rover that failed its own safety check.**
+A roam grant is neither: it starts motion the owner could have commanded anyway, so a
+stray touch costs a wander they can stop rather than a safety check they bypassed. There is deliberately no
 DECLINE button — declining and ignoring both land in the same cooldown, so a
 second button would offer a choice that changes nothing.
 
@@ -325,19 +332,25 @@ legitimately needs one where passive observation does not.
      that same hung kernel. Witty Pi 5's watchdog lives on a completely separate MCU and can
      force a real power cycle regardless of what the Pi's OS is doing. The heartbeat protocol
      (a register *read*, per the manual's literal "the software periodically polls a register"
-     wording, not a write) is best-effort against the documentation — **not independently
-     confirmed, since the hardware doesn't exist on this unit yet.**
+     wording, not a write) is best-effort against the documentation — **still not
+     independently confirmed against the real device.** The hardware IS fitted (0x51 answers,
+     §0 roll-call); what remains unverified is whether this heartbeat protocol actually
+     satisfies the watchdog. Corrected 2026-09-13 — this line said the hardware did not
+     exist, three weeks after it was installed.
    - `config.ENABLE_WITTY_PI` is **`True`** (`config.py:227`), so `brain.py:71` adds 0x51 to
-     `_EXPECTED_I2C` and the self-test expects it. ~~stays `False`, and 0x51 stays out of `_EXPECTED_I2C`~~ (§4.1 step 3),
-     until the hardware is actually installed — flip both on then, not before, or the self-test
-     will report a real device as missing every single run.
-   - **Open, unresolved**: the battery is wired via VUSB (USB-C), not the VIN screw terminal —
-     the manual documents the configurable low-voltage-threshold registers (#22/#23) as
-     monitoring VIN specifically. Whether an equivalent threshold usefully applies to a dropping
-     VUSB isn't confirmed either way. This doesn't reduce safety regardless of how it resolves —
-     `config.BAT_SHUTDOWN_V` et al. (via the real battery-voltage ADC) remain the primary,
-     already-working safety mechanism; Witty Pi 5's low-voltage cutoff would only ever be an
-     *additional* backstop, not a replacement.
+     `_EXPECTED_I2C` and the self-test expects eleven devices (§4.1 step 3). The flag exists
+     precisely so the address is only expected once the hardware is present — enabling it
+     before installation would make the self-test report a real device as missing every run.
+     It was flipped when the HAT went in. *(Rewritten 2026-09-13: this bullet previously
+     carried a struck "stays False" clause alongside "flip both on then, not before", which
+     read as contradicting the sentence in front of it.)*
+   - ~~**Open, unresolved**: the battery is wired via VUSB (USB-C), not the VIN screw
+     terminal…~~ **CLOSED 2026-09-13 — the premise no longer holds.** Witty Pi was refed
+     through its **VIN screw terminal** from DROK-Pi on 2026-08-23 (Master Hardware Design
+     §2.2), so registers #22/#23 monitor the input they were documented for and the question
+     of whether they apply to a dropping VUSB is moot. The safety position is unchanged:
+     `config.BAT_SHUTDOWN_V` et al., via the battery-voltage ADC, remain primary, and the
+     Witty Pi cutoff is an additional backstop.
 1. `RoverBrain.__init__` constructs every subsystem. Note that `motors.py` and
    `arm.py` construction calls `PCA9685.reset()`, which clears the MODE1
    ALLCALL bit — this is why 0x70 legitimately stops answering before the
@@ -497,7 +510,7 @@ Playback is untouched and does not go through this path at all: all three
 
 ---
 
-## 6.5 Front obstacle fusion (VL53L7CX, hardware due 2026-09-12)
+## 6.5 Front obstacle fusion (DFRobot SEN0628, ordered 2026-09-13)
 
 A multi-zone ToF sensor joins the front sonar — see Master Hardware Design §6.5 for
 the part and the mounting constraints. The software consequence is deliberately
@@ -535,6 +548,14 @@ availability floor stays exactly where it is today; the ToF only ever adds.
 
 Owner decision 2026-09-11: hold `STAIR_STANDOFF_M = 0.15` from a mapped stair edge
 while in `floor` mode, released by an explicit switch to `stair` mode.
+
+**Neither mode exists yet.** `floor` and `stair` are FR-1200-002's mobility modes, and
+they are **not** `brain.py` FSM states — they do not appear in §3.1's table and nothing
+in the code implements them. They are a capability gate to be built alongside
+FR-1200's stair navigation, orthogonal to the FSM in the same way `mapping.active` is.
+Until they exist, `floor` is the implicit and only behaviour, so the standoff simply
+always applies. Recorded 2026-09-13, because §6.6 referenced them as though they were
+already defined somewhere.
 
 **This lives in the deliberative layer, and that is deliberate.** The standoff is
 arithmetic on a mapped position against an estimated pose — both of which can be
@@ -661,16 +682,36 @@ already fire today. `tests/test_brain_reset_gate.py` covers the brain.py-side
 logic off-hardware; the touchscreen's own tap detection needs the physical
 5" DSI panel (Master Hardware Design v2.0 §15.3) to verify.
 
-**S-2 — Encoder polling may under-sample at speed; the "~8.5kHz/channel"
-figure was wrong, corrected 2026-08-23.** `ENCODER_COUNTS_PER_REV` (3292 =
-823.1 PPR × 4) is already the geared-down figure — 823.1 PPR is 11 PPR at
-the motor shaft times roughly a 74.8:1 gearbox. Multiplying that
-already-geared count by 620 RPM as *output-shaft* RPM (the earlier
-arithmetic) implies a ~46,000 RPM motor, which isn't physical. The real
-per-wheel edge rate depends on which shaft 620 RPM refers to and the actual
-gear ratio, neither bench-confirmed — landing somewhere in **roughly
-450-4,400 Hz**, not 8.5kHz. Whether the ~1kHz I²C poll ceiling is even a
-real problem is genuinely open, not established. Resolve by bench test
+**S-2 — Encoder polling under-samples at speed. RECOMPUTED 2026-09-13, and the
+answer got worse.**
+
+This entry argued, on 2026-08-23, that the "~8.5kHz/channel" concern was overstated
+and the real figure was "roughly 450–4,400 Hz". **That argument used constants which
+were themselves corrected two days later**, on 2026-08-25, and it was never revisited.
+With the measured values:
+
+- `ENCODER_COUNTS_PER_REV` = **752**, not 3292 — 11 PPR × 4 quadrature × **17.1:1**,
+  not 823.1 PPR × 4 on a ~74.8:1 box (`config.py:119`, Master Hardware Design §7.1).
+- **620 RPM is the OUTPUT speed**, which the old entry treated as unresolved.
+  `config.py:123` settles it: 620 RPM from a ~10.6k RPM bare motor through 17.1:1.
+  It is corroborated by the ~3.3 m/s theoretical top speed on 101.6mm wheels.
+
+So the per-channel edge rate at full speed is:
+
+```
+620 RPM / 60 × 752 counts/rev  =  ~7,770 Hz per channel
+```
+
+**~7.8 kHz against a ~1 kHz poll ceiling — roughly 8× oversubscribed.** The 2026-08-23
+entry was arguing this concern *down* toward 450–4,400 Hz; the real number is close to
+the 8.5 kHz it was disputing. **The original concern was substantially right, and the
+correction that dismissed it was wrong.**
+
+This does not change what to do — a bench test still settles it, and arithmetic is not
+a substitute for one. It changes the expectation you should carry into that test: plan
+for the poll rate to be inadequate rather than hoping it is fine. Note also that this
+matters only once the encoders produce edges at all; they have produced none since
+2026-08-25. Resolve by bench test
 (mark a wheel, jog known turns, read counts — same session as confirming
 `WHEEL_DIAMETER_M`), not more arithmetic. If it does turn out too slow, the
 fix is `dtparam=i2c_arm_baudrate=400000` (~4x, no wiring — this bus already
@@ -853,7 +894,14 @@ wants it.
    The two known tick-blocking culprits are fixed (see S-6); still needs a
    live `systemctl cat willy-rover.service` check and live verification that
    no tick now approaches the kill threshold.
-3. **Wire an E-stop sense line (S-1).** Blocks Directive 1 from being
+3. ~~**Wire an E-stop sense line (S-1).**~~ **NOT REQUIRED — closed by owner decision
+   2026-08-24, see S-1.** The latching mushroom switch cuts motor and arm power
+   physically and absolutely, and FR-300-001/002/003 are satisfied in hardware. This
+   item read as a live requirement and contradicted S-1's closure; corrected
+   2026-09-13. Retained only as an *optional* future enhancement — if a sense pin is
+   ever wanted for observability, the statement below is why it would help.
+
+   Original text: Blocks Directive 1 from being
    represented in software at all.
 4. **Run `arm_jog.py` and record real per-joint limits (S-4).** Nothing else
    unblocks retrieval.
