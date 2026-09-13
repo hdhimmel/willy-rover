@@ -448,6 +448,40 @@ feed raw email text to an LLM as instructions.
 
 ---
 
+**Multi-zone ToF — DFRobot SEN0628, arriving 2026-09-14.** Front obstacle sensing
+*alongside* the sonar, never replacing it. Full design in Master Hardware Design §6.5
+and Software Design §6.5/§6.6; the traps are here.
+
+- **Set the DIP switch first.** Three positions choosing UART-vs-I²C and address. Wrong
+  setting is a silent device that looks exactly like a wiring fault.
+- **Peel the protective film off the optics** — a ~5×3mm square over the laser window
+  that the documentation does not mention, plus one over the DIP switch.
+- **Bench it over USB-C before wiring it to Willie.** A serial monitor shows rows y0–y7,
+  eight columns. One of six reviewers had the board reset-looping every few seconds even
+  on firmware v1.3 — **prove a stable multi-minute stream before this goes anywhere near
+  the reflex path.**
+- **Power from 3.3V, NOT 5V.** It accepts both, but on UART the logic level follows the
+  supply and the Pi's RX is not 5V tolerant. Under 80mA, so Pi header pin 1 carries it —
+  that pin has had no consumer since the ISO1540 came out.
+- **The TCA9548A is NOT needed for this** (a change from the 2026-09-11 design). The mux
+  was mandated because a bare VL53L7CX uploads ~84KB of firmware over I²C at every init;
+  the onboard RP2040 does that locally now. I²C traffic is just 64 values per frame.
+- **FOV is 60° H × 60° V, 90° DIAGONAL.** If you see "90 × 90" anywhere, that came from
+  the earlier MusRock listing and is wrong. It matters: 60° vertical puts the floor
+  intersection at ~1.7× mount height, not 1×.
+- **Never blanket-mask the floor rows.** Calibrate a per-zone floor profile and flag a
+  zone only when it returns meaningfully *shorter* than its stored value — see §6.5. And
+  an **uncalibrated sensor must report nothing**, not raw ranges, or the floor becomes a
+  permanent obstacle and Willie never moves.
+- **It is also the cliff detector** now that dedicated cliff sensors were dropped (the
+  chassis extends past the body, so nothing can mount ahead of the front wheels). A drop
+  reads as zones returning *nothing* where the profile expects floor. Dark carpet does
+  the same, which is the safe direction — he stops for nothing rather than driving off.
+- **Unavailable ≠ fault.** If it drops out, `sensors.py` falls back to sonar alone and
+  logs it. Adding a sensor must never lower Willie's availability floor.
+
+---
+
 ## Power
 
 - Pi 5V rail measured 5.144V under boot load, `vcgencmd get_throttled` = 0x0.

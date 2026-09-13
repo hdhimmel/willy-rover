@@ -1253,7 +1253,11 @@ separately under FR-1200.
     backstop until this is measured on the real rover.
 
     The reflex-layer drop detector is the VL53L7CX (Master Hardware Design
-    §6.5), which is deterministic and does not depend on pose being right.
+    §6.5) — as of 2026-09-13 the DFRobot SEN0628 carrying that sensor behind an
+    RP2040 — which is deterministic and does not depend on pose being right.
+    Dedicated IR cliff sensors were considered and dropped on 2026-09-12: the
+    chassis extends beyond the body, so nothing can be mounted ahead of the front
+    wheels without a bracket sitting in the stair-riser strike zone.
     FR-1000-002's rule holds unchanged: vision informs, it never gates the stop.
 
 # FR-2000-012/013 Acceptance Criteria — email as a command channel
