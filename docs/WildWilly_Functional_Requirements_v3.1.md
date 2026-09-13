@@ -6,30 +6,46 @@ Version 3.1**
   -----------------------------------------------------------------------
   Field                   Value
   ----------------------- -----------------------------------------------
-  Revision                3.1
+  Revision                3.2
 
-  Date                    2026-08-18
+  Date                    2026-09-13
 
   Owner                   Howard Himmel
 
   Status                  Hardware build complete; live verification in
                           progress
 
-  Companion documents     WildWilly Master Hardware Design v2.0 --- current
+  Companion documents     WildWilly Master Hardware Design rev 2.1 --- current
                           hardware configuration. Section references of the
                           form §n refer to it unless stated otherwise.
-                          WildWilly Software Design v1.0 --- module
+                          WildWilly Software Design rev 1.1 --- module
                           architecture and control layering.
 
   Supersedes              v3.0 (2026-08-15), v2.3, v2.2
   -----------------------------------------------------------------------
 
-*v3.0 gave every previously empty Acceptance Criteria section concrete
-pass/fail conditions, added a verification-status register (§V), and aligned all
-hardware references with the as-built configuration. **No requirement has been
-added, removed, or reworded** in that revision or this one. All 113 requirement
-IDs from v2.2 are retained unchanged --- these revisions state how each is
-proven, not what each demands.*
+*v3.2 (2026-09-13) is the first revision since v2.2 to **add requirements**, and says
+so because the header claimed the opposite while four new IDs were being inserted
+beneath it.*
+
+***Requirements added since v3.1:***
+
+| ID | Added | Subject |
+|----|-------|---------|
+| FR-1000-005 | 2026-09-09 | Obtain operator permission before unprompted autonomous motion |
+| FR-1200-005 | 2026-09-11 | Hold a standoff from mapped stairs until stair mode is enabled |
+| FR-2000-012 | 2026-09-11 | Execute commands from the owner by email, including motion |
+| FR-2000-013 | 2026-09-11 | Verify inbound authentication results before acting |
+
+*The count is therefore **117**, not 113. v3.2 also reconciles §V, FR-100, FR-300,
+FR-2000 and G-2 against the as-built state.*
+
+*v3.0 gave every previously empty Acceptance Criteria section concrete pass/fail
+conditions, added a verification-status register (§V), and aligned all hardware
+references with the as-built configuration. **No requirement was added, removed or
+reworded** in v3.0 or v3.1; all 113 requirement IDs from v2.2 were retained unchanged.
+That statement remained in this header until 2026-09-13 while the four requirements
+above were being added under it.*
 
 *v3.1 (2026-08-18) advances §V to the current implementation state, adds §V.1
 recording which requirement groups now have implementing modules and test
@@ -47,18 +63,39 @@ Requirements are implemented and unit-tested off-hardware unless noted.
   FR-000 Prime Directives Implemented, not        Requires E-stop and
                           live-verified           motion testing
 
-  FR-100 Startup          PARTIAL --- I²C         Ten-device roll-call
-                          enumeration             passes through the
-                          live-verified           isolator. Encoder and
-                                                  IMU checks outstanding.
+  FR-100 Startup          PARTIAL --- I²C         Eleven-device roll-call
+                          enumeration             passes on the single
+                          live-verified           non-isolated segment ---
+                                                  20 consecutive scans,
+                                                  zero errors, 2026-09-08.
+                                                  ("passes through the
+                                                  isolator" until
+                                                  2026-09-13; the ISO1540
+                                                  was removed 2026-09-08.)
+                                                  Encoder and IMU checks
+                                                  outstanding.
 
   FR-200 Power            PARTIAL --- rail        Pi rail 5.144V,
-                          measurement and         throttled 0x0. Battery
-                          battery divider         divider calibrated
-                          live-verified           2026-08-16 (owner-
-                                                  confirmed; see Master
-                                                  Hardware Design v2.0
-                                                  Section 13).
+                          measurement only.       throttled 0x0.
+                          BATTERY DIVIDER NOT     ⚠ CORRECTED 2026-09-13:
+                          LIVE-VERIFIED           this row read "battery
+                                                  divider live-verified,
+                                                  calibrated 2026-08-16".
+                                                  FALSE. That calibration
+                                                  was of an EARLIER
+                                                  divider; the one fitted
+                                                  is new as of 2026-09-02
+                                                  and has no +12V feed ---
+                                                  A0 reads 0.0146V. No
+                                                  pack-voltage path
+                                                  exists, so FR-200-001/
+                                                  003/004 are NOT proven.
+                                                  See Master Hardware
+                                                  Design rev 2.1 §0 and
+                                                  open item 2, and
+                                                  Software Design §12
+                                                  item 13 for the
+                                                  software consequence.
 
   FR-300 Safety / E-stop  SATISFIED by hardware   Owner decision 2026-08-24:
                           (owner decision          the latching mushroom switch
@@ -113,6 +150,24 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   FR-1700-003/004 (approach
                                                   planning, grasp) not
                                                   live-verified.
+
+  FR-1000 Autonomous      PARTIAL --- FR-1000-005 Roam-permission gate
+  navigation              logic verified          live-verified in
+                          off-hardware; the rest  simulation
+                          BLOCKED                 (test_brain_roam_
+                                                  permission.py, 13 cases).
+                                                  FR-1000-001/003 and
+                                                  FR-1200-005's standoff are
+                                                  BLOCKED: Navigator steers
+                                                  by odometry.pose and the
+                                                  encoders have produced no
+                                                  edges since 2026-08-25.
+                                                  FR-1000-002's avoidance is
+                                                  SONAR-ONLY today --- the
+                                                  encoder half of the reflex
+                                                  layer is dead. Added to
+                                                  this register 2026-09-13;
+                                                  it had no row at all.
 
   FR-900 through FR-1400, Implemented, off-       
   FR-1800 onwards         hardware tested only    
@@ -212,7 +267,7 @@ against it. Directive 1 is enforced physically but is not represented in the
 control loop.
 
 **Design update 2026-08-23:** two dedicated physical cut switches, SW-M and
-SW-A, added to the distribution tree (Master Hardware Design v2.0 Section
+SW-A, added to the distribution tree (Master Hardware Design rev 2.1 Section
 2.1/2.3) -- SW-M in P3 on the motor supply; SW-A in P6, on the arm servo supply (6V DROK input — was the DZS, replaced 2026-08-28),
 which has no current monitor. SW-M's placement was intended to close the motor side of
 this gap by reading the current monitor then downstream of it (0x44). **That
@@ -234,20 +289,30 @@ settled, since it changes what "E-stop fired" actually means in the wiring.
 > by reading bus voltage at 0x40/0x44/0x45 before treating this as fact.
 
 
-**G-2 --- FR-500-002/004, encoder counts are possibly under-sampled at
-speed --- the "~8.5 kHz per channel" figure this doc previously stated is
-wrong, corrected 2026-08-23.** `ENCODER_COUNTS_PER_REV` is 3292 (823.1 PPR
-× 4), and 823.1 PPR is itself already the geared-down figure (11 PPR at the
-motor shaft × roughly a 74.8:1 gearbox, per `sensors.py`'s own encoder
-math). The previous "~8.5 kHz" multiplied that already-geared count by 620
-RPM taken as *output-shaft* RPM --- for both numbers to be true
-simultaneously the motor would need to spin at roughly 46,000 RPM, which is
-not physically the case. The real edge rate depends on which shaft 620 RPM
-actually refers to, and the gearbox ratio is not recorded anywhere in this
-project's documentation as a bench-confirmed value. Depending on that,
-per-wheel quadrature edges land somewhere in **roughly 450-4,400 Hz**, not
-8.5 kHz --- a wide enough range that whether `sensors.py`'s ~1 kHz I²C poll
-ceiling is even a real problem is genuinely unresolved, not established.
+**G-2 --- FR-500-002/004, encoder counts ARE under-sampled at speed.
+RECOMPUTED 2026-09-13.**
+
+This gap previously argued that the "~8.5 kHz per channel" figure was wrong and the
+real rate was "roughly 450-4,400 Hz". **That argument was built on constants which
+were themselves corrected two days later, on 2026-08-25, and it was never revisited.**
+With the measured values:
+
+-   `ENCODER_COUNTS_PER_REV` = **752**, not 3292 --- 11 PPR × 4 quadrature × **17.1:1**
+    reduction (`config.py:119`; Master Hardware Design rev 2.1 §7.1). The 823.1 PPR /
+    74.8:1 figures were never real.
+-   **620 RPM is the OUTPUT speed**, which the old text treated as unresolved.
+    `config.py:123` settles it --- 620 RPM from a ~10.6k RPM bare motor through 17.1:1
+    --- and it is corroborated by the ~3.3 m/s theoretical top speed on 101.6 mm wheels.
+
+So at full speed:
+
+    620 RPM / 60 × 752 counts/rev  =  ~7,770 Hz per channel
+
+**~7.8 kHz against `sensors.py`'s ~1 kHz poll ceiling --- roughly 8× oversubscribed.**
+The old text was arguing this *down* toward 450-4,400 Hz; the real figure is close to
+the 8.5 kHz it was disputing. **The original concern was substantially right and the
+2026-08-23 correction that dismissed it was wrong.** This is no longer "genuinely
+unresolved" --- expect under-sampling and plan for it.
 
 **Resolution:** bench test, not more arithmetic --- mark one wheel, jog it a
 known number of turns, read the counts. This settles counts/rev and the
@@ -260,19 +325,21 @@ problem at all.
 interrupt-driven decode.** `dtparam=i2c_arm_baudrate=400000` (~4x the
 current rate) is a software-only fix with no wiring, and the bus already
 carries an LTC4311 specifically to make higher speeds viable across this
-bus's capacitance. Test it against a full ten-device roll-call first, given
+bus's capacitance. Test it against a full **eleven**-device roll-call first, given
 this session's history of real I²C fragility on this bus.
 
 **Interrupt-driven decode (decided 2026-08-18) --- retracted 2026-08-23, do
 not implement as designed.** Three independent problems, not one:
 
-1. **Breaks galvanic isolation.** The MCP23017 lives on the isolated side of
-   the ISO1540 (Master Hardware Design §3.1); its INTA pin is referenced to
-   that isolated 3.3V domain. Wiring it straight to the Pi's GP7 runs a
-   conductor directly across the barrier that isolator exists to maintain
-   --- the same barrier this session's own I²C fault-finding relied on
-   staying intact. Doing it correctly would need another isolator channel,
-   adding a part and a failure mode for no net gain (see next point).
+1. ~~**Breaks galvanic isolation.**~~ **PREMISE GONE 2026-09-08 — marked
+   2026-09-13.** The ISO1540 was removed and there is no isolation barrier to
+   cross, so this reason for the retraction no longer applies. *The retraction
+   itself still stands on the remaining points below* — and note Software Design
+   already carried an equivalent "premise corrected" marker on this argument while
+   this copy did not. Retained as history: the MCP23017 lived on the isolated side
+   of the ISO1540 (Master Hardware Design §3.1); its INTA pin was referenced to
+   that isolated 3.3V domain, so wiring it to GP7 would have run a conductor across
+   the barrier, and doing it correctly would have needed another isolator channel.
 
    ⚠ **Premise corrected 2026-08-28.** Reason 1 as written does not hold: GND1
    and GND2 are not galvanically separate and never were (Master Hardware Design
@@ -295,7 +362,7 @@ not implement as designed.** Three independent problems, not one:
 
 `config.ENCODER_INT_PIN` (GP7) and the `IOCON.MIRROR`/`INTCON`/`GPINTEN`
 configuration in `sensors.py::Encoders` reflect this retracted design and
-need to be reverted along with this doc change --- see Software Design v1.0
+need to be reverted along with this doc change --- see Software Design rev 1.1
 S-2. GP7 reverts to free/unused pending a different use.
 
 **G-3 --- FR-1700-005, grasp is a fixed primitive sequence, not planning.**
@@ -539,9 +606,13 @@ commissioning gate (Master Engineering Package rev 6.2.0 §17.5). Pass
 conditions:
 
 -   **FR-100-002 (I²C bus and device init).** `i2cdetect -y 1` enumerates the
-    ten expected devices: 0x27 MCP23017, 0x40/0x44/0x45 INA260, 0x42/0x43
-    PCA9685, 0x48 ADS1115, 0x4A BNO085, 0x60/0x61 FeatherWing. Any missing
-    address fails the gate; the run must not continue to FR-100-004 release.
+    **eleven** expected devices: 0x27 MCP23017, 0x40/0x44/0x45 INA260, 0x42/0x43
+    PCA9685, 0x48 ADS1115, 0x4A BNO085, **0x51 Witty Pi 5**, 0x60/0x61 FeatherWing.
+    Any missing address fails the gate; the run must not continue to FR-100-004
+    release. *(Corrected 2026-09-13 — this said ten and omitted 0x51, while §V's own
+    roll-call note said eleven. `brain.py:71` adds 0x51 to `_EXPECTED_I2C` whenever
+    `ENABLE_WITTY_PI` is True, which it is, so the gate has expected eleven since the
+    HAT was fitted.)*
 
 -   **FR-100-002, 0x70 is not a device.** A scan will also show 0x70. Per
     Master Engineering Package §5.2 this is the PCA9685 All-Call broadcast
@@ -576,7 +647,8 @@ conditions:
     critical.
 
 -   **FR-100-003 (startup self-test).** The self-test additionally confirms the
-    BNO085 interrupt is live on GP15 and that all six encoder channels on the
+    BNO085 interrupt is live on GP15 and that all six wheels' encoder channels
+    (twelve A/B lines, per FR-500) on the
     MCP23017 change count under manual wheel rotation. Address enumeration
     alone is not sufficient --- a device can ACK and still be miswired.
 
@@ -652,7 +724,15 @@ conditions:
     scale factor in `config.py` is set. Rail currents are read from the three
     INA260s at 0x40 (servo/steering 5V), 0x44 (+12V main input) and 0x45 (Pi
     supply). 0x44/0x45 were transposed in docs until 2026-08-24; 0x44 moved
-    upstream to the main input 2026-08-28.
+    upstream to the main input 2026-08-28. ⚠ **These identities are asserted here but
+    flagged UNVERIFIED by G-1**, which wants bus voltages read at 0x40/0x44/0x45
+    before they are treated as fact. `config.py` carries measurements consistent with
+    them (0x40 = 5.148V, 0x44 = 11.373V, 0x45 = 9.068V), which is supporting evidence,
+    not the confirmation G-1 asks for. Flag carried into these criteria 2026-09-13.
+
+    ⚠ **The voltage half of FR-200-001 cannot currently be verified at all.** The
+    divider fitted on 2026-09-02 has no +12V feed and A0 reads 0.0146V, so there is no
+    pack-voltage path to compare against a meter. See §V's FR-200 row.
 
 -   **FR-200-001, pre-power safety condition.** A0 must be metered before the
     ADS1115 is first energised and must sit in the 2.76--3.06V window. A
@@ -709,7 +789,7 @@ directly: *the Pi doesn't need this, the main power down is sufficient.*
 Rationale and scope, recorded so this is traceable rather than silently relaxed:
 
 -   The E-stop is a **latching mushroom switch that physically cuts motor and
-    arm power** (Master Hardware Design v2.0 §2.3). That cut is absolute and
+    arm power** (Master Hardware Design rev 2.1 §2.3). That cut is absolute and
     does not depend on software running, being responsive, or being correct.
     Software awareness would add logging and a reset gate — it would not make
     the stop itself any more reliable.
@@ -739,16 +819,29 @@ cuts. Neither is a sense line, and neither is claimed to be.
 Directive 2's gate is considered satisfied. G-1 in §V.2 is closed by this
 decision rather than by implementation.
 
--   **FR-300-001 (continuous monitoring).** The E-stop state is polled or
-    interrupt-driven on every control cycle, not checked once at startup.
-    Verified by triggering the E-stop mid-cycle and confirming detection
-    within one cycle period.
+-   ⚠ **FR-300-001 (continuous monitoring) --- VERIFICATION SUPERSEDED
+    2026-08-24, restated 2026-09-13.** The criterion below describes a software
+    polling test that **cannot be executed**: no sense line exists, nothing is
+    polled, and the owner decision immediately above accepts that. It survived the
+    decision unmarked.
 
--   **FR-300-002 (immediate motion disable).** With all six drive motors
-    running and the arm mid-trajectory, triggering the E-stop halts motor
-    output and arm output in the same cycle. No queued command executes
-    afterwards. A queued arm motion completing after an E-stop trigger is a
-    critical defect, not a tuning issue.
+    **Restated as hardware verification:** fire the latching mushroom switch and
+    confirm, with a meter, that motor and arm supply terminals are dead. That is
+    the whole requirement — the cut is physical, absolute and independent of
+    software, so there is no cycle period to detect within.
+
+    *Original text, retained only to describe what a future sense pin would enable:
+    "The E-stop state is polled or interrupt-driven on every control cycle, not
+    checked once at startup. Verified by triggering the E-stop mid-cycle and
+    confirming detection within one cycle period."*
+
+-   **FR-300-002 (immediate motion disable).** With all six drive motors running
+    and the arm mid-trajectory, triggering the E-stop halts motor and arm output.
+    **Verified at the terminals, not in software** (restated 2026-09-13): the cut
+    removes power, so nothing can execute afterwards regardless of what is queued.
+    The original text said "in the same cycle" and warned that a queued arm motion
+    completing afterwards is a critical defect — true, and satisfied structurally
+    rather than by timing, since the actuators have no supply to move on.
 
 -   **FR-300-003 (operator reset).** After an E-stop, no motion command
     succeeds until an explicit operator reset. Verified by issuing drive and
@@ -769,10 +862,18 @@ decision rather than by implementation.
     from either motor driver, halts motion rather than continuing on stale
     state. Verified by disconnecting the bus mid-run.
 
--   **Coverage note.** The E-stop cuts motor and arm power in hardware. That
-    is the backstop, not the requirement --- FR-300 governs the software path,
-    which must reach the same state independently so that logic remains
-    consistent after the hardware cut.
+-   ⚠ **Coverage note --- SUPERSEDED 2026-08-24, marked 2026-09-13.** This
+    paragraph said the hardware cut "is the backstop, not the requirement", and that
+    FR-300 governs a software path which "must reach the same state independently".
+    **With no sense line, the software path cannot reach that state at all**, so as
+    written it asserts an impossibility. It is pre-decision text that was left
+    unmarked when the rest of this section was superseded.
+
+    **Current position:** the hardware cut *is* the requirement. FR-300-001/002/003
+    are satisfied physically. Software cannot observe the E-stop and does not claim
+    to; what it does provide is `_await_reset_or_resume()`'s no-auto-resume rule for
+    the three faults it *can* see (tilt, sensor, stall), which is a genuine and
+    separate behaviour, not a partial E-stop implementation.
 
 # FR-400 Mobility and Drive Control
 
@@ -812,9 +913,12 @@ left side (LF, LM, LR) and 0x61 the right (RF, RM, RR).
     consistently rather than fighting each other.
 
 -   **FR-400-003 (smooth ramping).** A step command produces a ramped current
-    profile rather than an inrush spike. Verified against the motor-rail
-    INA260 --- an unramped six-motor start is one of the larger transients on
-    the 12V rail.
+    profile rather than an inrush spike. Verified against **INA260 0x44**, which
+    since 2026-08-28 sits on the **+12V main input**, not the motor branch — so the
+    reading includes every 12V consumer, not the motors alone. An unramped six-motor
+    start is still one of the larger transients on that rail and remains visible, but
+    read it as total system draw. *(Corrected 2026-09-13 — this said "the motor-rail
+    INA260", which no longer exists.)*
 
 -   **FR-400-004 (speed limits).** A command above the software cap is clamped,
     not refused silently and not passed through. This is Directive 4 and is a
@@ -949,7 +1053,7 @@ Seven servos on PCA9685 0x43, channels CH0--CH6; CH7 is unused.
 **Channel order is not joint order.** As remapped 2026-09-06 the board runs
 shoulders on CH0/CH1, elbow CH2, wrist pitch CH3, wrist rotate CH4, gripper
 CH5, base yaw CH6. `config.py` is the authority and Master Hardware Design
-v2.0 §8 carries the table plus the remap history; any channel number quoted
+rev 2.1 §8 carries the table plus the remap history; any channel number quoted
 from a revision older than 2026-09-06 is stale.
 
 -   **FR-700-001 (all joints).** Each joint responds on its own channel across
@@ -1012,6 +1116,10 @@ from a revision older than 2026-09-06 is stale.
     trusting any of them together. Front and right reading correctly while
     left returns garbage is the specific signature of the serial console
     having been re-enabled --- the left echo pin doubles as UART transmit.
+    **Unchanged by the 2026-09-13 SEN0628 decision:** that sensor's UART is planned
+    for GP8/GP9, not GP14/GP15, so it does not reintroduce this conflict. The warning
+    stands as written and the serial console must remain disabled — see Master
+    Hardware Design rev 2.1 §5.3 and §6.5.
 
 -   **FR-800-003 (tilt detection).** Excessive tilt is detected from IMU
     output and halts motion. Verify the threshold against the rover's actual
@@ -1183,7 +1291,9 @@ separately under FR-1200.
 -   **Known false positives to handle explicitly.** Two states look like
     faults but are not, and must be distinguished rather than reported as
     errors. A blank or partial I²C scan with the base unpowered is expected ---
-    the isolated bus dies with the 12V chain. And the Pi-rail monitor showing
+    the device bus dies with the 12V rails. *(Was "the isolated bus dies with the 12V
+    chain"; the ISO1540 was removed 2026-09-08 and FR-100's version of this note was
+    corrected then while this one was not.)* And the Pi-rail monitor showing
     a healthy voltage with near-zero current while the Pi is plainly running
     indicates USB-C bench power, not a sensor fault.
 
@@ -1199,16 +1309,16 @@ separately under FR-1200.
   -----------------------------------------------------------------------
   Requirement ID    Requirement       Priority          Verification
   ----------------- ----------------- ----------------- -----------------
-  FR-1200-001       Detect stairways  High              Test
+  FR-1200-001       Detect stairways  **Stretch**       Test
 
-  FR-1200-002       Select floor or   High              Test
+  FR-1200-002       Select floor or   **Stretch**       Test
                     stair mode                          
 
-  FR-1200-003       Monitor traction  High              Test
+  FR-1200-003       Monitor traction  **Stretch**       Test
                     and tilt during                     
                     climbing                            
 
-  FR-1200-004       Support           High              Test
+  FR-1200-004       Support           **Stretch**       Test
                     multi-floor                         
                     navigation                          
                     through the world                   
@@ -1223,6 +1333,35 @@ separately under FR-1200.
 
 # Acceptance Criteria
 
+**Priority corrected 2026-09-13.** FR-1200-001 through -004 were marked High while
+the mission table (M-006) reclassifies stair climbing as **STRETCH**. The mission
+classification is the intent; the priority column was stale. **FR-1200-005 remains
+High** — holding a standoff from stairs is a safety behaviour required *now*, and is
+independent of whether climbing is ever built.
+
+-   **FR-1200-001 (detect stairways).** Stairs are recorded during a mapping run and
+    persisted in the world model with position, heading and width. Verified by
+    labelling a real flight and confirming the record round-trips through
+    `world_model.db`. *Camera-proposed detection (§4 of the come-to-me spec) is the
+    intended mechanism; manual labelling satisfies this requirement on its own.*
+
+-   **FR-1200-002 (floor / stair mode).** A mobility mode selector exists with
+    `floor` as the power-on default, and no path switches to `stair` implicitly.
+    Verified by confirming the rover powers up in `floor` and that only an explicit
+    operator action changes it. **Neither mode is implemented as of 2026-09-13** —
+    see Software Design §6.6.
+
+-   **FR-1200-003 (traction and tilt during climbing).** While in `stair` mode,
+    per-wheel stall and IMU tilt are sampled every control cycle, and either a stall
+    or a tilt beyond `IMU_TILT_LIMIT` aborts the climb and reverses to level ground.
+    **Blocked**: per-wheel stall detection requires encoders, which have produced no
+    edges since 2026-08-25.
+
+-   **FR-1200-004 (multi-floor navigation).** The world model represents more than
+    one floor level and a route may traverse between them. **Not designed.** Recorded
+    here so the requirement has a stated pass condition rather than none; it was one
+    of four in this section with no criteria at all until 2026-09-13.
+
 -   **FR-1200-005 (stair standoff).** Owner decision 2026-09-11. Stairs are
     recorded during the mapping run and Willie holds **0.15 m** clear of a mapped
     stair edge whenever `floor` mode is selected (FR-1200-002). The standoff is
@@ -1231,6 +1370,12 @@ separately under FR-1200.
     a hazard to be walled off**: the rocker-bogie is designed to climb them, and
     the same mapped geometry that keeps him clear today is what he will approach
     deliberately under FR-1200-001/002.
+
+    ⚠ **The reflex layer is sonar-only today.** FR-1000-002 names sonar *and
+    encoders* as the reflex layer, but the encoders have produced no edges since
+    2026-08-25, so stall detection contributes nothing and avoidance rests on three
+    HC-SR04s alone until the VL53L7CX is fitted. This register did not record that
+    anywhere; noted 2026-09-13.
 
     Three sources contribute, and they do different jobs. **Mapping** records
     where the stairs are. **Vision** (both cameras are mounted 15° downward, so
@@ -1541,6 +1686,15 @@ section behind it until now. Added 2026-08-02, v1.4.
 
 -   Wake-word detection, speech-to-text and response run on-device using the
     NPU accelerator, with no network dependency for core interaction.
+    **Which stage runs where, clarified 2026-09-13** — §V records intent parsing as
+    "live-verified on CPU only", which reads as contradicting this line. Both are
+    true of different stages: wake word (openwakeword) and STT (faster-whisper) run
+    on **CPU**; `ENABLE_HAILO_STT` is False. Vision runs on the **Hailo NPU**. Intent
+    parsing is Hailo-primary (`ENABLE_HAILO_LLM=True`) with a Claude fallback, but
+    has only ever been live-verified on the CPU path, which is what §V records. The
+    "no network dependency" claim is therefore aspirational for intent parsing while
+    G-6 stands: a 0%-scoring local model routes essentially every episode to the
+    cloud.
 -   Voice commands are subject to Directives 1--5. A spoken motion command is
     refused if the self-test has not passed, exactly as any other command
     would be.
@@ -1964,10 +2118,31 @@ time (e.g. rapid voltage drop).
 
 # Acceptance Criteria
 
-WildWilly shall initialize correctly, operate safely under manual
-control, detect faults, avoid obstacles, support autonomous navigation,
-and enter a safe state when power, communications, or safety conditions
-become invalid.
+**Corrected 2026-09-13.** This heading previously carried a generic document-level
+summary — "WildWilly shall initialize correctly, operate safely under manual control,
+detect faults, avoid obstacles…" — which belongs at the front of the FRD, not under
+FR-1900, and left FR-1900 with no pass conditions at all. FR-1900-011's
+guaranteed-save requirement in particular had none anywhere in the document.
+
+-   **FR-1900-001/002 (store and recall).** A fact taught by voice is recalled in a
+    later session after a full power cycle. Verified against `memory.db` — the store
+    is SQLite on the SSD, so a restart is the meaningful test, not a re-read within
+    one process.
+
+-   **FR-1900-003 (replay similarity floor).** A recalled item below
+    `MEMORY_REPLAY_SIMILARITY_FLOOR` (0.6) is reported as a mismatch rather than
+    replayed. Verified by asking for something deliberately close to, but not, a
+    stored key and confirming Willie says he is unsure rather than acting.
+
+-   **FR-1900-011 (guaranteed save).** No learned item is lost to an ungraceful stop.
+    `memory.save_all_now()` is called on the operator STOP path
+    (`brain.py::_tick()`'s stop-button branch) and on voice-commanded shutdown.
+    Verified by teaching a fact, triggering each stop path, and confirming the fact
+    survives a restart. **Note the limit:** an abrupt power cut — the case the User
+    Guide warns about — is not covered by any of this, because nothing runs to save.
+
+-   **Retention.** FR-1900 content is subject to FR-1800's retention rules, and
+    `forget everyone` / a `memory.db` delete are the operator-facing wipes.
 
 # FR-2000 Email Account and Management
 
@@ -2012,12 +2187,6 @@ expand who\'s trusted enough to be read.
                     for new messages                                  
 
   FR-2000-003       Surface relevant email content  Medium            Test
-
-  FR-2000-012       Execute commands from the owner  High             Test
-                    by email, including motion
-
-  FR-2000-013       Verify inbound authentication    High             Test
-                    results before acting
                     to the owner via voice                            
                     (FR-1500) and/or display                          
                     (FR-1600) summary, rather than                    
@@ -2040,7 +2209,15 @@ expand who\'s trusted enough to be read.
                     the owner --- never interpret                     
                     instructions embedded in email                    
                     content as commands to execute                    
-                    (prompt-injection boundary)                       
+                    (prompt-injection boundary),                      
+                    **EXCEPT owner mail                               
+                    authenticated per FR-2000-013,                    
+                    which FR-2000-012 permits to                      
+                    command. Raw email text is                        
+                    still never fed to a model as                     
+                    instructions; only a parsed                       
+                    intent from an authenticated                      
+                    owner message may act.**                          
 
   FR-2000-007       Email content and any derived   Medium            Test
                     summaries are subject to                          
@@ -2084,12 +2261,33 @@ expand who\'s trusted enough to be read.
                     alone, by content in an email,                    
                     or by any other unauthenticated                   
                     path                                              
+
+  FR-2000-012       Execute commands from the      High              Test
+                    owner by email, including                         
+                    motion --- subject to                             
+                    FR-2000-013 and the freshness,                    
+                    Directive-gating, announcement                    
+                    and kill-switch conditions in                     
+                    the Acceptance Criteria below                     
+
+  FR-2000-013       Verify inbound authentication  High              Test
+                    results (SPF/DKIM/DMARC)                          
+                    before acting on any email;                       
+                    refuse to act on a message                        
+                    that did not pass DKIM                            
+                    regardless of its From header                     
   -------------------------------------------------------------------------------------
 
 # Acceptance Criteria
 
--   Email handling operates only when explicitly invoked and never initiates
-    motion or any physical action on its own.
+-   ⚠ **Superseded in part by FR-2000-012 (2026-09-11).** This criterion read
+    "Email handling operates only when explicitly invoked and never initiates motion
+    or any physical action on its own." That was written for the "surfaced, never
+    acted on" rule and is **no longer true**: FR-2000-012 executes owner email
+    commands, motion included. It still holds for every sender other than the owner,
+    and for any message failing FR-2000-013's DKIM check. Restated: **email
+    originating from anyone but the authenticated owner never initiates motion or any
+    physical action.**
 -   Credentials are held outside the repository and are not present in any
     committed file or commit history.
 -   Failures degrade gracefully --- loss of email connectivity does not affect
