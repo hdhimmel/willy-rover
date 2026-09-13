@@ -13,7 +13,7 @@
 | Project | WildWilly Autonomous Rover |
 | Document | Master Hardware Design — as-built, current configuration only |
 | Revision | 2.1 |
-| Date | 2026-09-11 |
+| Date | 2026-09-13 |
 | Owner | Howard Himmel |
 | Status | Build complete; AI accelerator bonded; live verification in progress. **Filename retains `v2.0` deliberately** — renaming would break every cross-reference in Software Design, the FRD and `CLAUDE.md`. The revision field above is authoritative. |
 | Supersedes | As-Built Design Document v1.0 (2026-08-15) |
@@ -188,7 +188,7 @@ distribution, bus node board and motor drivers in the body tray.
 | P1 | 2 × 3S 8000mAh → hard parallel, per-pack BMS | 12–14 AWG | BMS per pack |
 | P2 | Battery+ → F1 → KCD4 switch → Q1 FET → +12V bus | 12 AWG | F1 30A ATC |
 | P3 | +12V bus → F2 → **SW-M** → INA260 0x44 → both FeatherWing VIN | 16 AWG | F2 |
-| P4 | +12V bus → F3 → Switch 2 → **DROK-Pi** (9V to Witty Pi) | 16 AWG | F3 |
+| P4 | +12V bus → F3 → Switch 2 → **DROK-Pi** (**9V or 9.5V — DISPUTED, see below**) | 16 AWG | F3 |
 | P5 | +12V bus → F4 → **DROK-5V** input | 16 AWG | F4 10A |
 | P6 | +12V bus → F5 → **SW-A** → **DROK-6V** input | 16 AWG | F5 |
 | P8 | +12V bus → F6 polyfuse (RXEF110 1.1A) → **TPSM84205** (12V→5V) → **AMS1117-3.3** → isolated 3.3V rail (VCC2) | 20–22 AWG | F6 PTC |
@@ -281,9 +281,18 @@ graph TD
 | R3 | 6V | **DROK-6V** buck | Arm servo distribution | — |
 | R5 | **3.3V** | **DROK-4** buck | Motor Hall encoders (JGA25-370B) **and all I²C device logic**. Settled 2026-09-08, see §0 — the "3V or 5V" question below is closed | — |
 | ~~R4~~ | ~~3V3~~ | ~~Pi header pin 1~~ | **NO CONSUMER AS-BUILT.** Fed ISO1540 Side 1 VCC only, and the ISO1540 is out of the build (§1, 2026-09-08). Nothing loads Pi 3V3 now — see §2.1 and §5.3. Retained as history; do not wire from this row. | — |
-| — | 3V3 (VCC2) | **Two-stage chain** (§3): TPSM84205 (12V→5V) → AMS1117-3.3 (5V→3.3V) | Entire isolated I²C bus (devices, not encoders) | — |
+| ~~—~~ | ~~3V3 (VCC2)~~ | ~~Two-stage chain: TPSM84205 → AMS1117-3.3~~ | **OUT OF SERVICE 2026-09-08 (§0).** The isolated bus it fed does not exist. The TPSM is still physically fitted but dormant; the AMS1117 has no input. Struck 2026-09-13 — R4 was struck in rev 2.1 and this row was missed | — |
 | — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | INA260 **0x44** (P3 monitoring) |
 | — | +12V main | Battery via F1/KCD4/Q1 | All four DROK inputs + isolated power chain (P8) | — |
+
+⚠ **R1 voltage is DISPUTED — meter it (flagged 2026-09-13).** §0 records R1 as
+**9.5V**. But `config.py:212` carries a *verified measurement* of **9.068V**
+("VERIFIED 9.068V"), and `config.py:223`, §2.1's P4 row, §2.1's diagram and §16.4 all
+say 9V. One measurement against one as-built capture, from different dates. Either the
+DROK was readjusted after config.py's measurement, or §0 is wrong. It is one meter
+reading at the Witty Pi VIN terminal — do that before trusting either figure. Rev 2.1
+changed §2.2's R1 row to 9.5V on §0's authority alone; that was premature and is why
+this note exists.
 
 ⚠ **DROK inventory status — updated 2026-09-11.** Four DROK adjustable units, **all
 four now fitted and live** (§0): DROK-Pi (**9.5V**, R1), DROK-5V (R2), DROK-6V (R3),
@@ -323,7 +332,9 @@ one converter per rail. Rail voltages, roles, fuses, and downstream wiring are u
 as **3V**. That is *below* the 3.3V minimum this document already gives for these
 Hall encoders (see the 2026-08-25 root cause above), and only **170mV above the
 2.83V that killed all six of them**. If "3" means 3.3V, fine. If it is literally
-3.0V, this reproduces the original failure exactly — the encoders will sit
+3.0V — **note R5 is now set to 3.3V and settled (§0, and the table above), so this
+paragraph describes a risk that has been addressed, not a live setting** — this
+reproduces the original failure exactly: the encoders would sit
 powered-but-inoperative while every I²C device on the bus tests healthy, which is
 the signature that cost days to diagnose. **Meter the rail before connecting the
 encoders, and settle the still-open question of whether these encoders want 3.3V
@@ -938,7 +949,8 @@ replacement arrives the header has no breakout: everything lands on the Pi's
 40-pin header directly.
 
 **Replacement: a screw-terminal breakout HAT — ON ORDER as of 2026-09-09.**
-Eleven lines have to land on it:
+**Twelve** lines have to land on it (thirteen with the optional ToF return —
+was eleven until the SEN0628 was chosen on 2026-09-13):
 
 | # | Line | Pi pin | Notes |
 |---|------|--------|-------|
@@ -949,6 +961,12 @@ Eleven lines have to land on it:
 | 9 | **BNO085 INT** | **GP15**, header pin 10 | §6.3. Wired but **unused by the driver** — the library polls over I²C (§16 open-items table) |
 | 10 | 5V | pins 2/4 | HC-SR04 VCC |
 | 11 | GND | pins 6/9 | |
+| **12** | **SEN0628 ToF — sensor TX → Pi RX** | **GP9** (Block 1, silkscreened `MISO`) | §6.5. **Required.** Confirm the Pi 5 UART overlay mapping first |
+| *13* | *SEN0628 ToF — Pi TX → sensor RX* | *GP8* (Block 1, silkscreened `CE0`) | *Optional* — only to send the sensor configuration |
+| **—** | **SEN0628 3V3 supply** | **header pin 1** | <80mA. Not a breakout terminal, but it is the pin's first consumer since the ISO1540 went |
+
+**So it is 12 lines, or 13 with the optional return.** The heading above says eleven
+because that was true until 2026-09-13.
 
 **The Pi's 3V3 (header pin 1) is NOT in the list, and that is deliberate.** Its
 only consumer was ISO1540 Side 1 VCC (rails table, R4), and the ISO1540 is out
@@ -1049,7 +1067,10 @@ Harness colours: **blue GND, purple ECHO, grey TRIG, white VCC.**
 from midpoint to GND. Midpoint goes to **ADS1115 A0**. Expect ~2.76V at
 11.4V pack, ~3.06V at 12.6V.
 
-Requires calibration: meter the actual voltage at the divider high side,
+Requires calibration — and note §13/§14 item 2: the 2026-08-16 calibration was
+performed against an *earlier* divider, not the 2026-09-02 one now fitted, so the
+stored `BATTERY_DIVIDER_SCALE` is unverified against this hardware. Meter the actual
+voltage at the divider high side,
 compare against the reported value, and set the scale factor in `config.py`.
 Verify at two points across the range. The low-voltage shutdown fires from
 calibrated volts, so an error here moves the cutoff.
@@ -1487,7 +1508,7 @@ desoldering.
 
 | Pin | BCM | Connects to |
 |-----|-----|-------------|
-| 1 | 3V3 | ~~ISO1540 Side 1 VCC~~ — **NO CONSUMER AS-BUILT.** The ISO1540 is out of the build (§0); nothing loads Pi 3V3. Do not wire from this row — see §5.3 |
+| 1 | 3V3 | ~~ISO1540 Side 1 VCC~~ — **now feeds the SEN0628 ToF sensor** (<80mA, §6.5). Had no consumer between the ISO1540's removal on 2026-09-08 and 2026-09-13 |
 | 2, 4 | 5V | Pi buck output |
 | 3 | GP2 | I²C SDA → GODIY hubs → all devices (§0) |
 | 5 | GP3 | I²C SCL → GODIY hubs → all devices (§0) |
@@ -1500,7 +1521,8 @@ desoldering.
 | 33 | GP13 | Sonar LEFT TRIG |
 | 37 | GP26 | Sonar FRONT ECHO (÷) |
 | 40 | GP21 | Sonar RIGHT ECHO (÷) |
-Free and unused: **GP7–GP11**, and the twelve pins formerly used for motor
+Free and unused: **GP7, GP10, GP11** — and **GP8/GP9 are now claimed for the SEN0628
+ToF UART** (§5.3, §6.5), so they are no longer available. Also free: the twelve pins formerly used for motor
 direction. (GP7 was briefly earmarked for MCP23017 INTA/interrupt-driven
 quadrature decode, decided 2026-08-18 — **retracted 2026-08-23**: that wire
 would have run directly across the ISO1540 galvanic isolation barrier
@@ -1654,11 +1676,11 @@ overtaken are corrected below rather than left standing.
 | Bus node board fully populated | PASS | All rail positions landed |
 | Breakout connections verified | **SUPERSEDED** | The Seengreat PX00 is out of the build (§0). Its replacement screw-terminal HAT is on order — §5.3 |
 | AI accelerator PCIe bond | PASS | `/dev/hailo0`; firmware 5.1.1, HAILO10H |
-| Pi-rail INA260 address | PASS — 0x44 | 0x46 does not answer; `config.INA260_PI_ADDR=0x44` agrees |
+| Pi-rail INA260 address | **PASS — 0x45** (corrected 2026-09-13) | `config.py:212` `INA260_PI_ADDR=0x45` ("VERIFIED 9.068V"); `config.py:210` `INA260_MOTOR_ADDR=0x44` is the +12V bus. This row said 0x44 — stale from before the 2026-08-28 correction recorded in §15.8, and it survived the rev 2.1 pass. §0, §2.2 and §16.4 were right |
 | Sonars connected | Connected, not range-tested | — |
 | Encoder counts on all six channels | Not tested | — |
 | BNO085 interrupt and fusion output | Not tested | INT on GP15 is unused by the driver; library polls over I²C |
-| Battery divider calibration | **DONE** (2026-08-16, owner-confirmed) | `BATTERY_DIVIDER_SCALE` re-trimmed 0.2865→0.2386 against a simultaneous ADC/multimeter reading (2.9112V ADC vs. 12.2V meter); `BAT_FULL_V` corrected to 11.58V, now above `BAT_WARN_V`. See `config.py`. |
+| Battery divider calibration | ⚠ **DONE FOR A DIFFERENT DIVIDER** — see below | `BATTERY_DIVIDER_SCALE` trimmed 0.2865→0.2386 on 2026-08-16 (2.9112V ADC vs 12.2V meter). **That predates the divider now on the board**, which was new on 2026-09-02 (§4.2). Must be re-run once the divider is fed |
 | Steering servo sweep | Not tested | — |
 | Arm servo range and per-joint limits | Not tested | §20.6 calibration; `arm_jog.py` is the tool |
 | Motor direction and mapping | Not tested | — |
@@ -1677,7 +1699,28 @@ clean bill of health.
 
 1. **Motor crimps** — five of six unverified against the colour scheme in
    §7.1. Meter before first motion.
-2. ~~Battery divider calibration~~ — done 2026-08-16, owner-confirmed; see §13.
+2. ⚠ **Battery divider calibration — REOPENED 2026-09-13.** It was closed on
+   2026-08-16, but that calibration was performed against a **different divider**.
+   The one on the board now is new as of 2026-09-02 (§4.2, and three §15 BOM rows
+   dated the same day), so an August calibration cannot describe it. A divider
+   added in September cannot have been calibrated in August, and the two entries
+   contradicted each other until this was caught.
+
+   **The stored value is plausible but unverified.** The current divider is 10kΩ
+   high against 10kΩ∥4.7kΩ ≈ 3.197kΩ low, giving a designed ratio of
+   3.197/(10+3.197) = **0.2423**. `BATTERY_DIVIDER_SCALE=0.2386` is within about
+   1.5% of that, which suggests the new divider was built to reproduce the
+   calibrated ratio rather than to replace it. Treat that as an explanation, not a
+   verification.
+
+   **This also bears on §0's open item.** §0 says the divider "appears never to
+   have been fed", and a real August calibration would mean an earlier divider
+   *was* fed. Both can be true — different dividers. But it means "never fed"
+   applies to the present one only, and should not be read as evidence that the
+   measurement chain has never worked.
+
+   Re-meter and re-trim once the divider has a feed. Until then A0 reads 0.0146V
+   and the software consequence is in Software Design §12 item 13.
 3. **PCA9685 V+ current path** — servo current now flows through each board's
    V+ terminal, PCB trace and channel headers rather than signal current
    only. Worst-case steering draw is near 9A. Confirm against the board's
@@ -1735,7 +1778,14 @@ clean bill of health.
     investigation before `ENABLE_HAILO_LLM` can be enabled. See Software
     Design v1.0 §7 and `docs/superpowers/plans/2026-08-23-hailo-voice-
     offload.md` Task 4.
-12. **§3.1's I²C 3.3V connector needs a permanent fix (hot glue), not just a
+12. ⚠ **RETARGET OR CLOSE (flagged 2026-09-13).** This item names **§3.1's** I²C
+   3.3V connector — but that bus was rebuilt on 2026-09-08 and §3.1's topology no
+   longer exists. The loose connector it describes belonged to the isolated bus. If a
+   mechanically marginal connection remains on the *current* flat topology, retarget
+   this item at that connector by name; if not, close it. Do not carry it forward
+   pointing at a section that describes removed hardware.
+
+   Original text: **§3.1's I²C 3.3V connector needs a permanent fix (hot glue), not just a
     reseat** (2026-08-23) — worked loose once already, taking the entire
     isolated bus down. One current monitor (`0x40`) was still intermittently
     failing self-test after the reseat; confirm it holds before treating
@@ -1829,10 +1879,10 @@ listed in §15.8 rather than carried as a line item.
 | **TI TPSM84205** | 12V → 5.0V pre-regulator (1.5A) — **NOT 84203 or 84212** | 1 | **Fitted, but OUT OF SERVICE** — no consumers since 2026-09-08 (§0) |
 | RXEF110 1.1A polyfuse | F6, TPSM 12V input, PTC resettable | 1 | **Installed 2026-09-07** |
 | AMS1117-3.3 | 5V → 3.3V final stage of the dead P8 chain | 1 | **NOT in service** — its only input was the TPSM's 5V output, which is now dormant, and the touchscreen went back to Pi power. Physical presence unconfirmed |
-| 10µF **50V** electrolytic | TPSM Vin (12V input protection — 50V minimum for transient headroom) | 1 | **To build** |
-| 2× 47µF **50V** ceramic | TPSM Vout (TI min 94µF total at 5V — 50V overspecs but safe) | 2 | **To build** |
+| ~~10µF **50V** electrolytic~~ | ~~TPSM Vin~~ | 1 | **NOT NEEDED — P8 is out of service (§0).** Only if the chain is ever re-energised |
+| ~~2× 47µF **50V** ceramic~~ | ~~TPSM Vout (TI min 94µF total)~~ | 2 | **NOT NEEDED — P8 is out of service (§0).** Only if the chain is ever re-energised |
 | 10µF 50V electrolytic | AMS1117 Vin, from TPSM (≥10mm from pins) | 1 | **To build** |
-| 10µF ceramic, **10V+** | AMS1117 Vout, VCC2 (3.3V rail, 10V sufficient) | 1 | **To build** |
+| ~~10µF ceramic, **10V+**~~ | ~~AMS1117 Vout, VCC2~~ | 1 | **NOT NEEDED — the AMS1117 has no input and VCC2 does not exist (§0)** |
 | — | — | — | — |
 | Rubycon ZL 1000µF 16V low-ESR | Pi 5V rail bulk, at header (from Witty Pi) | 1 | Installed |
 | 0.1µF ceramic | Pi 5V rail HF bypass | 1 | Installed |
@@ -2277,7 +2327,7 @@ None of these touch the 40-pin header except the display's power tap.
 
 ---
 
-**End of As-Built Design Document rev 1.0**
+**End of Master Hardware Design rev 2.1**
 
 ---
 
@@ -2287,7 +2337,7 @@ None of these touch the 40-pin header except the display's power tap.
 
 | Document | Revision | Covers |
 |----------|----------|--------|
-| Master Hardware Design (this document) | 2.0 | As-built hardware, BOM, pin-to-pin schedule |
+| Master Hardware Design (this document) | **2.1** | As-built hardware, BOM, pin-to-pin schedule |
 | Functional Requirements | 3.1 | What the rover must do, and how each requirement is proven |
 | Software Design | 1.0 | Module architecture, control layering, FSM, safety gate |
 | Master Engineering Package | rev 6.2.0 | **Historical record only** — incident narrative, superseded designs, revision lineage. Retain; do not treat as current. |
