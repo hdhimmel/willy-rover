@@ -466,6 +466,17 @@ and Software Design §6.5/§6.6; the traps are here.
 - **The TCA9548A is NOT needed for this** (a change from the 2026-09-11 design). The mux
   was mandated because a bare VL53L7CX uploads ~84KB of firmware over I²C at every init;
   the onboard RP2040 does that locally now. I²C traffic is just 64 values per frame.
+- **UART is the chosen interface** (2026-09-13) — all four rover USB ports are occupied,
+  and UART keeps it off the I²C bus entirely. Only **RX** is strictly needed; the sensor
+  transmits and the Pi listens. `GP8`/`GP9` are the candidates: free, and **SPI0 is
+  already off** so the kernel is not holding them. **Confirm the Pi 5 overlay→pin mapping
+  before wiring** — the Pi 4 mapping does not carry over to the RP1:
+  `ls /boot/firmware/overlays/ | grep uart`, `dtoverlay -h uart3`, and
+  `sudo cat /sys/kernel/debug/gpio | grep spi0` (must be empty). Then read
+  `/dev/ttyAMA*` at 115200.
+- **GP8/GP9 are silkscreened `CE0` and `MISO` on the breakout** — their SPI names. Label
+  those terminals for the UART they actually carry, or someone wires SPI to them.
+- **The USB-C bench test runs on the LAPTOP, not Willie.** It costs no rover port.
 - **FOV is 60° H × 60° V, 90° DIAGONAL.** If you see "90 × 90" anywhere, that came from
   the earlier MusRock listing and is wrong. It matters: 60° vertical puts the floor
   intersection at ~1.7× mount height, not 1×.

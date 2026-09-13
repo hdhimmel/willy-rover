@@ -961,6 +961,13 @@ part.
 MCP23017 **GPB4**, not to the Pi header (§6.3), which is why the expander must
 be initialised before the IMU can be reset.
 
+**Added 2026-09-13: the SEN0628 UART makes this 12–13 lines, not 11.** Block 1 is no
+longer unused. `GP8`/`GP9` — silkscreened `CE0` and `MISO`, their SPI names — carry the
+ToF sensor's UART (§6.5). Only RX is strictly needed, so it may be one line or two, and
+the sensor's 3V3 supply comes off header pin 1, which the note above records as having
+no consumer. It has one now. **Label those terminals for what they carry**, or the next
+person wires SPI to an SPI-named terminal that is running a UART.
+
 **The ECHO dividers stay on the sensor side of the terminals.** HC-SR04 ECHO
 idles at 5V and the Pi's GPIO is not 5V tolerant, so the divider must never end
 up downstream of the breakout — §16.13 check 6 is the bench test for this
@@ -1138,16 +1145,46 @@ monitor shows the 8×8 grid directly, which proves the board and the firmware wi
 involving the rover. Note also that the sensor ships with a small protective film over
 the optics that the documentation does not mention.
 
-**Then either interface is acceptable:**
+**UART is the chosen interface** (owner decision 2026-09-13 — the rover's four USB
+ports are all occupied, and UART keeps the sensor off a bus that took the whole rover
+down twice).
 
-- **UART (preferred)** — keeps it off a bus that took the whole rover down twice.
-  `GP14`/`GP15` are UART0 and both are taken (sonar left ECHO, BNO085 INT — §9), so
-  this needs one of the Pi 5's alternate UARTs. **Confirm the Pi 5 overlay and pin
-  mapping before wiring** — the BCM2711 mapping commonly quoted for the Pi 4 does not
-  carry over unchanged, and `GP7–GP11` being free does not make them a UART.
-- **I²C (acceptable fallback)** — four wires onto the existing GODIY hubs, address
-  0x30. Without the firmware upload this is just 64 values per frame, which is not the
-  hazard it was. Take this route if the alternate-UART question stalls the build.
+**Only RX is strictly required.** The sensor transmits; the Pi listens. Minimum wiring
+is three conductors:
+
+| Sensor | To | Note |
+|---|---|---|
+| VCC | Pi header **pin 1 (3V3)** | <80mA. This pin has had no consumer since the ISO1540 came out (§5.3) — this is its first |
+| GND | Pi header pin 6 or 9 | |
+| **TX** | **Pi RX of the chosen UART** | the data |
+| RX | Pi TX *(optional)* | only needed to send the sensor configuration |
+
+**Which UART is an open question with a one-command answer.** `GP14`/`GP15` are UART0
+and both are taken (sonar left ECHO, BNO085 INT — §9). `GP8`/`GP9` are the obvious
+candidates: they are free, and **SPI0 is already disabled** (`dtparam=spi=off`, found
+and fixed 2026-08-20 — see §12 and CLAUDE.md), so the kernel is not holding them. On a
+Pi 5 the alternate-UART pin mapping is an RP1 matter and the BCM2711 mapping quoted
+for the Pi 4 does **not** carry over unchanged, so confirm on the unit before wiring:
+
+```
+ls /boot/firmware/overlays/ | grep uart
+dtoverlay -h uart3
+sudo cat /sys/kernel/debug/gpio | grep spi0     # must be empty
+```
+
+The first two give the overlay-to-pin mapping for this kernel; the third confirms SPI0
+really has released GP7–GP11. Then add the overlay to `/boot/firmware/config.txt`,
+reboot, and read `/dev/ttyAMA*` at 115200.
+
+**Label the breakout terminals for what they carry, not what the silkscreen says.**
+GP8/GP9 appear on Block 1 as `CE0` and `MISO` — their SPI names. §5.3 previously
+recorded Block 1 as unused; it is not any more, and an unlabelled SPI-named terminal
+carrying a UART is how the next person wires SPI to it.
+
+**I²C remains a viable fallback** if the alternate-UART question stalls the build —
+four wires onto the existing GODIY hubs at address 0x30. Without the firmware upload
+it is just 64 values per frame, not the hazard it was. The DIP switch makes swapping
+between the two a two-minute change, not a rebuild.
 
 **The floor is always in view, and must be subtracted — not masked.** With a wide
 vertical FoV aimed forward, the lower rows of the 8×8 grid see carpet ahead and
