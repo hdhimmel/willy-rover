@@ -12,6 +12,43 @@ code needs fixing — every line below was confirmed on the bench.
 
 ---
 
+## When a fact changes, grep for the old one
+
+**The dominant defect in this project's documentation is not wrong writing. It is
+correct writing left in place.** A constant gets corrected, a part gets removed, a
+decision gets closed — and the edit lands where someone happened to be looking while
+a paragraph two sections away goes on asserting the old state, indefinitely.
+
+Three review passes on 2026-09-11/13 found the same species repeatedly:
+
+| Changed | Still said the old thing, and for how long |
+|---|---|
+| ISO1540 removed 2026-09-08 | §1's bus row, §9's pin table, §12 rule 3, §13's roll-call, the BOM, and two FRD sections — some for weeks |
+| `ENCODER_COUNTS_PER_REV` 3292 → **752**, 2026-08-25 | Software Design S-2 *and* FRD G-2, both still arguing from the dead figure on 2026-09-13 — and both reached a **wrong conclusion** because of it |
+| INA260 Pi rail 0x44 → **0x45**, 2026-08-28 | FRD §V's row, which a consistency pass had already been through |
+| Cliff sensors dropped, ToF part changed, mux withdrawn | §6.5's own fusion paragraph, two paragraphs below the withdrawal |
+| Four FRD requirements added | A header still claiming none had been |
+
+**So: when you change a constant, a part, an address, a revision or a decision,
+`grep -rn` the OLD value across the whole repo before calling it done.** Not the file
+you are in. All of them — the three design docs, `CLAUDE.md`, the user guide, the
+specs, and the code. It takes seconds and it is the only thing that reliably catches
+this.
+
+Two habits that make it stick:
+
+- **Strike, don't delete.** Removed hardware and superseded decisions stay visible
+  with a marker and a date — §16.1/§16.2 and the struck §12 rules are the pattern.
+  History is what stops a part being re-fitted next month. But a strike is *not* a
+  substitute for checking whether anything else still cites it.
+- **Prefer the artifact to the document.** When two documents disagree, read the
+  code, the config, or the file itself — not the more recent doc. On 2026-09-13 a
+  review concluded the hardware doc was right and the software doc stale about the
+  `CLAUDE.md` repoint; reading `CLAUDE.md` showed the reverse. `config.py` settled
+  the INA260 address and the encoder constants the same way.
+
+---
+
 ## Bus topology and roll-call — AS-BUILT, verified 2026-09-08
 
 **The bus is no longer isolated.** The ISO1540, the VCC2/GND2 isolated rail and
