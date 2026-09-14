@@ -2,7 +2,7 @@
 
 ## Master Hardware Design — As-Built
 
-**Revision 2.0 · Current Configuration**
+**Revision 2.1 · Current Configuration · 2026-09-14**
 
 ---
 
@@ -13,7 +13,7 @@
 | Project | WildWilly Autonomous Rover |
 | Document | Master Hardware Design — as-built, current configuration only |
 | Revision | 2.1 |
-| Date | 2026-09-13 |
+| Date | 2026-09-14 |
 | Owner | Howard Himmel |
 | Status | Build complete; AI accelerator bonded; live verification in progress. **Filename retains `v2.0` deliberately** — renaming would break every cross-reference in Software Design, the FRD and `CLAUDE.md`. The revision field above is authoritative. |
 | Supersedes | As-Built Design Document v1.0 (2026-08-15) |
@@ -123,11 +123,25 @@ I²C device logic"; it feeds **the encoders only**. Two consequences, both mater
    still required; only the supply question is now separable.
 
 **R5 = 3.3V settles the "3V or 5V — voltage TBD" question open in §2.2 since
-2026-08-28.** It also means the bus does not load the Pi's own 3V3 pin.
+2026-08-28.**
 
-⚠ **R5 is a single point of failure for the encoders and the entire I²C bus** —
-the same role the AMS1117 held when it failed twice. Budget its draw: six Hall
-encoders, eleven I²C devices, all bus pull-ups.
+⚠ **CORRECTED 2026-09-14.** Two claims here were backwards:
+
+- ~~"the bus does not load the Pi's own 3V3 pin"~~ — **it does.** All I²C device
+  logic runs from Pi header pin 1. R5 being 3.3V only means the *encoders* are not on
+  that pin.
+- ~~"R5 is a single point of failure for the encoders and the entire I²C bus…
+  budget six Hall encoders, eleven I²C devices, all bus pull-ups"~~ — **R5 feeds the
+  encoders and nothing else.**
+
+**The single point of failure for device logic is Pi header pin 1**, and that is the
+budget worth writing down: eleven devices' logic plus the bus pull-ups plus the
+SEN0628's <80mA, against a pin the Pi 5 rates for a few hundred mA. Comfortable, but
+it is a real rail with a real load — not, as several sections claimed until
+2026-09-14, an unused pin.
+
+**R5's own budget is just the six Hall encoders**, which is what makes it safely
+changeable (see the note above §2.2's rails table).
 
 ### Verified 2026-09-08
 
@@ -159,13 +173,10 @@ matches §3.3's table.
      from a broken sensor, so a *future* divider fault would repeat this silently. See
      Software Design §12 item 13.
 
-   ⚠ **CORRECTED 2026-09-14 (owner): the divider DOES have a 12V feed.** So this is a
-   FAULT, not an unwired board — the diagnosis changes. Fed with 12V, A0 should sit
-   around 2.9V; it reads 0.0146V, so something between the feed and A0 is open.
-   Wires first: (1) re-meter A0 to GND, (2) meter the divider high side — is 12V
-   actually arriving at R3? — (3) if 12V is present and A0 is dead, the open joint is
-   in the divider itself or the A0 conductor. Do not re-trim
-   `BATTERY_DIVIDER_SCALE` until A0 is in band; the scale is not the problem.
+   *(An intermediate 2026-09-14 note here diagnosed this as an open circuit — "A0 should
+be ~2.9V but reads 0.0146V". That was a theory held for about an hour and is
+superseded by the CLOSED note below: the divider is fed and reading correctly. Removed
+to avoid two incompatible 2026-09-14 notes in the same item.)*
 2. **Encoders unverified.** MCP23017 `0x27` is confirmed healthy (registers
    read/write, internal pull-ups engage, both ports read cleanly). Whether the
    Hall channels actually count is untested — all 16 bits read high at rest,
@@ -789,8 +800,16 @@ zero bus errors. Expect eleven, not twelve: `0x70` is All-Call, not a device.
 whenever either PCA9685 is alive. The LTC4311 bus accelerator has no address
 at all — it is a transparent pass-through and never appears in a scan.
 
-A blank or partial scan with the base unpowered is expected behaviour, not a
-fault: Side 2 dies with the 12V chain, so the Pi on USB-C alone sees nothing.
+⚠ **REVERSED 2026-09-14 — a blank scan on USB-C power is now a FAULT, not expected.**
+This said a blank or partial scan with the base unpowered was normal, because "Side 2
+dies with the 12V chain, so the Pi on USB-C alone sees nothing". That was true when
+device logic came off the isolated rail. **It does not any more: device logic runs
+from the Pi's own 3.3V, so a USB-C-powered Pi powers the whole device bus.** Expect a
+full eleven-device roll-call on USB-C alone. A blank scan means a real bus fault.
+
+What *does* still change with the base unpowered is anything drawing from the 12V
+rails — the FeatherWings' motor supply, the servo rails, the encoders on R5 — so
+devices will answer while their loads are dead.
 
 ---
 
@@ -1243,8 +1262,8 @@ fault.
 
 **Power it from 3.3V, not 5V.** It accepts 3.3–5V, but on UART the logic level
 follows the supply and the Pi's RX is not 5V tolerant. At <80mA it can come off Pi
-header **pin 1 (3V3)**, which §5.3 notes has had no consumer since the ISO1540 was
-removed — this is its first one. The R5 DROK 3.3V rail is the alternative.
+header **pin 1 (3V3)** — which already carries all I²C device logic (§2.2), so this is
+an *additional* <80mA load on an existing rail, not its first consumer. The R5 DROK 3.3V rail is the alternative.
 
 **Bench bring-up over USB-C first**, before wiring it to Willie at all: a serial
 monitor shows the 8×8 grid directly, which proves the board and the firmware without
@@ -1260,7 +1279,7 @@ is three conductors:
 
 | Sensor | To | Note |
 |---|---|---|
-| VCC | Pi header **pin 1 (3V3)** | <80mA. This pin has had no consumer since the ISO1540 came out (§5.3) — this is its first |
+| VCC | Pi header **pin 1 (3V3)** | <80mA, *added to* the I²C device-logic load that pin already carries (§2.2) |
 | GND | Pi header pin 6 or 9 | |
 | **TX** | **Pi RX of the chosen UART** | the data |
 | RX | Pi TX *(optional)* | only needed to send the sensor configuration |
@@ -1396,7 +1415,9 @@ encoder side alone; combined with the wheel-diameter error fixed the same day
 
 The 11 PPR figure itself still comes from this same section, which was wrong
 about the motors — so 752 is derived, not measured. `scripts/encoder_calibration.py`
-confirms it by hand-turning a wheel a known number of revolutions, and settles
+confirms it by driving a wheel a known number of revolutions **under power** — not by
+hand, which produces no counts at all (§2.2: the encoder is behind the 17.1:1 gearbox
+and does not back-drive) — and settles
 the unverified A/B channel column in §7.2 in the same pass.
 
 | Wire | Function | Lands on |
@@ -1446,7 +1467,12 @@ were ever tested. The motor ports turned out not to follow position order, so
 the encoder channel assignment cannot be assumed to either — it may follow the
 physical wheels, or the port permutation, or neither. This affects per-wheel
 odometry attribution only; whole-side drive is unaffected. Settle it the same
-way: turn one wheel by hand and read which encoder channel counts.
+way — **but not by hand.** §2.2 records that hand-turning produces nothing: the
+encoder sits on the motor shaft behind the 17.1:1 gearbox and does not back-drive.
+**Any encoder test must be under power**, driving one wheel at a time and reading which
+channel toggles. `scripts/encoder_calibration.py` is built on hand-turning and is
+therefore invalid on this hardware. (Contradiction corrected 2026-09-14; this section
+and §11.2 both said to turn wheels by hand.)
 
 **RESOLVED 2026-08-25 — the LEFT MIDDLE motor on 0x60 M1 was a disconnected
 connector, not a failed motor.** Reconnected during teardown; the wheel was
@@ -1661,8 +1687,13 @@ roll-call), confirm the BNO085 interrupt is live on GP15,
 and confirm all six encoder channels change count under manual rotation.
 Motion stays inhibited unless every check passes.
 
-The self-test must distinguish "base unpowered" from "bus fault" — a blank
-scan on USB-C-only power is expected, not a failure.
+⚠ **This distinction no longer works as written (2026-09-14).** It said the self-test
+must tell "base unpowered" from "bus fault" because a blank scan on USB-C-only power
+was expected. Since device logic moved to the Pi's own 3.3V, a USB-C-powered Pi powers
+the entire device bus and **a blank scan is a genuine fault in either case**. The
+self-test needs no such distinction for *enumeration*; what it cannot infer from a
+clean roll-call is whether the 12V rails are up, since every device answers regardless.
+`_check_motor_rail()` (INA260 0x44) is the signal for that, not the scan.
 
 ### 11.3 Shutdown
 
@@ -1732,7 +1763,7 @@ not obvious from the schematic.
 
 14. Never run USB-C and the Pi buck simultaneously — two sources on one rail.
 15. Do not erode the Pi rail margin. Floor is 4.85V; measured 5.144V.
-16. The 5V rail worst case is already near 9A against an 8A UBEC rating.
+16. The 5V rail worst case is already near 9A. **Rate it against DROK-5V, not the FEICHAO 8A UBEC** — the UBEC was replaced 2026-08-28 (§2.2). The DROK's rating is not recorded here; record it before treating any headroom figure as real. (Corrected 2026-09-14.)
     Budget any new load on this rail before fitting it.
 17. Packs within 0.05V per cell before paralleling. Main Y first, balance Y
     a minute later.
@@ -1765,7 +1796,7 @@ overtaken are corrected below rather than left standing.
 | Sonars connected | Connected, not range-tested | — |
 | Encoder counts on all six channels | Not tested | — |
 | BNO085 interrupt and fusion output | Not tested | INT on GP15 is unused by the driver; library polls over I²C |
-| Battery divider calibration | ⚠ **DONE FOR A DIFFERENT DIVIDER** — see below | `BATTERY_DIVIDER_SCALE` trimmed 0.2865→0.2386 on 2026-08-16 (2.9112V ADC vs 12.2V meter). **That predates the divider now on the board**, which was new on 2026-09-02 (§4.2). Must be re-run once the divider is fed |
+| Battery divider calibration | ⚠ **DONE FOR A DIFFERENT DIVIDER** — see below | `BATTERY_DIVIDER_SCALE` trimmed 0.2865→0.2386 on 2026-08-16 (2.9112V ADC vs 12.2V meter). **That predates the divider now on the board**, which was new on 2026-09-02 (§4.2). The divider is **fed and reading** as of 2026-09-14; what remains is the scale re-trim |
 | Steering servo sweep | Not tested | — |
 | Arm servo range and per-joint limits | Not tested | §20.6 calibration; `arm_jog.py` is the tool |
 | Motor direction and mapping | Not tested | — |
@@ -1809,8 +1840,11 @@ clean bill of health.
    one's designed ratio is ~0.2423. Meter the pack, compare against `battery_pct`,
    and adjust.
 
-   Re-meter and re-trim once the divider has a feed. Until then A0 reads 0.0146V
-   and the software consequence is in Software Design §12 item 13.
+   **The divider is fed and reading real pack voltage as of 2026-09-14**, so what is
+   left of this item is the re-trim alone: meter the pack, compare against
+   `battery_pct`, adjust `BATTERY_DIVIDER_SCALE`. The software gap it exposed —
+   `sensors.py` cannot tell a broken sensor from a real zero — is unchanged by the
+   repair and stays open at Software Design §12 item 13.
 3. **PCA9685 V+ current path** — servo current now flows through each board's
    V+ terminal, PCB trace and channel headers rather than signal current
    only. Worst-case steering draw is near 9A. Confirm against the board's
@@ -1848,7 +1882,7 @@ clean bill of health.
    the closure immediately above it.
 7. **Pi-rail buck identity** — DROK 12A LCD versus Elecbee 5V/5A across older
    documents. Electrically settled: the rail measures correctly and its
-   monitor is confirmed at 0x44. This is a labelling question only. Identify
+   monitor is confirmed at **0x45** (corrected 2026-09-14; `config.py:212`). This is a labelling question only. Identify
    the physical part and fix §15.6.
 8. **JGA25-370B Hall output drive type** — push-pull or open-collector is
    unknown, and no official datasheet exists for this motor family. This
@@ -1899,7 +1933,7 @@ listed in §15.8 rather than carried as a line item.
 | OV9782 (USB) | Rear camera | 1 | Installed |
 | USB PnP **Audio** Device puck (`0c76:1203`) | Voice OUTPUT — speaker. Its mic is unused (§5.5) | 1 | Installed |
 | USB PnP **Sound** Device (`08bb:2902`) | Voice INPUT — microphone, capture-only, 48kHz native | 1 | Installed |
-| Screw-terminal GPIO breakout HAT | 40-pin breakout, 11 lines (§5.3). Replaces the removed Seengreat | 1 | **On order 2026-09-09** |
+| Screw-terminal GPIO breakout HAT | 40-pin breakout, **13 lines** — 14 with the optional ToF UART return. Count from §5.3's table, not from prose. Replaces the removed Seengreat | 1 | **On order 2026-09-09** |
 | **DFRobot SEN0628** — VL53L7CX + RP2040, 8×8 ToF | Front obstacle sensing ALONGSIDE sonar, not replacing it (§6.5). UART or I²C | 1 | **Ordered 2026-09-13.** Replaces the MusRock breakout ordered 2026-09-10, which did not arrive |
 | Raspberry Pi Active Cooler | Pi 5 blower + heatsink | 1 | Installed |
 | 5V case fan, 30–40mm | Head assembly exhaust | 1 | Installed |
@@ -1971,7 +2005,7 @@ listed in §15.8 rather than carried as a line item.
 | AMS1117-3.3 | 5V → 3.3V final stage of the dead P8 chain | 1 | **NOT in service** — its only input was the TPSM's 5V output, which is now dormant, and the touchscreen went back to Pi power. Physical presence unconfirmed |
 | ~~10µF **50V** electrolytic~~ | ~~TPSM Vin~~ | 1 | **NOT NEEDED — P8 is out of service (§0).** Only if the chain is ever re-energised |
 | ~~2× 47µF **50V** ceramic~~ | ~~TPSM Vout (TI min 94µF total)~~ | 2 | **NOT NEEDED — P8 is out of service (§0).** Only if the chain is ever re-energised |
-| 10µF 50V electrolytic | AMS1117 Vin, from TPSM (≥10mm from pins) | 1 | **To build** |
+| ~~10µF 50V electrolytic~~ | ~~AMS1117 Vin, from TPSM~~ | 1 | **NOT NEEDED — P8 is out of service (§0) and open item 6 is closed.** Only if the chain is re-energised |
 | ~~10µF ceramic, **10V+**~~ | ~~AMS1117 Vout, VCC2~~ | 1 | **NOT NEEDED — the AMS1117 has no input and VCC2 does not exist (§0)** |
 | — | — | — | — |
 | Rubycon ZL 1000µF 16V low-ESR | Pi 5V rail bulk, at header (from Witty Pi) | 1 | Installed |
@@ -2015,7 +2049,7 @@ Listed so their absence is deliberate and traceable, not an omission.
 
 **One item to confirm:** the Pi rail buck's identity is recorded inconsistently
 across older documents — a DROK 12A LCD unit in some, an Elecbee 5V/5A in
-others. The rail measures correctly and the monitor is confirmed at 0x44, so
+others. The rail measures correctly and the monitor is confirmed at **0x45** (corrected 2026-09-14), so
 this is a labelling question rather than an electrical one. Confirm the part
 physically and settle §15.6. *(The monitor reference here previously read 0x44;
 the Pi supply monitor is 0x45 — corrected 2026-08-28. See §16.4.)*
@@ -2074,7 +2108,9 @@ Confirm the breakout carries its own decoupling; 2 × 0.1µF, one per side, if n
 ### 16.2 Isolated bus power chain — P8 (external)
 
 > ⚠ **SUPERSEDED 2026-09-08 — this entire path is removed (§0).** No TPSM, no
-> AMS1117, no F6, no VCC2. Bus logic is fed from the 3.3V DROK (R5). Retained
+> AMS1117, no F6, no VCC2. Bus logic is fed from **the Pi's own 3.3V (header pin 1)** —
+> *this banner said "the 3.3V DROK (R5)" until 2026-09-14; R5 feeds the encoders only.*
+> Retained
 > for history, including the dropout lesson: a rail that sags with load is a
 > linear regulator with no headroom; a buck holds flat.
 
@@ -2190,9 +2226,12 @@ Four wires only. Transparent to the bus; never appears in a scan.
 
 **Mount it off-board, adjacent to the bus node board, with the shortest leads
 of any device.** It is an edge-rate accelerator: on a long drop cable it adds
-capacitance at the wrong point and can mis-trigger. With twelve taps at
-300–400pF and the 4.7kΩ rail pull-ups now **removed** (§3.2), this part is load-bearing rather than merely helpful — it is what keeps the bus
-inside I²C timing.
+capacitance at the wrong point and can mis-trigger. With twelve taps at 300–400pF and the 4.7kΩ rail pull-ups **not fitted** (§3.2), it
+earns its place — but **it is not what keeps the bus inside I²C timing**, which this
+paragraph claimed until 2026-09-14. §3.2's recomputation is the stronger claim: the
+Pi's own 1.8kΩ pull-ups on GP2/GP3 now serve the whole segment, and 1.8kΩ at 400pF is
+~2.2µs against a 10µs bit. The bus meets timing without the accelerator; the LTC4311
+improves margin rather than supplying it.
 
 ### 16.6 BNO085 — 0x4A, row 9
 
@@ -2282,8 +2321,17 @@ trusting the colour.
 | Yellow | Encoder phase A | MCP23017, even pin of the pair |
 | Green | Encoder phase B | MCP23017, odd pin of the pair |
 
-Motor rows 15–20 on the bus node board carry the encoder 3V3 and GND taps;
-motor power itself comes from the FeatherWing terminals, not the rails.
+⚠ **Which rail these taps land on is AMBIGUOUS as of 2026-09-14 — resolve before
+wiring.** Rows 15–20 are described here as carrying the encoder 3V3 and GND taps off
+the board's +3.3V rail, while §2.2 says to strike rows 15–20 once R5 is confirmed —
+and R5 *is* now confirmed as the encoder supply. Both cannot be right. **The encoders
+are on R5 (DROK-4), not on the board's 3.3V rail**, so either these rows are vestigial
+and should be struck, or the encoder supply physically routes through them from R5.
+One look at the board settles it; until then do not wire an encoder from either
+assumption.
+
+Motor power itself comes from the FeatherWing terminals, not the rails — that part is
+unchanged.
 
 ### 16.11 Steering servos × 6
 
@@ -2429,7 +2477,7 @@ None of these touch the 40-pin header except the display's power tap.
 |----------|----------|--------|
 | Master Hardware Design (this document) | **2.1** | As-built hardware, BOM, pin-to-pin schedule |
 | Functional Requirements | 3.1 | What the rover must do, and how each requirement is proven |
-| Software Design | 1.0 | Module architecture, control layering, FSM, safety gate |
+| Software Design | **1.1** | Module architecture, control layering, FSM, safety gate |
 | Master Engineering Package | rev 6.2.0 | **Historical record only** — incident narrative, superseded designs, revision lineage. Retain; do not treat as current. |
 
 ### 17.2 Reference-integrity defect in `CLAUDE.md` — CLOSED 2026-08-18
