@@ -1937,7 +1937,7 @@ listed in §15.8 rather than carried as a line item.
 | **DFRobot SEN0628** — VL53L7CX + RP2040, 8×8 ToF | Front obstacle sensing ALONGSIDE sonar, not replacing it (§6.5). UART or I²C | 1 | **Ordered 2026-09-13.** Replaces the MusRock breakout ordered 2026-09-10, which did not arrive |
 | Raspberry Pi Active Cooler | Pi 5 blower + heatsink | 1 | Installed |
 | 5V case fan, 30–40mm | Head assembly exhaust | 1 | Installed |
-| SanDisk Extreme PRO SSD 500GB | Boot drive | 1 | Installed |
+| SanDisk Extreme PRO SSD **1TB** | Boot drive | 1 | **Installed** — owner-confirmed 2026-09-14. This row said 500GB; Software Design §1's 1TB was right |
 
 ### 15.2 Drive and steering
 

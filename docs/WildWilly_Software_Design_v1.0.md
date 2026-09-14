@@ -36,7 +36,7 @@ separate.
 | Property | Value |
 |----------|-------|
 | Host | Raspberry Pi 5 (8GB), Debian 13 Trixie, Python 3.13.5 |
-| Boot | ⚠ **SSD size DISPUTED — check before sizing anything against it.** This says **1TB**; Master Hardware Design §15.1 says **SanDisk Extreme PRO 500GB**. One is wrong. `lsblk -d -o NAME,SIZE,MODEL` on the rover settles it in a second; the rover was powered down when this was found (2026-09-14). Matters for log retention and map storage sizing |
+| Boot | **1TB SSD** (owner-confirmed 2026-09-14) |
 | Entry point | `main.py` → `RoverBrain().run()` |
 | Process management | systemd unit `willy-rover.service`, `Restart=on-failure` |
 | Modules | 26 Python files at repository root |
