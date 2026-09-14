@@ -205,7 +205,15 @@ front and right sonar read fine, left returns garbage.
   shutdown believing the pack is flat. `sensors.py`'s guard only catches *failed*
   reads — a successful read of a genuine zero sails straight through it. **Do not
   re-enable `willy-rover.service` until A0 is in band.** The divider was added
-  2026-09-02 and appears never to have been fed.
+  2026-09-02.
+
+  ⚠ **CORRECTED 2026-09-14 (owner): the divider DOES have a 12V feed.** So this is a
+  FAULT, not an unwired board — the diagnosis changes. Fed with 12V, A0 should sit
+  around 2.9V; it reads 0.0146V, so something between the feed and A0 is open.
+  Wires first: (1) re-meter A0 to GND, (2) meter the divider high side — is 12V
+  actually arriving at R3? — (3) if 12V is present and A0 is dead, the open joint is
+  in the divider itself or the A0 conductor. Do not re-trim
+  `BATTERY_DIVIDER_SCALE` until A0 is in band; the scale is not the problem.
 - **A crash-looping service will masquerade as flaky hardware.** On 2026-09-08
   `willy-rover.service` was found `active` with **196 restarts**, holding two file
   descriptors on `/dev/i2c-1`, alongside `scripts/power_logger.py` polling the

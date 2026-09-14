@@ -143,8 +143,15 @@ matches §3.3's table.
    will perform a controlled shutdown believing the pack is flat.
    `sensors.py`'s guard only catches *failed* reads; a successful read of a real
    zero passes straight through. **Do not enable `willy-rover.service` until A0
-   is in band.** The divider was added 2026-09-02 and appears never to have been
-   fed.
+   is in band.** The divider was added 2026-09-02.
+
+   ⚠ **CORRECTED 2026-09-14 (owner): the divider DOES have a 12V feed.** So this is a
+   FAULT, not an unwired board — the diagnosis changes. Fed with 12V, A0 should sit
+   around 2.9V; it reads 0.0146V, so something between the feed and A0 is open.
+   Wires first: (1) re-meter A0 to GND, (2) meter the divider high side — is 12V
+   actually arriving at R3? — (3) if 12V is present and A0 is dead, the open joint is
+   in the divider itself or the A0 conductor. Do not re-trim
+   `BATTERY_DIVIDER_SCALE` until A0 is in band; the scale is not the problem.
 2. **Encoders unverified.** MCP23017 `0x27` is confirmed healthy (registers
    read/write, internal pull-ups engage, both ports read cleanly). Whether the
    Hall channels actually count is untested — all 16 bits read high at rest,
@@ -1779,9 +1786,10 @@ clean bill of health.
 
    **This also bears on §0's open item.** §0 says the divider "appears never to
    have been fed", and a real August calibration would mean an earlier divider
-   *was* fed. Both can be true — different dividers. But it means "never fed"
-   applies to the present one only, and should not be read as evidence that the
-   measurement chain has never worked.
+   *was* fed. Both can be true — different dividers. **And as of 2026-09-14 the
+   owner confirms the present divider HAS a 12V feed**, so the "never fed" reading
+   is withdrawn entirely: A0's 0.0146V is an open circuit somewhere between the
+   feed and the ADC, not an unwired board.
 
    Re-meter and re-trim once the divider has a feed. Until then A0 reads 0.0146V
    and the software consequence is in Software Design §12 item 13.
