@@ -37,7 +37,11 @@ class _StubLLM:
         self.events = []            # ordered trace of 'generate'/'clear'
         self.context = []           # what a STATEFUL implementation would accumulate
 
-    def generate_all(self, prompt):
+    def generate_all(self, prompt, **kw):
+        # **kw because the real generate_all takes temperature/top_p/max_generated_tokens
+        # (config.py). This stub does not care what they are -- statelessness is orthogonal
+        # to sampling -- but it must not reject them, or every test here fails on a TypeError
+        # that has nothing to do with context handling.
         self.events.append('generate')
         self.context.append(prompt)
         i = self.calls

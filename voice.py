@@ -509,7 +509,7 @@ class VoicePipeline:
                 f'User said: "{text}"\n'
                 f'If the user is asking you to fetch/bring/collect an object -- phrasings like '
                 f'"retrieve", "get", "pick up", "grab", or "bring me" the object -- use '
-                f'intent "retrieve" with args {{"object":"<the object>"}}, regardless of which '
+                f'intent "retrieve" with args like {{"object":"newspaper"}}, regardless of which '
                 f'of those words they used.\n'
                 f'Other recognized intents and example phrasings, always use exactly these names:\n'
                 f'"shutdown" -- "shut down", "power off", "go to sleep"\n'
@@ -524,9 +524,13 @@ class VoicePipeline:
                 f'"what_do_you_see" -- "what do you see?", "what\'s in front of you?"\n'
                 f'"wave" -- "wave hello", "say hi", "give a wave"\n'
                 f'"stop" -- "stop", "halt", "freeze"\n'
-                f'Respond ONLY with JSON: '
-                f'{{"intent":"<short action name>","args":{{}},"reply":"<what to say back, <200 chars>",'
-                f'"confidence":<0.0-1.0, how sure you are of this interpretation>}}')
+                f'Reply with one JSON object and nothing else. Use an object name in args ONLY '
+                f'for \"retrieve\"; every other intent takes an empty args object. Never output '
+                f'angle brackets or placeholder text.\n'
+                f'Example: {{\"intent\":\"retrieve\",\"args\":{{\"object\":\"newspaper\"}},'
+                f'\"reply\":\"On my way to get the newspaper.\",\"confidence\":0.9}}\n'
+                f'Example: {{\"intent\":\"battery\",\"args\":{{}},'
+                f'\"reply\":\"I am at 80 percent.\",\"confidence\":0.9}}')
         result=self._local_ai.ask_sync(prompt,schema=_INTENT_SCHEMA)
         if not result.parse_success:
             log.info(f'Local interpretation low-confidence/failed: {result.reason}')

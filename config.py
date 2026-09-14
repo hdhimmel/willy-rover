@@ -470,6 +470,21 @@ ENABLE_HAILO_LLM=True   # PRIMARY on-device reasoning (Hailo-10H NPU). 2026-09-0
                         # STUCK state tries this first; falls back to Claude only if confidence < HAILO_LLM_CONFIDENCE_FLOOR.
 HAILO_LLM_MODEL_PATH='models/hailo_qwen2_1_5b.hef'  # qwen2:1.5b, Hailo GenAI Model Zoo. ~1.6GB, not tracked in git.
 HAILO_LLM_CONFIDENCE_FLOOR=0.7  # 70% confidence on Hailo decision = proceed without Claude. Below = escalate to cloud.
+
+# Generation parameters for the on-device LLM. Until 2026-09-14 hailo_llm.py called
+# generate_all(prompt) with NONE of these set, leaving temperature/top_p/top_k/max_generated_tokens
+# at whatever the runtime defaults to -- i.e. sampling tuned for varied prose, on a model whose
+# only job is emitting one small JSON object for a strict parser. Observed live, same prompt back
+# to back: defaults produced valid JSON with the WRONG intent ("status" for a battery question),
+# temperature=0.1/top_p=0.9 produced valid JSON with the correct one.
+#
+# These are tuned against experiments/llm_reliability_batch.py. If you change one, RE-RUN THAT
+# BATCH -- the 32-case score in FRD G-6 is only meaningful for the values it was measured at, and
+# HAILO_LLM_CONFIDENCE_FLOOR above is calibrated against the same run.
+HAILO_LLM_TEMPERATURE=0.1   # Near-greedy. JSON-only output wants determinism, not creativity.
+HAILO_LLM_TOP_P=0.9
+HAILO_LLM_MAX_TOKENS=256    # 20 of 32 failures on 2026-09-14 broke at exactly char 96 -- the
+                            # signature of truncation. This budget is well clear of a complete object.
 # --- Audio device selection. Mic swap 2026-09-09: capture moved OFF the Waveshare mic+speaker
 # puck and onto a dedicated capture-only USB mic. The puck stays as the SPEAKER (owner decision
 # 2026-09-09) -- it is the only non-HDMI playback device on the rover.

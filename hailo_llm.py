@@ -13,6 +13,25 @@ from hailo_platform.genai import LLM
 
 log=logsetup.setup('hailo_llm')
 
+# Qwen2 is ChatML-trained: llm.prompt_template is a ChatML Jinja template and its stop tokens
+# are ['<|im_end|>', '<|endoftext|>']. generate_all() does NOT apply that template -- it takes
+# one raw string and continues it. Handing it a bare instruction therefore invited exactly what a
+# completion model should do with a template: continue it. Live output was the prompt's own JSON
+# skeleton echoed back five and a half times, 820 characters of it, with no answer anywhere.
+#
+# This renders the template's non-tools branch by hand for a [system, user] messages list with
+# add_generation_prompt=True. Doing it by hand rather than through Jinja keeps the dependency
+# surface where it is; the branch reproduced is small and fixed, and tests/test_hailo_chatml.py
+# pins its exact shape.
+_QWEN_DEFAULT_SYSTEM='You are Qwen, created by Alibaba Cloud. You are a helpful assistant.'
+
+def _chatml(prompt,system=None):
+    sys_msg=system if system else _QWEN_DEFAULT_SYSTEM
+    return (f'<|im_start|>system\n{sys_msg}<|im_end|>\n'
+            f'<|im_start|>user\n{prompt}<|im_end|>\n'
+            f'<|im_start|>assistant\n')
+
+
 class HailoIntentModel(AIProvider):
     # Shares vision's device via the class-level Hailo.TARGET singleton (picamera2.devices.Hailo)
     # rather than constructing a separate hailo_platform.genai.VDevice() -- confirmed live on the
@@ -62,9 +81,15 @@ class HailoIntentModel(AIProvider):
         # for local interpretation today (_interpret_local() builds one combined prompt), so
         # this is not a behavior change, just documented here since the shape differs from
         # LocalAIProvider's messages-list call.
-        full_prompt=f'{system}\n\n{prompt}' if system else prompt
+        full_prompt=_chatml(prompt,system)
         try:
-            txt=self._llm.generate_all(full_prompt)
+            # Generation parameters are passed explicitly -- see config.py. Leaving them unset
+            # means None for all four, which is the runtime's prose-oriented default sampling and
+            # is measurably worse at producing parseable, correct JSON (2026-09-14).
+            txt=self._llm.generate_all(full_prompt,
+                                       temperature=config.HAILO_LLM_TEMPERATURE,
+                                       top_p=config.HAILO_LLM_TOP_P,
+                                       max_generated_tokens=config.HAILO_LLM_MAX_TOKENS)
         except Exception as e:
             log.info(f'Hailo LLM call failed: {type(e).__name__}: {e}')
             return AIResult(False,0.0,None,False,None,f'{type(e).__name__}: {e}')
