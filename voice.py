@@ -88,6 +88,59 @@ _ARM=r"(?:the |your )?arm"
 _ARM_HOME_V=r"(?:centre|center|home|reset)"
 _ARM_STOW_V=r"(?:stow|park)"
 
+# --- Emergency stop, deterministic. P0, 2026-09-14 review. -----------------------------------
+# "whoa whoa please stop right now" was classified by the Hailo model as `where_are_you` at
+# confidence 0.8 in 2 of 3 repeats (experiments/results/2026-09-14-failure-classification.md).
+# It reached the model at all only because the tier-2 `stop` core above is wrapped in _ADDRESS /
+# _TRAILER, whose vocabulary does not cover interjections ("whoa") or intensifiers ("right now").
+# A safety-critical command was one model misfire away from being read as a question about which
+# room the rover is in.
+#
+# STRUCTURE IS STILL FULLMATCH, deliberately. The review asked that the negation protection
+# survive, and switching to a keyword search would break it: tests/test_voice_fast_path.py
+# requires "we should stop soon" NOT to fire, because discussing stopping is not commanding it.
+# What widens is the VOCABULARY around a narrow imperative core -- interjections and politeness
+# in front, intensifiers behind. That is fail-closed: an unanticipated phrasing falls through to
+# the LLM exactly as before, and no negation can be admitted because "don't" is not a prefix this
+# accepts.
+#
+# Both groups are a single * over a flat alternation rather than nested quantifiers, which would
+# be a backtracking hazard on long non-matching speech.
+_STOP_PREFIX=(r"(?:(?:hey|ok|okay|oh|no|now|just|please|whoa|woah|willie|wait|"
+              r"can you|could you|would you|i need you to|i want you to|you need to|"
+              r"go ahead and)[,!]?\s+)*")
+# "emergency stop" and "full stop" precede bare "stop": alternation is first-match, so the longer
+# forms must come first or they would match as prefix-plus-"stop" and leave a trailing word.
+_STOP_CORE=(r"(?:emergency stop|full stop|stop right there|stop moving|stop|halt|freeze|brake|"
+            r"cease|stand still|hold (?:it|on|up)|whoa|woah)")
+_STOP_TRAILER=(r"(?:[\s,]+(?:right now|right there|right here|now|immediately|moving|please|"
+               r"for me|willie|ok|okay|buddy|there))*[\s!.?]*")
+_EMERGENCY_STOP=re.compile(_STOP_PREFIX+_STOP_CORE+_STOP_TRAILER,re.I)
+
+# Defence in depth. The fullmatch structure above cannot admit a negation today, because none of
+# these words are in _STOP_PREFIX. This guard is for whoever widens that vocabulary next: it makes
+# the requirement explicit rather than emergent, so a well-meaning addition of "do not" to the
+# prefix list cannot silently turn "don't stop" into a stop.
+_STOP_NEGATED=re.compile(r"\b(?:do\s*n[o']?t|do not|does\s*n[o']?t|did\s*n[o']?t|never|without|"
+                         r"avoid|rather than|instead of|no need to|should\s*n[o']?t|"
+                         r"could\s*n[o']?t|ca\s*n[o']?t|cannot|wo\s*n[o']?t|will not)"
+                         r"\b",re.I)
+
+
+def is_emergency_stop(text):
+    """True when `text` is an imperative stop command.
+
+    Fail-safe direction is asymmetric and chosen deliberately: a false positive stops a rover
+    nobody asked to stop, which is annoying and harmless; a false negative fails to stop a moving
+    rover when a person asked it to. Where a judgement call exists this errs toward stopping.
+
+    The result goes straight to stop_requested -- never to the LLM, never to pending_commands.
+    """
+    norm=text.strip().rstrip('.!? ')
+    if _STOP_NEGATED.search(norm): return False
+    return bool(_EMERGENCY_STOP.fullmatch(norm))
+
+
 _FAST_PATH_PATTERNS=[
     # --- tier 2: motion / destructive, narrow cores ---
     (_fp(r'stop|halt|freeze|hold (it|on|up)|stop moving|stand still|whoa'),'stop','Stopping.'),
@@ -497,6 +550,11 @@ class VoicePipeline:
         for pattern,name,reply in _FAST_PATH_PATTERNS:
             if pattern.fullmatch(norm):
                 return {'intent':name,'args':{},'reply':reply}
+        # Last, so a task-directed stop ("stop mapping") is claimed by its own pattern above
+        # rather than swallowed as an emergency stop. Everything reaching here is either an
+        # emergency stop phrased conversationally, or not a fast-path command at all.
+        if is_emergency_stop(norm):
+            return {'intent':'stop','args':{},'reply':'Stopping.'}
         return None
 
     def _interpret_local(self,text):

@@ -603,6 +603,113 @@ margin to be meaningful, which dead reckoning cannot deliver.
 computed, and the correct response is to refuse to roam rather than to proceed as
 though the zone were clear. An uncomputable keep-out is not an absent keep-out.
 
+## 6.7 Which functions may use which reasoner — architectural decision, 2026-09-14
+
+**Status: decided, and the confidence half is permanent.** Owner decision following the
+2026-09-14 review and the 96-call failure classification
+(`experiments/results/2026-09-14-failure-classification.md`).
+
+This section exists because the question stopped being "how do we make the on-device model
+pass the benchmark" and became "which functions may safely use it". The measurements that
+forced that change are in FRD v3.1 G-6; the decisions they produced are here.
+
+### 6.7.1 The model's self-reported confidence must never authorize a physical action
+
+**This is permanent, not a threshold awaiting a better value.** Measured over 96 calls:
+
+| self-reported confidence | correct (n=76) | wrong (n=11) |
+|---|---|---|
+| 0.8 | 28 | 7 |
+| 0.9 | 32 | 2 |
+| 1.0 | 13 | 2 |
+
+The distributions are identical and the model never emitted a value below 0.8 for any case.
+It writes the `confidence` field the way it writes `reply` — plausible text of the requested
+shape — with no internal uncertainty behind it.
+
+A gate can only separate two populations that differ. These do not. Therefore:
+
+- Do **not** raise `HAILO_LLM_CONFIDENCE_FLOOR`.
+- Do **not** lower it.
+- Do **not** add a second confidence threshold anywhere.
+- Do **not** use the model's self-reported confidence to authorize a physical action.
+
+Note this is a *stronger* statement than the separate finding that
+`HAILO_LLM_CONFIDENCE_FLOOR` is compared against `action_confidence` — a binary structural
+check — rather than against the model's number at all. Even on the voice path, where the
+model's number **is** read (`voice.py:467`, `LOCAL_LLM_CONFIDENCE_FLOOR`), it carries no
+information. Both facts point the same way and neither is fixable by tuning.
+
+What *does* carry information is the structural check: `_action_confidence()` verifies the
+action name is recognised and that duration/speed are in range. That is deterministic, it is
+not the model's opinion of itself, and it is what the gate should keep reading.
+
+### 6.7.2 Tiers: what each reasoner is allowed to decide
+
+The governing rule, from the review: **the model may recommend an action; it must never be
+the authority that makes the action safe.**
+
+**Tier A — deterministic only. No model involvement, ever.**
+
+| function | mechanism |
+|---|---|
+| emergency stop by voice | `voice.py::is_emergency_stop()`, fullmatch with negation guard |
+| operator stop button | `brain.py::_tick()` polls it before any state handler |
+| tilt cutoff, sensor-fault stop | reflex layer, `safety.py` |
+| obstacle reflex (`DIST_STOP`) | sonar + ToF, `sensors.py` → `safety.py` |
+| duration and speed clamps | `safety.py`, applied to every request regardless of source |
+
+A model is not consulted for any of these and must never become a dependency of one.
+`tests/test_reflex_deliberative_separation.py` enforces it structurally: no reflex module
+imports or even mentions an AI backend.
+
+**Tier B — a model may propose; deterministic logic disposes.**
+
+| function | who decides | who authorizes |
+|---|---|---|
+| STUCK recovery action | Hailo (primary), Claude (fallback) | `_action_confidence` + `safety.request()` clamps |
+| retrieve / come_here / follow | intent from a model | `safety.py`, plus vision calibration (still unverified — G-6, P1) |
+| arm presets | intent from a model | `arm.py` limits |
+
+These are the cases where a wrong answer costs something physical, so nothing here may rest
+on the model alone. The clamps are the authority; the model is a suggestion.
+
+**Tier C — a model is appropriate and a wrong answer is cheap.**
+
+`status`, `battery`, `where_are_you`, `what_do_you_see`, `time`, `date`, conversational
+replies, and feature-request composition. Worst case is an unwanted or wrong spoken answer.
+Note most of these are already claimed by `_fast_path()` before any model runs, because a
+deterministic match is also ~5s faster.
+
+### 6.7.3 Hailo versus the CPU model
+
+Measured on the same 32-case benchmark, same prompt, same schema:
+
+| | actionable | median latency |
+|---|---|---|
+| Hailo NPU (Qwen2 1.5B) | 80.2% | **4.86s** |
+| CPU `LocalAIProvider` | **96.9%** | 24.95s |
+
+And on the 11 cases Hailo got confidently wrong, the CPU model got **11 of 11 right**. This
+is a capability gap, not a prompt-format one — which is why further prompt or sampling tuning
+is not the next move.
+
+**The NPU is not currently buying enough intent reliability to justify putting it in charge
+of rover actions.** It is buying a 5× latency improvement, which matters for conversation and
+does not matter for a STUCK episode where the rover is already stationary.
+
+`ENABLE_HAILO_LLM` is deliberately left as-is pending the owner's decision, now that both
+sides of the trade have real numbers. The honest summary: Hailo is a good local
+conversational and intent assistant, and is not trusted as the sole classifier for
+safety-critical physical commands.
+
+### 6.7.4 What would change this
+
+Not a better prompt, and not a better threshold. Either a more capable on-device model, or
+moving the specific failing intents off the model entirely — which is what was done for
+`stop` on 2026-09-14, and is the pattern to follow for any other intent whose failure has a
+physical consequence.
+
 ## 7. Perception and the Accelerator
 
 **Vision — shipped on the Hailo-10H NPU, 2026-08-21.** `vision.py`'s

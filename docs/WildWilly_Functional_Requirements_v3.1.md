@@ -807,10 +807,15 @@ visible as a logged overrun before it became a kill.
 > 24 of 32 utterances fail identically in all three repeats, so these are reproducible
 > defects rather than sampling noise, and each is individually addressable.
 >
-> **The one failure with a safety consequence** is `stop` → `where_are_you` at confidence
-> 0.8 for "whoa whoa please stop right now". Bare "stop" never reaches the model
-> (`_fast_path` `fullmatch`), but a sentence does. That fix belongs in `voice.py`, not in
-> the model or the floor.
+> **The one failure with a safety consequence** was `stop` -> `where_are_you` at confidence
+> 0.8 for "whoa whoa please stop right now". **FIXED 2026-09-14**: `voice.py::is_emergency_stop()`
+> now claims natural stop language deterministically, before any model is consulted, while
+> preserving the negation protection ("don't stop", "never stop", "we should stop soon" all still
+> fall through). It stays fullmatch rather than a keyword search precisely so that protection
+> survives; what widened is the vocabulary of interjections and intensifiers around the imperative
+> core. 24 stop phrasings and 12 must-not-fire phrasings are pinned by
+> tests/test_emergency_stop_phrases.py. The decision on which functions may use which reasoner is
+> recorded in Software Design v1.0 section 6.7.
 >
 > Regression cover added: `tests/test_hailo_chatml.py` (6) pins the framing ---
 > role markers, the trailing assistant handoff, the system turn, no double
