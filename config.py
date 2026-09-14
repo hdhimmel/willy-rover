@@ -82,6 +82,25 @@ SONAR_RIGHT_TRIG=4;  SONAR_RIGHT_ECHO=21
 SONAR_TIMEOUT=0.025; SONAR_SAMPLES=3; SONAR_INTERVAL=0.05
 DIST_STOP=20; DIST_SLOW=40; DIST_CLEAR=60; DIST_SIDE_CLEAR=25
 
+# --- FR-1000-002 / FR-1200-005 multi-zone ToF (DFRobot SEN0628, Master Hardware Design §6.5).
+# Front obstacle sensing ALONGSIDE the sonar, never replacing it: the two fail in opposite
+# directions. Sonar is blind to chair legs, soft furnishings and angled surfaces; ToF looks
+# straight THROUGH glass, which sonar reflects off perfectly well.
+ENABLE_TOF=False            # flip True once the sensor is wired and a floor profile is captured
+TOF_PORT='/dev/ttyAMA3'     # UART, not I2C -- keeps it off a bus that took the whole rover down
+                            # twice on 2026-09-07/08. CONFIRM the Pi 5 overlay->pin mapping first
+                            # (§6.5): the Pi 4 mapping does not carry over to the RP1.
+TOF_BAUD=115200             # fixed in the sensor's firmware, not configurable
+TOF_ZONES=64                # 8x8. A frame of any other length is a desynchronised UART, not data
+# Floor-profile margin. A zone counts as an obstacle only when it returns this much SHORTER than
+# its own stored floor distance, and as a drop when it returns this much LONGER (or nothing).
+# Wide enough to absorb carpet pile, a rug edge and a few mm of ride height -- without a margin
+# every surface change reads as an obstacle and he never moves.
+TOF_FLOOR_MARGIN_MM=120.0
+TOF_FLOOR_PROFILE_PATH='tof_floor_profile.json'
+TOF_PROFILE_SAMPLES=10      # frames averaged when capturing; one frame carries per-zone noise
+                            # straight into the baseline everything else is measured against
+
 IMU_ADDR=0x4A; IMU_TILT_LIMIT=25; IMU_TILT_WARN=18; IMU_POLL_HZ=100  # BNO085, §8.2/§8.5
 # RST wired to MCP23017 (§9.1's same chip, ENCODER_ADDR) port B bit 4 — confirmed 2026-08-08
 # (previously only documented as "spare pin", no bit number). MCP230xx get_pin() numbering is

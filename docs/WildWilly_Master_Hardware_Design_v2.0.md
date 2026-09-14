@@ -1222,7 +1222,14 @@ default is usually more effective than lowering it.
 
 ---
 
-### 6.5 Multi-zone ToF — DFRobot SEN0628 (ON ORDER, 2026-09-13)
+### 6.5 Multi-zone ToF — DFRobot SEN0628 (ON ORDER; SOFTWARE BUILT 2026-09-14)
+
+> **Software status.** `tof.py`, the `sensors.py` fusion and
+> `scripts/calibrate_tof_floor.py` are written and tested (24 tests). Only the UART frame
+> parser is missing, because the wire format has never been observed — it raises
+> `NotImplementedError` saying so. When the sensor arrives: bench it on USB-C, watch the
+> serial output, implement `read_frame()` against the real stream, capture a floor profile
+> on clear floor, then set `ENABLE_TOF=True`.
 
 **Part changed 2026-09-13.** A bare MusRock VL53L7CX breakout was ordered 2026-09-10
 and did not arrive. Replaced with **DFRobot SEN0628** ($22) — same VL53L7CX sensor,

@@ -510,7 +510,18 @@ Playback is untouched and does not go through this path at all: all three
 
 ---
 
-## 6.5 Front obstacle fusion (DFRobot SEN0628, ordered 2026-09-13)
+## 6.5 Front obstacle fusion (DFRobot SEN0628)
+
+**BUILT 2026-09-14, except the transport.** `tof.py` holds the classification, the floor
+profile and the availability contract; `sensors.py::distances()` holds the fusion;
+`scripts/calibrate_tof_floor.py` captures the profile. 24 tests
+(`tests/test_tof.py`, `tests/test_sonar_tof_fusion.py`).
+
+**What is deliberately NOT written: `tof.read_frame()`.** The sensor has not arrived, so
+the wire format has never been observed, and it raises `NotImplementedError` with that
+said plainly rather than guessing at a frame layout. Everything above it takes any
+callable returning 64 millimetre values, which is exactly how it was developed and
+tested with the rover powered down. `ENABLE_TOF=False`.
 
 A multi-zone ToF sensor joins the front sonar — see Master Hardware Design §6.5 for
 the part and the mounting constraints. The software consequence is deliberately

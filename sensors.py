@@ -59,6 +59,10 @@ class SonarArray:
         self.right=Sonar(config.SONAR_RIGHT_TRIG,config.SONAR_RIGHT_ECHO)
         self._sensors=[self.front,self.left,self.right]
         self._running=False; self._thread=None
+        # Optional multi-zone ToF (§6.5). Set by brain.py when ENABLE_TOF; None otherwise, which
+        # is also what an unavailable sensor degrades to. ALONGSIDE the sonar, never replacing
+        # it -- the two are blind to different things, and ToF looks straight through glass.
+        self.tof=None
     def start(self):
         self._running=True
         self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
@@ -69,7 +73,29 @@ class SonarArray:
         while self._running:
             for s in self._sensors: s.update(); time.sleep(config.SONAR_INTERVAL/3)
     @property
-    def distances(self): return {'front':self.front.distance,'left':self.left.distance,'right':self.right.distance}
+    def distances(self):
+        """THE fusion point (§6.5). 'front' is the minimum of the sonar reading and the nearest
+        ToF zone reporting an obstacle -- whichever sensor sees something closer wins.
+
+        min() is the whole design: fail-safe by construction, no arbitration logic, no new FSM
+        state, no threshold changes. DIST_STOP/DIST_SLOW/DIST_CLEAR, _roam(), _slow() and
+        _avoid() all keep working against the same dict key and never learn the ToF exists.
+
+        The ToF only ever pulls 'front' DOWN. A None from it means "nothing to report" -- not
+        "the way is clear" -- so an uncalibrated or unavailable sensor can never mask a real
+        sonar obstacle. Sides are untouched: this is a front sensor, and the left/right sonars
+        are the only side coverage there is."""
+        front=self.front.distance
+        tof=self.tof
+        if tof is not None and getattr(tof,'available',False):
+            try:
+                near=tof.nearest_obstacle_cm()
+                if near is not None and near<front: front=near
+            except Exception:
+                # distances() runs on the 20Hz tick. An exception escaping here would stop
+                # obstacle checks entirely -- strictly worse than having no ToF at all.
+                log.warning('ToF read raised inside distances(); using sonar alone',exc_info=True)
+        return {'front':front,'left':self.left.distance,'right':self.right.distance}
     def obstacle_ahead(self): return self.front.distance<config.DIST_STOP
     def should_slow(self): return self.front.distance<config.DIST_SLOW
     def better_side(self): return 'left' if self.left.distance>=self.right.distance else 'right'
