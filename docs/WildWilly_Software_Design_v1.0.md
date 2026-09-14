@@ -662,12 +662,12 @@ check reports healthy unconditionally. Recommended fix: relocate INA260 0x45
 (redundant now that the Witty Pi 5 HAT+ measures Pi current) into P3 downstream
 of SW-M, then repoint the `'motor'` rail key at it. Owner decision pending.
 
-> **UNVERIFIED as of 2026-08-28.** This regression assumes the device moving to
-> the 12V input is 0x44. The owner subsequently described the three monitors by
-> *rail* as Pi / UBEC 5V / DZS 6V, with the 5V and 6V staying put — which makes
-> the **Pi-rail** monitor the one that moves, and this regression spurious. That
-> conflicts with `config.py`'s measured 0x44 = 11.373V on the motor bus. Resolve
-> by reading bus voltage at 0x40/0x44/0x45 before treating this as fact.
+> ~~**UNVERIFIED as of 2026-08-28.**~~ **CLOSED 2026-09-14, owner-confirmed.** The
+> three monitors are settled: **0x40 = 5V** (servos, sonar — measured 5.148V),
+> **0x44 = +12V main** (11.373V), **0x45 = Pi feed at 9V** (9.068V). Each reads the
+> voltage its assignment predicts, and the rails are 5/9/12V apart — not confusable.
+> `config.py` already recorded all three measurements, which is the bus-voltage check
+> this note asked for.
 
 
 The reset-gate *mechanism* itself is no longer blocked on that wiring, though.

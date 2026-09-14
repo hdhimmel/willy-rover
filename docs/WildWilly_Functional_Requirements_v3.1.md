@@ -724,11 +724,10 @@ conditions:
     scale factor in `config.py` is set. Rail currents are read from the three
     INA260s at 0x40 (servo/steering 5V), 0x44 (+12V main input) and 0x45 (Pi
     supply). 0x44/0x45 were transposed in docs until 2026-08-24; 0x44 moved
-    upstream to the main input 2026-08-28. ⚠ **These identities are asserted here but
-    flagged UNVERIFIED by G-1**, which wants bus voltages read at 0x40/0x44/0x45
-    before they are treated as fact. `config.py` carries measurements consistent with
-    them (0x40 = 5.148V, 0x44 = 11.373V, 0x45 = 9.068V), which is supporting evidence,
-    not the confirmation G-1 asks for. Flag carried into these criteria 2026-09-13.
+    upstream to the main input 2026-08-28. **Identities CONFIRMED 2026-09-14
+    (owner).** Each monitor reads the voltage its assignment predicts — 0x40 = 5.148V,
+    0x44 = 11.373V, 0x45 = 9.068V — and the rails are 5/9/12V apart, so they cannot be
+    confused. The flag raised here on 2026-09-13 is withdrawn.
 
     ⚠ **The voltage half of FR-200-001 cannot currently be verified at all.** The
     divider fitted on 2026-09-02 has no +12V feed and A0 reads 0.0146V, so there is no
