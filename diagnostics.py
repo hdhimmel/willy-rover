@@ -15,6 +15,12 @@ log=logsetup.setup('diagnostics')
 _EXPECTED_I2C={config.ENCODER_ADDR,config.INA260_SERVO_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
                config.INA260_PI_ADDR,config.INA260_MOTOR_ADDR,config.ADS_ADDR,config.IMU_ADDR,
                config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR}
+# Witty Pi 5 joins only when enabled, mirroring brain.py:71 exactly. THIS LINE WAS MISSING until
+# 2026-09-14: brain.py's self-test expected eleven devices while this expected ten, so
+# `python3 diagnostics.py` reported a clean bus on a rover whose Witty Pi had dropped off it.
+# The failure direction was the bad one -- a read-only report that cannot see an absent device.
+# tests/test_expected_i2c_agreement.py now compares the two sets so they cannot drift again.
+if config.ENABLE_WITTY_PI: _EXPECTED_I2C.add(config.WITTY_PI_ADDR)
 
 def scan_i2c():
     i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
