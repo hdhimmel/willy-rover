@@ -469,7 +469,17 @@ LOCAL_LLM_CONFIDENCE_FLOOR=0.55  # FR-1400-001: below this, offer cloud AI fallb
 ENABLE_HAILO_LLM=True   # PRIMARY on-device reasoning (Hailo-10H NPU). 2026-09-01: enabled for autonomous thinking.
                         # STUCK state tries this first; falls back to Claude only if confidence < HAILO_LLM_CONFIDENCE_FLOOR.
 HAILO_LLM_MODEL_PATH='models/hailo_qwen2_1_5b.hef'  # qwen2:1.5b, Hailo GenAI Model Zoo. ~1.6GB, not tracked in git.
-HAILO_LLM_CONFIDENCE_FLOOR=0.7  # 70% confidence on Hailo decision = proceed without Claude. Below = escalate to cloud.
+HAILO_LLM_CONFIDENCE_FLOOR=0.7  # NOT a confidence threshold, despite the name. brain.py:1007
+                        # compares this against AIResult.action_confidence, and
+                        # ai_provider.py::_action_confidence() returns ONLY 1.0 (the action name is
+                        # recognised and duration/speed are in range) or 0.0. So this is a boolean
+                        # gate: every value in (0.0, 1.0] behaves identically. Tuning it does
+                        # nothing. 0.0 would admit structurally invalid actions and >1.0 would
+                        # reject every on-device decision, which are the only two changes that
+                        # would have any effect at all.
+                        # The model's OWN self-reported confidence is used elsewhere --
+                        # voice.py:467 against LOCAL_LLM_CONFIDENCE_FLOOR -- not here.
+                        # Pinned by tests/test_confidence_gate_semantics.py.
 
 # Generation parameters for the on-device LLM. Until 2026-09-14 hailo_llm.py called
 # generate_all(prompt) with NONE of these set, leaving temperature/top_p/top_k/max_generated_tokens
@@ -639,7 +649,7 @@ IDENTITY_DB_PATH='identities.db'
 #
 # Both numbers are STARTING POINTS FOR TUNING, not measured values. Ship
 # scripts/tune_face_threshold.py alongside and sweep them against real enrolments. This project
-# already carries one guessed threshold that was never tuned -- HAILO_LLM_CONFIDENCE_FLOOR=0.7,
+# already carries one threshold that reads as tunable and is not -- HAILO_LLM_CONFIDENCE_FLOOR=0.7,
 # recorded in FRD G-6 as exactly that and still an open risk. Do not add a second.
 FACE_MATCH_MAX_DISTANCE=0.40
 FACE_STRANGER_MIN_DISTANCE=0.60
@@ -678,9 +688,18 @@ STUCK_TIMEOUT=3.0; BACK_UP_TIME=0.8; TURN_TIME_90=1.2; IDLE_TIMEOUT=30.0
 #      now produce an action the rover can carry out, up from 16%. Better, NOT solved -- roughly
 #      one in five still misfires, and the remaining errors are confident ones the 0.7 floor
 #      cannot catch, so a wrong STUCK decision can still reach arbitration.
-#   3. HAILO_LLM_CONFIDENCE_FLOOR=0.7 is a guessed number, never tuned against real output.
-#      It can now be tuned for the first time, because there is finally real output to tune it
-#      against -- but note the surviving failures score 0.8-1.0, so raising it will not help.
+#   3. ~~HAILO_LLM_CONFIDENCE_FLOOR=0.7 is a guessed number, never tuned against real output.~~
+#      It is a boolean structural gate, not a threshold -- there is nothing to tune. The real
+#      residual risk on this path is a STRUCTURALLY VALID but semantically wrong action
+#      ("forward, 2s" into the obstacle that caused the STUCK), which scores 1.0 and proceeds
+#      without cloud review. safety.py's clamps and the reflex layer are what stand between that
+#      and the wheels -- not this number.
+#      ~~It can now be tuned for the first time.~~ Corrected hours later the same day: it
+#      CANNOT be tuned, because it is compared against a binary structural check rather than the
+#      model's self-report (see its own comment above). What IS measurable, and now measured, is
+#      the self-report on the VOICE path: 88% of answers scoring >= 0.7 were right (73 of 83 over
+#      96 calls, experiments/results/2026-09-14-hailo-qualification.json). Roughly one confident
+#      answer in eight is wrong, and the wrong ones self-report 0.8-1.0.
 # Set back to False if Willie starts tripping STALL_FAULTs unattended.
 ENABLE_AUTONOMOUS_ROAM=True
 

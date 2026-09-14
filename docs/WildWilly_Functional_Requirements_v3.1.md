@@ -577,6 +577,78 @@ visible as a logged overrun before it became a kill.
 > worthless. Their rendered tails are verified character-identical. **Keep them
 > that way or this number stops meaning anything.**
 >
+> **QUALIFICATION RUN 2026-09-14 — the evidence is now in the repository, not in
+> a commit message.** The 2026-09-14 review's first finding was fair and worse
+> than stated: the batch results quoted above lived in `/tmp` on the rover, which
+> a power cycle wipes. Nothing in git let anyone check them. That is fixed:
+> `experiments/hailo_qualification.py` writes a JSON artifact holding every
+> per-case record — payload, confidence, latency, outcome — and the artifact is
+> committed alongside the conclusions drawn from it
+> (`experiments/results/2026-09-14-hailo-qualification.json`).
+>
+> **96 calls through ONE long-lived `HailoIntentModel`** (3 repeats × 32 cases),
+> at the shipped settings: temperature 0.1, top_p 0.9, max_tokens 256.
+>
+> | outcome | count | of 96 |
+> |---|---|---|
+> | actionable (correct intent, usable args, has a reply) | 77 | **80.2%** |
+> | wrong intent | 10 | 10.4% |
+> | parse failure | 9 | 9.4% |
+> | strict batch pass (`bool(args) == expects_args`) | 26 | 27.1% |
+>
+> **Repeated-call stability — the 2026-08-23 context defect is gone.** The old
+> failure mode was insidious because call 1 worked and later calls decayed as
+> conversation context accumulated. Driving the whole sequence through one
+> instance three times shows no decay whatsoever:
+>
+> | repeat | actionable / 32 | parse failures | median latency |
+> |---|---|---|---|
+> | 1 | 26 | 3 | 4.86s |
+> | 2 | 25 | 3 | 4.86s |
+> | 3 | 26 | 3 | 4.81s |
+>
+> Flat, not monotonic. `clear_context()` in the `finally:` block is doing its job
+> and **must not be replaced with anything weaker** — `tests/test_hailo_statelessness.py`
+> exists to make that regression loud.
+>
+> **The remaining failures are deterministic, not random**, which is temperature
+> 0.1 behaving as intended and makes them individually fixable rather than a
+> matter of luck. The same four utterances fail identically in all three repeats:
+>
+> | expected | returned | occurrences |
+> |---|---|---|
+> | `retrieve` | `arm_home` | 3 of 3 |
+> | `arm_stow` | `arm_home` | 3 of 3 |
+> | `wave` | `where_are_you` | 3 of 3 |
+> | `stop` | `where_are_you` | 1 of 3 |
+>
+> Every one of these self-reported confidence 0.8–1.0. `arm_stow → arm_home` is
+> the benign kind: both currently alias to `center_all()` at `brain.py:807`, so
+> the rover does the same thing either way.
+>
+> **`stop → where_are_you` is not benign, and it deserves its own decision.** The
+> utterance was **"whoa whoa please stop right now"**, returned as
+> `where_are_you` at confidence 0.8. `voice.py::_fast_path()` does hold a stop
+> pattern (`stop|halt|freeze|hold (it|on|up)|stop moving|stand still|whoa`) and
+> it is matched with `fullmatch`, which is the right conservative choice and was
+> explicitly endorsed in the 2026-09-14 review — it is what stops "don't stop"
+> from halting the rover, pinned by `tests/test_voice_fast_path.py`.
+>
+> But `fullmatch` means a stop request phrased as a **sentence** does not match,
+> falls through to the model, and is then only as reliable as the model. Measured:
+> on this utterance it is not reliable at all. So the trade-off is real and it now
+> has a number attached — bare "stop" is safe by construction, conversational
+> "please stop right now" is not.
+>
+> This is an owner decision, not a documentation one, and three options exist:
+> widen the stop pattern with an explicit `don't|do not|never` guard rather than
+> relying on `fullmatch` alone; accept it on the grounds that the wake-word turn
+> plus STT latency (~17s end to end) already makes voice unsuitable as an
+> emergency stop, and point users at the physical control instead; or leave it and
+> record it. **What must not happen is leaving it unrecorded**, because the
+> current design reads as though voice-stop is covered, and for sentence-form
+> phrasings it is not.
+>
 > **Why this gap stays open.**
 >
 > 1. **`ENABLE_HAILO_LLM=True` still makes this the PRIMARY intent parser**, with
@@ -584,19 +656,61 @@ visible as a logged overrun before it became a kill.
 >    was set on 2026-09-01 while this scored 0%, and it is deliberately not changed
 >    here --- it is a live-behaviour decision for the owner, now that there is
 >    finally a real measurement to make it against.
-> 2. **The 0.7 floor does not contain the remaining failures, and this is now
->    demonstrated rather than predicted.** The surviving errors are *confident*
->    ones: `where_are_you` returned at confidence 0.9 and 1.0 for two `retrieve`
->    utterances, and `fetch`/`halt` substituted for `retrieve`/`stop` at 0.8-1.0.
->    A floor cannot filter an error the model is sure about. Vocabulary drift ---
->    a correct understanding under the wrong label --- is the dominant remaining
->    failure and is the thing to attack next.
-> 3. **Latency is unmeasured since the fix.** Completions fell from 820-1039
->    characters to roughly 110, which should help a great deal, but the pre-fix
->    range was 12s to over two minutes per inference and no one has re-timed it.
->    FR-1500 is a speech requirement: an accurate parser that takes 30 seconds is
->    still unusable for voice. **Measure this before enabling anything on the
->    strength of the 78%.**
+> 2. **The "0.7 confidence floor" is not a confidence threshold, and cannot be
+>    tuned.** Corrected 2026-09-14 after reading the code rather than the
+>    comments. `brain.py:1007` compares `HAILO_LLM_CONFIDENCE_FLOOR` against
+>    `AIResult.action_confidence`, and `ai_provider.py::_action_confidence()`
+>    returns **only 1.0 or 0.0** — 1.0 when the action name is recognised and
+>    duration/speed are in range, 0.0 otherwise. It is a boolean structural gate
+>    wearing a threshold's name. Every value in (0.0, 1.0] behaves identically;
+>    only 0.0 (admit invalid actions) and >1.0 (reject everything, making STUCK
+>    recovery fully cloud-dependent) would change anything. Earlier entries in
+>    this register — and `config.py` — repeatedly advised "tune the floor against
+>    real output", which was advice to adjust a number that does nothing.
+>    Pinned now by `tests/test_confidence_gate_semantics.py`.
+>
+>    **The residual risk on the motion path is therefore not the one previously
+>    described.** It is not a confidently-wrong answer sneaking past a threshold;
+>    it is a **structurally valid but semantically wrong** action — `forward,
+>    2.0s` into the obstacle that caused the STUCK — which scores exactly 1.0 and
+>    proceeds without cloud review. No confidence number would catch that.
+>    `safety.py`'s clamps and the reflex layer are the only things between it and
+>    the wheels, which is why `tests/test_no_direct_drive_bypass.py` matters more
+>    than the floor does.
+>
+> 3. **The model's self-reported confidence IS load-bearing on the voice path,
+>    and is now calibrated for the first time.** `voice.py:467` compares
+>    `intent_confidence` against `LOCAL_LLM_CONFIDENCE_FLOOR=0.55`. Measured over
+>    96 calls (`experiments/results/2026-09-14-hailo-qualification.json`):
+>
+>    | | count | correct | precision |
+>    |---|---|---|---|
+>    | self-reported confidence ≥ 0.7 | 83 | 73 | **88.0%** |
+>    | self-reported confidence < 0.7 | 13 | 4 | 30.8% |
+>
+>    So roughly **one confident answer in eight is wrong**, and every wrong answer
+>    in the run self-reported 0.8–1.0. The self-report is informative — 88% versus
+>    31% is a real separation, not noise — but it is nowhere near a safety
+>    interlock. Note also that 4 of the 13 escalations would have been right, so
+>    the floor costs some correct answers to buy that separation.
+>
+> 4. **Latency, measured 2026-09-14 (was unmeasured).** Median **4.86s**, p90
+>    5.47s, max 8.53s, min 3.89s over 96 calls — against a pre-fix range of 12s to
+>    over two minutes. Using the live voice-turn figures in `config.py:511`
+>    (stt 12.1s, tts 4.6s), a median turn now lands near **21.6s**. Better by a
+>    large margin and still slow for conversation; STT, not the LLM, is now the
+>    dominant cost, which redirects where any further latency work should go.
+>
+> 5. **The motion path has never been benchmarked at all.** Every number in this
+>    entry, and every number in the 32-case batch, is for the **voice intent**
+>    schema (`{intent, args, reply}`). The STUCK path uses `_MOTION_SCHEMA`
+>    (`{action, duration, speed}`) with a different prompt built at
+>    `brain.py:1040` — and that prompt still contains the angle-bracket
+>    placeholders (`"duration":<float>`, `"speed":<0.0-1.0>`,
+>    `"reason":"<60 chars>"`) whose literal echoing was the entire cause of the
+>    0% on the intent path. The defect that was fixed in one prompt was never
+>    swept out of the other. **This is the next P0**: the unmeasured path is the
+>    one that drives the wheels.
 >
 > Regression cover added: `tests/test_hailo_chatml.py` (6) pins the framing ---
 > role markers, the trailing assistant handoff, the system turn, no double
