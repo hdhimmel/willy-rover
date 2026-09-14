@@ -1067,8 +1067,8 @@ was chosen.
 | 10 | 5V | pins 2/4 | HC-SR04 VCC |
 | 11 | GND | pins 6/9 | |
 | **12** | **3V3** | **header pin 1** | **I²C device logic + SEN0628.** Removed from this list 2026-09-11 in error; restored 2026-09-14 |
-| **13** | **SEN0628 ToF — sensor TX → Pi RX** | **GP9** (Block 1, silkscreened `MISO`) | §6.5. **Required.** Confirm the Pi 5 UART overlay mapping first |
-| *14* | *SEN0628 ToF — Pi TX → sensor RX* | *GP8* (Block 1, silkscreened `CE0`) | *Optional* — only to send the sensor configuration |
+| **13** | **SEN0628 ToF — sensor TX → Pi RX** | **GP9** — terminal silkscreened **`MISO`** (physical pin 21) | §6.5. **Required.** Confirm the Pi 5 UART overlay mapping first |
+| *14* | *SEN0628 ToF — Pi TX → sensor RX* | *GP8* — terminal silkscreened **`CE0`** (physical pin 24) | *Optional* — only to send the sensor configuration |
 
 **So it is 13 lines, or 14 with the optional ToF return.** The count has moved three
 times: eleven as first written on 2026-09-09, twelve when the ToF UART was added on
@@ -1315,10 +1315,12 @@ The first two give the overlay-to-pin mapping for this kernel; the third confirm
 really has released GP7–GP11. Then add the overlay to `/boot/firmware/config.txt`,
 reboot, and read `/dev/ttyAMA*` at 115200.
 
-**Label the breakout terminals for what they carry, not what the silkscreen says.**
-GP8/GP9 appear on Block 1 as `CE0` and `MISO` — their SPI names. §5.3 previously
-recorded Block 1 as unused; it is not any more, and an unlabelled SPI-named terminal
-carrying a UART is how the next person wires SPI to it.
+⚠ **The GeeekPi breakout labels its terminals with SPI names** (owner-confirmed
+2026-09-14), so the ToF UART lands on terminals marked **`MISO`** (GP9, physical pin
+21) and **`CE0`** (GP8, physical pin 24). **Re-label them for the UART they actually
+carry.** An SPI-named terminal running a UART is how the next person wires SPI to it —
+and SPI0 must stay disabled (§12), so that mistake would break the sensor and the pin
+reservation at once.
 
 **I²C remains a viable fallback** if the alternate-UART question stalls the build —
 four wires onto the existing GODIY hubs at address 0x30. Without the firmware upload

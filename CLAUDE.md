@@ -537,8 +537,11 @@ and Software Design §6.5/§6.6; the traps are here.
   `ls /boot/firmware/overlays/ | grep uart`, `dtoverlay -h uart3`, and
   `sudo cat /sys/kernel/debug/gpio | grep spi0` (must be empty). Then read
   `/dev/ttyAMA*` at 115200.
-- **GP8/GP9 are silkscreened `CE0` and `MISO` on the breakout** — their SPI names. Label
-  those terminals for the UART they actually carry, or someone wires SPI to them.
+- **GP8/GP9 are silkscreened `CE0` and `MISO` on the GeeekPi breakout** — SPI names,
+  owner-confirmed 2026-09-14. GP9 = `MISO` = physical pin 21 (**required**, sensor TX);
+  GP8 = `CE0` = physical pin 24 (optional, config only). **Re-label both for the UART
+  they carry** — and note SPI0 must stay disabled (see the SPI0 entry above), so wiring
+  actual SPI there would break two things at once.
 - **The USB-C bench test runs on the LAPTOP, not Willie.** It costs no rover port.
 - **FOV is 60° H × 60° V, 90° DIAGONAL.** If you see "90 × 90" anywhere, that came from
   the earlier MusRock listing and is wrong. It matters: 60° vertical puts the floor
