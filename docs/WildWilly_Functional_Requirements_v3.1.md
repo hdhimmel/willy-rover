@@ -489,6 +489,30 @@ threshold-ordering advice (raise `WatchdogSec` or lower
 visible as a logged overrun before it became a kill.
 
 **G-6 --- FR-1500, Hailo NPU intent-parsing LLM is not usable as tested.**
+
+> ⚠ **RE-MEASUREMENT IN PROGRESS 2026-09-14.** The 32-case batch is being re-run on the
+> rover against the current code, which now clears conversation context after every call.
+> **Two observations already, both independent of the final score:**
+>
+> 1. **It is far too slow for voice.** Per-inference times observed in the live run range
+>    from ~12s to over two minutes. FR-1500 requires speech interaction; a two-minute
+>    intent classification is unusable regardless of whether the answer is correct, and
+>    that is a separate failure from the accuracy one recorded below.
+> 2. **Early accuracy is consistent with the 0% baseline, not better than it.** The first
+>    ten cases produced one parseable result. The `clear_context()` fix removed a real
+>    degradation but does not appear to have moved the underlying output quality.
+>
+> The final score replaces the paragraph below when the run completes. **Do not treat
+> `ENABLE_HAILO_LLM=True` as production-ready in the meantime** --- the confidence floor
+> routes failures to the cloud, so the practical effect today is that on-device intent
+> parsing is not providing autonomy, exactly as this gap has said since 2026-08-23.
+>
+> Separately: the statefulness defect that prompted the re-run now has regression cover.
+> `tests/test_hailo_statelessness.py` (11 tests) asserts on **repeated** calls against one
+> long-lived instance --- 20 consecutive classifications, the ordered generate-then-clear
+> trace, and cleanup on both the raising and garbled paths. The original bug was invisible
+> to a single-call test, which is why it survived to be found live.
+
 `hailo_llm.py::HailoIntentModel` (`config.ENABLE_HAILO_LLM`)
 loads and runs on the shared Hailo device, but scored 0% on a 32-case
 intent-reliability batch (`experiments/llm_reliability_batch.py`)

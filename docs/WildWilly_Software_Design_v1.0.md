@@ -883,6 +883,21 @@ timeout, mid-flight obstacle abort, and `emergency_stop()`.
 
 ---
 
+## 10.1 Tests added 2026-09-14
+
+| File | Covers |
+|---|---|
+| `test_identity_store.py` (16) | FR-2100 store/matcher — three bands, pending-is-inert, wipe |
+| `test_battery_plausibility.py` (7) | §12 item 13 — a broken sensor is not a flat pack |
+| `test_tof.py` (17) | Floor profile, obstacle/drop classification, availability |
+| `test_sonar_tof_fusion.py` (7) | `min()` fusion, incl. the glass case sonar must still catch |
+| `test_hailo_statelessness.py` (11) | Repeated calls on one long-lived model — the 2026-08-23 degradation |
+| `test_expected_i2c_agreement.py` (5) | `brain.py` and `diagnostics.py` must expect the same bus |
+
+Two of these exist because a **single-call test cannot see the bug**. The Hailo
+degradation only appeared from the second classification onward, and the I²C drift
+only appeared when two files were compared. Both had been live for weeks.
+
 ## 11. Configuration
 
 `config.py` holds every tunable, address and pin map, with dated calibration

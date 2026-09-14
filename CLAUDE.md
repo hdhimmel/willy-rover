@@ -583,6 +583,24 @@ in every document: several tables said R5 fed "Hall encoders and all I²C device
 
 ---
 
+**TWO places decide what is on the I²C bus, and they drifted.** `brain.py::_EXPECTED_I2C`
+gates motion at startup; `diagnostics.py::_EXPECTED_I2C` is the read-only FR-1100-004
+report. On 2026-09-14 brain expected **eleven** and diagnostics expected **ten** — Witty Pi
+`0x51` was missing from diagnostics, which had never learned about `ENABLE_WITTY_PI`.
+
+- **The failure direction was the bad one.** `python3 diagnostics.py` would report a clean
+  bus on a rover whose Witty Pi had fallen off it — a health check that cannot see an
+  absent device.
+- Fixed, and `tests/test_expected_i2c_agreement.py` now compares the two sets directly, so
+  they cannot drift again. **If you add a device, add it to `config.py` and let both sets
+  derive from there** — an address written as a literal in one file and a config name in
+  the other is how this happened.
+- **`0x70` belongs in neither.** It is the PCA9685 all-call broadcast, cleared by
+  `PCA9685.reset()` during construction, so expecting it would make every healthy rover
+  fail its own self-test.
+
+---
+
 ## Power
 
 - Pi 5V rail measured 5.144V under boot load, `vcgencmd get_throttled` = 0x0.
