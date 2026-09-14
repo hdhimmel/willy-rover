@@ -88,7 +88,7 @@ probe at boot.
 | 0x42 | PCA9685 | Steering servos, CH0–CH5 |
 | 0x43 | PCA9685 | Arm servos, CH0–CH6 (CH7 unused, remapped 2026-09-06) |
 | 0x44 | INA260 | **+12V main input** — total system draw (moved upstream 2026-08-28) |
-| 0x45 | INA260 | Pi supply: DROK 9.5V → Witty Pi VIN |
+| 0x45 | INA260 | Pi supply: DROK 9V → Witty Pi VIN |
 | 0x48 | ADS1115 | Battery voltage ADC, A0. **See the divider pitfall below** |
 | 0x4A | BNO085 | 9-DoF IMU |
 | 0x51 | Witty Pi 5 HAT+ | On the Pi header, its own power domain |
@@ -601,7 +601,7 @@ board (owner-confirmed 2026-09-09). Everything live runs off these four DROKs:
 
 | Rail | Volts | Source | Feeds |
 |------|-------|--------|-------|
-| R1 | **9.5V** | DROK-Pi | Witty Pi 5 VIN → Pi | INA260 `0x45` |
+| R1 | **9V** | DROK-Pi | Witty Pi 5 VIN → Pi | INA260 `0x45` |
 | R2 | 5V | DROK-5V | Steering servos, sonar VCC, Pi screen | INA260 `0x40` |
 | R3 | 6V | DROK-6V | Arm servo distribution |
 | R5 | **3.3V** | DROK-4 | **Motor Hall encoders ONLY** (corrected 2026-09-14) |

@@ -101,7 +101,7 @@ that was **not** built.
 
 | Rail | Volts | Source | Feeds | Monitor |
 |------|-------|--------|-------|---------|
-| R1 | **9.5V** | DROK-Pi | Witty Pi 5 VIN → Pi | INA260 `0x45` |
+| R1 | **9V** | DROK-Pi | Witty Pi 5 VIN → Pi | INA260 `0x45` |
 | R2 | 5V | DROK-5V | Steering servos, sonar VCC, Pi screen | INA260 `0x40` |
 | R3 | 6V | DROK-6V | Arm servo distribution | — |
 | R5 | **3.3V** | DROK-4 | **Motor Hall encoders ONLY** — corrected 2026-09-14 | — |
@@ -201,7 +201,7 @@ distribution, bus node board and motor drivers in the body tray.
 | P1 | 2 × 3S 8000mAh → hard parallel, per-pack BMS | 12–14 AWG | BMS per pack |
 | P2 | Battery+ → F1 → KCD4 switch → Q1 FET → +12V bus | 12 AWG | F1 30A ATC |
 | P3 | +12V bus → F2 → **SW-M** → INA260 0x44 → both FeatherWing VIN | 16 AWG | F2 |
-| P4 | +12V bus → F3 → Switch 2 → **DROK-Pi** (**9V or 9.5V — DISPUTED, see below**) | 16 AWG | F3 |
+| P4 | +12V bus → F3 → Switch 2 → **DROK-Pi** (**9V or 9V — DISPUTED, see below**) | 16 AWG | F3 |
 | P5 | +12V bus → F4 → **DROK-5V** input | 16 AWG | F4 10A |
 | P6 | +12V bus → F5 → **SW-A** → **DROK-6V** input | 16 AWG | F5 |
 | P8 | +12V bus → F6 polyfuse (RXEF110 1.1A) → **TPSM84205** (12V→5V) → **AMS1117-3.3** → isolated 3.3V rail (VCC2) | 20–22 AWG | F6 PTC |
@@ -289,7 +289,7 @@ graph TD
 
 | ID | Rail | Source | Feeds | Monitor |
 |----|------|--------|-------|---------|
-| R1 | **9.5V** | **DROK-Pi** buck | Witty Pi 5 VIN (KF350-2P) → Witty Pi → Pi 5 | INA260 **0x45** |
+| R1 | **9V** | **DROK-Pi** buck | Witty Pi 5 VIN (KF350-2P) → Witty Pi → Pi 5 | INA260 **0x45** |
 | R2 | 5V | **DROK-5V** buck | Steering servo distribution, sonar VCC, Pi screen | INA260 **0x40** |
 | R3 | 6V | **DROK-6V** buck | Arm servo distribution | — |
 | R5 | **3.3V** | **DROK-4** buck | **Motor Hall encoders (JGA25-370B) ONLY** — corrected 2026-09-14; I²C device logic runs from the Pi's own 3.3V | — |
@@ -298,17 +298,12 @@ graph TD
 | — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | INA260 **0x44** (P3 monitoring) |
 | — | +12V main | Battery via F1/KCD4/Q1 | All four DROK inputs + isolated power chain (P8) | — |
 
-⚠ **R1 voltage is DISPUTED — meter it (flagged 2026-09-13).** §0 records R1 as
-**9.5V**. But `config.py:212` carries a *verified measurement* of **9.068V**
-("VERIFIED 9.068V"), and `config.py:223`, §2.1's P4 row, §2.1's diagram and §16.4 all
-say 9V. One measurement against one as-built capture, from different dates. Either the
-DROK was readjusted after config.py's measurement, or §0 is wrong. It is one meter
-reading at the Witty Pi VIN terminal — do that before trusting either figure. Rev 2.1
-changed §2.2's R1 row to 9.5V on §0's authority alone; that was premature and is why
-this note exists.
+**R1 = 9V — owner-confirmed 2026-09-14, dispute closed.** §0 briefly recorded 9.5V and
+rev 2.1 propagated that; it was wrong. `config.py:212`'s "VERIFIED 9.068V", §2.1's P4
+row, its diagram and §16.4 were all correct throughout.
 
 ⚠ **DROK inventory status — updated 2026-09-11.** Four DROK adjustable units, **all
-four now fitted and live** (§0): DROK-Pi (**9.5V**, R1), DROK-5V (R2), DROK-6V (R3),
+four now fitted and live** (§0): DROK-Pi (**9V**, R1), DROK-5V (R2), DROK-6V (R3),
 DROK-4 (**3.3V**, R5). The rail voltages are settled; the note below is retained only
 because one question inside it is still genuinely open.
 
@@ -1940,7 +1935,7 @@ listed in §15.8 rather than carried as a line item.
 | 3S BMS 40–60A with balance | One per pack | 2 | Installed |
 | ~~FEICHAO 8A UBEC~~ | Replaced 2026-08-28 — see §15.8 | — | Removed |
 | ~~DZS Elec 12A adjustable buck~~ | Replaced 2026-08-28 — see §15.8 | — | Removed |
-| **DROK-Pi** adjustable buck | 12V → **9.5V** for Witty Pi VIN (R1) | 1 | **Installed** — live rail (§0) |
+| **DROK-Pi** adjustable buck | 12V → **9V** for Witty Pi VIN (R1) | 1 | **Installed** — live rail (§0) |
 | **DROK-5V** adjustable buck | 12V → 5.0V for steering servos, sonar VCC, screen (R2, INA260 0x40) | 1 | **Installed** — live rail (§0) |
 | **DROK-6V** adjustable buck | 12V → 6.0V for arm servos (R3) | 1 | **Installed** — live rail (§0) |
 | **DROK-4** adjustable buck | R5 — **3.3V**, **Hall encoders only** (corrected 2026-09-14). I²C device logic is on the Pi's own 3.3V | 1 | **Installed** — live rail |
