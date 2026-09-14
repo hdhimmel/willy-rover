@@ -76,8 +76,13 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   outstanding.
 
   FR-200 Power            PARTIAL --- rail        Pi rail 5.144V,
-                          measurement only.       throttled 0x0.
-                          BATTERY DIVIDER NOT     ⚠ CORRECTED 2026-09-13:
+                          measurement, and the      throttled 0x0. Divider
+                          BATTERY DIVIDER IS       fed and in spec; the
+                          READING (2026-09-14)     ADS1115 reports real pack
+                                                  voltage (owner, 2026-09-14).
+                                                  Scale factor still wants a
+                                                  re-trim against a meter.
+                                                  Prior note, retained:
                           LIVE-VERIFIED           this row read "battery
                                                   divider live-verified,
                                                   calibrated 2026-08-16".

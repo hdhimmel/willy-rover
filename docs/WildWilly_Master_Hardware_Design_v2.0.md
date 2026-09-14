@@ -145,6 +145,20 @@ matches §3.3's table.
    zero passes straight through. **Do not enable `willy-rover.service` until A0
    is in band.** The divider was added 2026-09-02.
 
+   ⚠ **CLOSED 2026-09-14 (owner): the divider is fed, its voltages are in spec, and the
+   ADS1115 reports real pack voltage.** The 0.0146V reading recorded here was valid when
+   taken — the feed had not yet been connected — and the hardware has since been
+   completed. The shutdown-on-boot risk described below no longer applies, and the
+   service is safe to enable on this account.
+   
+   Two things remain, neither blocking:
+   - **Re-trim `BATTERY_DIVIDER_SCALE` against a meter.** The stored 0.2386 was
+     calibrated for an earlier divider; this one's designed ratio is ~0.2423, about 1.5%
+     off. Low risk, but it is the number `battery_pct` and the shutdown ladder both rest on.
+   - **The software gap stands regardless** — `sensors.py` still cannot tell a real zero
+     from a broken sensor, so a *future* divider fault would repeat this silently. See
+     Software Design §12 item 13.
+
    ⚠ **CORRECTED 2026-09-14 (owner): the divider DOES have a 12V feed.** So this is a
    FAULT, not an unwired board — the diagnosis changes. Fed with 12V, A0 should sit
    around 2.9V; it reads 0.0146V, so something between the feed and A0 is open.
