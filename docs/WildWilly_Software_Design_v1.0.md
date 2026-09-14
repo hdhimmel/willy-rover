@@ -931,10 +931,12 @@ wants it.
     (Master Hardware Design §0). The loose 3.3V wire and the non-responding 0x40
     both belonged to a bus that no longer exists.
 12. ~~**Power delivery reworked 2026-08-23.**~~ — **CLOSED 2026-09-11.** Witty Pi
-    is fed from DROK-Pi, and Master Hardware Design §0 records that rail as
-    **9.5V**, not the ~9V written here. The under-voltage problem it was chasing
-    was separately root-caused to a degraded AMS1117 (2026-08-21) and the rail has
-    since been rebuilt entirely.
+    is fed from DROK-Pi at **~9V**, which is what this item said and what
+    `config.py:212` measured (9.068V). *(My 2026-09-11 closure claimed §0 recorded
+    9.5V and that this item was wrong; §0 was the wrong one, owner-confirmed
+    2026-09-14.)* The under-voltage problem it was chasing was separately
+    root-caused to a degraded AMS1117 (2026-08-21) and the rail has since been
+    rebuilt entirely.
 13. **Battery divider has no feed — a SOFTWARE gap, not only a hardware one.**
     Master Hardware Design §0 records ADS1115 A0 reading 0.0146V because the
     divider is unfed. `sensors.py`'s guard catches a *failed* read; it does not
