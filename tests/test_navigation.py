@@ -192,7 +192,19 @@ print("NAV_SIM_OK")
 def test_navigation_full_lifecycle_under_simulation():
     env=dict(os.environ,WILLY_SIMULATE='1')
     result=subprocess.run([sys.executable,'-c',_NAV_SCRIPT],cwd=_REPO_ROOT,env=env,
-                           capture_output=True,text=True,timeout=30)
+                           capture_output=True,text=True,timeout=180)
+                           # 30s until 2026-09-14. These spawn a real interpreter that imports
+                           # the whole stack under WILLY_SIMULATE, which takes ~20s alone on this
+                           # Pi -- leaving ~10s of headroom, so the test failed whenever anything
+                           # else was running. It tipped over on roughly half of full-suite runs
+                           # and on every run sharing the machine with the Hailo batch.
+                           #
+                           # A test that fails for load rather than for a defect is worse than no
+                           # test: it trains the reader to ignore red, which is how a real failure
+                           # gets waved past. Raised to 180s -- generous on purpose, because the
+                           # point of the timeout is to stop a hang running forever, not to
+                           # measure performance. Tick-timing regressions are test_tick_timing.py's
+                           # job and it asserts on measured durations, not on wall-clock here.
     assert 'NAV_SIM_OK' in result.stdout, (
         f'sim-mode navigation lifecycle failed\n--- stdout ---\n{result.stdout}\n'
         f'--- stderr ---\n{result.stderr}')
