@@ -770,6 +770,48 @@ visible as a logged overrun before it became a kill.
 > zero, and the previous three attempts to tune this family of prompts each fixed one
 > model by breaking another.
 >
+> **WHY THE MODEL IS CONFIDENTLY WRONG — answered 2026-09-14, and it closes the
+> confidence-tuning question for good.** Full per-case classification, with raw model
+> output, in `experiments/results/2026-09-14-failure-classification.md` and its JSON.
+>
+> The self-reported confidence is a **stylistic artifact of a fluent completion, not an
+> estimate**. Over 96 calls the distributions are identical:
+>
+> | self-reported confidence | correct (n=76) | wrong (n=11) |
+> |---|---|---|
+> | 0.8 | 28 | 7 |
+> | 0.9 | 32 | 2 |
+> | 1.0 | 13 | 2 |
+>
+> The model **never emitted a value below 0.8 for any case**. It writes the confidence
+> field the way it writes the `reply` field: plausible text of the requested shape, with no
+> internal uncertainty behind it. **Therefore no threshold can filter this model's errors —
+> not 0.7, not 0.9, not any value** — because a gate can only separate populations that
+> differ, and these do not. That is a stronger result than item 2 above: even on the voice
+> path, where the model's number *is* read, it carries no information.
+>
+> Wrong answers are not random. All 11 collapsed into just two attractor intents —
+> `arm_home` (6) and `where_are_you` (5) — so the model is not choosing badly among sixteen
+> intents, it is falling back to the same two when it fails to match.
+>
+> **The CPU model got 11 of 11 of those right**, on the same prompt and schema. So this is
+> model capability, not prompt engineering — which is the evidence for not spending another
+> pass on prompt or sampling tuning.
+>
+> Category totals: 52 of 96 are `normalization_gap` (correct intent, spurious `args` that
+> the benchmark scores as failure and the rover ignores), 21 strictly actionable, 11
+> confident-wrong, 9 parse failures, 3 correct-but-escalated. **73 of 96 (76%) produced the
+> correct intent** — the largest bucket is not wrong answers but correct ones the benchmark
+> penalises.
+>
+> 24 of 32 utterances fail identically in all three repeats, so these are reproducible
+> defects rather than sampling noise, and each is individually addressable.
+>
+> **The one failure with a safety consequence** is `stop` → `where_are_you` at confidence
+> 0.8 for "whoa whoa please stop right now". Bare "stop" never reaches the model
+> (`_fast_path` `fullmatch`), but a sentence does. That fix belongs in `voice.py`, not in
+> the model or the floor.
+>
 > Regression cover added: `tests/test_hailo_chatml.py` (6) pins the framing ---
 > role markers, the trailing assistant handoff, the system turn, no double
 > wrapping; `tests/test_hailo_generation_params.py` (4) pins that the parameters
