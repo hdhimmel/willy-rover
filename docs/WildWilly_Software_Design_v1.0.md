@@ -2,7 +2,7 @@
 
 ## Software Design — As-Built
 
-**Revision 1.0 · Current Implementation**
+**Revision 1.1 · Current Implementation · 2026-09-14**
 
 ---
 
@@ -13,10 +13,10 @@
 | Project | WildWilly Autonomous Rover |
 | Document | Software Design — as-built implementation |
 | Revision | 1.1 |
-| Date | 2026-09-11 |
+| Date | 2026-09-14 |
 | Owner | Howard Himmel |
 | Status | Implemented and off-hardware tested; partially live-verified. **Filename retains `v1.0` deliberately** — renaming breaks cross-references in the Master Hardware Design, the FRD and `CLAUDE.md`. The Revision field is authoritative. |
-| Supersedes | Nothing. First revision. |
+| Supersedes | Software Design v1.0 (2026-08-18) |
 | Companions | Master Hardware Design **rev 2.1**; Functional Requirements v3.1 |
 
 **Scope of this document.** This describes the software as it is currently
@@ -36,7 +36,7 @@ separate.
 | Property | Value |
 |----------|-------|
 | Host | Raspberry Pi 5 (8GB), Debian 13 Trixie, Python 3.13.5 |
-| Boot | 1TB SSD |
+| Boot | ⚠ **SSD size DISPUTED — check before sizing anything against it.** This says **1TB**; Master Hardware Design §15.1 says **SanDisk Extreme PRO 500GB**. One is wrong. `lsblk -d -o NAME,SIZE,MODEL` on the rover settles it in a second; the rover was powered down when this was found (2026-09-14). Matters for log retention and map storage sizing |
 | Entry point | `main.py` → `RoverBrain().run()` |
 | Process management | systemd unit `willy-rover.service`, `Restart=on-failure` |
 | Modules | 26 Python files at repository root |
@@ -49,7 +49,7 @@ separate.
 Line counts below for `brain.py`, `config.py`, `voice.py`, `vision.py`, and
 `ai_provider.py` are current as of 2026-08-23 (all five changed materially
 this session — Hailo vision/voice work, Witty Pi, arm remap). Everything else
-in this table is carried over from the prior revision and due a fuller
+in this table is carried over from v1.0 (2026-08-18) and due a fuller
 refresh; treat those as approximate.
 
 | Module | Lines | Responsibility |
@@ -532,6 +532,15 @@ arbitration logic, no new FSM state and no threshold changes: `DIST_STOP`,
 `DIST_SLOW`, `DIST_CLEAR`, `_roam()`, `_slow()` and `_avoid()` all keep working
 against the same dict key.
 
+**But it does introduce a calibration dependency into the reflex layer, and that is
+new for this codebase.** "No new state" is true of the FSM; it is not true of
+persisted state. The reflex path now depends on 64 stored floor values, and a stale
+profile — after a bracket shift, or a different floor surface — degrades obstacle
+detection. The failure direction is favourable (phantom obstacles, so he stops for
+nothing rather than driving into something) and §6.5's re-run procedure and
+uncalibrated-reports-nothing rule cover it. Name the coupling anyway: **every other
+input to the reflex layer is stateless, and this one is not.**
+
 **This sensor may live in the reflex layer, and vision may not.** §2.1's rule is
 that an obstacle stop must never depend on something with variable latency. At 15Hz
 with deterministic timing the ToF qualifies; the NPU does not. This is the first
@@ -680,7 +689,7 @@ gate E-stop once the sense pin exists; this is not a placeholder built ahead
 of the hardware, it's a real behavior change for the three faults that
 already fire today. `tests/test_brain_reset_gate.py` covers the brain.py-side
 logic off-hardware; the touchscreen's own tap detection needs the physical
-5" DSI panel (Master Hardware Design v2.0 §15.3) to verify.
+5" DSI panel (Master Hardware Design rev 2.1 §15.3) to verify.
 
 **S-2 — Encoder polling under-samples at speed. RECOMPUTED 2026-09-13, and the
 answer got worse.**
