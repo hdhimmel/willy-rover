@@ -253,16 +253,20 @@ front and right sonar read fine, left returns garbage.
   **but the mapping itself is unverified.** Re-run the one-wheel test before trusting
   per-wheel odometry, stall attribution, or crab steering. See Master Hardware Design
   v2.0 §7.2.
-- **Arm servo connector(s) found disconnected under the cover, 2026-08-20 — unresolved,
-  physical fix needed.** Voice-triggered `arm_home`/`wave` both dispatched correctly in
-  software (heard, matched, `brain.py::_drain_voice_commands()` called `arm.center_all()`/
-  `_start_wave()`, TTS ack played) but produced zero physical motion. Owner felt the wrist
-  joint resist manual movement (taut, consistent with a powered/holding servo elsewhere on the
-  chain), then opened the cover and found some servo connector(s) actually unplugged — this is
-  the real cause, not the live under-voltage issue investigated the same day (that remains a
-  separate, still-open item — see Power section). Re-seat the disconnected connector(s) and
-  retest with a voice `arm_home` before assuming this is closed; which specific joint(s) were
-  disconnected was not identified before stopping for the day.
+- **Arm servo connector(s) — RECONNECTED 2026-09-14, owner-confirmed.** Open from
+  2026-08-20, when voice `arm_home`/`wave` dispatched correctly in software (heard,
+  matched, `brain.py::_drain_voice_commands()` called `arm.center_all()`/`_start_wave()`,
+  TTS ack played) and produced zero physical motion. The cause was unplugged servo
+  connector(s) under the cover, not the under-voltage issue investigated the same day.
+
+  **Not yet retested.** The connector is fixed; nobody has issued a voice `arm_home` and
+  watched it move. Do that before treating the arm as working — it is one command and it
+  is the difference between "wired" and "works".
+
+  This unblocks three things that were all waiting on it: **`arm_jog.py` calibration**
+  (per-joint limits are still recorded "Not tested", and nothing else unblocks
+  retrieval), the **door-knock** design, and the **arm reach envelope** the lidar
+  mounting question needs.
 - **Motor− (white) never lands on an MCP23017 GPIO.** It goes to a FeatherWing
   motor terminal. A motor lead on a logic pin destroyed the first MCP23017.
 - **ADS1115 A0 must read 2.76–3.06V before the ADC is powered.** It sits on a
