@@ -83,22 +83,13 @@ Both hubs are **passive fan-outs**, so this is **one electrical segment**. There
 is no segmentation and no containment: any device holding SDA or SCL low takes
 the entire bus down. That happened repeatedly on 2026-09-07/08.
 
-⚠ **DISPUTED — still unresolved, but the stakes changed 2026-09-14.** This section
-says the 4.7kΩ rail pull-ups are re-fitted; §3.2 and the §15 BOM both say they were
-REMOVED on 2026-09-07. Two sources against one, and the minority is this one — the
-section everyone reads first.
+**RESOLVED 2026-09-14 — the 4.7kΩ rail pull-ups are NOT fitted.** Owner-confirmed.
+This section previously claimed they were re-fitted, contradicting §3.2 and the §15
+BOM, which both said removed. §3.2 and the BOM were right.
 
-**It no longer decides whether the bus works.** §3.2's recomputation shows the Pi's own
-1.8kΩ pull-ups on GP2/GP3 now serve the entire segment, since the ISO1540 that used to
-isolate them is gone. 1.8kΩ alone is comfortably adequate at this capacitance, and the
-20 consecutive clean scans recorded below are the proof.
-
-**What it now decides is the sink budget.** 1.8kΩ at 3.3V is ~1.8mA; the 4.7kΩ pair
-plus uncatalogued breakout pull-ups in parallel push the total toward the ~3mA an I²C
-device is specced to sink. **The risk is too strong, not too weak.** Still meter
-SDA↔VCC and SCL↔VCC with power off — ~1.3kΩ or below means the pair is fitted and the
-budget is tight; ~1.8kΩ means it is not and you are on the Pi's pull-ups alone, which
-is fine. Correct whichever section is wrong and strike this warning.
+The bus therefore runs on the **Pi's own 1.8kΩ pull-ups on GP2/GP3**, plus whatever
+the device breakouts carry. That is adequate — see §3.2's recomputation — and the 20
+consecutive clean scans confirm it.
 
 A TCA9548A multiplexer (strapped
 `0x74`) was bought, wired and proven working during the 2026-09-07/08 debugging,
@@ -689,7 +680,7 @@ they pull up the entire bus.
 |--------|-------|----------|
 | **Pi internal, GP2/GP3** | **1.8kΩ** | **Yes — on the board, always** |
 | ~~ISO1540 onboard~~ | ~~10kΩ × 2~~ | **Gone with the part, 2026-09-08** |
-| ~~4.7kΩ rail pair (R1/R2)~~ | ~~4.7kΩ~~ | Removed 2026-09-07 — **and §0 disputes this**, see below |
+| ~~4.7kΩ rail pair (R1/R2)~~ | ~~4.7kΩ~~ | **NOT FITTED — owner-confirmed 2026-09-14.** Removed 2026-09-07; §0's contrary claim is withdrawn |
 | Device breakouts | typically 10kΩ each | Uncatalogued; in parallel they only strengthen the total |
 
 **At 1.8kΩ alone the bus is comfortably fine**, which is the point the old text could
@@ -705,12 +696,11 @@ not reach:
 scans with zero bus errors on 2026-09-08, stable across power cycles. A bus with
 inadequate pull-ups does not do that.
 
-**So the 4.7kΩ question is much less urgent than §0 and §12 imply.** Whether that pair
-is fitted decides whether the total is ~1.8kΩ or ~1.3kΩ — both fine. It is worth
-metering, but for the *opposite* reason to the one recorded: the risk is now the sink
-budget, not the rise time. 1.8kΩ at 3.3V is ~1.8mA; add the 4.7kΩ pair and parallel
-breakout pull-ups and the total climbs toward the ~3mA a device is specced to sink.
-**Too strong, not too weak, is the live concern.**
+**The 4.7kΩ question is CLOSED (owner-confirmed 2026-09-14): they are not fitted.**
+The bus runs on the Pi's 1.8kΩ plus uncatalogued breakout pull-ups — comfortably
+adequate, and confirmed by 20 consecutive clean scans. Sink current from the Pi's pair
+alone is ~1.8mA against the ~3mA a device is specced for, so there is headroom but not
+a lot: **do not add pull-ups anywhere without measuring the combined value first.**
 
 **The old warning about not adding pull-ups is now the general case.** It said "do not
 add pull-ups on Side 1 — that side sinks only 3.5mA". There is no Side 1; the
