@@ -1049,7 +1049,7 @@ removed 2026-09-08 with the rest of the isolated-bus hardware. Until its
 replacement arrives the header has no breakout: everything lands on the Pi's
 40-pin header directly.
 
-**Replacement: a screw-terminal breakout HAT — INSTALLED 2026-09-14** (Xikentec HDO040, owner-confirmed).
+**Replacement: GeeekPi Micro GPIO Terminal Block Breakout Board — INSTALLED 2026-09-14** (owner-confirmed; *not* the Xikentec HDO040 photographed on 2026-09-09, which was a different candidate).
 **Thirteen** lines have to land on it, fourteen with the optional ToF return:
 
 | # | Line | Pi pin | Notes |
@@ -1094,6 +1094,15 @@ person wires SPI to an SPI-named terminal that is running a UART.
 idles at 5V and the Pi's GPIO is not 5V tolerant, so the divider must never end
 up downstream of the breakout — §16.13 check 6 is the bench test for this
 (3.2–3.4V at each junction).
+
+**Two things to confirm on this specific board.** First, **whether it carries per-pin
+LEDs.** GeeekPi's "Micro" terminal blocks are generally passive; their HAT variant has
+status LEDs. If there are none, this board adds no load anywhere and the ECHO-divider
+and SDA/SCL loading concerns raised for the HDO040 candidate do not apply. Second, the
+listing names Pi 4B/3B+/3B/2B/Zero and **does not mention the Pi 5** — for a passive
+1:1 passthrough that is almost certainly a marketing omission rather than an
+incompatibility, since the header pinout is unchanged, but confirm nothing on the board
+assumes a pre-Pi-5 pin function.
 
 Passivity remains a requirement, not a convenience: whatever the replacement is,
 anything it adds to GP2/GP3 counts against the bus budget (§3.2), and the bus has
@@ -1790,7 +1799,7 @@ overtaken are corrected below rather than left standing.
 | Pi boots from battery, not USB-C | PASS | Rail 5.144V against a 4.85V floor; `vcgencmd get_throttled` = 0x0, clearing the sticky since-boot bit as well as the live one |
 | Serial console disabled, GP14/GP15 free | PASS | `gpioinfo` shows both unused on the header gpiochip |
 | Bus node board fully populated | PASS | All rail positions landed |
-| Breakout connections verified | **NOT YET — HAT installed 2026-09-14** | Xikentec HDO040 fitted; connections not re-verified. The Seengreat PX00 it replaced is out of the build (§0). Re-run the §16.13 checks, in particular check 6: **re-meter the three ECHO divider junctions for 3.2–3.4V WITH the HAT fitted** — its per-pin LEDs are parallel load at exactly those nodes, so a reading taken before fitting does not hold |
+| Breakout connections verified | **NOT YET — breakout installed 2026-09-14** | GeeekPi Micro GPIO Terminal Block fitted; connections not re-verified. Re-run the §16.13 checks, in particular check 6 — the three ECHO divider junctions at 3.2–3.4V. **If this board has no per-pin LEDs** (the "Micro" line generally does not, unlike GeeekPi's LED variant) then it is electrically passive and adds no load, which removes the LED concerns that applied to the HDO040 candidate. **Confirm that before skipping the re-meter** |
 | AI accelerator PCIe bond | PASS | `/dev/hailo0`; firmware 5.1.1, HAILO10H |
 | Pi-rail INA260 address | **PASS — 0x45** (corrected 2026-09-13) | `config.py:212` `INA260_PI_ADDR=0x45` ("VERIFIED 9.068V"); `config.py:210` `INA260_MOTOR_ADDR=0x44` is the +12V bus. This row said 0x44 — stale from before the 2026-08-28 correction recorded in §15.8, and it survived the rev 2.1 pass. §0, §2.2 and §16.4 were right |
 | Sonars connected | Connected, not range-tested | — |
@@ -1933,7 +1942,7 @@ listed in §15.8 rather than carried as a line item.
 | OV9782 (USB) | Rear camera | 1 | Installed |
 | USB PnP **Audio** Device puck (`0c76:1203`) | Voice OUTPUT — speaker. Its mic is unused (§5.5) | 1 | Installed |
 | USB PnP **Sound** Device (`08bb:2902`) | Voice INPUT — microphone, capture-only, 48kHz native | 1 | Installed |
-| **Xikentec HDO040** screw-terminal GPIO breakout HAT | 40-pin breakout + per-pin LEDs, **13 lines** — 14 with the optional ToF UART return. Count from §5.3's table, not from prose. Replaces the removed Seengreat | 1 | **Installed 2026-09-14** |
+| **GeeekPi Micro GPIO Terminal Block** breakout | 40-pin passive breakout, **13 lines** — 14 with the optional ToF UART return. Count from §5.3's table, not from prose. Replaces the removed Seengreat | 1 | **Installed 2026-09-14** |
 | **DFRobot SEN0628** — VL53L7CX + RP2040, 8×8 ToF | Front obstacle sensing ALONGSIDE sonar, not replacing it (§6.5). UART or I²C | 1 | **Ordered 2026-09-13.** Replaces the MusRock breakout ordered 2026-09-10, which did not arrive |
 | Raspberry Pi Active Cooler | Pi 5 blower + heatsink | 1 | Installed |
 | 5V case fan, 30–40mm | Head assembly exhaust | 1 | Installed |
