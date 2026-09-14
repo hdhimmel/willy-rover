@@ -1010,18 +1010,53 @@ timeout, mid-flight obstacle abort, and `emergency_stop()`.
 
 ## 10.1 Tests added 2026-09-14
 
+**398 passing.** A single day's work, so the dates are all the same; the grouping below is by
+what the tests protect rather than by when they were written.
+
+### The Hailo investigation and its fixes
+
 | File | Covers |
 |---|---|
+| `test_hailo_chatml.py` (6) | ChatML role framing — the root cause of the 0%. Pins the role markers, the trailing assistant handoff, the system turn, and no double-wrapping |
+| `test_hailo_statelessness.py` (11) | Repeated calls on one long-lived model — the 2026-08-23 context-accumulation degradation |
+| `test_hailo_generation_params.py` (4) | Generation parameters actually reach `generate_all()`. A knob that never arrives is worse than no knob: the batch result gets attributed to a setting that was never in effect |
+| `test_hailo_device_sharing.py` (6) | The shared `Hailo.TARGET` singleton is reused, not replaced, and `TARGET_REF_COUNT` increments only **after** `LLM()` succeeds — incrementing first leaks the count on a load failure and the device is never released |
+| `test_ai_provider_normalisation.py` (11) | Placeholder `args` values dropped, missing `args` defaulted, and the limits of both — a missing `reply`, a missing `intent` and a wrongly-typed `args` are all still rejected |
+| `test_stuck_prompt.py` (11) | The STUCK motion prompt's shape, that `brain.py` and the harness use one shared builder, and an AST sweep for the old placeholder literal |
+
+### Safety boundary — what may reach the motors
+
+| File | Covers |
+|---|---|
+| `test_emergency_stop_phrases.py` (40) | 24 phrasings that must reach the deterministic stop path, 12 that must not. Negation, discussion-of-stopping, and the `stop_map` hijack |
+| `test_malformed_model_output.py` (38) | Every malformed shape — truncated, wrong schema, empty, `None`, bare stop token, the echoed prompt template — asserted on `parse_success`, plus the property stated directly over all of them at once |
+| `test_confidence_gate_semantics.py` (14) | `action_confidence` is binary, so every floor in (0.0, 1.0] behaves identically. Pinned so this cannot silently become a real threshold again |
+| `test_stuck_ai_fallback_chain.py` (1 test, 8 cases) | Which AI results may reach `_apply_ai_motion`. A failed parse, an invalid action, an in-flight poll and an already-executing move reach the wheels never |
+| `test_reflex_deliberative_separation.py` (5) | No reflex module (`sensors.py`, `safety.py`, `motors.py`) imports or even mentions an AI backend; `SafetyController` constructs and emergency-stops with no AI present |
+
+### Infrastructure
+
+| File | Covers |
+|---|---|
+| `test_sd_notify.py` (6) | sd_notify wire format, inertness without `NOTIFY_SOCKET`, abstract-socket translation, no exception into the 20 Hz tick from a dead socket, and that `READY=1` survives a failed self-test |
+| `test_expected_i2c_agreement.py` (5) | `brain.py` and `diagnostics.py` must expect the same bus |
 | `test_identity_store.py` (16) | FR-2100 store/matcher — three bands, pending-is-inert, wipe |
 | `test_battery_plausibility.py` (7) | §12 item 13 — a broken sensor is not a flat pack |
 | `test_tof.py` (17) | Floor profile, obstacle/drop classification, availability |
 | `test_sonar_tof_fusion.py` (7) | `min()` fusion, incl. the glass case sonar must still catch |
-| `test_hailo_statelessness.py` (11) | Repeated calls on one long-lived model — the 2026-08-23 degradation |
-| `test_expected_i2c_agreement.py` (5) | `brain.py` and `diagnostics.py` must expect the same bus |
 
-Two of these exist because a **single-call test cannot see the bug**. The Hailo
-degradation only appeared from the second classification onward, and the I²C drift
-only appeared when two files were compared. Both had been live for weeks.
+### Why several of these exist
+
+**A single-call test cannot see the bug.** The Hailo context degradation only appeared from the
+second classification onward. The I²C drift only appeared when two files were compared. The
+device-sharing refcount leak has no symptom until the *next* process start. All three had been
+live for weeks behind passing tests.
+
+**Three of them were written wrong before the code was.** In each case the test was corrected,
+not the code: an array-wrapped payload is legitimately *recovered* rather than rejected; `READY=1`
+lives in `start()` rather than `__init__`; and a repo-wide grep for the old prompt literal had to
+become an AST scan, because docstrings quote that literal deliberately to record the fix. Noted
+because "the test failed so the code is wrong" is the assumption that makes tests expensive.
 
 ## 11. Configuration
 
@@ -1047,6 +1082,14 @@ wants it.
 ---
 
 ## 12. Open Actions
+
+> **Bench procedures prepared 2026-09-14.** Every item below that needs the physical rover now
+> has a written procedure with a blank result field in
+> `docs/WildWilly_Bench_Test_Procedures.md` — motor mapping (M-1), encoders (E-1), arm (A-1),
+> vision range (V-1), ToF (T-1), battery divider (B-1), watchdog (W-1). That document opens by
+> separating what is already **proven in software** (and needs no bench time) from what still
+> requires hands on hardware. **No result in it has been observed**; the fields stay blank until
+> someone runs the procedure and writes down what happened.
 
 1. ~~Repoint `CLAUDE.md`.~~ Done 2026-08-18 — points at the current trio now,
    with an explicit note on the rev 6.2.0-is-real-but-uncommitted situation.

@@ -445,6 +445,66 @@ Two preconditions must both be met before this line goes back:
    deadline, and a failed self-test that never sends `READY=1` would then count
    as a failed start --- a behaviour change worth deciding on deliberately.
 
+**Update 2026-09-14 --- both preconditions are now implemented and staged, and
+one of them was misunderstood until it was tested.** Nothing is installed; the
+watchdog still has never run in this deployment. What changed is that arming it
+is now a measurement and a bench session rather than an open design question.
+
+Precondition 1 is met by `willy-rover-watchdog.service.prepared` --- a separate
+unit carrying `Type=notify` and `NotifyAccess=main`, deliberately named
+`.prepared` so a wildcard copy into `/etc/systemd/system` cannot pick it up.
+It is a *second* unit rather than an edit to `willy-rover.service`, so rollback
+is one command.
+
+Precondition 2 is met by `scripts/measure_startup.py`, which produces the two
+numbers nobody had: wall time to `READY=1`, and the worst gap between
+`WATCHDOG=1` heartbeats. It launches `main.py` with its own `NOTIFY_SOCKET`, so
+it observes exactly what systemd would receive without installing a unit, using
+`systemctl`, or disturbing a running rover. It reports the **worst** startup
+rather than the median, because under `Type=notify` that figure is the start
+deadline and a cold page cache or a retried I²C probe lands on the tail.
+
+**The behaviour change flagged above --- "a failed self-test that never sends
+`READY=1` would count as a failed start" --- turns out not to apply.** `brain.py`
+sends `READY=1` on *both* the pass and fail branches of the self-test
+(`RoverBrain.start`), so a rover that fails its self-test comes up degraded with
+motion disabled and stays up, rather than being restart-looped by systemd. That
+is the desired behaviour and it is now pinned by
+`tests/test_sd_notify.py::test_ready_is_sent_even_when_the_self_test_fails`,
+because moving that call inside the success branch would silently convert a
+recoverable degraded state into a crash loop on a rover that cannot see its own
+sensors.
+
+**A third problem was found by testing the prepared unit rather than reasoning
+about it, and it is the most dangerous of the three.** The unit's two timing
+values are `__MEASURE__` placeholders. The assumption was that systemd would
+reject them. It does not --- verified with `systemd-analyze`:
+
+```
+Failed to parse TimeoutStartSec= parameter, ignoring: __MEASURE__
+Failed to parse WatchdogSec=__MEASURE__, ignoring: Invalid argument
+```
+
+systemd logs a warning, **ignores both lines, and starts the unit with the
+defaults** --- and the default `WatchdogSec` is *disabled*. So the failure mode
+of installing it half-finished was not a refusal to start; it was a rover coming
+up perfectly cleanly while whoever installed it believed a watchdog was running
+and nothing was watching at all. That is the same silent-failure shape as the
+original `Type=simple` defect: a protective mechanism that is inert while
+appearing configured. The refusal is now enforced explicitly by an
+`ExecStartPre` guard that fails the start while any placeholder remains,
+verified in both directions.
+
+Bench validation before arming is procedure **W-1** in
+`docs/WildWilly_Bench_Test_Procedures.md`: measure, fill both values,
+sanity-check `WatchdogSec` against `TICK_OVERRUN_THRESHOLD_S` (a watchdog below
+the tick-overrun threshold kills the process before it has logged that it was
+running slow, destroying the evidence for why it died), then ten restarts with
+the rover on blocks, then an induced stall to confirm the watchdog actually
+bites. The software half is already verified --- `tests/test_sd_notify.py` (6)
+covers the wire format, inertness without `NOTIFY_SOCKET`, abstract-socket
+translation, and that a dead socket never raises into the 20 Hz tick loop.
+
 `WatchdogSec` is commented out in the repository unit as of 2026-09-07 with
 these preconditions recorded inline, so the next person cannot arm it by
 copying the file. **The watchdog has therefore still never run in this
@@ -640,14 +700,33 @@ visible as a logged overrun before it became a kill.
 > has a number attached — bare "stop" is safe by construction, conversational
 > "please stop right now" is not.
 >
-> This is an owner decision, not a documentation one, and three options exist:
-> widen the stop pattern with an explicit `don't|do not|never` guard rather than
-> relying on `fullmatch` alone; accept it on the grounds that the wake-word turn
-> plus STT latency (~17s end to end) already makes voice unsuitable as an
-> emergency stop, and point users at the physical control instead; or leave it and
-> record it. **What must not happen is leaving it unrecorded**, because the
-> current design reads as though voice-stop is covered, and for sentence-form
-> phrasings it is not.
+> ~~This is an owner decision, and three options exist...~~ **DECIDED AND FIXED
+> 2026-09-14.** `voice.py::is_emergency_stop()` now claims natural stop language
+> deterministically, before any model is consulted.
+>
+> It was **not** fixed by making the matcher broader, which the owner explicitly
+> ruled out. Nor by switching `fullmatch` to a keyword search — that would have
+> broken an existing requirement, since `tests/test_voice_fast_path.py` pins that
+> "we should stop soon" must NOT fire. Discussing stopping is not commanding it.
+> Instead the structure stays `fullmatch` — which is what makes a negation
+> structurally impossible to admit — and what widened is the *vocabulary* of
+> interjections and intensifiers around a narrow imperative core. An
+> unanticipated phrasing still falls through to the LLM exactly as before. An
+> explicit negation guard sits in front as defence in depth, so the requirement is
+> legible to whoever widens the prefix list next rather than merely emergent.
+>
+> Ordered **after** the existing fast-path table, so a task-directed stop
+> ("stop mapping") is still claimed by its own pattern rather than swallowed.
+>
+> `tests/test_emergency_stop_phrases.py` (40) pins 24 phrasings that must reach the
+> deterministic path and 12 that must not, plus that `_fast_path` takes no provider
+> argument — a stop cannot acquire a dependency on a model — and that stop is
+> dispatched to `stop_requested` rather than queued.
+>
+> **The remaining exposure is latency, not classification.** A wake-word turn plus
+> STT is ~17s end to end, so voice is not an emergency stop under any
+> implementation. The physical control remains the emergency stop; this change
+> makes the voice path reliable, not instant.
 >
 > **Why this gap stays open.**
 >

@@ -316,7 +316,20 @@ citing the old, superseded wording:
    CH0 pitfall in "Hardware pitfalls" above before commanding the arm.
 
 Still genuinely open (not a doc contradiction — a real unverified-hardware
-item, tracked in Master Hardware Design v2.0 §14):
+item, tracked in Master Hardware Design v2.0 §14).
+
+**Before working any hardware item, read `docs/WildWilly_Bench_Test_Procedures.md`.**
+Prepared 2026-09-14, it holds a written procedure for each one — motor mapping (M-1),
+encoders (E-1), arm (A-1), vision range (V-1), ToF (T-1), battery divider (B-1), systemd
+watchdog (W-1) — with the pass criteria and the interpretation rules decided *in advance*,
+so a reading cannot be rationalised after the fact. It also opens by listing what is
+already **proven in software**, so no bench time is spent re-establishing it. **Every result
+field in that document is blank and must stay blank until someone runs the procedure on the
+physical rover.** Write results into that file and commit them; a measurement that lives
+only in a chat log is a measurement nobody can check.
+
+Suggested order is M-1 first: every per-wheel claim — odometry, stall attribution, crab
+steering, autonomous recovery — depends on knowing which wheel is which.
 
 3. **Motor crimps unverified.** Five of six motors have not been checked
    against the corrected colour scheme (Red=Motor+, White=Motor−, Blue=Enc
@@ -326,6 +339,21 @@ item, tracked in Master Hardware Design v2.0 §14):
 ---
 
 ## Architecture constraint — keep the NPU out of the safety path
+
+> **PERMANENT, decided 2026-09-14: the model's self-reported confidence must never authorize a
+> physical action.** Not by raising `HAILO_LLM_CONFIDENCE_FLOOR`, not by lowering it, not by
+> adding a second threshold anywhere. Measured over 96 calls, the confidence distributions for
+> correct and wrong answers are **identical** (0.8/0.9/1.0 in both), and the model never emitted
+> a value below 0.8 for anything. A gate can only separate populations that differ. This is not a
+> threshold awaiting a better value — it is a signal with no information in it, and no amount of
+> tuning changes that. Full data: `experiments/results/2026-09-14-failure-classification.md`.
+>
+> Which functions may use which reasoner is recorded in **Software Design v1.0 §6.7** (Tier A
+> deterministic-only, Tier B model-proposes-safety-disposes, Tier C model-is-fine). The rule
+> throughout: **the model may recommend an action; it must never be the authority that makes the
+> action safe.** Enforced by `tests/test_reflex_deliberative_separation.py` and
+> `tests/test_no_direct_drive_bypass.py`.
+
 
 An AI HAT+ 2 (Hailo-10H) is installed and PCIe-bonded as of 2026-08-16 (`/dev/hailo0`,
 `hailortcli fw-control identify` reports firmware 5.1.1, architecture HAILO10H). This was a

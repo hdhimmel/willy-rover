@@ -1849,6 +1849,13 @@ measurement work rather than wiring.
 
 ## 14. Open Items
 
+> **Bench procedures prepared 2026-09-14.** The hardware-blocked items in this section now have
+> written procedures with blank result fields in `docs/WildWilly_Bench_Test_Procedures.md`,
+> including the interpretation rules decided *in advance* so a reading cannot be rationalised
+> after the fact. **No result in that document has been observed.** Suggested order is M-1 motor
+> mapping first, because every per-wheel claim — odometry, stall attribution, crab steering —
+> depends on knowing which wheel is which.
+
 1. **Motor crimps** — five of six unverified against the colour scheme in
    §7.1. Meter before first motion.
 2. ⚠ **Battery divider calibration — REOPENED 2026-09-13.** It was closed on
