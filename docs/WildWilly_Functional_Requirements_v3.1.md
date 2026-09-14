@@ -1205,6 +1205,11 @@ from a revision older than 2026-09-06 is stale.
                     permission before                   
                     unprompted                          
                     autonomous motion                   
+
+  FR-1000-006       Navigate to a     Medium            Test
+                    named room and
+                    find the person
+                    in it
   -----------------------------------------------------------------------
 
 # Acceptance Criteria
@@ -1227,6 +1232,32 @@ separately under FR-1200.
 
 -   **FR-1000-004 (handover).** Operator control is regained on demand within
     one control cycle, from any autonomous state.
+
+-   **FR-1000-006 (come to me).** Added v3.3. Design:
+    `docs/superpowers/specs/2026-09-10-come-to-me-design.md`. **NOT IMPLEMENTED** ---
+    no `come_to_me_task.py`, no room-labelling tools.
+
+    One spoken command --- *"Willie, I'm in the kitchen, come to me"* --- routes him to
+    a named room **through labelled doorways, not centroid-to-centroid**, then has him
+    find the speaker there. **Arriving is not success**: success is being within
+    `PURSUIT_STANDOFF_CM` of an actual person, and arriving without finding anyone is a
+    distinct, separately-spoken outcome.
+
+    **Blocked on hardware, not design.** `Navigator` steers by `odometry.pose` and the
+    encoders have produced no edges since 2026-08-25. The *find* leg is not blocked and
+    can be built and live-tested today.
+
+    Two prerequisites belong to this requirement rather than to separate work: a
+    **search sweep** --- `PursuitTask` currently re-examines the same view and gives up
+    without moving, so he can approach a person he already sees but cannot look for one
+    --- and a **per-class width table**, since `localize()` assumes an 8cm object and a
+    person therefore ranges about 6x too near, making him report "arrived" from across
+    the room.
+
+    If a doorway is shut he **knocks and asks to be let in**, up to three attempts. The
+    knock is a bounded, timed arm oscillation from a sonar-measured standoff --- never
+    "move until contact", because the arm rail has no current monitor and nothing would
+    detect a servo pressing against a door.
 
 -   **FR-1000-005 (permission to roam).** Owner decision 2026-09-09. The two
     triggers that start motion nobody asked for --- the `IDLE_TIMEOUT` wander
@@ -1333,6 +1364,10 @@ separately under FR-1200.
                     stairs until                        
                     stair mode is                       
                     enabled                             
+
+  FR-1200-006       Record stairs     High              Test
+                    during a mapping
+                    run
   -----------------------------------------------------------------------
 
 # Acceptance Criteria
@@ -1365,6 +1400,20 @@ independent of whether climbing is ever built.
     one floor level and a route may traverse between them. **Not designed.** Recorded
     here so the requirement has a stated pass condition rather than none; it was one
     of four in this section with no criteria at all until 2026-09-13.
+
+-   **FR-1200-006 (record stairs).** Added v3.3. **NOT IMPLEMENTED** --- `world_model`
+    has no stair, hazard or keep-out concept at all; its tables are rooms, doorways,
+    landmarks, objects and routes.
+
+    A stair label carries **position, heading and width**, not just a position. A circle
+    is enough to stay away from and useless for climbing, and FR-1200 says this chassis
+    will eventually climb them --- he needs an approach heading to line up. Capturing it
+    at labelling time avoids re-labelling the house later. Both cameras are mounted 15
+    degrees downward, so the ground plane is in frame and a mapping run can *propose*
+    stair candidates rather than leaving them to be hunted for; the operator confirms.
+
+    **FR-1200-005 depends on this.** A standoff from mapped stairs requires the stairs
+    to have been mapped.
 
 -   **FR-1200-005 (stair standoff).** Owner decision 2026-09-11. Stairs are
     recorded during the mapping run and Willie holds **0.15 m** clear of a mapped
@@ -2296,6 +2345,149 @@ expand who\'s trusted enough to be read.
     committed file or commit history.
 -   Failures degrade gracefully --- loss of email connectivity does not affect
     local rover operation in any way.
+
+# FR-2100 Person and Pet Recognition
+
+Added v3.3 (2026-09-14). Design approved 2026-08-25 and extended through 2026-09-11,
+but carried **no requirement at all** until now --- the same gap FR-1500 records for
+itself. Design: `docs/superpowers/specs/2026-08-25-person-pet-recognition-design.md`.
+
+**NOT IMPLEMENTED.** No `identity.py`, no `recognition.py`, no
+`ENABLE_FACE_RECOGNITION` flag. Zero lines written as of 2026-09-14.
+
+  -----------------------------------------------------------------------
+  Requirement ID    Requirement                  Priority     Verification
+  ----------------- ---------------------------- ------------ ------------
+  FR-2100-001       Enrol a person on an owner   Medium       Test
+                    introduction
+
+  FR-2100-002       Greet a recognised person    Medium       Test
+                    by name
+
+  FR-2100-003       Ask an unrecognised person   Medium       Test
+                    who they are before treating
+                    them as a stranger
+
+  FR-2100-004       Scope learned FACTS to the   Medium       Test
+                    person who taught them
+
+  FR-2100-005       Persist biometric            High         Test
+                    embeddings, never images,
+                    in a separate store
+
+  FR-2100-006       Restrict enrolment to the    High         Test
+                    owner, confirmed by email
+  -----------------------------------------------------------------------
+
+# Acceptance Criteria
+
+-   **FR-2100-001 (enrolment).** "Willie, this is Carolyn" captures several frames
+    over roughly two seconds, embeds each, and stores **multiple vectors per
+    identity**. He refuses cleanly, with a spoken reason, when he sees no face or more
+    than one person. He then introduces himself and waves --- **after** the capture
+    completes, never during it, since an arm in frame can occlude the face being
+    learned.
+
+-   **FR-2100-002 (greeting).** A recognised person is greeted by name once per
+    session (`FACE_GREET_SESSION_S`). Verified by walking in and out of frame and
+    confirming a single greeting.
+
+-   **FR-2100-003 (strangers).** Matching resolves into **three bands**, not two:
+    recognised (greet), uncertain (**silent**, recorded present but unnamed), and
+    confidently unknown. Only the third asks "who are you?", and only an unknown name
+    or no reply produces the stranger response. Announcing a stranger requires
+    **positive evidence of dissimilarity**, not merely the absence of a match ---
+    without that, an enrolled person in poor light gets accused of breaking in.
+    Verified by enrolling a person, degrading the lighting, and confirming he asks
+    rather than accuses.
+
+    **This is personality, not security.** He takes no action on a stranger: no alert,
+    no event log, no photograph, no behaviour change. It must not be described
+    anywhere in terms suggesting he monitors for intruders, because someone will
+    otherwise rely on it.
+
+-   **FR-2100-004 (per-person memory).** Facts are scoped; **instructions are not**. A
+    fact is personal and collision is the problem being solved; an instruction is a
+    capability, and scoping it would let identity silently determine what the rover
+    will do --- permissions by the back door, which the design excludes precisely to
+    keep a misidentification embarrassing rather than dangerous.
+
+-   **FR-2100-005 (biometric retention).** Enrolment images are converted to vectors
+    and **deleted immediately**; an embedding cannot be viewed as a face. Storage is
+    its own SQLite file, so a wipe is a file delete rather than a careful DELETE.
+    **Embeddings of unrecognised people are never persisted** --- enrolment is
+    consented, a visitor crossing the frame is not.
+
+    **This requirement exists because the design flagged that it goes beyond what
+    FR-1800-002 permits** (camera frames not persisted beyond the current task).
+    Recorded as a deliberate, visible exception rather than stretched into an existing
+    requirement.
+
+-   **FR-2100-006 (enrolment authority).** Only the owner or Carolyn may introduce
+    someone. **This cannot be enforced on the speaker today, and the requirement says
+    so**: identity comes from the last face seen, and during an introduction the camera
+    is looking at the *subject*, not the speaker. So the gate is two parts --- a soft
+    "was an authorised person seen recently" check, which is a **deterrent, not
+    enforcement**, and an **email confirmation**, which carries the actual authority
+    because it is the only authenticated channel involved (FR-2000-009's single
+    hard-coded recipient, FR-2000-010/011's allowlist, FR-2000-013's DKIM check, and a
+    one-time code).
+
+    **A pending identity is inert** --- stored but excluded from matching --- so a
+    soft-gate bypass yields a database row that does nothing until the owner approves
+    it by email. That is what keeps the failure embarrassing rather than dangerous.
+
+    A **narrow exception** to the standing rule that inbound email is surfaced and
+    never acted on: an email may only flip an already-pending enrolment to active, may
+    only confirm an action initiated in person at the rover, and may never cause
+    physical action.
+
+# FR-2200 Willie-Initiated Feature Requests
+
+Added v3.3 (2026-09-14). Design:
+`docs/superpowers/specs/2026-09-11-willie-feature-requests-design.md`.
+
+**NOT IMPLEMENTED.** No `feature_requests.py`, no `docs/feature-requests/` queue.
+
+  -----------------------------------------------------------------------
+  Requirement ID    Requirement                  Priority     Verification
+  ----------------- ---------------------------- ------------ ------------
+  FR-2200-001       Propose feature requests     Low          Test
+                    from observed operational
+                    evidence
+
+  FR-2200-002       Obtain owner approval by     Low          Test
+                    email before recording a
+                    request
+
+  FR-2200-003       Never generate, edit or      High         Test
+                    execute code
+  -----------------------------------------------------------------------
+
+# Acceptance Criteria
+
+-   **FR-2200-001 (evidence-grounded).** A request **cites observed evidence** ---
+    event counts, dates, log references --- drawn from repeated `STALL_FAULT`s,
+    unmatched voice intents, failed tasks, recurring faults or `TICK_OVERRUN` counts.
+    **A request that cannot cite anything is not sent.** Rate-limited to
+    `FEATURE_REQUEST_MAX_PER_DAY`. Verified by feeding synthetic history and asserting
+    on what is proposed. Composed by the cloud provider, not the on-device LLM --- G-6
+    has the latter at 0% on intent parsing, and composing a coherent request is harder
+    than parsing an intent, not easier.
+
+-   **FR-2200-002 (approval before recording).** An approved request becomes a file in
+    `docs/feature-requests/`, committed and pushed by Willie **staging that file
+    alone** --- never `git add -A`, which is how the hourly backup cron swept a
+    session's in-progress work into a commit on 2026-09-09. **Unapproved requests never
+    reach the repo**; they expire locally, so the queue is a list of what the owner
+    agreed to rather than suggestions to triage. Each file records its own provenance:
+    proposed and approved timestamps, channel and DKIM status, and the evidence it was
+    built from.
+
+-   **FR-2200-003 (text only).** Nothing in this subsystem generates, edits or executes
+    Python, and nothing changes `config.py`. **Approval is not a specification** ---
+    anything non-trivial still goes through design before implementation. Verified by
+    confirming the only artefact produced is a Markdown file.
 
 # Mission-Level Functional Requirements (M-001--M-012)
 
