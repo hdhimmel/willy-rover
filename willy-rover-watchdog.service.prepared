@@ -1,0 +1,105 @@
+# PREPARED, NOT INSTALLED. 2026-09-14.
+#
+# This is the watchdog-enabled variant of willy-rover.service. It is deliberately named
+# ".prepared" and NOT ".service" so that it cannot be picked up by a wildcard copy into
+# /etc/systemd/system, and so that installing it is always a conscious act.
+#
+# IT WILL NOT START AS WRITTEN, and the mechanism matters. Two values below are __MEASURE__
+# placeholders. systemd does NOT reject those -- verified 2026-09-14 with systemd-analyze:
+#
+#   Failed to parse TimeoutStartSec= parameter, IGNORING: __MEASURE__
+#   Failed to parse WatchdogSec=__MEASURE__, IGNORING: Invalid argument
+#
+# It logs a warning, ignores both lines, and starts the unit with the DEFAULTS -- which for
+# WatchdogSec means disabled. That is the worst possible outcome: the rover comes up cleanly and
+# whoever installed it believes the watchdog is armed when nothing is watching at all. Exactly
+# the silent-failure shape this whole exercise exists to remove.
+#
+# So the refusal is enforced explicitly, by the ExecStartPre below, which fails the start while
+# any placeholder remains. A unit that refuses to start is a better failure than a rover that
+# crash-loops, and far better than one that lies about being protected.
+#
+# For context on why this caution exists: the 2026-09-07 outage came from a watchdog value chosen
+# without measurement. WatchdogSec=500ms was installed against a startup that loads a 1.7GB Hailo
+# HEF; the rover was SIGABRTed four times in twenty seconds, never reaching its own first log line.
+#
+# TO FILL THEM IN
+#   1. sudo systemctl stop willy-rover
+#   2. ./venv/bin/python scripts/measure_startup.py --runs 5 --out /tmp/startup.json
+#   3. Copy the two printed values here.
+#   4. Work through procedure W-1 in docs/WildWilly_Bench_Test_Procedures.md -- repeated
+#      restarts, rover ON BLOCKS -- before any live use.
+#
+# WHAT CHANGED FROM willy-rover.service, and why each line is needed:
+#
+#   Type=notify        The actual bug. The old unit was Type=simple, so NotifyAccess defaulted
+#                      to `none` and systemd DISCARDED every sd_notify message the process sent.
+#                      brain.py's WATCHDOG=1 heartbeat was never received by anything, so no
+#                      heartbeat rate could have satisfied the deadline and the watchdog fired
+#                      unconditionally. This line is what makes the rest mean anything.
+#
+#   NotifyAccess=main  Only the main process may notify. Belt and braces under Type=notify --
+#                      it stops a child process (a shell, a subprocess) from being able to
+#                      satisfy the watchdog on behalf of a wedged parent.
+#
+#   TimeoutStartSec    Under Type=notify this becomes a real START deadline: systemd waits for
+#                      READY=1 and kills the unit if it does not arrive. brain.py sends READY=1
+#                      only after the startup self-test, and that path loads the Hailo HEF plus
+#                      the vision and voice models. Must exceed the WORST measured startup, not
+#                      the median -- a cold page cache or a retried I2C probe lands on the tail.
+#
+#   WatchdogSec        Must exceed the worst observed gap between WATCHDOG=1 heartbeats, with
+#                      real margin, because systemd kills on the FIRST missed deadline. Check it
+#                      against config.TICK_OVERRUN_THRESHOLD_S as well: a WatchdogSec below that
+#                      threshold means the process is killed before it has logged that it was
+#                      running slow, destroying the evidence for why it was killed.
+#
+#   Restart=on-failure Unchanged, and deliberately NOT `always`. A rover that fails its startup
+#                      self-test comes up degraded with motion disabled and STAYS up -- brain.py
+#                      sends READY=1 on both the pass and fail branches for exactly this reason
+#                      (pinned by tests/test_sd_notify.py). Restarting it would lose that state.
+#
+#   StartLimitIntervalSec / StartLimitBurst
+#                      New. If something does go wrong, systemd gives up after 3 failures in 5
+#                      minutes instead of restarting forever. The 2026-09-07 failure was four
+#                      restarts in twenty seconds; this bounds that shape of incident and leaves
+#                      the journal readable.
+#
+# ROLLBACK: sudo systemctl disable --now willy-rover-watchdog && sudo systemctl enable --now willy-rover
+
+[Unit]
+Description=WildWilly Autonomous Rover v2 (systemd watchdog enabled)
+After=network.target graphical-session.target
+Wants=graphical-session.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=hhimmel
+WorkingDirectory=/home/hhimmel/rover
+Environment=PYTHONUNBUFFERED=1
+Environment=SDL_VIDEODRIVER=wayland
+Environment=SDL_VIDEO_WAYLAND_WMCLASS=willy
+Environment=SDL_VIDEO_ROTATION=0
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=WAYLAND_DISPLAY=wayland-0
+EnvironmentFile=-/home/hhimmel/rover/.env
+# Refuses to start while either value below is still a placeholder. systemd would otherwise
+# ignore the unparseable lines and run with the watchdog silently disabled -- see the header.
+ExecStartPre=/bin/sh -c '! grep -q __MEASURE__ /etc/systemd/system/willy-rover-watchdog.service'
+ExecStart=/home/hhimmel/rover/venv/bin/python3 /home/hhimmel/rover/main.py
+
+# --- fill both from scripts/measure_startup.py before installing ---
+TimeoutStartSec=__MEASURE__
+WatchdogSec=__MEASURE__
+
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=willy-rover
+
+[Install]
+WantedBy=multi-user.target
