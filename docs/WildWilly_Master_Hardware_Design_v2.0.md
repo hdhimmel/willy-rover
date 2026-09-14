@@ -1819,11 +1819,24 @@ overtaken are corrected below rather than left standing.
 | Motor crimps | 1 of 6 verified | — |
 
 ⚠ **This section previously read "Nothing in the hardware build is outstanding."
-That is false and was corrected 2026-09-11.** It was true on 2026-08-18 and was
-carried forward without review. §0 lists live construction items — the battery
-divider has no feed, and the GPIO breakout is on order — and the 4.7kΩ pull-up
-question is unresolved. Construction work remains; do not read this section as a
-clean bill of health.
+That was corrected on 2026-09-11 because it was false then, and the items it cited —
+an unfed battery divider, a breakout on order, an unresolved pull-up question — were
+all closed on 2026-09-14, along with the arm servo connector.
+
+**What remains is verification, not construction**, which is what the original line
+was trying to say and was simply three weeks early in saying it. Still outstanding:
+
+- **Encoder signal path** — no edges on any of six channels since 2026-08-25. Must be
+  tested under power; hand-turning produces nothing (§16.10).
+- **Motor mapping** — `MOTOR_PORT` unverified since 2026-09-04, bench test needed.
+- **`arm_jog.py`** — per-joint limits still "Not tested"; now unblocked by the
+  connector repair.
+- **`BATTERY_DIVIDER_SCALE`** — re-trim against a meter.
+- **Breakout connections** — installed 2026-09-14, not re-verified (§16.13 check 6).
+- **SEN0628** — not yet fitted.
+
+Do not read this section as a clean bill of health, but the blocker list is now
+measurement work rather than wiring.
 
 ---
 
