@@ -170,6 +170,40 @@ class ADC:
             d=self._bus.read_i2c_block_data(config.ADS_ADDR,self._POINTER_CONVERT,2)
         raw=(d[0]<<8)|d[1]
         return raw-65536 if raw>=32768 else raw
+    def accept_battery_raw(self,raw):
+        """Adopt a raw ADC count only if it could plausibly be a real pack. Returns True if
+        adopted, False if refused.
+
+        The 2026-08-24 guard covers a read that FAILS. This covers one that SUCCEEDS and returns
+        something impossible -- which is not hypothetical: with the battery divider unfed, A0
+        read 0.0146V, scaling to a pack voltage near 0.06V. That read succeeds, passes every
+        existing check, and walks brain.py's tier ladder to `shutdown`. The Pi is powered from
+        that same pack; at 0.06V nothing would be executing this code, so the number is
+        structurally impossible rather than merely alarming.
+
+        A refusal is deliberately handled EXACTLY like a failure -- hold the last good value,
+        do not refresh the timestamp -- so `is_healthy` goes False and brain.py escalates it
+        through SENSOR_FAULT (grace period, visible fault, operator reset). No new path and no
+        new state: the difference between a broken sensor and a flat battery is made once, here,
+        and everything downstream already knows what to do with staleness."""
+        volts=raw*self._LSB/config.BATTERY_DIVIDER_SCALE
+        if volts<config.BAT_IMPLAUSIBLE_V:
+            self._bat_fail_count+=1
+            if self._bat_fail_count==1:
+                log.warning(f'ADS1115 battery read implausible ({volts:.3f}V < '
+                            f'{config.BAT_IMPLAUSIBLE_V}V) — treating as a BROKEN SENSOR, not a '
+                            f'flat pack. Holding last good value and marking stale.')
+            elif self._bat_fail_count%60==0:
+                log.warning(f'ADS1115 battery reading still implausible ({volts:.3f}V, '
+                            f'{self._bat_fail_count} consecutive)')
+            return False
+        self._bat_raw=raw
+        if self._bat_fail_count:
+            log.info(f'ADS1115 battery read recovered after {self._bat_fail_count} rejected/failed reads')
+            self._bat_fail_count=0
+        self._bat_last_ok=time.perf_counter()
+        return True
+
     @property
     def battery_raw(self): return self._bat_raw
     @property
@@ -207,11 +241,10 @@ class ADC:
     def _loop(self):
         while self._running:
             try:
-                self._bat_raw=self.read_channel(config.ADS_CH_BATTERY)
-                if self._bat_fail_count:
-                    log.info(f'ADS1115 battery read recovered after {self._bat_fail_count} failures')
-                    self._bat_fail_count=0
-                self._bat_last_ok=time.perf_counter()
+                # accept_battery_raw() owns the adopt/refuse decision, the fail counter and
+                # the timestamp -- a successful-but-impossible read is refused there and is then
+                # indistinguishable, downstream, from the failed read handled below.
+                self.accept_battery_raw(self.read_channel(config.ADS_CH_BATTERY))
             except Exception:
                 # Deliberately does NOT zero _bat_raw -- see __init__. Holding the last good
                 # value keeps a transient bus glitch from reading as a flat pack; is_healthy

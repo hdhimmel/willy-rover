@@ -246,6 +246,20 @@ BATTERY_DIVIDER_SCALE=0.2386
 # battery_pct. Don't treat voltage-under-load as equivalent to open-circuit/rested voltage if
 # these thresholds are ever recalibrated from a bench (unloaded) reading.
 BAT_FULL_V=11.58      # display-only 100% anchor for battery_pct (post-fuse voltage)
+# PLAUSIBILITY FLOOR. Below this, the reading is not a flat pack -- it is a broken sensor, and
+# sensors.py refuses it instead of letting it drive the shutdown ladder.
+#
+# Why this exists: the 2026-08-24 change stopped a FAILED read from zeroing the value, because a
+# loose I2C wire had made "the bus hiccupped" indistinguishable from "the pack is flat" and
+# Willie powered himself off. It did not cover a SUCCESSFUL read of an impossible value, and
+# that happened for real -- an unfed battery divider read A0 at 0.0146V, which scales to a pack
+# voltage near 0.06V, passes every guard, and walks the ladder straight to shutdown.
+#
+# 5.0V is chosen to be unarguable rather than tight. The Pi runs from this same pack through
+# DROK-Pi; at 5V a 3S pack is destroyed and nothing would be executing this code. It sits well
+# BELOW BAT_SHUTDOWN_V on purpose -- a genuinely flat pack must still shut the rover down, so
+# raising this above the shutdown threshold would disable the protection the ladder exists for.
+BAT_IMPLAUSIBLE_V=5.0
 BAT_WARN_V=11.4       # -> warn
 BAT_RTH_V=10.8        # -> return-to-home / DOCK
 BAT_SAFE_V=10.5        # -> SAFE_MODE (motion stop, arm holds)

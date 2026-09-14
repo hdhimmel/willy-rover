@@ -956,9 +956,23 @@ wants it.
     off — from a reading that is structurally impossible for a connected pack.
     **A plausibility floor is needed**: a pack reading below any credible value is
     a broken sensor, not a flat battery, and must raise `SENSOR_FAULT` rather than
-    drive the shutdown ladder. Recorded 2026-09-11; hardware fixed 2026-09-14,
-    **this item deliberately left open** — the next divider fault would repeat the
-    same silent shutdown, and nothing in the code has changed.
+    drive the shutdown ladder. Recorded 2026-09-11; hardware fixed 2026-09-14.
+
+    **CLOSED 2026-09-14 — `ADC.accept_battery_raw()`.** A reading below
+    `BAT_IMPLAUSIBLE_V` (5.0V) is refused and handled **exactly like a failed read**:
+    hold the last good value, do not refresh the timestamp. `is_healthy` then ages out
+    and `brain.py` escalates through `SENSOR_FAULT` — grace period, visible fault
+    state, operator reset — instead of shutting down. No new path and no new state: the
+    broken-sensor-versus-flat-battery decision is made once, and everything downstream
+    already knows what to do with staleness.
+
+    5.0V is deliberately unarguable rather than tight, and sits **below**
+    `BAT_SHUTDOWN_V` — a genuinely flat pack must still shut the rover down, so a floor
+    above the shutdown threshold would disable the protection the ladder exists for.
+    The Pi runs from this same pack; at 5V nothing would be executing the code.
+
+    7 tests, `tests/test_battery_plausibility.py`, including the exact 0.06V reading
+    seen on the rover.
 
 ---
 
