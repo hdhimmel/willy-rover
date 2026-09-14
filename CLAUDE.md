@@ -498,8 +498,8 @@ and Software Design §6.5/§6.6; the traps are here.
   on firmware v1.3 — **prove a stable multi-minute stream before this goes anywhere near
   the reflex path.**
 - **Power from 3.3V, NOT 5V.** It accepts both, but on UART the logic level follows the
-  supply and the Pi's RX is not 5V tolerant. Under 80mA, so Pi header pin 1 carries it —
-  that pin has had no consumer since the ISO1540 came out.
+  supply and the Pi's RX is not 5V tolerant. Under 80mA off Pi header pin 1 — which
+  already carries the whole I²C device bus, see below.
 - **The TCA9548A is NOT needed for this** (a change from the 2026-09-11 design). The mux
   was mandated because a bare VL53L7CX uploads ~84KB of firmware over I²C at every init;
   the onboard RP2040 does that locally now. I²C traffic is just 64 values per frame.
@@ -527,6 +527,30 @@ and Software Design §6.5/§6.6; the traps are here.
   the same, which is the safe direction — he stops for nothing rather than driving off.
 - **Unavailable ≠ fault.** If it drops out, `sensors.py` falls back to sonar alone and
   logs it. Adding a sensor must never lower Willie's availability floor.
+
+---
+
+**The I²C bus runs on the PI'S OWN 3.3V (header pin 1). DROK-4 / R5 feeds the motor
+encoders and nothing else.** Owner-stated 2026-09-14, and it corrects a claim that was
+in every document: several tables said R5 fed "Hall encoders and all I²C device logic".
+
+- **Pi header pin 1 is a loaded rail with a real budget.** It carries eleven devices'
+  logic plus the bus pull-ups plus the SEN0628. The Pi 5 rates that pin for a few
+  hundred mA; that should be comfortable, but it is a budget that exists. Anything
+  claiming "nothing loads Pi 3V3" is wrong — that error sat in §5.3, §9 and the rails
+  table until 2026-09-14, and cost the breakout HAT a line.
+- **The breakout HAT needs a 3V3 terminal.** It was removed from the list on 2026-09-11
+  on the false premise above and restored on 2026-09-14. The list is **13 lines**, 14
+  with the optional ToF UART return — count from Master Hardware Design §5.3's table,
+  not from prose.
+- **R5 is now cleanly separable, which matters for the dead encoders.** Since the
+  encoders are its only consumer, R5 can be changed without risking the MCP23017,
+  either PCA9685, or anything else on the bus. The standing hypothesis — that these
+  Hall encoders want 5V and are sitting under-volted at 3.3V, which would explain six
+  channels producing nothing since 2026-08-25 — is therefore a **clean experiment**
+  now, not a risky one. **But the twelve encoder SIGNAL lines still land on a 3.3V
+  MCP23017 whose inputs are NOT 5V tolerant**, so raising the supply still requires
+  level shifting on those twelve lines. Supply and signal are separate problems.
 
 ---
 
@@ -580,7 +604,7 @@ board (owner-confirmed 2026-09-09). Everything live runs off these four DROKs:
 | R1 | **9.5V** | DROK-Pi | Witty Pi 5 VIN → Pi | INA260 `0x45` |
 | R2 | 5V | DROK-5V | Steering servos, sonar VCC, Pi screen | INA260 `0x40` |
 | R3 | 6V | DROK-6V | Arm servo distribution |
-| R5 | **3.3V** | DROK-4 | Hall encoders **and all I²C device logic** |
+| R5 | **3.3V** | DROK-4 | **Motor Hall encoders ONLY** (corrected 2026-09-14) |
 
 **R5 is settled at 3.3V** — that resolves the "3V or 5V, voltage TBD" question
 open in Master Hardware Design §2.2 since 2026-08-28. It also means the bus does

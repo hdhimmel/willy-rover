@@ -113,8 +113,23 @@ that was **not** built.
 | R1 | **9.5V** | DROK-Pi | Witty Pi 5 VIN → Pi | INA260 `0x45` |
 | R2 | 5V | DROK-5V | Steering servos, sonar VCC, Pi screen | INA260 `0x40` |
 | R3 | 6V | DROK-6V | Arm servo distribution | — |
-| R5 | **3.3V** | DROK-4 | Hall encoders **and all I²C device logic** | — |
+| R5 | **3.3V** | DROK-4 | **Motor Hall encoders ONLY** — corrected 2026-09-14 | — |
 | — | +12V | Battery via F1/KCD4/Q1 | Both FeatherWing VIN, all DROK inputs | INA260 `0x44` |
+
+⚠ **CORRECTED 2026-09-14 — I²C device logic is fed from the PI'S OWN 3.3V, not
+R5.** Owner-stated. Every table in this document said R5 fed "Hall encoders and all
+I²C device logic"; it feeds **the encoders only**. Two consequences, both material:
+
+1. **Pi header pin 1 (3V3) is loaded, and always has been.** §5.3, §9 and the struck
+   R4 row all said Pi 3V3 had no consumer. Wrong — it powers the whole device bus.
+   The breakout HAT therefore **does** need a 3V3 line, which was removed from its
+   list on 2026-09-11 in the belief that nothing loaded that pin.
+2. **R5 can now be changed without touching the I²C bus.** Since the encoders are its
+   only consumer, raising R5 to 5V no longer risks the MCP23017, PCA9685s or anything
+   else. That makes the standing encoder-supply hypothesis a *clean* experiment —
+   see the warning below §2.2's rails table. The twelve encoder **signal** lines still
+   land on a 3.3V MCP23017 whose inputs are not 5V tolerant, so level shifting is
+   still required; only the supply question is now separable.
 
 **R5 = 3.3V settles the "3V or 5V — voltage TBD" question open in §2.2 since
 2026-08-28.** It also means the bus does not load the Pi's own 3V3 pin.
@@ -286,8 +301,8 @@ graph TD
 | R1 | **9.5V** | **DROK-Pi** buck | Witty Pi 5 VIN (KF350-2P) → Witty Pi → Pi 5 | INA260 **0x45** |
 | R2 | 5V | **DROK-5V** buck | Steering servo distribution, sonar VCC, Pi screen | INA260 **0x40** |
 | R3 | 6V | **DROK-6V** buck | Arm servo distribution | — |
-| R5 | **3.3V** | **DROK-4** buck | Motor Hall encoders (JGA25-370B) **and all I²C device logic**. Settled 2026-09-08, see §0 — the "3V or 5V" question below is closed | — |
-| ~~R4~~ | ~~3V3~~ | ~~Pi header pin 1~~ | **NO CONSUMER AS-BUILT.** Fed ISO1540 Side 1 VCC only, and the ISO1540 is out of the build (§1, 2026-09-08). Nothing loads Pi 3V3 now — see §2.1 and §5.3. Retained as history; do not wire from this row. | — |
+| R5 | **3.3V** | **DROK-4** buck | **Motor Hall encoders (JGA25-370B) ONLY** — corrected 2026-09-14; I²C device logic runs from the Pi's own 3.3V | — |
+| **R4** | **3V3** | **Pi header pin 1** | ⚠ **CORRECTED 2026-09-14 — this row was struck as "NO CONSUMER AS-BUILT" and that was WRONG.** Pi 3V3 supplies **all I²C device logic** (owner-stated), and now the SEN0628 as well. It formerly also fed ISO1540 Side 1, which is gone. This is a live rail with a real load and a real budget — the Pi 5's 3V3 pin is good for a few hundred mA, which eleven devices' logic plus pull-ups should sit inside, but it is now a budget that exists | — |
 | ~~—~~ | ~~3V3 (VCC2)~~ | ~~Two-stage chain: TPSM84205 → AMS1117-3.3~~ | **OUT OF SERVICE 2026-09-08 (§0).** The isolated bus it fed does not exist. The TPSM is still physically fitted but dormant; the AMS1117 has no input. Struck 2026-09-13 — R4 was struck in rev 2.1 and this row was missed | — |
 | — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | INA260 **0x44** (P3 monitoring) |
 | — | +12V main | Battery via F1/KCD4/Q1 | All four DROK inputs + isolated power chain (P8) | — |
@@ -307,7 +322,8 @@ DROK-4 (**3.3V**, R5). The rail voltages are settled; the note below is retained
 because one question inside it is still genuinely open.
 
 **Still open: what the encoders themselves want.** R5 is set to 3.3V and also feeds
-all I²C device logic, so the rail voltage is not in question. Whether these Hall
+the encoders **and nothing else** (corrected 2026-09-14), which makes this question
+**cleanly testable**: R5 can be changed without risk to any I²C device. Whether these Hall
 encoders need 3.3V or 5V is — the vendor part number was never captured, and the
 2.83V that killed them is uncomfortably close to 3.3V's lower tolerance. If they turn
 out to want 5V, note the MCP23017 runs at 3.3V and its inputs are NOT 5V tolerant, so
@@ -1009,8 +1025,7 @@ replacement arrives the header has no breakout: everything lands on the Pi's
 40-pin header directly.
 
 **Replacement: a screw-terminal breakout HAT — ON ORDER as of 2026-09-09.**
-**Twelve** lines have to land on it (thirteen with the optional ToF return —
-was eleven until the SEN0628 was chosen on 2026-09-13):
+**Thirteen** lines have to land on it, fourteen with the optional ToF return:
 
 | # | Line | Pi pin | Notes |
 |---|------|--------|-------|
@@ -1021,19 +1036,23 @@ was eleven until the SEN0628 was chosen on 2026-09-13):
 | 9 | **BNO085 INT** | **GP15**, header pin 10 | §6.3. Wired but **unused by the driver** — the library polls over I²C (§16 open-items table) |
 | 10 | 5V | pins 2/4 | HC-SR04 VCC |
 | 11 | GND | pins 6/9 | |
-| **12** | **SEN0628 ToF — sensor TX → Pi RX** | **GP9** (Block 1, silkscreened `MISO`) | §6.5. **Required.** Confirm the Pi 5 UART overlay mapping first |
-| *13* | *SEN0628 ToF — Pi TX → sensor RX* | *GP8* (Block 1, silkscreened `CE0`) | *Optional* — only to send the sensor configuration |
-| **—** | **SEN0628 3V3 supply** | **header pin 1** | <80mA. Not a breakout terminal, but it is the pin's first consumer since the ISO1540 went |
+| **12** | **3V3** | **header pin 1** | **I²C device logic + SEN0628.** Removed from this list 2026-09-11 in error; restored 2026-09-14 |
+| **13** | **SEN0628 ToF — sensor TX → Pi RX** | **GP9** (Block 1, silkscreened `MISO`) | §6.5. **Required.** Confirm the Pi 5 UART overlay mapping first |
+| *14* | *SEN0628 ToF — Pi TX → sensor RX* | *GP8* (Block 1, silkscreened `CE0`) | *Optional* — only to send the sensor configuration |
 
-**So it is 12 lines, or 13 with the optional return.** The heading above says eleven
-because that was true until 2026-09-13.
+**So it is 13 lines, or 14 with the optional ToF return.** The count has moved three
+times: eleven as first written on 2026-09-09, twelve when the ToF UART was added on
+2026-09-13, thirteen when 3V3 was restored on 2026-09-14. **Count from this table, not
+from any prose figure elsewhere in the repo.**
 
-**The Pi's 3V3 (header pin 1) is NOT in the list, and that is deliberate.** Its
-only consumer was ISO1540 Side 1 VCC (rails table, R4), and the ISO1540 is out
-of the build (§1). Nothing loads Pi 3V3 as-built — §2.1 states this directly —
-and device logic is fed from the DROK R5 3.3V rail instead. Do not land a 3V3
-line here on the strength of the R4 row alone; that row describes a removed
-part.
+⚠ **REVERSED 2026-09-14 — 3V3 IS required, and this paragraph was wrong.** It said
+Pi 3V3 had no consumer and that device logic came from the DROK R5 rail. **It does
+not: the I²C device logic is fed from the Pi's own 3.3V** (owner-stated). R5/DROK-4
+feeds the **motor encoders only**.
+
+So **a 3V3 line does land here**, and it was removed from this list on 2026-09-11 on a
+false premise. It carries the entire device bus plus the SEN0628 — a real load on a
+pin the Pi 5 rates for a few hundred mA.
 
 **The BNO085's other GPIO line does not land here either.** RST runs to
 MCP23017 **GPB4**, not to the Pi header (§6.3), which is why the expander must
@@ -1568,7 +1587,7 @@ desoldering.
 
 | Pin | BCM | Connects to |
 |-----|-----|-------------|
-| 1 | 3V3 | ~~ISO1540 Side 1 VCC~~ — **now feeds the SEN0628 ToF sensor** (<80mA, §6.5). Had no consumer between the ISO1540's removal on 2026-09-08 and 2026-09-13 |
+| 1 | 3V3 | **Feeds ALL I²C device logic** (owner-stated 2026-09-14), plus the SEN0628 ToF (<80mA, §6.5). Formerly also ISO1540 Side 1 VCC. ⚠ This row read "no consumer as-built" until 2026-09-14 — it was never true; the bus has always run from this pin |
 | 2, 4 | 5V | Pi buck output |
 | 3 | GP2 | I²C SDA → GODIY hubs → all devices (§0) |
 | 5 | GP3 | I²C SCL → GODIY hubs → all devices (§0) |
@@ -1934,7 +1953,7 @@ listed in §15.8 rather than carried as a line item.
 | **DROK-Pi** adjustable buck | 12V → **9.5V** for Witty Pi VIN (R1) | 1 | **Installed** — live rail (§0) |
 | **DROK-5V** adjustable buck | 12V → 5.0V for steering servos, sonar VCC, screen (R2, INA260 0x40) | 1 | **Installed** — live rail (§0) |
 | **DROK-6V** adjustable buck | 12V → 6.0V for arm servos (R3) | 1 | **Installed** — live rail (§0) |
-| **DROK-4** adjustable buck | R5 — **3.3V**, Hall encoders **and all I²C device logic**. Voltage settled 2026-09-08 (§0) | 1 | **Installed** — live rail |
+| **DROK-4** adjustable buck | R5 — **3.3V**, **Hall encoders only** (corrected 2026-09-14). I²C device logic is on the Pi's own 3.3V | 1 | **Installed** — live rail |
 | **Isolated bus power chain (P8):** | — | — | — |
 | **TI TPSM84205** | 12V → 5.0V pre-regulator (1.5A) — **NOT 84203 or 84212** | 1 | **Fitted, but OUT OF SERVICE** — no consumers since 2026-09-08 (§0) |
 | RXEF110 1.1A polyfuse | F6, TPSM 12V input, PTC resettable | 1 | **Installed 2026-09-07** |
