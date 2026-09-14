@@ -1049,7 +1049,12 @@ removed 2026-09-08 with the rest of the isolated-bus hardware. Until its
 replacement arrives the header has no breakout: everything lands on the Pi's
 40-pin header directly.
 
-**Replacement: GeeekPi Micro GPIO Terminal Block Breakout Board — INSTALLED 2026-09-14** (owner-confirmed; *not* the Xikentec HDO040 photographed on 2026-09-09, which was a different candidate).
+**Replacement: GeeekPi Micro GPIO Terminal Block Breakout Board — INSTALLED
+2026-09-14** (owner-confirmed). The Xikentec HDO040 photographed on 2026-09-09 was
+tried and **rejected: physically too large for the head assembly.** Note that
+constraint for any future replacement — the space is tight enough that a full-size
+40-pin HAT with terminal blocks does not fit, which is also why the "Micro" variant
+was chosen.
 **Thirteen** lines have to land on it, fourteen with the optional ToF return:
 
 | # | Line | Pi pin | Notes |
