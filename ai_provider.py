@@ -144,6 +144,61 @@ def build_world_state(world_model,goal=None,battery=None,**extra):
     state.update(extra)
     return state
 
+def build_stuck_prompt(situation):
+    """The STUCK-state motion prompt. ONE definition, imported by brain.py and by
+    experiments/motion_reliability_batch.py.
+
+    It lives here rather than in brain.py because brain.py cannot be imported without the hardware
+    stack, and a prompt that only the rover can construct is a prompt nobody can measure. The
+    previous arrangement -- a literal in brain.py plus a hand-kept copy in the harness -- is the
+    same divergence trap that made the voice-intent prompt untrustworthy, where voice.py and
+    llm_reliability_batch.py had to be kept character-identical by discipline alone.
+
+    WHY IT LOOKS LIKE THIS. Measured 2026-09-14 with the previous version, which asked for
+    {"action":"forward"|"reverse"|...,"duration":<float>,"speed":<0.0-1.0>,"reason":"<60 chars>"}:
+
+        hailo, 30 calls : 53% parsed, and EVERY parsed answer was "forward" -- including a fully
+                          blocked front, boxed in on three sides, and 25 degrees of tilt. 33% of
+                          all calls were both unsafe and structurally valid, which means they
+                          clear brain.py:1007 and move the rover with no cloud review.
+        cpu, 10 calls   : 10% parsed, 90% escalated to cloud.
+
+    Three changes, each aimed at one observed failure:
+
+    1. No angle-bracket placeholders. This model copies them verbatim rather than substituting
+       values -- the established cause of the intent path's 0%. Their output here is invalid JSON,
+       so it fails the schema and escalates; not dangerous, but it is why half the calls never
+       produced a decision at all.
+    2. The safety rules are restated in the user turn, beside the actual measured distance, not
+       left only in the system turn. The baseline drove forward into an 8cm front while
+       _MOTION_SYSTEM said "never forward if front<15cm", so the system turn alone was not
+       carrying it.
+    3. Two worked examples showing DIFFERENT actions. One example teaches a constant -- on the
+       intent path the model copied the single example object ("newspaper") into unrelated
+       answers -- and given the baseline already answered "forward" to everything, a lone forward
+       example would have reinforced precisely the dangerous behaviour.
+
+    Pinned by tests/test_stuck_prompt.py, including a repo-wide sweep for the old literal.
+    """
+    return (
+        f'Situation: {json.dumps(situation)}{chr(10)}'
+        f'Front clearance is {situation.get("front_cm")} cm and tilt is '
+        f'{situation.get("tilt_deg")} degrees.{chr(10)}'
+        f'Rules: never choose forward when front clearance is under 15 cm. '
+        f'When tilt is over 22 degrees choose stop.{chr(10)}'
+        f'Choose what to do next. Reply with one JSON object and nothing else, containing '
+        f'exactly the keys action, duration, speed, reason and confidence.{chr(10)}'
+        f'action must be one of: forward, reverse, turn_left, turn_right, stop, wait.{chr(10)}'
+        f'duration is seconds as a number. speed is a number from 0.0 to 1.0. '
+        f'reason is a short sentence. confidence is a number from 0.0 to 1.0.{chr(10)}'
+        f'Example when the front is blocked and the left is clear: '
+        f'{{"action":"turn_left","duration":0.8,"speed":0.3,'
+        f'"reason":"front blocked, left is open","confidence":0.9}}{chr(10)}'
+        f'Example when the way ahead is clear: '
+        f'{{"action":"forward","duration":1.0,"speed":0.4,'
+        f'"reason":"path ahead is open","confidence":0.9}}')
+
+
 class AIProvider(ABC):
     # Owns the non-blocking worker-thread plumbing (moved from the old claude_client.py,
     # unchanged in shape -- request_async/poll_async/reset_async are exactly

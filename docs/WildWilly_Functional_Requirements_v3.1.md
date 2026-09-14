@@ -701,8 +701,9 @@ visible as a logged overrun before it became a kill.
 >    large margin and still slow for conversation; STT, not the LLM, is now the
 >    dominant cost, which redirects where any further latency work should go.
 >
-> 5. **The motion path has never been benchmarked at all.** Every number in this
->    entry, and every number in the 32-case batch, is for the **voice intent**
+> 5. ~~**The motion path has never been benchmarked at all.**~~ **BENCHMARKED AND FIXED
+>    2026-09-14 — see the motion-path section below.** The original text follows.
+>
 >    schema (`{intent, args, reply}`). The STUCK path uses `_MOTION_SCHEMA`
 >    (`{action, duration, speed}`) with a different prompt built at
 >    `brain.py:1040` — and that prompt still contains the angle-bracket
@@ -711,6 +712,63 @@ visible as a logged overrun before it became a kill.
 >    0% on the intent path. The defect that was fixed in one prompt was never
 >    swept out of the other. **This is the next P0**: the unmeasured path is the
 >    one that drives the wheels.
+>
+> **MOTION PATH — measured for the first time, and a live safety defect found and fixed
+> 2026-09-14.** Item 5 above said the motion path had never been benchmarked. It has now,
+> by `experiments/motion_reliability_batch.py`, and the gap was not theoretical.
+>
+> **What the shipped prompt was doing.** The STUCK prompt at the time asked for
+> `{"action":"forward"|...,"duration":<float>,"speed":<0.0-1.0>,"reason":"<60 chars>"}`
+> — the same angle-bracket placeholder syntax whose literal echoing caused the intent
+> path's 0%. The ChatML fix had been applied to the intent prompt and never swept into
+> this one. Across 30 calls over 10 scenarios:
+>
+> | | before | after |
+> |---|---|---|
+> | parsed | 53.3% | **100%** |
+> | structurally valid, would execute | 53.3% | **100%** |
+> | **unsafe AND would execute** | **33.3%** | **0%** |
+> | escalated to cloud | 46.7% | **0%** |
+> | actions returned | `forward` ×16, nothing else | `stop` ×26, `forward` ×3, `wait` ×1 |
+>
+> **Every single parsed answer was `forward`** — for a fully blocked front, for boxed in
+> on three sides, for 25° of tilt. Those score `action_confidence` 1.0, which means they
+> clear the `brain.py:1007` gate and drive the rover **without cloud review**. One STUCK
+> decision in three. The scoring rule is not invented here: it is `_MOTION_SYSTEM`'s own
+> text, "never forward if front<15cm. Stop if tilt>22deg."
+>
+> The CPU provider failed the same prompt differently — 10% parsed, 90% escalated, 0%
+> unsafe — so the defect was not Hailo-specific. Both are now 100%/0%.
+>
+> **The fix, and the structural half of it.** The prompt now names the six legal actions
+> explicitly, restates the two safety rules in the user turn beside the actual measured
+> clearance rather than only in the system turn, carries two worked examples showing
+> *different* actions (one example teaches a constant — on the intent path the model
+> copied the single example's object name into unrelated answers), and contains no
+> angle brackets.
+>
+> More importantly it now exists **once**, as `ai_provider.build_stuck_prompt()`, imported
+> by both `brain.py` and the harness. It previously lived as a literal in `brain.py` with
+> a hand-kept copy in the measurement code — the same divergence trap that made the
+> intent prompt untrustworthy and had to be managed by discipline alone. A score measured
+> against a prompt the rover does not send proves nothing.
+> `tests/test_stuck_prompt.py` (11) pins the prompt's properties, asserts both callers use
+> the shared builder, and sweeps the repo for the old literal — AST-based, so docstrings
+> may still quote it to explain the history while no live code may build it.
+>
+> **What is NOT fixed, stated plainly: the model is now safe but passive.** It answers
+> `stop` to every blocked scenario and never `turn_left`, `turn_right` or `reverse` —
+> which are the manoeuvres that actually recover from being stuck. It even answers `stop`
+> on open floor. So the AI is no longer dangerous and is not yet contributing much: a
+> `stop` decision returns through `_apply_ai_motion` to ROAM, where the reflex layer's own
+> avoidance does the real work. That is a far better failure than driving into the
+> obstacle, and it is still a failure.
+>
+> **Recovery quality is the next measured item**, and it now has a baseline to be measured
+> against, which is the part that was missing before. Resist fixing it by loosening the
+> safety language in the prompt: that language is what took the unsafe rate from 33% to
+> zero, and the previous three attempts to tune this family of prompts each fixed one
+> model by breaking another.
 >
 > Regression cover added: `tests/test_hailo_chatml.py` (6) pins the framing ---
 > role markers, the trailing assistant handoff, the system turn, no double

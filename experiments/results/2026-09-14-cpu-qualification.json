@@ -1,0 +1,634 @@
+{
+  "summary": {
+    "backend": "cpu",
+    "generated_utc": "2026-09-14T18:37:21Z",
+    "config": {
+      "temperature": 0.1,
+      "top_p": 0.9,
+      "max_tokens": 256,
+      "confidence_floor": 0.7,
+      "model_path": "models/hailo_qwen2_1_5b.hef"
+    },
+    "n": 32,
+    "repeats": 1,
+    "cases_per_repeat": 32,
+    "outcomes": {
+      "actionable": 31,
+      "wrong_intent": 1
+    },
+    "actionable": 31,
+    "actionable_pct": 96.9,
+    "strict_pass": 31,
+    "strict_pass_pct": 96.9,
+    "latency": {
+      "min_s": 23.4,
+      "median_s": 24.95,
+      "p90_s": 26.67,
+      "max_s": 32.75
+    },
+    "stability_per_repeat": [
+      {
+        "repeat": 0,
+        "n": 32,
+        "actionable": 31,
+        "parse_failures": 0,
+        "median_latency_s": 24.95
+      }
+    ],
+    "calibration": {
+      "floor": 0.7,
+      "at_or_above_floor": 32,
+      "at_or_above_floor_correct": 31,
+      "precision_above_floor_pct": 96.9,
+      "below_floor": 0,
+      "below_floor_correct": 0,
+      "escalated_but_would_have_been_right_pct": null
+    }
+  },
+  "records": [
+    {
+      "repeat": 0,
+      "utterance": "can you go fetch the red ball for me",
+      "expected": "retrieve",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 28.245,
+      "confidence": 0.8,
+      "intent_confidence": 0.8,
+      "payload": {
+        "intent": "retrieve",
+        "args": {
+          "object": "red ball"
+        },
+        "reply": "On my way to get the red ball.",
+        "confidence": 0.8
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "grab the blue cup off the floor",
+      "expected": "retrieve",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 26.044,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "retrieve",
+        "args": {
+          "object": "blue cup"
+        },
+        "reply": "On my way to get the blue cup.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "I need you to bring me my slippers",
+      "expected": "retrieve",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 26.06,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "retrieve",
+        "args": {
+          "object": "slippers"
+        },
+        "reply": "On my way to get the slippers.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "could you pick up the remote from the couch",
+      "expected": "retrieve",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 25.454,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "retrieve",
+        "args": {
+          "object": "remote"
+        },
+        "reply": "On my way to get the remote.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "I think it's time you went to sleep",
+      "expected": "shutdown",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 25.044,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "shutdown",
+        "args": {},
+        "reply": "Goodnight, I'm shutting down.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "would you power yourself off now",
+      "expected": "shutdown",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 24.952,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "shutdown",
+        "args": {},
+        "reply": "Shutting down.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "go ahead and shut yourself down",
+      "expected": "shutdown",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 30.66,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "shutdown",
+        "args": {},
+        "reply": "Shutting down.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "how's your status looking today",
+      "expected": "status",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 30.877,
+      "confidence": 0.8,
+      "intent_confidence": 0.8,
+      "payload": {
+        "intent": "status",
+        "args": {},
+        "reply": "I am functioning within normal parameters.",
+        "confidence": 0.8
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "are you doing okay buddy",
+      "expected": "status",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 32.748,
+      "confidence": 0.8,
+      "intent_confidence": 0.8,
+      "payload": {
+        "intent": "status",
+        "args": {},
+        "reply": "I'm doing well, thanks for asking.",
+        "confidence": 0.8
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "can I get a status report please",
+      "expected": "status",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 26.669,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "status",
+        "args": {},
+        "reply": "I am functioning within normal parameters.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "what's your charge level at right now",
+      "expected": "battery",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 25.07,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "battery",
+        "args": {},
+        "reply": "I am at 80 percent.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "do you have much juice left",
+      "expected": "battery",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 24.753,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "battery",
+        "args": {},
+        "reply": "I am at 80 percent.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "how much battery do you have left",
+      "expected": "battery",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 24.686,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "battery",
+        "args": {},
+        "reply": "I am at 80 percent.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "could you stow your arm away please",
+      "expected": "arm_stow",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 25.324,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "arm_stow",
+        "args": {},
+        "reply": "My arm is stowed away.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "put that arm away for me",
+      "expected": "arm_stow",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 24.533,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "arm_stow",
+        "args": {},
+        "reply": "Arm stowed.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "go ahead and stow the arm",
+      "expected": "arm_stow",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 24.349,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "arm_stow",
+        "args": {},
+        "reply": "Arm stowed.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "can you reset your arm back home",
+      "expected": "arm_home",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 24.801,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "arm_home",
+        "args": {},
+        "reply": "My arm is now stowed.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "send your arm home please",
+      "expected": "arm_home",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 25.216,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "arm_home",
+        "args": {},
+        "reply": "My arm is stowed and ready.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "hey come over here for a second",
+      "expected": "come_here",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 24.631,
+      "confidence": 0.8,
+      "intent_confidence": 0.8,
+      "payload": {
+        "intent": "come_here",
+        "args": {},
+        "reply": "I'm on my way.",
+        "confidence": 0.8
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "could you come here please",
+      "expected": "come_here",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 23.986,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "come_here",
+        "args": {},
+        "reply": "I am here.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "start following me around",
+      "expected": "follow",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 23.422,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "follow",
+        "args": {},
+        "reply": "Following you.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "keep following me for a while",
+      "expected": "follow",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 24.157,
+      "confidence": 0.8,
+      "intent_confidence": 0.8,
+      "payload": {
+        "intent": "follow",
+        "args": {},
+        "reply": "Keeping track of you.",
+        "confidence": 0.8
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "can you run a self test for me",
+      "expected": "diagnostics",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 24.293,
+      "confidence": 0.8,
+      "intent_confidence": 0.8,
+      "payload": {
+        "intent": "diagnostics",
+        "args": {},
+        "reply": "All systems nominal.",
+        "confidence": 0.8
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "go run diagnostics please",
+      "expected": "diagnostics",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 23.885,
+      "confidence": 0.8,
+      "intent_confidence": 0.8,
+      "payload": {
+        "intent": "diagnostics",
+        "args": {},
+        "reply": "Running diagnostics...",
+        "confidence": 0.8
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "do you know what room this is",
+      "expected": "where_are_you",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 24.942,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "where_are_you",
+        "args": {},
+        "reply": "I am in this room.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "can you tell me where you are right now",
+      "expected": "where_are_you",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 25.284,
+      "confidence": 0.8,
+      "intent_confidence": 0.8,
+      "payload": {
+        "intent": "where_are_you",
+        "args": {},
+        "reply": "I am in the living room.",
+        "confidence": 0.8
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "what do you see out there right now",
+      "expected": "what_do_you_see",
+      "outcome": "wrong_intent",
+      "raised": null,
+      "latency_s": 25.277,
+      "confidence": 0.8,
+      "intent_confidence": 0.8,
+      "payload": {
+        "intent": "where_are_you",
+        "args": {},
+        "reply": "I am in the living room.",
+        "confidence": 0.8
+      },
+      "reason": "",
+      "strict_pass": false
+    },
+    {
+      "repeat": 0,
+      "utterance": "can you tell me what's in front of you",
+      "expected": "what_do_you_see",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 26.617,
+      "confidence": 0.8,
+      "intent_confidence": 0.8,
+      "payload": {
+        "intent": "what_do_you_see",
+        "args": {},
+        "reply": "I see a bookshelf in front of me.",
+        "confidence": 0.8
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "could you give everyone a wave",
+      "expected": "wave",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 24.053,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "wave",
+        "args": {},
+        "reply": "Hello everyone!",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "go ahead and say hi to them",
+      "expected": "wave",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 23.616,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "wave",
+        "args": {},
+        "reply": "Hello!",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "whoa whoa please stop right now",
+      "expected": "stop",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 23.526,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "stop",
+        "args": {},
+        "reply": "Stopping.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    },
+    {
+      "repeat": 0,
+      "utterance": "I need you to stop moving immediately",
+      "expected": "stop",
+      "outcome": "actionable",
+      "raised": null,
+      "latency_s": 23.404,
+      "confidence": 0.9,
+      "intent_confidence": 0.9,
+      "payload": {
+        "intent": "stop",
+        "args": {},
+        "reply": "Stopping.",
+        "confidence": 0.9
+      },
+      "reason": "",
+      "strict_pass": true
+    }
+  ]
+}

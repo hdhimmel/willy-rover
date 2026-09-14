@@ -4,7 +4,7 @@ if not config.SIMULATE_HARDWARE: import board,busio
 from motors import DriveBase,Steering
 from sensors import SonarArray,IMU,ADC,Encoders,CurrentMonitor
 from display import WillyFace
-from ai_provider import CloudAIProvider,build_world_state
+from ai_provider import CloudAIProvider,build_world_state,build_stuck_prompt
 from safety import SafetyController,Rejected
 from odometry import Odometry
 from world_model import WorldModel,Observation,project_point
@@ -1030,10 +1030,10 @@ class RoverBrain:
                                      battery=self.adc.battery_pct,front_cm=d['front'],left_cm=d['left'],
                                      right_cm=d['right'],tilt_deg=tilt,stuck_count=self._stuck_count,
                                      last_action=self._last_action)
-        self._last_stuck_prompt=(
-            f'Situation: {json.dumps(situation)}\nWhat should I do? Respond ONLY with JSON: '
-            f'{{"action":"forward"|"reverse"|"turn_left"|"turn_right"|"stop"|"wait","duration":<float>,'
-            f'"speed":<0.0-1.0>,"reason":"<60 chars>","confidence":<0.0-1.0>}}')
+        # Built by ai_provider.build_stuck_prompt so the measurement harness sends exactly
+        # what the rover sends -- see that function for the 2026-09-14 measurements behind its
+        # shape. It previously lived here as a literal, with a hand-kept copy in the harness.
+        self._last_stuck_prompt=build_stuck_prompt(situation)
 
         if config.ENABLE_HAILO_LLM and self.hailo_llm and self.hailo_llm.available:
             if self.hailo_llm.request_async(self._last_stuck_prompt,system=_MOTION_SYSTEM,
