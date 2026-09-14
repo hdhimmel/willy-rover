@@ -222,7 +222,7 @@ distribution, bus node board and motor drivers in the body tray.
 | P1 | 2 × 3S 8000mAh → hard parallel, per-pack BMS | 12–14 AWG | BMS per pack |
 | P2 | Battery+ → F1 → KCD4 switch → Q1 FET → +12V bus | 12 AWG | F1 30A ATC |
 | P3 | +12V bus → F2 → **SW-M** → INA260 0x44 → both FeatherWing VIN | 16 AWG | F2 |
-| P4 | +12V bus → F3 → Switch 2 → **DROK-Pi** (**9V or 9V — DISPUTED, see below**) | 16 AWG | F3 |
+| P4 | +12V bus → F3 → Switch 2 → **DROK-Pi** (9V to Witty Pi) | 16 AWG | F3 |
 | P5 | +12V bus → F4 → **DROK-5V** input | 16 AWG | F4 10A |
 | P6 | +12V bus → F5 → **SW-A** → **DROK-6V** input | 16 AWG | F5 |
 | P8 | +12V bus → F6 polyfuse (RXEF110 1.1A) → **TPSM84205** (12V→5V) → **AMS1117-3.3** → isolated 3.3V rail (VCC2) | 20–22 AWG | F6 PTC |
@@ -1801,9 +1801,13 @@ clean bill of health.
    **This also bears on §0's open item.** §0 says the divider "appears never to
    have been fed", and a real August calibration would mean an earlier divider
    *was* fed. Both can be true — different dividers. **And as of 2026-09-14 the
-   owner confirms the present divider HAS a 12V feed**, so the "never fed" reading
-   is withdrawn entirely: A0's 0.0146V is an open circuit somewhere between the
-   feed and the ADC, not an unwired board.
+   owner confirms the present divider is fed, in spec, and the ADS1115 reports real
+   pack voltage.** The "never fed" reading and the open-circuit theory that briefly
+   replaced it are both withdrawn — the feed was simply connected after §0 was
+   written. **What remains of this item is only the re-trim**: the stored
+   `BATTERY_DIVIDER_SCALE=0.2386` was calibrated for an earlier divider, and this
+   one's designed ratio is ~0.2423. Meter the pack, compare against `battery_pct`,
+   and adjust.
 
    Re-meter and re-trim once the divider has a feed. Until then A0 reads 0.0146V
    and the software consequence is in Software Design §12 item 13.

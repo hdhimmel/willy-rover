@@ -937,15 +937,19 @@ wants it.
     2026-09-14.)* The under-voltage problem it was chasing was separately
     root-caused to a degraded AMS1117 (2026-08-21) and the rail has since been
     rebuilt entirely.
-13. **Battery divider has no feed — a SOFTWARE gap, not only a hardware one.**
-    Master Hardware Design §0 records ADS1115 A0 reading 0.0146V because the
-    divider is unfed. `sensors.py`'s guard catches a *failed* read; it does not
+13. **`sensors.py` cannot tell a broken sensor from a real zero.**
+    **The hardware fault is FIXED as of 2026-09-14** — the divider is fed, in spec,
+    and reading real pack voltage. **This software gap is not.** It was found because
+    Master Hardware Design §0 recorded ADS1115 A0 at 0.0146V while the divider was
+    unfed. `sensors.py`'s guard catches a *failed* read; it does not
     catch a *successful zero*. So `brain.py` scales 0.0146V into a pack voltage of
     roughly 0.06V, walks the battery ladder to `shutdown`, and powers the rover
     off — from a reading that is structurally impossible for a connected pack.
     **A plausibility floor is needed**: a pack reading below any credible value is
     a broken sensor, not a flat battery, and must raise `SENSOR_FAULT` rather than
-    drive the shutdown ladder. Recorded 2026-09-11.
+    drive the shutdown ladder. Recorded 2026-09-11; hardware fixed 2026-09-14,
+    **this item deliberately left open** — the next divider fault would repeat the
+    same silent shutdown, and nothing in the code has changed.
 
 ---
 

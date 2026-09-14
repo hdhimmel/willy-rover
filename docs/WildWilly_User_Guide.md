@@ -141,7 +141,9 @@ few times. Howard approves or ignores it; nothing changes until someone writes t
 ## Battery
 
 Ask *"how's your battery?"* any time. If it gets low he'll stop what he's doing and shift to a
-low-power state well before it's actually empty, without you doing anything.
+low-power state well before it's actually empty, without you doing anything. His battery
+measurement was wired up properly on 2026-09-14, so the percentage he reports is now real —
+before that the sensor wasn't connected.
 
 He can't yet reliably drive himself somewhere to be plugged in — that needs the wheel sensors
 mentioned above. **For now, low battery means "go and find him and plug him in", not "he'll
