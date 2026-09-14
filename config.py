@@ -569,6 +569,39 @@ RAW_AUDIO_CAMERA_PERSIST=False  # FR-1800-002
 # --- FR-1900 local memory store. SQLite, no external dependency — safe to default on.
 ENABLE_LEARNING=True
 MEMORY_DB_PATH='memory.db'
+
+# --- FR-2100 person recognition. NOT ENABLED: identity.py (the store/matcher) exists, but the
+# embedding source (recognition.py) and its ArcFace/SCRFD models do not, so nothing can produce a
+# vector yet. Flag stays False until that half lands, matching the convention used by
+# ENABLE_HAILO_LLM and ENABLE_OBJECT_RETRIEVAL.
+ENABLE_FACE_RECOGNITION=False
+# Biometric data lives in its OWN file, deliberately not a table inside memory.db (design §4):
+# a wipe is then a file delete rather than a careful DELETE, and the embeddings sit on a visibly
+# separate boundary from ordinary learned facts. That separation is what makes FR-2100-005's
+# privacy position defensible.
+IDENTITY_DB_PATH='identities.db'
+# Three bands, not two -- cosine DISTANCE, so smaller is more similar.
+#   d <  FACE_MATCH_MAX_DISTANCE    -> recognised, greet by name
+#   in between                      -> UNCERTAIN: silent, recorded present but unnamed
+#   d >= FACE_STRANGER_MIN_DISTANCE -> confidently unknown, ask who they are
+# The middle band is not a nicety. With a single threshold every uncertain match becomes a loud
+# "Stranger Danger!" at an enrolled person in poor lighting, which is the failure FR-2100-003
+# exists to prevent. Announcing a stranger requires positive evidence of DISSIMILARITY, not
+# merely the absence of a match.
+#
+# Both numbers are STARTING POINTS FOR TUNING, not measured values. Ship
+# scripts/tune_face_threshold.py alongside and sweep them against real enrolments. This project
+# already carries one guessed threshold that was never tuned -- HAILO_LLM_CONFIDENCE_FLOOR=0.7,
+# recorded in FRD G-6 as exactly that and still an open risk. Do not add a second.
+FACE_MATCH_MAX_DISTANCE=0.40
+FACE_STRANGER_MIN_DISTANCE=0.60
+# Cap per identity, oldest evicted. Rescued matches (FR-2100-003) add vectors over time, so
+# without a cap an identity accumulates hundreds and matching slows for no accuracy gain.
+FACE_MAX_VECTORS_PER_IDENTITY=12
+# A person is greeted once per session; a session ends once they have been unseen this long.
+# Long enough that walking in and out of the room does not re-trigger it, short enough that
+# coming back after lunch feels like being noticed.
+FACE_GREET_SESSION_S=1800
 MEMORY_REPLAY_SIMILARITY_FLOOR=0.6  # FR-1900-003: below this, report mismatch rather than replay
 STUCK_TIMEOUT=3.0; BACK_UP_TIME=0.8; TURN_TIME_90=1.2; IDLE_TIMEOUT=30.0
 
