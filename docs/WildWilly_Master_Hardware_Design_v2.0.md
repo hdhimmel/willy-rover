@@ -83,15 +83,22 @@ Both hubs are **passive fan-outs**, so this is **one electrical segment**. There
 is no segmentation and no containment: any device holding SDA or SCL low takes
 the entire bus down. That happened repeatedly on 2026-09-07/08.
 
-⚠ **DISPUTED — DO NOT ACT ON THIS LINE WITHOUT A METER.** This section says the
-4.7kΩ Side-2 rail pull-ups are re-fitted. **§3.2 and the §15 BOM both say they were
-REMOVED on 2026-09-07 and must not be re-fitted.** Two sources against one, and the
-one in the minority is this one — the section everyone is told to read first, which
-makes it the most dangerous place for the error to sit. It decides whether the bus can
-clock at this cabling's capacitance, so it cannot be settled by reading. Meter
-SDA↔VCC and SCL↔VCC with power off: ~4.7kΩ (or ~3.2kΩ in parallel with the LTC4311)
-means fitted; ~10kΩ means not. Correct whichever section is wrong, here and in §3.2,
-and strike this warning.
+⚠ **DISPUTED — still unresolved, but the stakes changed 2026-09-14.** This section
+says the 4.7kΩ rail pull-ups are re-fitted; §3.2 and the §15 BOM both say they were
+REMOVED on 2026-09-07. Two sources against one, and the minority is this one — the
+section everyone reads first.
+
+**It no longer decides whether the bus works.** §3.2's recomputation shows the Pi's own
+1.8kΩ pull-ups on GP2/GP3 now serve the entire segment, since the ISO1540 that used to
+isolate them is gone. 1.8kΩ alone is comfortably adequate at this capacitance, and the
+20 consecutive clean scans recorded below are the proof.
+
+**What it now decides is the sink budget.** 1.8kΩ at 3.3V is ~1.8mA; the 4.7kΩ pair
+plus uncatalogued breakout pull-ups in parallel push the total toward the ~3mA an I²C
+device is specced to sink. **The risk is too strong, not too weak.** Still meter
+SDA↔VCC and SCL↔VCC with power off — ~1.3kΩ or below means the pair is fitted and the
+budget is tight; ~1.8kΩ means it is not and you are on the Pi's pull-ups alone, which
+is fine. Correct whichever section is wrong and strike this warning.
 
 A TCA9548A multiplexer (strapped
 `0x74`) was bought, wired and proven working during the 2026-09-07/08 debugging,
@@ -651,6 +658,58 @@ directed their removal. The date and the stated reason were not written down at
 the time, and nothing in this repository recorded the change until now — every
 table below described a board that no longer existed.
 
+### RECOMPUTED 2026-09-14 — the ISO1540's removal changed the answer
+
+Everything below this heading was written for a two-sided bus and was never
+recomputed when the isolator came out on 2026-09-08. **It is not a naming problem;
+the electrical conclusion changes.**
+
+**There is one segment, and the Pi's own pull-ups are now on all of it.** The Pi 5
+carries physical **1.8kΩ** pull-ups on GP2/GP3. Those used to sit on Side 1, isolated
+from every device. With the ISO1540 gone and the hubs hanging straight off the header,
+they pull up the entire bus.
+
+| Source | Value | Present? |
+|--------|-------|----------|
+| **Pi internal, GP2/GP3** | **1.8kΩ** | **Yes — on the board, always** |
+| ~~ISO1540 onboard~~ | ~~10kΩ × 2~~ | **Gone with the part, 2026-09-08** |
+| ~~4.7kΩ rail pair (R1/R2)~~ | ~~4.7kΩ~~ | Removed 2026-09-07 — **and §0 disputes this**, see below |
+| Device breakouts | typically 10kΩ each | Uncatalogued; in parallel they only strengthen the total |
+
+**At 1.8kΩ alone the bus is comfortably fine**, which is the point the old text could
+not reach:
+
+| Pull-up | RC at 400pF | ~3τ to threshold | vs the 10µs bit |
+|---|---|---|---|
+| **1.8kΩ (Pi alone, as-built)** | **0.72µs** | **~2.2µs** | **fine** |
+| 1.3kΩ (old Side-2 figure) | 0.52µs | ~1.6µs | fine |
+| 10kΩ | 4µs | ~12µs | exceeds the bit — bus dead |
+
+**And it is empirically confirmed.** §0 records eleven devices across 20 consecutive
+scans with zero bus errors on 2026-09-08, stable across power cycles. A bus with
+inadequate pull-ups does not do that.
+
+**So the 4.7kΩ question is much less urgent than §0 and §12 imply.** Whether that pair
+is fitted decides whether the total is ~1.8kΩ or ~1.3kΩ — both fine. It is worth
+metering, but for the *opposite* reason to the one recorded: the risk is now the sink
+budget, not the rise time. 1.8kΩ at 3.3V is ~1.8mA; add the 4.7kΩ pair and parallel
+breakout pull-ups and the total climbs toward the ~3mA a device is specced to sink.
+**Too strong, not too weak, is the live concern.**
+
+**The old warning about not adding pull-ups is now the general case.** It said "do not
+add pull-ups on Side 1 — that side sinks only 3.5mA". There is no Side 1; the
+constraint applies to the whole bus, and the Pi's 1.8kΩ is already most of the budget.
+**Do not add pull-ups anywhere without measuring first.**
+
+The LTC4311 still earns its place at this cabling capacitance, and confirming it is
+fitted and enabled (§16.5) is still worth doing — but the bus is not depending on it
+to survive, as the text below assumed.
+
+---
+
+*Everything below is retained as the pre-2026-09-08 analysis. It describes a
+two-sided bus that no longer exists.*
+
 | Location | Value |
 |----------|-------|
 | Side 1 | Pi internal 1.8kΩ + ISO1540 onboard 10kΩ |
@@ -659,10 +718,9 @@ table below described a board that no longer existed.
 **The combined Side-2 resistance is now unmeasured.** It was ~1.3kΩ with the
 rail pair fitted. Without it the value depends entirely on how many device
 breakouts still carry their own pull-ups, which has never been catalogued.
-Measure SDA2 and SCL2 to VCC2 with power off before trusting any figure here.
 
-Do not add pull-ups on Side 1 — that side sinks only 3.5mA and is already near
-budget. That constraint is unchanged.
+~~Do not add pull-ups on Side 1 — that side sinks only 3.5mA and is already near
+budget.~~ Superseded by the whole-bus statement above.
 
 **Why removing them can be correct.** Combined 1.3kΩ at 3.3V draws ~2.5mA
 against the 3mA I²C sink budget, which is tight; and an LTC4311 supplies the
@@ -670,8 +728,10 @@ fast edge actively, so strong static pull-ups work against it rather than with
 it. Removal is a defensible change **provided the LTC4311 is fitted and
 enabled**. This reasoning is reconstructed, not a record of the original intent.
 
-⚠ **Without the accelerator it is a bus-killer, and that is a live hypothesis
-for the 2026-09-07 fault.** 4.7kΩ at 400kHz supports only ~75pF; twelve taps on
+⚠ ~~**Without the accelerator it is a bus-killer, and that is a live hypothesis
+for the 2026-09-07 fault.**~~ **WEAKENED 2026-09-14** — that hypothesis assumed the
+devices were isolated from the Pi's 1.8kΩ pull-ups. Since 2026-09-08 they are not. The
+original text follows: 4.7kΩ at 400kHz supports only ~75pF; twelve taps on
 drop cables is 300–400pF. At the 100kHz this bus actually runs, one bit is 10µs:
 
 | Side-2 pull-up | RC at 400pF | ~3τ to threshold | vs 10µs bit |
@@ -1622,7 +1682,7 @@ not obvious from the schematic.
    **Voltage rating rule:** Input stages (Vin) need 50V for transient protection; output stages can be lower 
    (50V overspecs fine, 10V minimum on 3.3V output). The AMS1117 remains single-point-of-failure on isolated 
    rail — use a fresh part, never the 2026-08-25 casualty.
-6. ~~4.7kΩ pull-ups present on SDA2 and SCL2.~~ **STRUCK 2026-09-07 — the rail pair has been removed** (§3.2). Do not verify or re-fit them on the strength of this checklist. The replacement check is: confirm the LTC4311 is fitted and enabled (§16.5), and meter SDA2/SCL2 to VCC2 with power off — a reading near 10kΩ means the lines are held only by the ISO1540 and the bus cannot clock at this cabling's capacitance.
+6. ~~4.7kΩ pull-ups present on SDA2 and SCL2.~~ **STRUCK 2026-09-07 — the rail pair has been removed** (§3.2). Do not verify or re-fit them on the strength of this checklist. **Replacement check, rewritten 2026-09-14** — the old wording referred to SDA2/SCL2/VCC2 and to the ISO1540 holding the lines, and the isolator has been gone since 2026-09-08. Meter **SDA↔VCC and SCL↔VCC** with power off on the single segment. Expect ~1.8kΩ (the Pi's own GP2/GP3 pull-ups, which now serve the whole bus) or lower if breakout pull-ups are populated. **Below ~1.3kΩ, check the sink budget** — the concern is too strong, not too weak. Also confirm the LTC4311 is fitted and enabled (§16.5).
 7. ~~GND1/GND2 isolation confirmed — no DC path between domains.~~
    **Struck 2026-08-28** — not achievable with this topology and never was
    (§3.1). Replace with: confirm the star-ground bond is present and the board
