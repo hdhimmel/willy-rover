@@ -1933,11 +1933,15 @@ measurement work rather than wiring.
     would not have reduced I²C transaction count regardless. Bench-testing
     the actual edge rate (mark a wheel, jog known turns) replaces this as
     the real next step — see Software Design v1.0 S-2 and FRD v3.1 G-2.
-11. **Hailo NPU intent-parsing LLM (`qwen2:1.5b`) scored 0% on a 32-case
-    reliability batch** (2026-08-23) — real, not a config issue. Needs
-    investigation before `ENABLE_HAILO_LLM` can be enabled. See Software
-    Design v1.0 §7 and `docs/superpowers/plans/2026-08-23-hailo-voice-
-    offload.md` Task 4.
+11. ~~**Hailo NPU intent-parsing LLM (`qwen2:1.5b`) scored 0% on a 32-case
+    reliability batch** (2026-08-23) — real, not a config issue.~~ **Root cause
+    found and fixed 2026-09-14, and it WAS a config issue** — the opposite of
+    what this item asserted for three weeks. The model is ChatML-trained and the
+    prompt was being sent with no role framing, so it continued the prompt
+    template instead of answering it. 16% → 78% of utterances now produce an
+    action the rover can carry out; the CPU path rose 72% → 97% from the same
+    work. Still open, for different reasons now: see FRD v3.1 G-6 and Software
+    Design v1.0 §7.
 12. ⚠ **RETARGET OR CLOSE (flagged 2026-09-13).** This item names **§3.1's** I²C
    3.3V connector — but that bus was rebuilt on 2026-09-08 and §3.1's topology no
    longer exists. The loose connector it describes belonged to the isolated bus. If a

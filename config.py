@@ -671,11 +671,16 @@ STUCK_TIMEOUT=3.0; BACK_UP_TIME=0.8; TURN_TIME_90=1.2; IDLE_TIMEOUT=30.0
 #   1. MOTOR_PORT is unverified since 2026-09-04 — it replaced a bench-measured mapping with an
 #      assumed one, so per-wheel stall attribution and odometry may name the wrong wheel.
 #      See CLAUDE.md's motor-port pitfall and Master Hardware Design v2.0 §7.2.
-#   2. The STUCK-state on-device reasoning that ROAM depends on is FRD v3.1 G-6: the Hailo LLM
-#      scored 0% on the 32-case intent batch on 2026-08-23 and has not been re-benchmarked
-#      since. In practice most STUCK episodes will fall through to Claude, so unattended
-#      roaming is cloud-dependent for recovery despite ENABLE_HAILO_LLM being primary.
+#   2. The STUCK-state on-device reasoning that ROAM depends on is FRD v3.1 G-6. ~~The Hailo
+#      LLM scored 0% on the 32-case intent batch and has not been re-benchmarked.~~ Root cause
+#      found 2026-09-14: the prompt was sent without ChatML role framing, so the model echoed
+#      the prompt template instead of answering it. Re-measured after the fix: 78% of utterances
+#      now produce an action the rover can carry out, up from 16%. Better, NOT solved -- roughly
+#      one in five still misfires, and the remaining errors are confident ones the 0.7 floor
+#      cannot catch, so a wrong STUCK decision can still reach arbitration.
 #   3. HAILO_LLM_CONFIDENCE_FLOOR=0.7 is a guessed number, never tuned against real output.
+#      It can now be tuned for the first time, because there is finally real output to tune it
+#      against -- but note the surviving failures score 0.8-1.0, so raising it will not help.
 # Set back to False if Willie starts tripping STALL_FAULTs unattended.
 ENABLE_AUTONOMOUS_ROAM=True
 

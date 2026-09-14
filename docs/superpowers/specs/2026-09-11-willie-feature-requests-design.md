@@ -99,9 +99,12 @@ feature is an inbox nobody reads any more.
 
 ## 3. Which model composes it
 
-**Claude, not the on-device LLM.** FRD G-6 records the Hailo LLM scoring 0% on a 32-case
-intent batch, and it has not been re-benchmarked. Composing a coherent feature request is
-harder than parsing an intent, not easier.
+**Claude, not the on-device LLM.** ~~FRD G-6 records the Hailo LLM scoring 0% on a 32-case
+intent batch, and it has not been re-benchmarked.~~ Re-benchmarked 2026-09-14: the 0% was a
+ChatML framing bug, now fixed, and 78% of utterances yield an executable action. **The
+conclusion is unchanged.** Composing a coherent feature request is harder than parsing an
+intent, not easier, and a model that still mislabels roughly one intent in five — returning
+`fetch` for `retrieve` — is not the one to hand open-ended composition to.
 
 This is the right task for the cloud path: it is asynchronous, off the tick thread, not
 latency-sensitive, and quality matters more than speed — the opposite of the profile that

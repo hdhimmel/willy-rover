@@ -488,71 +488,125 @@ threshold-ordering advice (raise `WatchdogSec` or lower
 `TICK_OVERRUN_THRESHOLD_S`) is still not done, and would have made this
 visible as a logged overrun before it became a kill.
 
-**G-6 --- FR-1500, Hailo NPU intent-parsing LLM is not usable as tested.**
+**G-6 --- FR-1500, Hailo NPU intent parsing: root cause found and fixed
+2026-09-14. Gap narrowed sharply, not closed.**
 
-> ⚠ **RE-MEASUREMENT IN PROGRESS 2026-09-14.** The 32-case batch is being re-run on the
-> rover against the current code, which now clears conversation context after every call.
-> **Two observations already, both independent of the final score:**
+> **The 0% was our bug, not the model's.** Everything this entry said between
+> 2026-08-23 and today blamed "the model's own output quality (recurring JSON
+> truncation, literal echoing of the prompt's placeholder syntax)". The echoing
+> was real. The diagnosis drawn from it was wrong, and wrong in the way this
+> register keeps warning about: a conclusion taken from an error message instead
+> of from the artifact. Nobody had looked at the bytes.
 >
-> 1. **It is far too slow for voice.** Per-inference times observed in the live run range
->    from ~12s to over two minutes. FR-1500 requires speech interaction; a two-minute
->    intent classification is unusable regardless of whether the answer is correct, and
->    that is a separate failure from the accuracy one recorded below.
-> 2. **Early accuracy is consistent with the 0% baseline, not better than it.** The first
->    ten cases produced one parseable result. The `clear_context()` fix removed a real
->    degradation but does not appear to have moved the underlying output quality.
+> **What was actually happening.** The Hailo model is Qwen2. It ships a ChatML
+> chat template (`llm.prompt_template`) and its stop tokens are `<|im_end|>` and
+> `<|endoftext|>`. `generate_all()` does **not** apply that template --- it takes
+> one raw string and continues it. `hailo_llm.py` handed it a bare instruction
+> with no role markers, so it did exactly what a completion model should do when
+> handed a template: it continued the template. The captured completion is the
+> prompt's own JSON skeleton echoed back five and a half times, 820 characters,
+> containing no answer at all:
 >
-> The final score replaces the paragraph below when the run completes. **Do not treat
-> `ENABLE_HAILO_LLM=True` as production-ready in the meantime** --- the confidence floor
-> routes failures to the cloud, so the practical effect today is that on-device intent
-> parsing is not providing autonomy, exactly as this gap has said since 2026-08-23.
+> ```
+> {"intent":"<short action name>","args":{},"reply":"<what to say back, <200 chars>", ...
+> {"intent":"<short action name>","args":{},"reply":"<what to say back, <200 chars>", ...
+> ```
 >
-> Separately: the statefulness defect that prompted the re-run now has regression cover.
-> `tests/test_hailo_statelessness.py` (11 tests) asserts on **repeated** calls against one
-> long-lived instance --- 20 consecutive classifications, the ordered generate-then-clear
-> trace, and cleanup on both the raising and garbled paths. The original bug was invisible
-> to a single-call test, which is why it survived to be found live.
+> **The "recurring JSON truncation" recorded below was never truncation.** 20 of
+> 32 failures reported `Expecting value: line 1 column 97 (char 96)`. Character
+> 96 is exactly where `"confidence":<0.0-1.0` begins, and `<` is the first token
+> `json.loads` refuses. The offset was identical on every failure because the
+> echoed skeleton is a *fixed string* --- the signature of a constant, not of a
+> length limit. Raising `max_generated_tokens` to 256 changed the failure count
+> by exactly zero, which is the confirming evidence.
+>
+> **Two numbers are reported below, and the difference between them matters.**
+> The batch scores `bool(args) == expects_args`, so a spurious `args` on an intent
+> that takes none counts as a failure. On the rover that is inert: `brain.py`
+> reads `args` only for `retrieve` (`object`), `go_to` (`room`/`x`/`y`) and the
+> movement intents (`speed`/`duration`) --- verified at `brain.py:753-781`.
+> For `status`, `battery`, `arm_stow`, `arm_home`, `wave`, `come_here`, `follow`,
+> `diagnostics`, `shutdown`, `where_are_you` and `what_do_you_see` it is never
+> read. So "actionable" below means *correct intent, plus usable args where the
+> rover actually consumes them* --- how often Willie would do the right thing.
+>
+> **The batch itself was not changed.** A benchmark loosened after seeing your
+> score is not a benchmark. Its pass rate remains the number of record.
+>
+> | backend | batch pass | parsed | actionable |
+> |---|---|---|---|
+> | Hailo, before (2026-08-23 and 2026-09-14 re-run) | 0% | 19% | **16%** |
+> | Hailo, after | 25% | 91% | **78%** |
+> | CPU `LocalAIProvider`, before | 69% | 100% | **72%** |
+> | CPU `LocalAIProvider`, after | 97% | 100% | **97%** |
+>
+> Note the CPU path improved too, from a change made for the Hailo path's sake.
+> The old prompt was costing it 25 points and nobody knew, because the CPU number
+> had not been re-measured since 2026-08-23 either.
+>
+> **Three changes, in the order they were found. Only the first is the root cause.**
+>
+> 1. **ChatML framing** (`hailo_llm.py::_chatml`). The fix. Hailo parse rate
+>    19% -> 91%.
+> 2. **Payload normalisation** (`ai_provider.py::_normalise_payload`). Small models
+>    fail in opposite directions on one shared prompt: Hailo pads `args` with the
+>    placeholder `{"object": "<the object>"}`, the CPU model omits `args` entirely.
+>    Both had correct intents thrown away. A value that is entirely angle-bracketed
+>    is placeholder text the model copied from its instructions --- never a real
+>    object name, and dangerous to pass to retrieval, which would go looking for
+>    something called "the object" --- so it is dropped. A missing `args` defaults
+>    to `{}`, because `args` is a container and an absent one carries no less
+>    information than an empty one. `intent` and `reply` get no such treatment;
+>    they are content, and defaulting them would invent an action or invent speech.
+> 3. **Prompt rewrite** (`voice.py` and the batch, kept identical). Every
+>    angle-bracket placeholder removed, two worked examples added, and the four-key
+>    contract stated explicitly rather than implied.
+>
+> **Sampling parameters were the first hypothesis and they were wrong.** Tuning
+> temperature and top_p moved the score by one case out of 32, i.e. noise. They
+> are now passed explicitly (`HAILO_LLM_TEMPERATURE`, `HAILO_LLM_TOP_P`,
+> `HAILO_LLM_MAX_TOKENS`) because leaving four generation parameters at `None` is
+> wrong on its own merits, but nothing should read that as the fix. Recorded here
+> because a plausible wrong hypothesis that gets quietly dropped is how the
+> original misdiagnosis survived three weeks.
+>
+> **The prompt lives in two places and must stay in sync.**
+> `voice.py::_interpret_local()` is what the rover sends;
+> `experiments/llm_reliability_batch.py::_build_prompt()` is what the score is
+> measured against. A batch result against a prompt `voice.py` does not use is
+> worthless. Their rendered tails are verified character-identical. **Keep them
+> that way or this number stops meaning anything.**
+>
+> **Why this gap stays open.**
+>
+> 1. **`ENABLE_HAILO_LLM=True` still makes this the PRIMARY intent parser**, with
+>    Claude demoted to a fallback below `HAILO_LLM_CONFIDENCE_FLOOR=0.7`. That flag
+>    was set on 2026-09-01 while this scored 0%, and it is deliberately not changed
+>    here --- it is a live-behaviour decision for the owner, now that there is
+>    finally a real measurement to make it against.
+> 2. **The 0.7 floor does not contain the remaining failures, and this is now
+>    demonstrated rather than predicted.** The surviving errors are *confident*
+>    ones: `where_are_you` returned at confidence 0.9 and 1.0 for two `retrieve`
+>    utterances, and `fetch`/`halt` substituted for `retrieve`/`stop` at 0.8-1.0.
+>    A floor cannot filter an error the model is sure about. Vocabulary drift ---
+>    a correct understanding under the wrong label --- is the dominant remaining
+>    failure and is the thing to attack next.
+> 3. **Latency is unmeasured since the fix.** Completions fell from 820-1039
+>    characters to roughly 110, which should help a great deal, but the pre-fix
+>    range was 12s to over two minutes per inference and no one has re-timed it.
+>    FR-1500 is a speech requirement: an accurate parser that takes 30 seconds is
+>    still unusable for voice. **Measure this before enabling anything on the
+>    strength of the 78%.**
+>
+> Regression cover added: `tests/test_hailo_chatml.py` (6) pins the framing ---
+> role markers, the trailing assistant handoff, the system turn, no double
+> wrapping; `tests/test_hailo_generation_params.py` (4) pins that the parameters
+> reach `generate_all()`; `tests/test_ai_provider_normalisation.py` (11) pins both
+> normalisation rules *and* their limits, including that a missing `reply`, a
+> missing `intent` and a wrongly-typed `args` are all still rejected.
+> `tests/test_hailo_statelessness.py` (11) continues to cover the separate
+> 2026-08-23 context-accumulation defect. 277 tests pass.
 
-`hailo_llm.py::HailoIntentModel` (`config.ENABLE_HAILO_LLM`)
-loads and runs on the shared Hailo device, but scored 0% on a 32-case
-intent-reliability batch (`experiments/llm_reliability_batch.py`)
-2026-08-23, versus 75% for the existing CPU `LocalAIProvider` on the same
-batch. This is not a wiring/config gap like G-1 through G-5 --- the code
-path works end-to-end, the model's own output quality is the problem
-(recurring JSON truncation, literal echoing of the prompt's placeholder
-syntax). Real investigation needed before this can be enabled; see Software
-Design v1.0 Section 7 and `docs/superpowers/plans/2026-08-23-hailo-voice-
-offload.md` Task 4. Voice continues to run on the CPU LLM path in the
-meantime, which this gap does not affect.
-
-**Update 2026-09-07 --- this gap is still open, and the flag was enabled
-anyway.** `config.ENABLE_HAILO_LLM` was set `True` on 2026-09-01 (`f18af62`)
-and the model made *primary* for STUCK-state motion decisions, with Claude
-demoted to a fallback below `HAILO_LLM_CONFIDENCE_FLOOR=0.7`. The 32-case
-batch that produced the 0% score has not been re-run, and the 0.7 floor is a
-guessed number rather than one tuned against observed output. The "real
-investigation needed before this can be enabled" advice above was not
-followed.
-
-The confidence floor does contain the damage in the expected case: a failed
-parse or a sub-0.7 score escalates to Claude, so a 0%-scoring model should
-route essentially every episode to the cloud. Two consequences follow. First,
-on-device reasoning is not actually providing autonomy --- unattended recovery
-is cloud-dependent, and an offline rover has no STUCK reasoning at all beyond
-the reflex layer. Second, the residual risk is a *confidently wrong* parse:
-one that scores above 0.7 and drives the rover on a decision no one has
-validated. Re-run `experiments/llm_reliability_batch.py` and tune the floor
-against the result before relying on unattended operation --- this became
-materially more urgent on 2026-09-07, when `ENABLE_AUTONOMOUS_ROAM` was set
-`True` and unprompted wandering resumed.
-
-**Partially mitigated 2026-09-09 (FR-1000-005).** Unprompted wandering now
-requires a per-session human grant rather than starting on its own, so nobody
-is relying on a 0%-scoring STUCK reasoner without having said yes to a wander
-first. This narrows the exposure; it does not close G-6. Once permission is
-given the grant holds for the rest of the session, so an unattended
-`STALL_FAULT` remains reachable --- the person who granted it may well have
-left the room. Re-running the batch and tuning the floor is still the fix.
 
 # 1. Purpose
 

@@ -61,6 +61,48 @@ def _action_confidence(payload):
         return 0.0
     return 1.0
 
+def _normalise_payload(parsed, schema):
+    """Repair the two harmless-but-fatal shapes small models produce, before schema validation.
+
+    Both rules below hold regardless of any benchmark; neither invents content.
+
+    1. PLACEHOLDER ARGS. A model that was shown "<the object>" in its instructions will sometimes
+       copy it into args verbatim, on intents that take no object at all. Observed live from the
+       Hailo Qwen2 model 2026-09-14: {"intent":"shutdown","args":{"object":"<the object>"}}.
+       That string is not an object name and must never reach object retrieval, which would go
+       looking for something called "the object". Dropping the key is strictly safer than keeping
+       it, and it is what the model meant.
+
+    2. MISSING ARGS. LocalAIProvider tends the other way and omits args entirely on intents that
+       need none: {"intent":"shutdown","reply":"Shutting down.","confidence":0.9}. args is a
+       CONTAINER -- an absent one carries exactly as much information as an empty one -- so
+       rejecting a correct, complete classification over it throws away a usable result.
+
+    Only args gets either treatment. intent and reply are content: defaulting a missing reply
+    would be inventing speech, and defaulting a missing intent would be inventing an action.
+    A WRONGLY TYPED args is also left alone to fail, because that means the model misunderstood
+    the shape rather than merely leaving a box empty.
+    """
+    if not isinstance(parsed, dict) or 'args' not in schema:
+        return parsed
+    args = parsed.get('args')
+    if args is None and 'args' not in parsed:
+        parsed['args'] = {}
+        return parsed
+    if isinstance(args, dict):
+        parsed['args'] = {k: v for k, v in args.items()
+                          if not (isinstance(v, str) and _is_placeholder(v))}
+    return parsed
+
+
+def _is_placeholder(v):
+    """A value that is ENTIRELY angle-bracketed, e.g. "<the object>". Deliberately not a
+    substring test: "the <b> sign" is real text a user could have said, and corrupting it would
+    be a worse failure than the one this fixes."""
+    v = v.strip()
+    return len(v) > 1 and v.startswith('<') and v.endswith('>')
+
+
 def _parse_response(txt,schema):
     """Pure function: raw model output text + an optional schema -> AIResult. schema=None means
     treat the response as free text (cloud_ai.py's old behavior) -- no JSON parsing attempted,
@@ -74,6 +116,7 @@ def _parse_response(txt,schema):
         parsed=json.loads(txt[txt.index('{'):txt.rindex('}')+1])
     except Exception as e:
         return AIResult(False,0.0,None,False,None,f'parse failed: {e}')
+    parsed=_normalise_payload(parsed,schema)
     if not _validate_schema(parsed,schema):
         return AIResult(False,0.0,None,False,parsed,'schema validation failed')
     intent_confidence=_clamp01(parsed.get('confidence'))

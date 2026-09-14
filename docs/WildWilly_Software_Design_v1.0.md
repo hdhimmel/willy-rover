@@ -641,15 +641,33 @@ a stop.
 `AIProvider` alternative to `LocalAIProvider`, sharing the NPU with vision the
 same way (`Hailo.TARGET`). It loads and runs (`hailo_platform.genai.LLM`,
 model `qwen2:1.5b` — Phi-2 is not obtainable on this rover's delivery path),
-but a 32-case intent-reliability batch
-(`experiments/llm_reliability_batch.py`) scored **0% (0/32)** against it,
-versus 75% (24/32) for the existing CPU `LocalAIProvider` on the same batch.
-Failure modes: a recurring identical JSON-truncation position across
-unrelated prompts, and repeated literal echoing of the prompt's own
-angle-bracket placeholder syntax (`'<the object>'`) instead of substituting
-real values. **Recommendation: keep `ENABLE_HAILO_LLM=False`** until this is
-understood — see the plan doc's Task 4 for the full investigation and
-suggested next steps. Voice STT (`hailo_stt.py::HailoWhisper`) is scaffolded
+~~but a 32-case intent-reliability batch scored **0% (0/32)** against it,
+versus 75% for the existing CPU `LocalAIProvider`. Failure modes: a recurring
+identical JSON-truncation position across unrelated prompts, and repeated
+literal echoing of the prompt's own angle-bracket placeholder syntax.~~
+
+**Corrected 2026-09-14 — the 0% was a framing bug on our side, and the
+"JSON truncation" never existed.** The model is Qwen2, ChatML-trained, and
+`generate_all()` does not apply its chat template. It was being handed a bare
+instruction string, so it continued the prompt template rather than answering
+it — 820 characters of the JSON skeleton echoed back five and a half times.
+The "identical truncation position" was character 96 of that echo, which is
+simply where `"confidence":<0.0-1.0` starts; `<` is the first token
+`json.loads` rejects, and the position was constant because the echoed string
+is constant. Raising `max_generated_tokens` changed nothing, confirming it.
+
+After ChatML framing (`hailo_llm.py::_chatml`), payload normalisation
+(`ai_provider.py::_normalise_payload`) and a prompt without angle-bracket
+placeholders, measured on the same 32 cases: Hailo 16% → **78%** of utterances
+yielding an action the rover can execute, CPU `LocalAIProvider` 72% → **97%**.
+The CPU path improved from a change made for Hailo's sake — the old prompt had
+been costing it 25 points unnoticed since 2026-08-23.
+
+**`ENABLE_HAILO_LLM` is deliberately left as it is** (`True` since 2026-09-01):
+flipping it is a live-behaviour decision for the owner, not a documentation
+one. Read FRD v3.1 G-6 before changing it — in particular that the remaining
+failures are *confident* ones, so `HAILO_LLM_CONFIDENCE_FLOOR` cannot filter
+them, and that latency has not been re-measured since the fix. Voice STT (`hailo_stt.py::HailoWhisper`) is scaffolded
 behind `ENABLE_HAILO_STT` but not implementable yet — needs a Whisper HEF
 compiled on a separate x86 Ubuntu machine (the Hailo Dataflow Compiler does
 not run on ARM), which is not available.
@@ -953,11 +971,18 @@ wants it.
    2026-08-18: deliberately deferred until basic drive is live-verified.
    Skid-steer stays the only turning mechanism — not an open question
    anymore, a scheduled-later item. See `motors.py::Steering`'s comment.
-10. **Understand why the Hailo LLM (`qwen2:1.5b`) scored 0% on the intent-
-    reliability batch (§7).** Not a quick fix — needs investigation into
-    whether `clear_context()` is fully resetting state, whether a simplified
-    prompt/schema helps (the model is echoing the prompt's own placeholder
-    syntax literally), or whether this model/path is not viable for this
+10. ~~**Understand why the Hailo LLM (`qwen2:1.5b`) scored 0% on the intent-
+    reliability batch (§7).**~~ **Answered 2026-09-14: no ChatML role framing.**
+    The guesses recorded here were all wrong, which is worth keeping visible —
+    `clear_context()` was already correct, and simplifying the prompt alone did
+    not help. What helped was framing the prompt as a chat turn. Now 78% of
+    utterances produce an executable action, up from 16%. **The remaining
+    question is a different one: vocabulary drift** — the model returns `fetch`
+    for `retrieve` and `halt` for `stop`, understanding the request correctly
+    but labelling it with a synonym, at confidence 0.8-1.0. That is what to
+    attack next, and a confidence floor cannot help with it. Superseded text
+    kept below for the record; the original question is closed. Whether this
+    model/path is viable for this
     task. `ENABLE_HAILO_LLM` stays off until this is understood.
 11. ~~**A real, separate I2C hardware fault found 2026-08-23**~~ — **CLOSED
     2026-09-11.** Superseded by the 2026-09-08 bus rebuild: the isolator, the
