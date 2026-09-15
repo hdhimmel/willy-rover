@@ -1268,6 +1268,52 @@ so materially fewer zones see carpet than the floor-profile section below assume
   wiring it into the reflex path**, and return it inside 30 days if it will not hold
   one.
 
+**UART protocol — ESTABLISHED 2026-09-15**, read verbatim out of `DFRobot_MatrixLidar.cpp`
+rather than guessed, and partially confirmed against live bytes. `scripts/tof_probe.py`
+implements it; `tof.py::read_frame()` is still to be written against it.
+
+```
+request   [0x55][argsNumH][argsNumL][cmd][args...]     argsNum = len(args) + 1
+reply     [status][cmd][lenL][lenH][payload...]         lenL BEFORE lenH
+          0x53 = STATUS_SUCCESS, 0x63 = STATUS_FAILED, 0xFF = skippable filler
+getAllData             55 00 01 02
+setRangingMode 8x8     55 00 05 01 00 00 00 08   + 5s settle
+payload   little-endian uint16 mm, 64 zones = 128 bytes, 4000 = invalid
+```
+
+⚠ **The sensor does NOT stream — it is strictly request/response.** Proven two ways: the
+vendor library polls (`getAllData()` writes a frame, then blocks in `recvPacket()`), and
+**30 seconds of passive listening on a powered, correctly-wired sensor returned zero bytes.**
+Consequences that cost a full session on 2026-09-15:
+
+- **Both UART wires are required** — `sensor TX → GP9 (pin 21)` *and* `sensor RX → GP8
+  (pin 24)`. Earlier guidance that "only RX is strictly needed" assumed streaming and is
+  struck. With one wire, commands never arrive and the sensor is silent for ever.
+- **Silence is the normal idle state**, not a fault signature. Do not diagnose from it.
+- **`argsNum` is `len+1`.** The un-incremented value returns `STATUS_FAILED`, which reads
+  like a hardware fault and is not.
+- **`0x53` is a status byte, not a header.** Parsing it as one yields absurd lengths.
+
+**The Pi 5 overlay is `uart3-pi5`, not `uart3`** — VERIFIED on Willie 2026-09-15 and now in
+`config.txt`. `dtoverlay -h uart3` reports *"GPIOs 4-7, BCM2711 only"* (Pi 4); `uart3-pi5`
+reports *"GPIOs 8-9, Pi 5 only."* The wrong one does not error — it boots clean and puts the
+UART on pins nothing is wired to, so the sensor reads as dead hardware. Same silent-failure
+shape as the `Type=simple` watchdog and the `__MEASURE__` placeholders.
+
+**Windows sees the sensor** as `USB Serial Device (COMx)` / `VID_2E8A&PID_000A` when running,
+and as removable drive `RPI-RP2` / `VID_2E8A&PID_0003` in BOOTSEL (hold **BOOT** while
+plugging USB-C). Flashing is drag-and-drop of the `.uf2`; the drive ejects itself on success.
+**USB-C is for firmware only** — the CDC interface does not answer the command protocol with
+the DIP set to UART, so USB silence is not evidence of a fault. v1.3 fixes *"the bug where
+invalid values remained unchanged — all invalid values will be uniformly set to 4000"*, so
+**seeing 4000s is evidence of v1.3, not of a defect.**
+
+**Unit #1 (bought 2026-09-14) is suspect and a replacement was ordered 2026-09-15.** It
+returned a handful of valid millimetre readings on 2026-09-15 and has emitted nothing since —
+across four power cycles, both firmware versions, both transports, and with both data lines
+confirmed connected. It never met §6.5's stable-multi-minute-stream bar. Return window to
+~2026-10-14.
+
 **Why both, and not a swap.** The two sensors fail in opposite directions.
 Sonar is blind to chair legs, soft furnishings and angled surfaces. ToF is blind
 to **glass** — it looks straight through a glass table or patio door, which sonar
@@ -1809,7 +1855,34 @@ overtaken are corrected below rather than left standing.
 
 | Item | Status | Evidence |
 |------|--------|----------|
-| Full **eleven**-device roll-call, **no isolator** | PASS 2026-09-08 | `i2cdetect -y 1` returns 0x27, 0x40, 0x42, 0x43, 0x44, 0x45, 0x48, 0x4A, **0x51**, 0x60, 0x61, plus 0x70 All-Call. 20 consecutive scans, zero bus errors, stable across power cycles. 0x51 (Witty Pi) was never counted in the old ten |
+| Full **eleven**-device roll-call, **no isolator** | PASS 2026-09-08, **re-confirmed 2026-09-15** | `i2cdetect -y 1` returns 0x27, 0x40, 0x42, 0x43, 0x44, 0x45, 0x48, 0x4A, **0x51**, 0x60, 0x61, plus 0x70 All-Call. 20 consecutive scans, zero bus errors, stable across power cycles. 0x51 (Witty Pi) was never counted in the old ten. **Both devices that dropped on 2026-09-15 are back — see the incident below** |
+
+> **TWO CONNECTOR FAULTS IN ONE DAY, 2026-09-15 — both recovered by handling the wiring,
+> neither a failed part.** This is now the fourth and fifth instance of this rover's
+> signature failure, and the pattern is worth trusting over any instinct to replace a chip.
+>
+> **`0x61` (FeatherWing RIGHT).** Found at 09:12 as a `willy-rover.service` crash loop —
+> 46 restarts, one every ~13s. `motors.py:15` builds both MotorKits in one comprehension,
+> `brain.py:112` retries 8× over ~6s, then the `ValueError` propagates out of
+> `RoverBrain.__init__` and main exits 1. Bus was otherwise perfect: ten devices, no kernel
+> errors, `throttled=0x0`, and `MOTORKIT_RIGHT_ADDR=0x61` unchanged since `fe0b019`
+> (2026-08-02). **Diagnostic value: 0x60 answered and 0x61 did not, on the same SDA/SCL
+> pair** — that rules out the bus in one step and localises the fault to one board's drop.
+> Recovered after the wiring was handled. The stack had been opened the previous day for the
+> breakout HAT (`ffe6c5e`), which is the likeliest disturbance.
+>
+> **`0x45` (INA260, Pi supply, §4.1 row 7 → column 7).** Dropped off a few hours later,
+> after the stack was opened again for the ToF wiring. Five consecutive scans absent,
+> direct read `Error: Read failed`. Recovered after handling. **`config.py:224` predicted
+> exactly this for `0x40` on 2026-08-24** — *"this device can stop ACKing on I²C while still
+> passing power perfectly… points at a marginal logic-side connection, not a dead chip."*
+> Same part family, same symptom, same resolution. Note the implication: an inline INA260
+> can be off the bus while the rail it monitors works perfectly, so its absence blinds
+> monitoring without causing a power fault.
+>
+> **Standing lesson:** a single device absent from an otherwise-perfect bus is a connector,
+> not a chip. Check the drop at its §4.1 column before considering the part. And §3.1's
+> *"permanent fix (hot glue) still pending"* note is now overdue on more than one connection.
 | Pi boots from battery, not USB-C | PASS | Rail 5.144V against a 4.85V floor; `vcgencmd get_throttled` = 0x0, clearing the sticky since-boot bit as well as the live one |
 | Serial console disabled, GP14/GP15 free | PASS | `gpioinfo` shows both unused on the header gpiochip |
 | Bus node board fully populated | PASS | All rail positions landed |
@@ -1961,6 +2034,38 @@ measurement work rather than wiring.
     isolated bus down. One current monitor (`0x40`) was still intermittently
     failing self-test after the reseat; confirm it holds before treating
     this as closed.
+
+   **RETARGET, don't close (2026-09-15).** Two more connectors dropped devices this day
+   (`0x61`, then `0x45` — see §16's roll-call note). That is five instances of the same
+   fault on this rover. Whatever the original item pointed at, the underlying issue is live
+   and the securing work is overdue on the FeatherWing and column-7 drops specifically.
+
+13. **The system clock jumps forward at boot (found 2026-09-15).** `journalctl` shows the
+    earliest `willy-rover` entries of a boot that began **2026-09-14 18:03** stamped
+    **Tue 2026-09-22** — a week in the future — and `/var/lib/apt` carries the same future
+    date. NTP corrects it afterwards (`timedatectl` reads correctly once up, RTC agrees),
+    so the damage is confined to whatever is written before sync: log timestamps, apt state,
+    and anything else dated at boot. Future-dated files make `apt` and systemd timers behave
+    badly, and they make log correlation actively misleading — the first evidence in a fault
+    investigation can appear to come from next week.
+
+    **Prime suspect is the Witty Pi 5's RTC (`0x51`)**, since setting system time at power-on
+    is precisely its job. Not yet investigated. Low urgency, but it will re-inject a wrong
+    date at every boot until corrected, and it silently corrupts the timeline of every
+    future diagnosis.
+
+14. **Three INA260 readings disagree with `config.py`'s recorded "VERIFIED" values
+    (2026-09-15).** Deliberately left open at the owner's direction rather than chased.
+    Recorded so the numbers are not lost: `0x40` reads 4.986V against 5.148V (fine);
+    **`0x44` reads 6.043V against a documented 11.373V** on the +12V FeatherWing VIN bus;
+    **`0x45` reads 11.174V against a documented 9.068V**, which is within ~0.2V of the
+    owner-metered pack voltage of 11.36V. Currents (~20–37mA) are *not* anomalous —
+    `config.py:232` records ~0A as correct whenever the Pi runs on AC rather than battery.
+    Note `config.py:229`/`:231` already record these two addresses as having been swapped
+    once on 2026-09-14; today's measurements disagree with that pass. **Two meter readings
+    would settle it** — the DROK-Pi buck output (adjustable, so a knocked pot is plausible)
+    and the FeatherWing VIN terminal. **M-1 should not be run until this is resolved**: at
+    6V on VIN you would be characterising a brownout, not a port map.
 
 ---
 

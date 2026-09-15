@@ -547,10 +547,22 @@ and Software Design §6.5/§6.6; the traps are here.
   setting is a silent device that looks exactly like a wiring fault.
 - **Peel the protective film off the optics** — a ~5×3mm square over the laser window
   that the documentation does not mention, plus one over the DIP switch.
-- **Bench it over USB-C before wiring it to Willie.** A serial monitor shows rows y0–y7,
-  eight columns. One of six reviewers had the board reset-looping every few seconds even
+- ~~**Bench it over USB-C before wiring it to Willie.** A serial monitor shows rows y0–y7,
+  eight columns.~~ **STRUCK 2026-09-15 — USB-C is for FIRMWARE ONLY, not a protocol bench.**
+  The sensor's USB CDC does not answer the command protocol: with the DIP set to UART, a
+  correctly-framed `GETALL` over `COM4` timed out both before and after the v1.3 flash, and
+  a 15s passive listen returned zero bytes. Every byte we have ever seen from this sensor
+  came over the hardware UART. The "rows y0–y7" account is a purchaser running an example
+  sketch, not raw USB output — do not treat USB silence as evidence of a fault.
+  **Still true:** one of six reviewers had the board reset-looping every few seconds even
   on firmware v1.3 — **prove a stable multi-minute stream before this goes anywhere near
   the reflex path.**
+- **Firmware v1.3 flashed 2026-09-15** (board serial `E66554A14B3CA123`). Windows sees the
+  sensor as `USB Serial Device (COMx)` / `VID_2E8A&PID_000A` when running, and as removable
+  drive `RPI-RP2` / `VID_2E8A&PID_0003` in BOOTSEL (hold **BOOT** while plugging USB-C).
+  Flashing is drag-and-drop of the `.uf2`; the drive ejects itself on success. v1.3 fixes
+  *"the bug where invalid values remained unchanged — all invalid values will be uniformly
+  set to 4000"*, so **seeing 4000s is evidence of v1.3, not of a fault.**
 - **Power from 3.3V, NOT 5V.** It accepts both, but on UART the logic level follows the
   supply and the Pi's RX is not 5V tolerant. Under 80mA off Pi header pin 1 — which
   already carries the whole I²C device bus, see below.
@@ -558,18 +570,35 @@ and Software Design §6.5/§6.6; the traps are here.
   was mandated because a bare VL53L7CX uploads ~84KB of firmware over I²C at every init;
   the onboard RP2040 does that locally now. I²C traffic is just 64 values per frame.
 - **UART is the chosen interface** (2026-09-13) — all four rover USB ports are occupied,
-  and UART keeps it off the I²C bus entirely. Only **RX** is strictly needed; the sensor
-  transmits and the Pi listens. `GP8`/`GP9` are the candidates: free, and **SPI0 is
-  already off** so the kernel is not holding them. **Confirm the Pi 5 overlay→pin mapping
-  before wiring** — the Pi 4 mapping does not carry over to the RP1:
-  `ls /boot/firmware/overlays/ | grep uart`, `dtoverlay -h uart3`, and
-  `sudo cat /sys/kernel/debug/gpio | grep spi0` (must be empty). Then read
-  `/dev/ttyAMA*` at 115200.
+  and UART keeps it off the I²C bus entirely. ~~Only **RX** is strictly needed; the sensor
+  transmits and the Pi listens.~~ **STRUCK 2026-09-15 — this was wrong, and it cost most of
+  a session.** The sensor does **not** stream. It is strictly request/response: the host
+  sends a command and the sensor answers, proven two ways — the library source polls
+  (`getAllData()` writes a frame then blocks in `recvPacket()`), and **30 seconds of purely
+  passive listening on a powered, correctly-wired sensor produced zero bytes.** **BOTH
+  directions are required.** With only RX wired, commands never reach the sensor and it is
+  silent for ever — which presents exactly like dead hardware. `GP8`/`GP9` are the
+  candidates: free, and **SPI0 is already off** so the kernel is not holding them.
+- **The overlay is `uart3-pi5`, NOT `uart3`** — VERIFIED on Willie 2026-09-15 and now in
+  `/boot/firmware/config.txt`. `dtoverlay -h uart3` reports *"Enable uart 3 on GPIOs 4-7.
+  **BCM2711 only**"* — the Pi 4 part. `uart3-pi5` reports *"Enable uart 3 on GPIOs 8-9.
+  Pi 5 only."* Getting this wrong is silent: `config.txt` looks correct, the board boots
+  clean, and the sensor reads as dead hardware on the wrong pins. Confirm with
+  `ls /boot/firmware/overlays/ | grep uart`, `dtoverlay -h uart3-pi5`, and
+  `sudo cat /sys/kernel/debug/gpio | grep spi0` (must be empty). After a reboot,
+  `/dev/ttyAMA3` exists and `sudo pinctrl get 8-9` shows `a2 ... TXD3 / RXD3`.
 - **GP8/GP9 are silkscreened `CE0` and `MISO` on the GeeekPi breakout** — SPI names,
   owner-confirmed 2026-09-14. GP9 = `MISO` = physical pin 21 (**required**, sensor TX);
-  GP8 = `CE0` = physical pin 24 (optional, config only). **Re-label both for the UART
-  they carry** — and note SPI0 must stay disabled (see the SPI0 entry above), so wiring
-  actual SPI there would break two things at once.
+  GP8 = `CE0` = physical pin 24 (~~optional, config only~~ **REQUIRED — corrected
+  2026-09-15**; it carries the Pi's TX, and without it no command can ever reach the
+  sensor). **Re-label both for the UART they carry** — and note SPI0 must stay disabled
+  (see the SPI0 entry above), so wiring actual SPI there would break two things at once.
+- **`pinctrl` settles "is it even connected?" without a meter.** `sudo pinctrl get 9` shows
+  `pu | hi` by default, which a *floating* pin also shows — so that level proves nothing.
+  Force the pull down (`sudo pinctrl set 9 pd`) and re-read: still `hi` means something is
+  actively driving the line, i.e. the sensor is powered and its TX is alive. Restore with
+  `sudo pinctrl set 9 pu`. This distinguished "sensor absent" from "sensor present but
+  mute" three times on 2026-09-15.
 - **The USB-C bench test runs on the LAPTOP, not Willie.** It costs no rover port.
 - **FOV is 60° H × 60° V, 90° DIAGONAL.** If you see "90 × 90" anywhere, that came from
   the earlier MusRock listing and is wrong. It matters: 60° vertical puts the floor

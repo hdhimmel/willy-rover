@@ -221,27 +221,82 @@ conservative the stopping behaviour looks.
 
 ## T-1 — ToF (DFRobot SEN0628) bench test, before integration
 
-**Why:** `tof.py::read_frame()` deliberately raises `NotImplementedError` — the sensor had
-not arrived, so its wire format has never been observed. `ENABLE_TOF=False`.
+**Why:** `tof.py::read_frame()` deliberately raises `NotImplementedError` — the wire format
+had never been observed. `ENABLE_TOF=False`.
 
-**Procedure:**
+> **PARTIALLY CLOSED 2026-09-15.** The transport and the protocol are now established and
+> the Pi side is fully verified. What is **not** established is a working sensor: the unit
+> bought 2026-09-14 produced a handful of valid readings and has emitted nothing since.
+> A replacement was ordered 2026-09-15. **The steps below marked ✅ do not need redoing on
+> the replacement — only the sensor-dependent ones do.**
 
-1. Bench only, not on the rover, until frames decode. DIP switch set to UART. Protective
-   film off the optics. Port per `config.TOF_PORT` (`/dev/ttyAMA3`).
-2. Capture raw bytes from the port and confirm the frame structure against the datasheet
-   **before writing any decode** — read the artifact, not the datasheet alone.
-3. Implement `read_frame()` against the observed bytes.
-4. On clear level floor, on the surface Willie actually roams, run
+**Pi side — VERIFIED 2026-09-15, does not need rechecking:**
+
+| check | result |
+|---|---|
+| `dtoverlay=uart3-pi5` in `/boot/firmware/config.txt` | ✅ added and confirmed |
+| `/dev/ttyAMA3` exists after reboot | ✅ `PL011 AXI` at `1f0003c000.serial` |
+| `pinctrl get 8-9` shows `a2` = TXD3 / RXD3 | ✅ |
+| `spi0` not holding GP8/GP9 | ✅ empty |
+
+⚠ **It must be `uart3-pi5`, never `uart3`.** The plain overlay is BCM2711/Pi 4 and puts
+UART3 on GPIOs 4–7. It does not error, the Pi boots cleanly, and the sensor reads as dead
+hardware on the wrong pins.
+
+**UART protocol — derived from `DFRobot_MatrixLidar.cpp` verbatim, 2026-09-15:**
+
+```
+request   [0x55][argsNumH][argsNumL][cmd][args...]      argsNum = len(args) + 1
+reply     [status][cmd][lenL][lenH][payload...]          lenL BEFORE lenH
+          status 0x53 = SUCCESS, 0x63 = FAILED
+          0xFF is filler; skip it while hunting the status byte
+getAllData    55 00 01 02
+setRangingMode 8x8   55 00 05 01 00 00 00 08   then wait 5s (library does delay(5000))
+payload   little-endian uint16 millimetres, 64 zones = 128 bytes; 4000 = invalid
+```
+
+Two traps, both of which cost hours: `argsNum` is `len+1` not `len` (the un-incremented
+value returns `STATUS_FAILED`, which reads like a hardware fault), and the reply's `0x53`
+is a **status byte, not a header** — parsing it as a header yields nonsense lengths.
+
+**`scripts/tof_probe.py` implements all of this.** Use it rather than rewriting a client.
+
+**Procedure — the sensor-dependent half:**
+
+1. **Set the DIP switch to UART and then DISCONNECT POWER.** The factory default is I²C, and
+   DFRobot require a power disconnect for the change to latch — a Pi reboot will not do it,
+   because the 3.3V header rail stays up. A sensor in I²C mode is silent on UART with both
+   lines idling high, indistinguishable from any other fault here.
+2. **Peel the protective film** off the optics and off the DIP switch.
+3. **Wire BOTH data lines.** `sensor TX → GP9 = pin 21` *and* `sensor RX → GP8 = pin 24`.
+   Power from **3.3V, not 5V**. Earlier guidance that only RX was needed was wrong — see
+   below — and one wire produces permanent silence.
+4. `./venv/bin/python scripts/tof_probe.py --listen` → **expect zero bytes.** The sensor is
+   polled, not streaming. Zero here is a pass, not a fault.
+5. `./venv/bin/python scripts/tof_probe.py` → expect `SUCCESS`, `len=128`, and a grid.
+6. `./venv/bin/python scripts/tof_probe.py -n 200` for the stability bar. §6.5 requires a
+   **stable multi-minute stream**; intermittent is a fail. Return inside 30 days if it will
+   not hold one.
+7. Implement `read_frame()` against the observed bytes.
+8. On clear level floor, on the surface Willie actually roams, run
    `python3 scripts/calibrate_tof_floor.py`.
-5. Only then set `ENABLE_TOF=True`.
+9. Only then set `ENABLE_TOF=True`.
+
+**`pinctrl` answers "is it even connected?" without a meter.** `sudo pinctrl get 9` reads
+`pu | hi` by default — but a *floating* pin reads the same, so that proves nothing. Force
+the pull down (`sudo pinctrl set 9 pd`) and re-read: still `hi` means something external is
+actively driving the line, i.e. the sensor is powered and its TX is alive. Restore with
+`sudo pinctrl set 9 pu`. This separated "sensor absent" from "sensor present but mute"
+three times on 2026-09-15.
 
 **Record:**
 
 | check | result |
 |---|---|
-| Raw frame observed (paste a sample) | |
-| Frame length and structure match datasheet | |
+| Raw frame observed (paste a sample) | partial 2026-09-15 — mm values incl. 1070, 969, 878; `4000` invalid markers |
+| Frame length and structure match library source | ✅ protocol derived and implemented |
 | All 64 zones return data | |
+| Stable multi-minute stream (`-n 200`) | ❌ original unit: never achieved |
 | Floor profile captured, zones with no data | |
 | Reads consistent at fixed distance | |
 
