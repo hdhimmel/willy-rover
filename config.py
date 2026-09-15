@@ -332,6 +332,34 @@ BAT_SAFE_V=10.5        # -> SAFE_MODE (motion stop, arm holds)
 BAT_SHUTDOWN_V=10.2   # -> controlled shutdown; also the 0% anchor for battery_pct
 BAT_HYSTERESIS_V=0.2
 
+# --- Battery cross-check (added 2026-09-15) -------------------------------------------------
+# Two independent sources exist for pack voltage and until now nothing compared them:
+#   * the ADS1115 divider on A0 -- the authority, because it taps V21 on the PACK side and keeps
+#     reading no matter what is switched off downstream;
+#   * INA260 INA260_BUS_12V_ADDR -- factory-calibrated, no divider, no scale constant.
+# On 2026-09-15 they read 0.09V and 10.97V simultaneously for hours and nobody noticed until a
+# diagnostics run happened to be read by eye.
+#
+# WHAT THIS ACTUALLY BUYS, and it is not the case you would first think of. A grossly wrong ADC
+# reading is ALREADY caught: accept_battery_raw() rejects anything below BAT_IMPLAUSIBLE_V=5.0V
+# and brain.py escalates the staleness through SENSOR_FAULT. The dangerous case is the one that
+# passes that floor -- a divider drifting or partially failing so it reports, say, 7.5V from an
+# 11.2V pack. That is plausible, so it is adopted, and it walks the tier ladder to rth/safe and
+# eventually shutdown. Willie returns home or powers off for no reason, and the log says low
+# battery. THAT is what a second opinion catches.
+#
+# DETECTION ONLY, exactly like _check_motor_rail(): it logs and shows on the face, it never
+# stops, faults, or touches the tier. The whole point is not to add a new automatic halt path to
+# a rover whose battery sensing is the thing under suspicion.
+BAT_CROSSCHECK_MAX_DIFF_V=1.5
+# Must clear the LEGITIMATE difference between the two taps, not just sensor noise. The bus sits
+# downstream of F1/KCD4/Q1 (and, per §2.1's P3 row, SW-M), so it reads lower than the pack by the
+# drop across them: measured 0.19V at 16mA idle on 2026-09-15. Under motor load that drop grows,
+# and nobody has measured how much yet -- M-1/E-1 will produce that number, and this value should
+# be TIGHTENED once they have. 1.5V is deliberately loose to start: a false "your battery sensor
+# is lying" during first driving would be worse than a slightly late catch.
+BAT_CROSSCHECK_GRACE_S=5.0   # sustained disagreement before reporting -- rides out motor inrush
+
 # Diagnostics/logging (FR-1100) — rotating file log alongside the existing journal output;
 # the journal is ephemeral (rotates per systemd-journald policy), this file persists independently.
 # §13: the directory itself is now WILLY_LOG_ROOT above (was a bare 'logs' joined against the

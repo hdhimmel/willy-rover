@@ -301,6 +301,21 @@ front and right sonar read fine, left returns garbage.
 - **ADS1115 A0 must read 2.76–3.06V before the ADC is powered.** It sits on a
   10k / ~3.2k divider off the 12V bus. A reading near 12V means the divider is
   open and the part will be destroyed on power-up.
+- ⚠ **A0 near 0V means the divider is UNFED — and it has happened twice.** Found again
+  2026-09-15: A0 read **0.025V** (pack 11.36V, so it should have been ~2.7V) with
+  `battery_volts` reporting 0.09V. **The ADS1115 was fine.** How to tell the two apart
+  without a meter, because the board gives you a control: `config.py` says the charge-sense
+  divider is not wired, so **A2/A3 are unconnected — and they read ~0.906V.** That is what a
+  *floating* input looks like here. A0 at 0.025V is not floating; it is connected and being
+  pulled to ground by the divider's low leg, which means **the wire to A0 is good and the
+  +12V feed into the top resistor is open.** Meter the divider's high side at `V21`. Read all
+  four channels before blaming the chip — `sensors.ADC.read_channel(0..3)`.
+- **Battery sensing has a second opinion now (2026-09-15).**
+  `brain.py::_check_battery_crosscheck()` compares the ADS1115 pack reading against the +12V
+  bus INA260 and puts `⚠BATTERY SENSE SUSPECT` on the face when they disagree by more than
+  `BAT_CROSSCHECK_MAX_DIFF_V`. **The divider stays the authority** — it taps the pack side and
+  keeps reading whatever is switched off downstream; the bus monitor does not, which is exactly
+  why it cannot replace it. Detection only: it never stops, faults, or moves the tier.
 > **Historical — these three parts are no longer in the build (2026-09-08).**
 > Kept because the reasoning generalises and because older notes and the design
 > documents still refer to them.

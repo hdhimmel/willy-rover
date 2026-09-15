@@ -2021,11 +2021,41 @@ measurement work rather than wiring.
    one's designed ratio is ~0.2423. Meter the pack, compare against `battery_pct`,
    and adjust.
 
-   **The divider is fed and reading real pack voltage as of 2026-09-14**, so what is
+   ~~**The divider is fed and reading real pack voltage as of 2026-09-14**, so what is
    left of this item is the re-trim alone: meter the pack, compare against
-   `battery_pct`, adjust `BATTERY_DIVIDER_SCALE`. The software gap it exposed —
+   `battery_pct`, adjust `BATTERY_DIVIDER_SCALE`.~~ The software gap it exposed —
    `sensors.py` cannot tell a broken sensor from a real zero — is unchanged by the
    repair and stays open at Software Design §12 item 13.
+
+   ⛔ **RE-OPENED 2026-09-15 — THE DIVIDER IS UNFED AGAIN, AND THIS IS A SAFETY ITEM NOW,
+   NOT A CALIBRATION ONE.** Owner investigating the divider as of this entry. Measured:
+
+   | | |
+   |---|---|
+   | A0 | **0.025V**, stable over 6s (5-count spread) — should be ~2.7V off an 11.36V pack |
+   | `battery_volts` | 0.09V, rejected by `accept_battery_raw()`'s 5.0V floor |
+   | A1 | 0.002V |
+   | **A2 / A3** | **0.906V / 0.905V** — UNCONNECTED (`config.py:249`), so this is what a floating input reads on this board |
+
+   **That last row is the diagnosis.** A0 is *not* floating — it sits at 0.025V, pulled to
+   ground by the divider's low leg — so the wire from the divider midpoint to A0 is intact and
+   the **+12V feed into the top resistor is open**. The ADS1115 itself is healthy: it ACKs,
+   converts, and reads all four channels cleanly. Meter the high side at `V21`. Read all four
+   channels before suspecting the chip; the unconnected pair is a free control.
+
+   **Consequence while it is open:** `config.py` records the battery-tier ladder as the primary
+   safety mechanism and it currently has no input. The plausibility floor holds correctly, so
+   nothing acts on the bad number — but nothing will act on a genuinely flat pack either. Do
+   not leave Willie running unattended until it is repaired. `0x45` on the +12V bus is a usable
+   proxy meanwhile (10.97V at 13:41 on 2026-09-15; pack metered 11.36V earlier that day, a
+   0.19V fuse-and-switch drop).
+
+   **Mitigation landed the same day:** `brain.py::_check_battery_crosscheck()` compares the two
+   sources and raises `⚠BATTERY SENSE SUSPECT` on the face when they disagree. It would NOT
+   have caught this particular fault — 0.09V is already rejected by the implausibility floor —
+   but it catches the more dangerous one that clears that floor: a divider reading 7.5V from an
+   11.2V pack is plausible, gets adopted, and walks the tier ladder to a shutdown nobody
+   ordered. `tests/test_battery_crosscheck.py` (3).
 3. **PCA9685 V+ current path** — servo current now flows through each board's
    V+ terminal, PCB trace and channel headers rather than signal current
    only. Worst-case steering draw is near 9A. Confirm against the board's

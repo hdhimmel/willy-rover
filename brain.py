@@ -166,6 +166,8 @@ class RoverBrain:
         self._stuck_alert_t=0.0; self._stuck_alert_count=0
         # Motor-power-loss detection (2026-08-24) -- see _check_motor_rail().
         self._motor_rail_low_since=None; self._motor_rail_lost=False
+        # Battery sense cross-check (2026-09-15) -- see _check_battery_crosscheck().
+        self._bat_xcheck_since=None; self._bat_xcheck_flagged=False
         self._bat_tier='normal'; self._health={}; self._fault_since={}; self._stall_since={}
         self._wave_step=0; self._wave_deadline=None
         # RESOLVED 2026-09-07: it was a stale deploy, exactly as guessed below. The 2026-08-08
@@ -576,6 +578,8 @@ class RoverBrain:
         # Runs every tick regardless of FSM state so a cut is noticed while parked, not just
         # while driving.
         motor_rail_msg=self._check_motor_rail()
+        # Second opinion on the pack reading (detection only -- see _check_battery_crosscheck).
+        self._check_battery_crosscheck()
         # Only advance the battery tier on a reading we actually got. A stale value must not
         # drive the ladder toward 'shutdown' -- that is exactly the silent self-power-off this
         # was changed to prevent (2026-08-24). _check_health() above is what reacts to staleness,
@@ -1125,6 +1129,57 @@ class RoverBrain:
                       f'Motion commands will have no effect until power returns.')
         return f'MOTOR POWER LOST ({v:.2f}V)'
 
+    def _check_battery_crosscheck(self):
+        """Compare the ADS1115 pack reading against the +12V bus INA260. DETECTION ONLY.
+
+        The ADS1115 divider is the AUTHORITY and this never overrides it. The divider taps V21 on
+        the pack side, so it keeps reading true pack voltage no matter what is switched off
+        downstream; the bus monitor does not. This only ever says "these two disagree, stop
+        trusting the number on the face" -- it does not decide which one is right.
+
+        Why it exists: on 2026-09-15 the divider went open and read 0.09V while the bus read
+        10.97V, for hours, with nothing comparing them. That particular fault was caught by
+        accept_battery_raw()'s implausibility floor. The one this catches is the fault that
+        CLEARS that floor -- a divider reading 7.5V from an 11.2V pack is perfectly plausible,
+        gets adopted, and walks the tier ladder to a shutdown nobody ordered.
+
+        DELIBERATELY SILENT WHEN THE BUS IS DOWN. Per §2.1's P3 row the bus monitor sits
+        downstream of SW-M, so throwing the motor cut collapses it to ~0V. Comparing then would
+        turn every E-stop into "your battery sensor is lying". _check_motor_rail() already owns
+        that case. This also makes the check correct whichever side of SW-M that monitor turns
+        out to be on -- which is not yet confirmed at the bench -- because an implausible bus
+        reading is skipped either way rather than being interpreted."""
+        if not self.adc.is_healthy:
+            return ''   # already stale; _check_health() owns that, and comparing noise is noise
+        try:
+            bus=self.current.rail('bus_12v')['voltage_v']
+        except Exception:
+            return ''   # monitor unreadable -- _check_health() owns it
+        if bus<config.MOTOR_RAIL_MIN_V:
+            self._bat_xcheck_since=None
+            return ''   # cut thrown or bus dead: not comparable, see the docstring
+        adc=self.adc.battery_volts
+        diff=abs(adc-bus)
+        now=time.time()
+        if diff<=config.BAT_CROSSCHECK_MAX_DIFF_V:
+            if self._bat_xcheck_flagged:
+                log.info(f'Battery sense cross-check back in agreement '
+                         f'(ADC {adc:.2f}V vs +12V bus {bus:.2f}V)')
+            self._bat_xcheck_since=None; self._bat_xcheck_flagged=False
+            return ''
+        if self._bat_xcheck_since is None:
+            self._bat_xcheck_since=now; return ''
+        if now-self._bat_xcheck_since<config.BAT_CROSSCHECK_GRACE_S:
+            return ''
+        if not self._bat_xcheck_flagged:
+            self._bat_xcheck_flagged=True
+            log.error(f'BATTERY SENSE SUSPECT — ADS1115 says {adc:.2f}V, +12V bus INA260 says '
+                      f'{bus:.2f}V ({diff:.2f}V apart, tolerance '
+                      f'{config.BAT_CROSSCHECK_MAX_DIFF_V}V). One of them is wrong. The divider '
+                      f'taps the pack side and is the authority, but do not trust battery_pct '
+                      f'or the tier until this is resolved. Check the divider feed at V21.')
+        return f'BATTERY SENSE SUSPECT (ADC {adc:.2f}V vs bus {bus:.2f}V)'
+
     def _send_stuck_alert(self):
         # STUCK help-photo (owner request 2026-08-24). Best-effort and fully swallowed: a failed
         # alert must never disturb the fault handling that triggered it.
@@ -1162,6 +1217,10 @@ class RoverBrain:
         # its own state: it is information, not a state change (see _check_motor_rail). Doing it
         # here means every call site surfaces it without each one having to remember to.
         if self._motor_rail_lost: st=f'⚡MOTOR POWER LOST — {st}'
+        # Same treatment for a battery-sense disagreement: information, not a state change.
+        # It rides in front because a pack reading you cannot trust colours everything else
+        # on the face -- the percentage, the tier, the range estimate.
+        if self._bat_xcheck_flagged: st=f'⚠BATTERY SENSE SUSPECT — {st}'
         self.display.update_state(state=fs,status=st,distances=d,tilt=tilt,speed=spd,
                                    awaiting_reset=awaiting_reset,offer_override=offer_override)
 
