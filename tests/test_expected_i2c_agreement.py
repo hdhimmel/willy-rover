@@ -77,7 +77,8 @@ def test_every_expected_address_comes_from_config():
 
 def test_the_pi_rail_monitor_is_0x45_not_0x44():
     """Pinned because it has been wrong in documentation repeatedly, most recently in the FRD's
-    own verification register on 2026-09-13. 0x44 is the +12V main input; 0x45 is the Pi feed.
+    own verification register on 2026-09-13. 0x44 is the 6V ARM rail; 0x45 is the +12V bus
+    (corrected 2026-09-15 -- see tests/test_motor_rail_identity.py).
     They were transposed in the docs until 2026-08-24 and 0x44 moved upstream on 2026-08-28."""
     assert config.INA260_BUS_12V_ADDR == 0x45
     assert config.INA260_ARM_6V_ADDR == 0x44

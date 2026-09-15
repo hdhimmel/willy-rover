@@ -517,9 +517,17 @@ profile and the availability contract; `sensors.py::distances()` holds the fusio
 `scripts/calibrate_tof_floor.py` captures the profile. 24 tests
 (`tests/test_tof.py`, `tests/test_sonar_tof_fusion.py`).
 
-**What is deliberately NOT written: `tof.read_frame()`.** The sensor has not arrived, so
+**What is deliberately NOT written: `tof.read_frame()`.** ~~The sensor has not arrived, so
 the wire format has never been observed, and it raises `NotImplementedError` with that
-said plainly rather than guessing at a frame layout. Everything above it takes any
+said plainly rather than guessing at a frame layout.~~ **Updated 2026-09-15: the protocol IS
+now known** — read verbatim from `DFRobot_MatrixLidar.cpp` and implemented in
+`scripts/tof_probe.py` (request `[0x55][argsNumH][argsNumL][cmd][args]`, `argsNum = len+1`;
+reply `[status][cmd][lenL][lenH][payload]`, `0x53` SUCCESS / `0x63` FAILED / `0xFF` filler;
+**polled, never streaming**). What is missing is a *working sensor*: unit #1 returned a handful
+of valid readings and nothing since, and a replacement was ordered. `read_frame()` still raises
+`NotImplementedError` on purpose — §6.5 requires a stable multi-minute stream before this
+reaches the reflex path, and implementing against a protocol we have not yet seen hold up under
+load is the same guess this note was written to avoid. Everything above it takes any
 callable returning 64 millimetre values, which is exactly how it was developed and
 tested with the rover powered down. `ENABLE_TOF=False`.
 

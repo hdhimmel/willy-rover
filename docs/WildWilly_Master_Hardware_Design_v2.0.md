@@ -2196,7 +2196,7 @@ listed in §15.8 rather than carried as a line item.
 | Adafruit LTC4311 | I²C accelerator — no address | 1 | Installed |
 | MCP23017 | Encoder GPIO expander, 0x27 | 1 | Installed |
 | ADS1115 | Battery voltage ADC, 0x48 | 1 | Installed |
-| INA260 current sensor | 0x40 servo, 0x44 12V, 0x45 Witty Pi | 3 | Installed |
+| INA260 current sensor | **0x40 = R2 5V, 0x44 = R3 6V arm, 0x45 = +12V bus** (corrected 2026-09-15) | 3 | Installed |
 | Adafruit PCA9685 | 0x42 steering, 0x43 arm | 2 | Installed |
 | 10kΩ resistor | Battery divider on EPLZON (R3 high side, §4.2) | 1 | New 2026-09-02 |
 | 10kΩ + 4.7kΩ resistor | Battery divider low side (parallel, ≈3.2kΩ, §4.2) — **now on board** | 2 | New 2026-09-02 |
@@ -2404,10 +2404,14 @@ it is not a parallel tap.
 | Addr | Row | VIN+ from | VIN− to |
 |---|---|---|---|
 | 0x40 | 5 | **5V DROK** output | Servo/steering distribution + sonar VCC |
-| 0x44 | 6 | +12V bus via F2 | Both FeatherWing VIN terminals |
-| 0x45 | 7 | DROK 9V buck output | Witty Pi VIN terminal → Pi |
+| 0x44 | 6 | ~~+12V bus via F2~~ **DROK-6V output (R3)** | ~~Both FeatherWing VIN terminals~~ **Arm servo distribution** |
+| 0x45 | 7 | ~~DROK 9V buck output~~ **+12V bus via F2** | ~~Witty Pi VIN terminal → Pi~~ **Both FeatherWing VIN terminals** |
 
-**0x44/0x45 corrected 2026-08-24 — they were transposed in this table.** All three
+> ⛔ **THE PARAGRAPH BELOW IS SUPERSEDED — see the 2026-09-15 correction after it.** Its
+> measurements were accurate on 2026-08-24 and the monitors have since been physically
+> relocated. Retained because it explains why the addresses were assigned as they were.
+
+~~**0x44/0x45 corrected 2026-08-24 — they were transposed in this table.**~~ All three
 measured live off the bus with base power on and the self-test passing:
 `0x40 → 5.148 V @ 0.136 A`, `0x44 → 11.373 V @ 0.112 A`, `0x45 → 9.068 V @ 0.002 A`.
 0x40 matched its entry exactly. The other two did not: this table had the Pi's
@@ -2415,20 +2419,40 @@ monitor on 0x44 as a 5.0–5.1V Pi-buck rail and the motor bus on 0x45, but 0x44
 reads ~11.4V and 0x45 reads 9V. The 2026-08-23 power rework is why — the Pi is no
 longer fed 5V from the Pi buck, it is fed 9V via DROK → Witty Pi VIN, so its
 monitor moved to 0x45 and the +12V motor bus moved to 0x44. Owner-confirmed.
-`config.py`'s `INA260_MOTOR_ADDR`/`INA260_PI_ADDR` were corrected to match (the
-names were always right; only the two address values were swapped).
+~~`config.py`'s `INA260_MOTOR_ADDR`/`INA260_PI_ADDR` were corrected to match (the
+names were always right; only the two address values were swapped).~~
 
-0x45 reads ~0A whenever the Pi is running on AC rather than battery — that is
-correct behaviour, not a fault: the DROK feed is simply unloaded.
+~~0x45 reads ~0A whenever the Pi is running on AC rather than battery — that is
+correct behaviour, not a fault: the DROK feed is simply unloaded.~~
+
+✅ **CORRECTED AGAIN 2026-09-15 — owner-stated, live-measured, and this is the current
+answer.** The monitors were physically relocated after 2026-08-24 and nothing followed them:
+
+| Addr | 2026-08-24 | 2026-09-15 | Rail now |
+|---|---|---|---|
+| 0x40 | 5.148V | 4.986V | R2, 5V — unchanged |
+| 0x44 | 11.373V | **6.043V** | **R3, 6V arm servo rail** |
+| 0x45 | 9.068V | **11.174V** | **+12V bus → both FeatherWing VIN** |
+
+**R1's 9V has no INA260** — the Witty Pi HAT monitors its own VIN. The constants were renamed
+to state the *voltage* rather than a consumer (`INA260_5V_ADDR` / `INA260_ARM_6V_ADDR` /
+`INA260_BUS_12V_ADDR`), because a name like `INA260_MOTOR_ADDR` silently stops being true when
+the wire moves — which is exactly what happened, and it left `brain.py`'s motor-cut detector
+watching the arm supply for three weeks.
 
 **Physical placement (owner, 2026-08-24).** Viewed from the **front** of Willie,
 left to right:
 
 | Position | Addr | Voltage | Rail |
 |---|---|---|---|
-| **Left** | 0x45 | 9V | DROK → Witty Pi VIN → Pi |
-| **Middle** | 0x44 | 12V | +12V bus → both FeatherWing VIN (motors) |
+| **Left** | 0x45 | ~~9V~~ **12V** | ~~DROK → Witty Pi VIN → Pi~~ **+12V bus → both FeatherWing VIN (motors)** |
+| **Middle** | 0x44 | ~~12V~~ **6V** | ~~+12V bus → both FeatherWing VIN (motors)~~ **DROK-6V → arm servo distribution** |
 | **Right** | 0x40 | 5V | **5V DROK** → servos, sonar VCC, Pi screen |
+
+⚠ **Voltages and rails corrected 2026-09-15; the POSITIONS are not re-verified.** The
+address→position mapping above is from 2026-08-24 and only the wiring is known to have changed
+— but since the relocation moved wires, confirm which physical board is which before using this
+table to find one by hand.
 
 Left and right were owner-stated; the middle follows by elimination (only three
 boards). Note the layout is 9V, 12V, 5V left-to-right — not sorted by voltage and

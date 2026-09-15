@@ -1,5 +1,11 @@
 # Handoff to Claude Code on Willie — 2026-08-15
 
+> ⛔ **HISTORICAL RECORD — do not read the INA260 details here as current (noted 2026-09-15).**
+> The constants `INA260_PI_ADDR` / `INA260_MOTOR_ADDR` / `INA260_SERVO_ADDR` no longer exist:
+> they were renamed to `INA260_BUS_12V_ADDR` / `INA260_ARM_6V_ADDR` / `INA260_5V_ADDR`, and the
+> monitors were physically relocated in the meantime. **As-built: 0x40 = R2 5V, 0x44 = R3 6V arm
+> rail, 0x45 = +12V bus; R1's 9V has no INA260.** See Master Hardware Design §16.4.
+
 Paste this into a Claude Code session on the Pi. It contains a code review
 finding, a design concern, and instructions for committing updated
 documentation.

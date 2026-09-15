@@ -397,8 +397,11 @@ SELFTEST_OVERRIDE_AFTER=3
 # Motor-power-loss detection (2026-08-24). G-1 (FRD v3.1) is that the E-stop is invisible to
 # software -- it cuts motors and arm with no GPIO sense line, so the control loop keeps issuing
 # drive commands into dead motor controllers with no idea anything happened. A sense wire is
-# still the real fix, but INA260 0x44 already sits inline on the +12V motor bus, so a cut there
+# still the real fix, but an INA260 sits inline on the +12V motor bus, so a cut there
 # IS observable today with no new hardware: bus voltage collapses toward zero.
+# (That monitor is 0x45 / INA260_BUS_12V_ADDR as of 2026-09-15. This comment said 0x44, and
+# brain.py duly read 0x44 -- which had been relocated to the 6V ARM rail, making the cut
+# undetectable. Corrected; see the INA260 identity note above and tests/test_motor_rail_identity.py.)
 # Deliberately DETECTION-ONLY for now -- it logs and shows on the face, it does NOT stop or
 # fault. Adding a brand-new automatic halt path on the eve of first driving is how you get a
 # rover that refuses to move for reasons nobody understands; prove the signal is clean first,

@@ -568,7 +568,8 @@ feed raw email text to an LLM as instructions.
 
 ---
 
-**Multi-zone ToF — DFRobot SEN0628, arriving 2026-09-14.** Front obstacle sensing
+**Multi-zone ToF — DFRobot SEN0628. Unit #1 arrived 2026-09-14 and is FAULTY; replacement
+ordered 2026-09-15.** Front obstacle sensing
 *alongside* the sonar, never replacing it. Full design in Master Hardware Design §6.5
 and Software Design §6.5/§6.6; the traps are here.
 

@@ -34,8 +34,15 @@ import os,sys,time
 sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 
-_RAIL=0x44          # motor 12V bus. NOT 0x45 (Pi 9V feed) -- those two were
-                    # transposed in the docs until 2026-08-24.
+_RAIL=config.INA260_BUS_12V_ADDR
+                    # The +12V motor bus -- 0x45 as of the 2026-09-15 identity correction.
+                    # WAS hardcoded 0x44 with the comment "motor 12V bus. NOT 0x45 (Pi 9V
+                    # feed)". Both halves of that are now wrong: 0x44 is the 6V ARM rail and
+                    # 0x45 is the +12V bus; R1's 9V has no INA260 at all. Left hardcoded, this
+                    # script would have reported ARM-rail current as per-wheel motor draw --
+                    # small, plausible-looking numbers that would have been written into M-1's
+                    # results as fact. Taken from config now, so a future relocation moves it
+                    # here too instead of silently diverging again.
 _BUS=1
 _DUTY=0.60          # above the ~0.5 breakaway measured on this chassis, below
                     # a speed that walks the rover off its block.

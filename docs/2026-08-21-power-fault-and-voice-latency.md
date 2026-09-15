@@ -1,5 +1,11 @@
 # 2026-08-21 — Power delivery fault + voice latency work
 
+> ⛔ **HISTORICAL RECORD — do not read the INA260 details here as current (noted 2026-09-15).**
+> The constants `INA260_PI_ADDR` / `INA260_MOTOR_ADDR` / `INA260_SERVO_ADDR` no longer exist:
+> they were renamed to `INA260_BUS_12V_ADDR` / `INA260_ARM_6V_ADDR` / `INA260_5V_ADDR`, and the
+> monitors were physically relocated in the meantime. **As-built: 0x40 = R2 5V, 0x44 = R3 6V arm
+> rail, 0x45 = +12V bus; R1's 9V has no INA260.** See Master Hardware Design §16.4.
+
 Session record. Two threads: a hardware power fault that turned out to be the
 rover's real blocker, and a voice-latency pass that cut a spoken command from
 16.7s toward ~6-8s.

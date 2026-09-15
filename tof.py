@@ -196,8 +196,16 @@ def read_frame(port=None,baud=None,timeout=0.2):
     port=port or config.TOF_PORT; baud=baud or config.TOF_BAUD
     with serial.Serial(port,baud,timeout=timeout) as ser:
         raise NotImplementedError(
-            'SEN0628 frame parsing is not written: the sensor has not arrived, so the wire '
-            'format has never been observed. DFRobot publish DFRobot_MatrixLidar (SKU SEN0628) '
-            'and a serial monitor shows rows y0-y7 of eight columns; implement against the real '
-            'stream rather than against a guess at it. Everything above this function is '
+            'SEN0628 frame parsing is not written. The PROTOCOL is now known -- read verbatim '
+            'from DFRobot_MatrixLidar.cpp on 2026-09-15 and implemented in scripts/tof_probe.py: '
+            'request [0x55][argsNumH][argsNumL][cmd][args] with argsNum = len(args)+1; reply '
+            '[status][cmd][lenL][lenH][payload] where 0x53 is SUCCESS, 0x63 FAILED and 0xFF is '
+            'skippable filler; getAllData is 55 00 01 02; payload is little-endian uint16 mm, '
+            '64 zones = 128 bytes, 4000 = invalid. It is POLLED, never streaming -- passive '
+            'listening returns nothing, and that is correct. '
+            'What is missing is a working sensor: unit #1 returned a handful of valid readings '
+            'on 2026-09-15 and nothing since, and a replacement was ordered. Implement this '
+            'against a real stable stream (scripts/tof_probe.py -n 200) rather than against the '
+            'protocol alone -- Master Hardware Design 6.5 requires a stable multi-minute stream '
+            'before this goes anywhere near the reflex path. Everything above this function is '
             'complete and tested, and takes any callable returning 64 millimetre values.')
