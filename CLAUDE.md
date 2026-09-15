@@ -84,11 +84,11 @@ probe at boot.
 | Addr | Device | Notes |
 |------|--------|-------|
 | 0x27 | MCP23017 | Encoder expander, 6 channels. **Waveshare board** |
-| 0x40 | INA260 | Servo/steering 5V rail current |
+| 0x40 | INA260 | R2, 5V rail — steering servos, sonar VCC, Pi screen |
 | 0x42 | PCA9685 | Steering servos, CH0–CH5 |
 | 0x43 | PCA9685 | Arm servos, CH0–CH6 (CH7 unused, remapped 2026-09-06) |
-| 0x44 | INA260 | **+12V main input** — total system draw (moved upstream 2026-08-28) |
-| 0x45 | INA260 | Pi supply: DROK 9V → Witty Pi VIN |
+| 0x44 | INA260 | **R3, 6V arm servo rail** — corrected 2026-09-15 |
+| 0x45 | INA260 | **+12V bus → both FeatherWing VIN** — corrected 2026-09-15 |
 | 0x48 | ADS1115 | Battery voltage ADC, A0. **See the divider pitfall below** |
 | 0x4A | BNO085 | 9-DoF IMU |
 | 0x51 | Witty Pi 5 HAT+ | On the Pi header, its own power domain |
@@ -101,18 +101,47 @@ answers whenever either PCA9685 is alive. Any roll-call check that counts
 device. Expect eleven, not twelve.
 
 
-> **INA260 map corrected + 0x44 relocated 2026-08-28.** Addresses were transposed in every doc until
+> ~~**INA260 map corrected + 0x44 relocated 2026-08-28.** Addresses were transposed in every doc until
 > `config.py` was fixed against live measurement on 2026-08-24 (0x40 -> 5.148V, 0x44 -> 11.373V,
 > 0x45 -> 9.068V). 0x44 has now additionally been **moved upstream** of all four DROK converters
 > and the TPSM, onto the +12V main input, so it reads total system draw. See the G-1 regression
-> note below — this move takes 0x44 off the motor branch and out from behind SW-M.
+> note below — this move takes 0x44 off the motor branch and out from behind SW-M.~~
+>
+> ⚠ **SUPERSEDED 2026-09-15 — THE MONITORS WERE RELOCATED AGAIN AND NOTHING FOLLOWED THEM.**
+> Owner-stated and confirmed by direct register reads with the pack at 11.36V:
+>
+> | Addr | 2026-08-24 read | 2026-09-15 read | Rail, as of now |
+> |---|---|---|---|
+> | 0x40 | 5.148V | 4.986V | R2, 5V — unchanged |
+> | 0x44 | 11.373V | **6.043V** | **R3, 6V arm servo rail** |
+> | 0x45 | 9.068V | **11.174V** | **+12V bus → both FeatherWing VIN** |
+>
+> **R1's 9V has no INA260 at all** — the Witty Pi HAT monitors its own VIN.
+>
+> This is the fix that Software Design §8 and FRD G-1 both *recommended* — "relocate INA260 0x45
+> into P3 downstream of SW-M, then repoint the `'motor'` rail key at it." The hardware half was
+> done. **The software half was not, for roughly three weeks**, so
+> `brain.py::_check_motor_rail()` went on reading the rail named `'motor'` while that monitor had
+> moved to the arm supply. A real motor cut was therefore undetectable, and arm-servo droop past
+> the 6.0V threshold would have raised false alarms. Repointed 2026-09-15 and pinned by
+> `tests/test_motor_rail_identity.py`.
+>
+> **Constants are now named for VOLTAGE, not for a consumer** — `INA260_5V_ADDR`,
+> `INA260_ARM_6V_ADDR`, `INA260_BUS_12V_ADDR`, with rail keys `steering_5v` / `arm_6v` /
+> `bus_12v`. A name like `'motor'` silently becomes a lie when the wire moves and nothing fails
+> loudly; a name stating the voltage cannot. **If an INA260 is relocated again, re-measure all
+> three and rename to match — do not assume the old name still describes the new wire.**
 
-**Trust `config.py`, not prose, for these three addresses.** Every doc in this
-repo had 0x44 and 0x45 transposed until 2026-08-24.
+~~**Trust `config.py`, not prose, for these three addresses.** Every doc in this
+repo had 0x44 and 0x45 transposed until 2026-08-24.~~ **Struck 2026-09-15:** `config.py` was
+itself stale for three weeks after the relocation. **Trust a live `i2cget` bus-voltage read over
+any written source, including `config.py`** — the rails are 5V / 6V / 12V apart and cannot be
+confused once actually measured.
 
 **Witty Pi 5 HAT+ (0x51) — NOT YET PHYSICALLY INSTALLED, software prepared ahead of it
 (2026-08-20).** Per its own user manual, it uses only SDA/SCL — confirmed no conflict with
-anything above. Wired via VUSB (USB-C, off the 0x45-monitored Pi supply), not the VIN
+anything above. Wired via VUSB (USB-C, off the DROK-Pi 9V feed — ~~0x45-monitored~~ **no INA260 sits on R1;
+corrected 2026-09-15**), not the VIN
 screw terminal. `config.ENABLE_WITTY_PI` stays `False` (and 0x51 stays out of `brain.py`'s
 self-test expected-device set) until it's actually connected — flip it on then, not before.
 See `docs/WildWilly_Software_Design_v1.0.md` §4.1 for the integration story and the open
@@ -705,7 +734,7 @@ board (owner-confirmed 2026-09-09). Everything live runs off these four DROKs:
 
 | Rail | Volts | Source | Feeds |
 |------|-------|--------|-------|
-| R1 | **9V** | DROK-Pi | Witty Pi 5 VIN → Pi | INA260 `0x45` |
+| R1 | **9V** | DROK-Pi | Witty Pi 5 VIN → Pi | **Witty Pi HAT** (no INA260) |
 | R2 | 5V | DROK-5V | Steering servos, sonar VCC, Pi screen | INA260 `0x40` |
 | R3 | 6V | DROK-6V | Arm servo distribution |
 | R5 | **3.3V** | DROK-4 | **Motor Hall encoders ONLY** (corrected 2026-09-14) |

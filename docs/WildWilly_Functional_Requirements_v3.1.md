@@ -277,21 +277,38 @@ SW-A, added to the distribution tree (Master Hardware Design rev 2.1 Section
 which has no current monitor. SW-M's placement was intended to close the motor side of
 this gap by reading the current monitor then downstream of it (0x44). **That
 route closed on 2026-08-28** when 0x44 moved upstream to the +12V main input,
-reopening the motor side of G-1. Recommended fix: relocate INA260 0x45 into P3
+reopening the motor side of G-1. ~~Recommended fix: relocate INA260 0x45 into P3
 downstream of SW-M — the Witty Pi 5 HAT+ measures the Pi's own current, making
-0x45 redundant where it currently sits. Owner decision pending. The arm
+0x45 redundant where it currently sits. Owner decision pending.~~ ✅ **DONE — hardware
+2026-09-08/14, software 2026-09-15.** 0x45 now sits on the +12V bus (measured 11.174V against
+an owner-metered pack of 11.36V) and `brain.py::_check_motor_rail()` reads it via the
+`'bus_12v'` key. **The two halves were three weeks apart**, and in between the check was
+reading 0x44 — which had moved to the 6V arm rail — so a real cut was undetectable and arm
+droop could raise a false one. Pinned by `tests/test_motor_rail_identity.py`. The arm
 side (SW-A) still needs either a new INA260 or a direct switch-state sense.
 Relationship between SW-M/SW-A and the previously-documented latching
 mushroom E-stop is **not yet confirmed** -- whether these replace it, are
 driven by it, or are independent. Do not close this gap in code until that's
 settled, since it changes what "E-stop fired" actually means in the wiring.
 
-> **UNVERIFIED as of 2026-08-28.** This regression assumes the device moving to
+> ~~**UNVERIFIED as of 2026-08-28.** This regression assumes the device moving to
 > the 12V input is 0x44. The owner subsequently described the three monitors by
 > *rail* as Pi / UBEC 5V / DZS 6V, with the 5V and 6V staying put — which makes
 > the **Pi-rail** monitor the one that moves, and this regression spurious. That
 > conflicts with `config.py`'s measured 0x44 = 11.373V on the motor bus. Resolve
-> by reading bus voltage at 0x40/0x44/0x45 before treating this as fact.
+> by reading bus voltage at 0x40/0x44/0x45 before treating this as fact.~~
+>
+> ✅ **RESOLVED 2026-09-15 by doing exactly what this note asked** — reading bus voltage at all
+> three addresses live, rather than quoting a stored figure. Result: **0x40 = 4.986V (R2 5V),
+> 0x44 = 6.043V (R3 6V arm rail), 0x45 = 11.174V (+12V bus)**. R1's 9V has no INA260; the Witty
+> Pi HAT monitors its own VIN (owner-stated).
+>
+> **The owner's rail-based description was the more accurate source.** It named a **6V** monitor,
+> and there is one — 0x44, on the arm rail, reading 6.043V against the DROK-6V's 12V→6.0V spec.
+> It was overruled here by a `config.py` measurement that was correct when taken and had since
+> been invalidated by a physical relocation. The lesson is not "believe prose over measurement"
+> — it is that **a stored measurement is a historical claim, not a live one**, and a three-week-old
+> number loses to a fresh `i2cget` every time.
 
 
 **G-2 --- FR-500-002/004, encoder counts ARE under-sampled at speed.
@@ -1103,12 +1120,16 @@ conditions:
 -   **FR-200-001 (voltage/current/power).** Reported pack voltage tracks a
     meter reading within 0.05V across the 10.2--12.6V range, after the divider
     scale factor in `config.py` is set. Rail currents are read from the three
-    INA260s at 0x40 (servo/steering 5V), 0x44 (+12V main input) and 0x45 (Pi
-    supply). 0x44/0x45 were transposed in docs until 2026-08-24; 0x44 moved
-    upstream to the main input 2026-08-28. **Identities CONFIRMED 2026-09-14
-    (owner).** Each monitor reads the voltage its assignment predicts — 0x40 = 5.148V,
+    INA260s at **0x40 (R2, 5V — steering servos, sonar, screen), 0x44 (R3, 6V arm
+    servo rail) and 0x45 (+12V bus → both FeatherWing VIN)**. R1's 9V has no INA260;
+    the Witty Pi HAT monitors its own VIN. ~~0x44/0x45 were transposed in docs until
+    2026-08-24; 0x44 moved upstream to the main input 2026-08-28. **Identities CONFIRMED
+    2026-09-14 (owner).** Each monitor reads the voltage its assignment predicts — 0x40 = 5.148V,
     0x44 = 11.373V, 0x45 = 9.068V — and the rails are 5/9/12V apart, so they cannot be
-    confused. The flag raised here on 2026-09-13 is withdrawn.
+    confused.~~ **CORRECTED 2026-09-15**: that 2026-09-14 confirmation quoted `config.py`'s stored
+    August numbers rather than a live read, and the monitors had been physically relocated in
+    between. Measured live with the pack at 11.36V: **0x40 = 4.986V, 0x44 = 6.043V,
+    0x45 = 11.174V**.
 
     ⚠ **The voltage half of FR-200-001 cannot currently be verified at all.** The
     divider fitted on 2026-09-02 has no +12V feed and A0 reads 0.0146V, so there is no
@@ -1188,10 +1209,15 @@ so it keeps issuing drive commands into unpowered controllers and logs nothing
 about the event. Two partial mitigations exist as of 2026-08-24:
 `brain.py::_check_motor_rail()` was written to detect motor-bus voltage
 collapse via INA260 0x44 while that monitor sat inline on the motor branch.
-**As of 2026-08-28 it no longer can** — 0x44 moved upstream of SW-M to the
+~~**As of 2026-08-28 it no longer can** — 0x44 moved upstream of SW-M to the
 +12V main input, so a cut does not collapse what it reads. Retained here as
 the description of intent; the check currently reports a healthy rail
-unconditionally. It surfaces in the log and on the face —
+unconditionally.~~ ✅ **WORKING AGAIN 2026-09-15.** It now reads **0x45** via the
+`'bus_12v'` rail key, and 0x45 sits on the +12V bus downstream of SW-M. Between
+2026-08-28 and 2026-09-15 it was worse than merely blind: 0x44 had moved to the **6V
+arm rail**, which idles at 6.043V against `MOTOR_RAIL_MIN_V=6.0`, so a genuine cut
+stayed invisible *and* 43mV of arm-servo droop could report a motor-power loss that
+had not happened. It surfaces in the log and on the face —
 detection only, no automatic stop — and SW-M/SW-A (§2.1/§2.3) give per-domain
 cuts. Neither is a sense line, and neither is claimed to be.
 

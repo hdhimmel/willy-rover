@@ -797,22 +797,45 @@ no GPIO sense pin exists, so Directive 1 is enforced physically but has no
 representation in the control loop and cannot be logged. What changed is that
 this is now an accepted design position rather than an open gap. Partial
 observability was added the same day — `brain.py::_check_motor_rail()` watches
-INA260 0x44 for the voltage collapse a cut produces, logging it and surfacing
-it on the face. That is detection only: it never stops or faults, and it is not
+the **+12V bus monitor** for the voltage collapse a cut produces, logging it and surfacing
+it on the face. *(That was INA260 0x44 when written; it is **0x45** as of 2026-09-15 — see
+the correction below, and note the check spent three weeks pointed at the arm rail.)* That is detection only: it never stops or faults, and it is not
 a substitute for a sense line.
 
-**Broken 2026-08-28.** 0x44 moved from the motor branch to the +12V main input,
+~~**Broken 2026-08-28.** 0x44 moved from the motor branch to the +12V main input,
 upstream of SW-M, so a cut no longer collapses the voltage it reads and this
 check reports healthy unconditionally. Recommended fix: relocate INA260 0x45
 (redundant now that the Witty Pi 5 HAT+ measures Pi current) into P3 downstream
-of SW-M, then repoint the `'motor'` rail key at it. Owner decision pending.
+of SW-M, then repoint the `'motor'` rail key at it. Owner decision pending.~~
 
-> ~~**UNVERIFIED as of 2026-08-28.**~~ **CLOSED 2026-09-14, owner-confirmed.** The
+✅ **FIXED 2026-09-15 — but note how long the two halves were apart.** The hardware half of
+that recommendation was carried out: **0x45 now sits on the +12V bus** (reads 11.174V against
+an owner-metered pack of 11.36V) and **0x44 moved to the 6V arm rail** (reads 6.043V, matching
+the DROK-6V spec). R1's 9V is monitored by the Witty Pi HAT, not by any INA260.
+
+**The software half — "repoint the `'motor'` rail key at it" — was never done**, so for about
+three weeks `_check_motor_rail()` watched the *arm* supply while believing it watched the motor
+bus. That failed in both directions at once: a genuine cut collapses the +12V bus and leaves the
+arm rail at ~6.04V, safely above `MOTOR_RAIL_MIN_V=6.0`, so **the cut was undetectable**; and the
+same 43mV of margin meant ordinary arm-servo droop would log `MOTOR POWER LOST` with the motor
+bus perfectly healthy. Repointed to the `'bus_12v'` key, with the rail constants renamed for
+voltage rather than consumer, and pinned by `tests/test_motor_rail_identity.py` (4 tests).
+
+> ~~**UNVERIFIED as of 2026-08-28.**~~ ~~**CLOSED 2026-09-14, owner-confirmed.** The
 > three monitors are settled: **0x40 = 5V** (servos, sonar — measured 5.148V),
 > **0x44 = +12V main** (11.373V), **0x45 = Pi feed at 9V** (9.068V). Each reads the
 > voltage its assignment predicts, and the rails are 5/9/12V apart — not confusable.
 > `config.py` already recorded all three measurements, which is the bus-voltage check
-> this note asked for.
+> this note asked for.~~
+>
+> ⚠ **RE-OPENED AND RE-CLOSED 2026-09-15.** That 2026-09-14 closure reasoned from `config.py`'s
+> *stored* August numbers rather than from a fresh read, and the monitors had been relocated in
+> between. Re-measured live: **0x40 = 4.986V (R2 5V), 0x44 = 6.043V (R3 6V arm), 0x45 = 11.174V
+> (+12V bus)**; owner confirms the 9V is monitored by the Witty Pi HAT, not an INA260.
+>
+> The note's own instruction was right and was not followed: it asked for a **bus-voltage read**,
+> and a stored measurement from three weeks earlier is not that. The rails really are far apart
+> and really are unconfusable — *once actually measured*.
 
 
 The reset-gate *mechanism* itself is no longer blocked on that wiring, though.

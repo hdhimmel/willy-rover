@@ -221,16 +221,61 @@ ESTOP_LOG_INTERVAL_S=5.0 # safety.py throttles emergency_stop()'s own log line t
 # So the original NAMES were right and only the ADDRESSES were transposed -- fixed by swapping the
 # two address values below rather than renaming anything, which keeps every existing caller valid.
 # Owner-confirmed. Master Hardware Design v2.0 §2.2/§16.4 updated to match.
-INA260_SERVO_ADDR=0x40   # 5V rail (DROK-5V, replaced FEICHAO UBEC 2026-08-28) → steering servos + sonar VCC. VERIFIED 5.148V.
+#
+# ⚠ SUPERSEDED 2026-09-15 -- AND NOTE WHY, because it is not "the docs were wrong".
+# The 2026-08-24 readings above were CORRECT FOR THE WIRING OF THAT DATE. Re-measured 2026-09-15:
+#     0x40 -> 4.986 V @ 0.526 A     0x44 -> 6.043 V @ 0.037 A     0x45 -> 11.174 V @ 0.019 A
+# 0x44 moved from the +12V bus (11.373V) to the 6V arm rail, and 0x45 moved from the 9V Pi feed
+# (9.068V) to the +12V bus. The monitors were PHYSICALLY RELOCATED between those dates -- there is
+# an unmerged branch named docs/eplzon-rev3.2-ina260-relocation -- and neither this file nor the
+# design docs were updated to follow. R1's 9V now has no INA260 at all; the Witty Pi HAT monitors
+# its own VIN (owner-stated 2026-09-15).
+#
+# LESSON, and it is the expensive kind: a constant whose NAME encodes a consumer ("motor", "pi")
+# silently becomes a lie when the wire moves, and nothing fails loudly. brain.py went on reading
+# the rail called 'motor' for three weeks while that monitor sat on the arm supply. The names
+# below now encode VOLTAGE, which is a property of the rail rather than of our intent for it.
+# When an INA260 is relocated again, re-measure all three and rename to match -- do not assume
+# the old name still describes the new wire.
+# ---------------------------------------------------------------------------------------------
+# INA260 IDENTITIES — CORRECTED AND RENAMED 2026-09-15, owner-stated, measurements agree.
+#
+# The old names (INA260_SERVO_ADDR / INA260_MOTOR_ADDR / INA260_PI_ADDR) were wrong about which
+# rail two of the three watched, and the wrongness was not cosmetic: brain.py's motor-power-cut
+# detector read the rail named 'motor' and was therefore watching the ARM rail. See the note on
+# INA260_ARM_6V_ADDR below. Three mutually inconsistent mappings existed simultaneously -- these
+# constants, sensors.py's class comment, and sensors.py's own _RAILS dict -- which is precisely
+# how the error survived two separate identification passes (2026-09-13 and 2026-09-14).
+#
+# Names are now RAIL-DESCRIPTIVE rather than consumer-descriptive. "Servo" was ambiguous the
+# moment arm servos moved to their own 6V rail; "motor"/"pi" were simply incorrect. A name that
+# states the voltage cannot drift away from the hardware the way a name stating a purpose can.
+#
+# Measured 2026-09-15 with the pack at 11.36V (owner meter):
+#     0x40 -> 4.986V     0x44 -> 6.043V     0x45 -> 11.174V
+INA260_5V_ADDR=0x40      # R2, 5V (DROK-5V, replaced FEICHAO UBEC 2026-08-28) -> steering servos
+                         # + sonar VCC + Pi screen. VERIFIED 5.148V; read 4.986V on 2026-09-15.
                          # Wired inline, so the rail passes through it: this device can stop
                          # ACKing on I2C while still passing power perfectly (seen 2026-08-24 --
                          # dropped off the bus, came back after the wiring was physically handled,
                          # which points at a marginal logic-side connection, not a dead chip).
-INA260_MOTOR_ADDR=0x44   # +12V bus -> both FeatherWing VIN. VERIFIED 11.373V. Docs had this on
-                         # 0x45; measurement says 0x44.
-INA260_PI_ADDR=0x45      # Pi supply feed: DROK 9V -> Witty Pi VIN -> Pi. VERIFIED 9.068V. Reads
-                         # ~0A whenever the Pi is running on AC instead of battery, which is
-                         # correct behaviour, not a fault. Docs had this on 0x44 as a 5V rail.
+INA260_ARM_6V_ADDR=0x44  # R3, 6V (DROK-6V) -> arm servo distribution. Reads 6.043V, which matches
+                         # the DROK-6V's 12V->6.0V spec and nothing else in the system.
+                         # ⚠ THIS IS NOT THE MOTOR BUS. It was named INA260_MOTOR_ADDR until
+                         # 2026-09-15 and brain.py::_motor_rail_status() read it believing it was
+                         # the +12V motor bus. That broke in both directions: a real motor-power
+                         # cut collapses the 12V bus and leaves this rail untouched, so the cut
+                         # was UNDETECTABLE; and this rail idles at 6.043V against a 6.0V
+                         # threshold, so 43mV of arm-servo droop raised a false "motor rail lost".
+INA260_BUS_12V_ADDR=0x45 # +12V bus (battery via F1/KCD4/Q1) -> both FeatherWing VIN. Reads
+                         # 11.174V against an owner-metered pack of 11.36V -- the ~0.19V delta is
+                         # the fuse and switch drop. This is the rail brain.py watches for a
+                         # motor-power cut.
+                         # Was named INA260_PI_ADDR and documented as "DROK 9V -> Witty Pi VIN".
+                         # It is NOT the 9V rail: R1's 9V is monitored by the Witty Pi HAT itself,
+                         # not by any INA260 (owner-stated 2026-09-15). The old "reads ~0A when
+                         # the Pi runs on AC" note explained the low current under the wrong
+                         # premise; the real reason is that this bus only draws when motors do.
 
 # Witty Pi 5 HAT+ (UUGear) — RTC and power management. Uses only SDA/SCL (per its own user
 # manual), no other GPIO — confirmed no conflict with anything else on this bus. Physically
@@ -239,7 +284,9 @@ INA260_PI_ADDR=0x45      # Pi supply feed: DROK 9V -> Witty Pi VIN -> Pi. VERIFI
 # Pi via its own VUSB output). "Default state when powered" set to ON with a 2s delay (so Willie
 # boots when power is connected), hardware watchdog enabled at 200 missed heartbeats (~10-20s).
 # ENABLE_WITTY_PI now True — 0x51 is included in brain.py's _EXPECTED_I2C self-test set.
-# Witty Pi's 9V input (INA260_PI_ADDR monitoring) comes from DROK-Pi (9V adjustable buck, R1).
+# Witty Pi's 9V input comes from DROK-Pi (9V adjustable buck, R1). The HAT monitors that VIN
+# itself -- no INA260 sits on R1 (corrected 2026-09-15; this line previously credited
+# INA260_PI_ADDR, which is now INA260_BUS_12V_ADDR and watches the +12V bus instead).
 # The manual's low-voltage-threshold registers (#22/#23) monitor VIN; exact thresholds are not
 # live-tested. The existing software battery-tier system (config.BAT_SHUTDOWN_V, battery-voltage
 # ADC) remains the primary safety mechanism.
@@ -731,9 +778,9 @@ def validate():
     FR-1100-004) instead -- run `python3 diagnostics.py` to see current results."""
     problems=[]
 
-    i2c_addrs={'ENCODER_ADDR':ENCODER_ADDR,'INA260_SERVO_ADDR':INA260_SERVO_ADDR,
+    i2c_addrs={'ENCODER_ADDR':ENCODER_ADDR,'INA260_5V_ADDR':INA260_5V_ADDR,
                'STEER_PCA_ADDR':STEER_PCA_ADDR,'ARM_PCA_ADDR':ARM_PCA_ADDR,
-               'INA260_PI_ADDR':INA260_PI_ADDR,'INA260_MOTOR_ADDR':INA260_MOTOR_ADDR,
+               'INA260_BUS_12V_ADDR':INA260_BUS_12V_ADDR,'INA260_ARM_6V_ADDR':INA260_ARM_6V_ADDR,
                'ADS_ADDR':ADS_ADDR,'IMU_ADDR':IMU_ADDR,
                'MOTORKIT_LEFT_ADDR':MOTORKIT_LEFT_ADDR,'MOTORKIT_RIGHT_ADDR':MOTORKIT_RIGHT_ADDR}
     seen={}

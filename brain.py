@@ -62,8 +62,8 @@ class _SdNotify:
 # all-call broadcast) — PCA9685.reset() clears MODE1's ALLCALL bit during motors.py/arm.py's
 # construction in RoverBrain.__init__, which runs before this self-test, so 0x70 legitimately
 # never answers by the time we scan; it was never a real device to begin with.
-_EXPECTED_I2C={config.ENCODER_ADDR,config.INA260_SERVO_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
-               config.INA260_PI_ADDR,config.INA260_MOTOR_ADDR,config.ADS_ADDR,config.IMU_ADDR,
+_EXPECTED_I2C={config.ENCODER_ADDR,config.INA260_5V_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
+               config.INA260_BUS_12V_ADDR,config.INA260_ARM_6V_ADDR,config.ADS_ADDR,config.IMU_ADDR,
                config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR}
 # Witty Pi 5 only joins the expected-device set once it's actually installed and enabled --
 # adding it unconditionally when the hardware is absent would make the self-test report a
@@ -1096,14 +1096,17 @@ class RoverBrain:
         status string when power looks lost, else ''.
 
         G-1 says the E-stop is invisible to software because there's no sense line. That's true
-        for the arm rail, but NOT for motors: INA260 0x44 is wired inline on the +12V motor bus
+        for the arm rail, but NOT for motors: INA260 0x45 is wired inline on the +12V motor bus
         (Master Hardware Design §16.4), so a cut collapses the voltage it reads. This turns a
         silent failure -- commanding motors into dead controllers -- into a logged, visible one.
 
         DETECTION ONLY by deliberate choice: no stop, no fault, no state change. See
         config.MOTOR_RAIL_MIN_V for why escalation is not wired up yet."""
         try:
-            v=self.current.rail('motor')['voltage_v']
+            # 'bus_12v' (0x45), NOT 'arm_6v'. Until 2026-09-15 this read the rail then named
+            # 'motor', which was the 6V ARM monitor -- so a real motor cut left it at 6.04V and
+            # went undetected, while arm-servo droop past the 6.0V threshold raised false ones.
+            v=self.current.rail('bus_12v')['voltage_v']
         except Exception:
             return ''  # monitor itself unreadable -- _check_health() owns that, not this
         now=time.time()

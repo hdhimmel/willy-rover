@@ -27,7 +27,11 @@ which is how the first two shutdowns got away.
 """
 import csv,os,sys,time
 
-_RAILS=[(0x40,'servo_5v'),(0x44,'motor_12v'),(0x45,'pi_9v')]
+# Rail identities corrected 2026-09-15: 0x44 is the 6V ARM rail and 0x45 is the +12V bus.
+# The old labels ('motor_12v' on 0x44, 'pi_9v' on 0x45) mislabelled every CSV column this
+# script has ever written -- treat logs from before that date as having those two swapped
+# and the 9V reading as being the 12V bus.
+_RAILS=[(0x40,'steering_5v'),(0x44,'arm_6v'),(0x45,'bus_12v')]
 _BUS=1
 _PERIOD_S=0.5   # 2 Hz. Fast enough to catch a CC transition, light enough that
                 # it can't starve the encoder thread on the shared bus (the

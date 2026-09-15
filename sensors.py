@@ -394,12 +394,17 @@ class Encoders:
     def is_healthy(self): return (time.perf_counter()-self._last_ok)<1.0
 
 class CurrentMonitor:
-    # INA260 x3 (§5.2): 0x40 servo/steering rail, 0x44 Pi rail, 0x45 motor rail. Monitor/log
+    # INA260 x3 (§5.2): 0x40 = R2 5V (steering servos, sonar, screen), 0x44 = R3 6V (arm servo
+    # distribution), 0x45 = +12V bus (both FeatherWing VIN). CORRECTED 2026-09-15 -- this comment
+    # previously read "0x44 Pi rail, 0x45 motor rail" and contradicted the _RAILS dict directly
+    # below it, which is part of how the mis-identification survived. Rail keys now state the
+    # VOLTAGE, so they cannot quietly stop describing the wire. Monitor/log
     # only (feeds FR-1100 diagnostics) — no numeric overcurrent trip threshold exists anywhere
     # in the documentation to hardcode an automatic cutoff against (§14.1 uses "threshold" as a
     # literal placeholder with no value attached).
     _REG_CURRENT=0x01; _REG_VOLTAGE=0x02; _REG_POWER=0x03  # 1.25mA/bit, 1.25mV/bit, 10mW/bit
-    _RAILS={'servo':config.INA260_SERVO_ADDR,'pi':config.INA260_PI_ADDR,'motor':config.INA260_MOTOR_ADDR}
+    _RAILS={'steering_5v':config.INA260_5V_ADDR,'arm_6v':config.INA260_ARM_6V_ADDR,
+            'bus_12v':config.INA260_BUS_12V_ADDR}
     def __init__(self,bus=1):
         self._bus=None if config.SIMULATE_HARDWARE else smbus2.SMBus(bus)
         self._data={r:{'current_a':0.0,'voltage_v':0.0,'power_w':0.0} for r in self._RAILS}

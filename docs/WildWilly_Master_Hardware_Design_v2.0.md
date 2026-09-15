@@ -101,11 +101,11 @@ that was **not** built.
 
 | Rail | Volts | Source | Feeds | Monitor |
 |------|-------|--------|-------|---------|
-| R1 | **9V** | DROK-Pi | Witty Pi 5 VIN → Pi | INA260 `0x45` |
+| R1 | **9V** | DROK-Pi | Witty Pi 5 VIN → Pi | **Witty Pi HAT** (no INA260 — corrected 2026-09-15) |
 | R2 | 5V | DROK-5V | Steering servos, sonar VCC, Pi screen | INA260 `0x40` |
 | R3 | 6V | DROK-6V | Arm servo distribution | — |
 | R5 | **3.3V** | DROK-4 | **Motor Hall encoders ONLY** — corrected 2026-09-14 | — |
-| — | +12V | Battery via F1/KCD4/Q1 | Both FeatherWing VIN, all DROK inputs | INA260 `0x44` |
+| — | +12V | Battery via F1/KCD4/Q1 | Both FeatherWing VIN, all DROK inputs | INA260 `0x45` |
 
 ⚠ **CORRECTED 2026-09-14 — I²C device logic is fed from the PI'S OWN 3.3V, not
 R5.** Owner-stated. Every table in this document said R5 fed "Hall encoders and all
@@ -232,7 +232,7 @@ distribution, bus node board and motor drivers in the body tray.
 |----|------|-------|------------|
 | P1 | 2 × 3S 8000mAh → hard parallel, per-pack BMS | 12–14 AWG | BMS per pack |
 | P2 | Battery+ → F1 → KCD4 switch → Q1 FET → +12V bus | 12 AWG | F1 30A ATC |
-| P3 | +12V bus → F2 → **SW-M** → INA260 0x44 → both FeatherWing VIN | 16 AWG | F2 |
+| P3 | +12V bus → F2 → **SW-M** → INA260 0x45 → both FeatherWing VIN | 16 AWG | F2 |
 | P4 | +12V bus → F3 → Switch 2 → **DROK-Pi** (9V to Witty Pi) | 16 AWG | F3 |
 | P5 | +12V bus → F4 → **DROK-5V** input | 16 AWG | F4 10A |
 | P6 | +12V bus → F5 → **SW-A** → **DROK-6V** input | 16 AWG | F5 |
@@ -260,7 +260,7 @@ graph TD
     FW_MOTOR["FeatherWing<br/>Motor Drivers<br/>12V VIN"]
     
     PI_BUCK["9V DROK<br/>Witty Pi"]
-    R1["R1: 9V<br/>INA260 0x45"]
+    R1["R1: 9V<br/>Witty Pi HAT"]
     
     DROK5["5V DROK<br/>INA260 0x40"]
     R2["R2: 5V<br/>Servos/Sonar"]
@@ -321,13 +321,13 @@ graph TD
 
 | ID | Rail | Source | Feeds | Monitor |
 |----|------|--------|-------|---------|
-| R1 | **9V** | **DROK-Pi** buck | Witty Pi 5 VIN (KF350-2P) → Witty Pi → Pi 5 | INA260 **0x45** |
+| R1 | **9V** | **DROK-Pi** buck | Witty Pi 5 VIN (KF350-2P) → Witty Pi → Pi 5 | **Witty Pi HAT monitors its own VIN — no INA260** |
 | R2 | 5V | **DROK-5V** buck | Steering servo distribution, sonar VCC, Pi screen | INA260 **0x40** |
-| R3 | 6V | **DROK-6V** buck | Arm servo distribution | — |
+| R3 | 6V | **DROK-6V** buck | Arm servo distribution | INA260 **0x44** |
 | R5 | **3.3V** | **DROK-4** buck | **Motor Hall encoders (JGA25-370B) ONLY** — corrected 2026-09-14; I²C device logic runs from the Pi's own 3.3V | — |
 | **R4** | **3V3** | **Pi header pin 1** | ⚠ **CORRECTED 2026-09-14 — this row was struck as "NO CONSUMER AS-BUILT" and that was WRONG.** Pi 3V3 supplies **all I²C device logic** (owner-stated), and now the SEN0628 as well. It formerly also fed ISO1540 Side 1, which is gone. This is a live rail with a real load and a real budget — the Pi 5's 3V3 pin is good for a few hundred mA, which eleven devices' logic plus pull-ups should sit inside, but it is now a budget that exists | — |
 | ~~—~~ | ~~3V3 (VCC2)~~ | ~~Two-stage chain: TPSM84205 → AMS1117-3.3~~ | **OUT OF SERVICE 2026-09-08 (§0).** The isolated bus it fed does not exist. The TPSM is still physically fitted but dormant; the AMS1117 has no input. Struck 2026-09-13 — R4 was struck in rev 2.1 and this row was missed | — |
-| — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | INA260 **0x44** (P3 monitoring) |
+| — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | INA260 **0x45** (P3 monitoring) |
 | — | +12V main | Battery via F1/KCD4/Q1 | All four DROK inputs + isolated power chain (P8) | — |
 
 **R1 = 9V — owner-confirmed 2026-09-14, dispute closed.** §0 briefly recorded 9.5V and
@@ -452,9 +452,12 @@ having power.
 
 **R1 changed 2026-08-23/24.** It was "5.0–5.1V, Pi buck → Pi header pins 2/4,
 monitored by INA260 0x44." The Pi is no longer fed that way: the DROK buck now
-supplies 9V into Witty Pi's VIN terminal, and Witty Pi supplies the Pi. Its
+supplies 9V into Witty Pi's VIN terminal, and Witty Pi supplies the Pi. ~~Its
 monitor is 0x45, not 0x44 — see §16.4 for the live measurements confirming this
-and the 0x44/0x45 transposition that was corrected at the same time.
+and the 0x44/0x45 transposition that was corrected at the same time.~~
+**CORRECTED 2026-09-15: R1 has no INA260 at all.** The Witty Pi HAT monitors its own VIN.
+0x45 was relocated onto the +12V bus (reads 11.174V) and 0x44 onto the 6V arm rail
+(reads 6.043V).
 
 Set each DROK off-load before connecting anything downstream: **9V** rail to the
 Witty Pi's input spec, **5V** to 5.0–5.1V, **6V** to 6.0V, **3V** per the warning
@@ -496,21 +499,39 @@ addressed around the same time.
   to the existing latching mushroom E-stop above — **replaces it, is driven by
   it, or is fully independent — not yet confirmed, owner to specify.**
   SW-M's placement was chosen so the motor side of G-1 would be observable
-  through the current monitor then sitting downstream of it (0x44). **That no
+  through the current monitor then sitting downstream of it (0x44). ~~**That no
   longer holds** — 0x44 moved to the +12V main input on 2026-08-28, upstream
   of SW-M, so a motor cut is invisible to it again. See the G-1 regression in
-  §16.4. SW-A's side (P6/R3) still has no
+  §16.4.~~ ✅ **Observable again as of 2026-09-15**, via **0x45** on the +12V bus
+  downstream of SW-M; `brain.py::_check_motor_rail()` reads it.
+  ~~SW-A's side (P6/R3) still has no
   current monitor, so it needs either a new INA260 or a direct switch-state
-  sense to be observable in software.
+  sense to be observable in software.~~
+  ⚠ **SW-A's side now DOES have a monitor — opportunity, not yet taken (2026-09-15).**
+  **INA260 0x44 sits on R3**, the 6V arm servo rail. SW-A cuts the 6V DROK's *input*, so
+  throwing it collapses R3 and 0x44 would read the drop. That makes the **arm** side of G-1
+  observable in software for the first time, by the same mechanism `_check_motor_rail()`
+  already uses for motors — no new hardware required. Not implemented: it needs its own
+  threshold (R3 idles at 6.043V, so the motor rail's 6.0V figure is unusable here) and an
+  owner decision on whether an arm-power cut should log, warn, or do nothing.
 - **Switch 2** in the Pi buck input line — de-powers the Pi and the 3V3 bus
   after a software shutdown.
 
-> **UNVERIFIED as of 2026-08-28.** This regression assumes the device moving to
+> ~~**UNVERIFIED as of 2026-08-28.** This regression assumes the device moving to
 > the 12V input is 0x44. The owner subsequently described the three monitors by
 > *rail* as Pi / UBEC 5V / DZS 6V, with the 5V and 6V staying put — which makes
 > the **Pi-rail** monitor the one that moves, and this regression spurious. That
 > conflicts with `config.py`'s measured 0x44 = 11.373V on the motor bus. Resolve
-> by reading bus voltage at 0x40/0x44/0x45 before treating this as fact.
+> by reading bus voltage at 0x40/0x44/0x45 before treating this as fact.~~
+>
+> ✅ **RESOLVED 2026-09-15 by doing what the note asked** — a live bus-voltage read at all three
+> addresses instead of a quoted figure: **0x40 = 4.986V (R2 5V), 0x44 = 6.043V (R3 6V arm),
+> 0x45 = 11.174V (+12V bus)**, owner-confirmed, pack metered at 11.36V.
+>
+> Note which source turned out to be right. **The owner's rail-based description named a 6V
+> monitor, and there is one.** It was overruled by a `config.py` measurement that was accurate
+> when taken and had since been invalidated by a physical relocation. A stored measurement is a
+> historical claim, not a live one.
 
 
 ### 2.4 Capacitors — complete list
@@ -789,8 +810,8 @@ zero bus errors. Expect eleven, not twelve: `0x70` is All-Call, not a device.
 | 0x40 | INA260 | 5V servo/steering rail current |
 | 0x42 | PCA9685 | Steering servos, CH0–CH5 |
 | 0x43 | PCA9685 | Arm servos, CH0–CH6 (CH7 unused, remapped 2026-09-06) |
-| 0x44 | INA260 | +12V main input — total system draw (moved upstream 2026-08-28) |
-| 0x45 | INA260 | Pi supply: DROK 9V → Witty Pi VIN |
+| 0x44 | INA260 | **R3, 6V arm servo rail** — corrected 2026-09-15 (was recorded as +12V main) |
+| 0x45 | INA260 | **+12V bus → both FeatherWing VIN** — corrected 2026-09-15 (was recorded as the 9V Pi feed) |
 | 0x48 | ADS1115 | Battery voltage ADC |
 | 0x4A | BNO085 | 9-DoF IMU |
 | 0x60 | FeatherWing | Motor driver, LEFT |
@@ -880,8 +901,8 @@ role-colouring and differs from the sonar harness key in §6.1.
 | 3 | X | X | X | X | ADS1115 logic | 0x48 |
 | 4 | X | — | — | — | ADS1115 ADDR→GND | 0x48 |
 | 5 | X | X | X | X | INA260 servo/steering | 0x40 |
-| 6 | X | X | X | X | INA260 +12V main input | 0x44 |
-| 7 | X | X | X | X | INA260 Pi supply | 0x45 |
+| 6 | X | X | X | X | INA260 **6V arm rail (R3)** | 0x44 |
+| 7 | X | X | X | X | INA260 **+12V bus** | 0x45 |
 | 8 | X | X | X | X | LTC4311 | none |
 | 9 | X | X | X | X | BNO085 IMU | 0x4A |
 | 10 | X | X | X | X | MCP23017 encoder | 0x27 |
@@ -1871,7 +1892,7 @@ overtaken are corrected below rather than left standing.
 > Recovered after the wiring was handled. The stack had been opened the previous day for the
 > breakout HAT (`ffe6c5e`), which is the likeliest disturbance.
 >
-> **`0x45` (INA260, Pi supply, §4.1 row 7 → column 7).** Dropped off a few hours later,
+> **`0x45` (INA260, **+12V bus monitor**, §4.1 row 7 → column 7).** Dropped off a few hours later,
 > after the stack was opened again for the ToF wiring. Five consecutive scans absent,
 > direct read `Error: Read failed`. Recovered after handling. **`config.py:224` predicted
 > exactly this for `0x40` on 2026-08-24** — *"this device can stop ACKing on I²C while still
@@ -2054,18 +2075,29 @@ measurement work rather than wiring.
     date at every boot until corrected, and it silently corrupts the timeline of every
     future diagnosis.
 
-14. **Three INA260 readings disagree with `config.py`'s recorded "VERIFIED" values
-    (2026-09-15).** Deliberately left open at the owner's direction rather than chased.
-    Recorded so the numbers are not lost: `0x40` reads 4.986V against 5.148V (fine);
-    **`0x44` reads 6.043V against a documented 11.373V** on the +12V FeatherWing VIN bus;
-    **`0x45` reads 11.174V against a documented 9.068V**, which is within ~0.2V of the
-    owner-metered pack voltage of 11.36V. Currents (~20–37mA) are *not* anomalous —
-    `config.py:232` records ~0A as correct whenever the Pi runs on AC rather than battery.
-    Note `config.py:229`/`:231` already record these two addresses as having been swapped
-    once on 2026-09-14; today's measurements disagree with that pass. **Two meter readings
-    would settle it** — the DROK-Pi buck output (adjustable, so a knocked pot is plausible)
-    and the FeatherWing VIN terminal. **M-1 should not be run until this is resolved**: at
-    6V on VIN you would be characterising a brownout, not a port map.
+14. ~~**Three INA260 readings disagree with `config.py`'s recorded "VERIFIED" values
+    (2026-09-15).**~~ ✅ **CLOSED the same day — owner supplied the identities and every
+    reading fits.** `0x45` is on the **+12V bus** (not the 9V Pi feed), `0x44` is on the
+    **R3 6V arm rail** (not the +12V bus), and **R1's 9V is monitored by the Witty Pi HAT**,
+    not by any INA260. Measured 4.986V / 6.043V / 11.174V against an owner-metered pack of
+    11.36V — each value matches its rail, with the ~0.19V bus-vs-pack delta being the fuse and
+    switch drop.
+
+    **Not a documentation error — a hardware change nobody followed.** The August figures were
+    correct when taken; the monitors were physically relocated afterwards (the unmerged
+    `docs/eplzon-rev3.2-ina260-relocation` branch), and neither `config.py` nor the design docs
+    followed them. Software Design §8 and FRD G-1 had both *recommended* precisely this
+    relocation; the hardware half was done and the software half was not, for about three weeks.
+
+    **It was not cosmetic.** `brain.py::_check_motor_rail()` — the only software observability
+    for a motor-power cut — read the rail named `'motor'`, which had become the 6V arm monitor.
+    A real cut left it at 6.043V against a 6.0V threshold and went undetected, while 43mV of
+    arm-servo droop would have raised a false alarm. Repointed at the 12V bus, constants renamed
+    for voltage rather than consumer, pinned by `tests/test_motor_rail_identity.py`.
+
+    ⚠ **The M-1 gate this item previously imposed is WITHDRAWN.** It said M-1 must wait because
+    the FeatherWing VIN might be browned out at 6V. That was wrong — 6.043V was the arm rail.
+    The +12V bus reads 11.174V and is healthy, so **M-1 is not blocked by rail voltage.**
 
 ---
 
@@ -2203,8 +2235,9 @@ Listed so their absence is deliberate and traceable, not an omission.
 across older documents — a DROK 12A LCD unit in some, an Elecbee 5V/5A in
 others. The rail measures correctly and the monitor is confirmed at **0x45** (corrected 2026-09-14), so
 this is a labelling question rather than an electrical one. Confirm the part
-physically and settle §15.6. *(The monitor reference here previously read 0x44;
-the Pi supply monitor is 0x45 — corrected 2026-08-28. See §16.4.)*
+physically and settle §15.6. *(The monitor reference here previously read 0x44; ~~the Pi supply monitor is 0x45 —
+corrected 2026-08-28~~ — **corrected again 2026-09-15: R1's 9V has no INA260 at all. The
+Witty Pi HAT monitors its own VIN; 0x45 is now on the +12V bus.** See §16.4.)*
 
 ---
 

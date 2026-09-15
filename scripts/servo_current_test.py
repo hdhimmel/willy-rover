@@ -31,7 +31,7 @@ import os,sys,time
 sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 
-_RAIL=config.INA260_SERVO_ADDR   # 0x40, the 5V UBEC rail
+_RAIL=config.INA260_5V_ADDR   # 0x40, the 5V rail (DROK-5V; was the FEICHAO UBEC)
 _BUS=1
 _SWEEP_DEG=15.0     # modest: enough current to measure, well inside the clamped half-span, and
                     # not enough to bind a corner against its mechanical stop

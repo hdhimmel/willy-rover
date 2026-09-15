@@ -12,8 +12,8 @@ log=logsetup.setup('diagnostics')
 # all-call broadcast) — PCA9685.reset() clears MODE1's ALLCALL bit during motors.py/arm.py's
 # construction in RoverBrain.__init__, which runs before this self-test, so 0x70 legitimately
 # never answers by the time we scan; it was never a real device to begin with. See brain.py.
-_EXPECTED_I2C={config.ENCODER_ADDR,config.INA260_SERVO_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
-               config.INA260_PI_ADDR,config.INA260_MOTOR_ADDR,config.ADS_ADDR,config.IMU_ADDR,
+_EXPECTED_I2C={config.ENCODER_ADDR,config.INA260_5V_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
+               config.INA260_BUS_12V_ADDR,config.INA260_ARM_6V_ADDR,config.ADS_ADDR,config.IMU_ADDR,
                config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR}
 # Witty Pi 5 joins only when enabled, mirroring brain.py:71 exactly. THIS LINE WAS MISSING until
 # 2026-09-14: brain.py's self-test expected eleven devices while this expected ten, so
@@ -53,7 +53,7 @@ def main():
     print(f'Encoders healthy={encoders.is_healthy}  counts={encoders.counts}')
     print('Current rails:')
     for rail,vals in current.all_rails.items():
-        print(f'  {rail:6s} {vals["current_a"]:.2f}A  {vals["voltage_v"]:.2f}V  {vals["power_w"]:.2f}W')
+        print(f'  {rail:9s} {vals["current_a"]:.2f}A  {vals["voltage_v"]:.2f}V  {vals["power_w"]:.2f}W')
     print(f'  (current monitor healthy={current.is_healthy})')
 
     sonars.stop(); imu.stop(); adc.stop(); encoders.stop(); current.stop()
