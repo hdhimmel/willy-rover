@@ -583,8 +583,8 @@ feed raw email text to an LLM as instructions.
 
 ---
 
-**Multi-zone ToF — DFRobot SEN0628. Unit #1 arrived 2026-09-14 and is FAULTY; replacement
-ordered 2026-09-15.** Front obstacle sensing
+**Multi-zone ToF — DFRobot SEN0628. WORKING as of 2026-09-15 — 200/200 clean frames via
+`scripts/tof_probe.py -n 200`.** Front obstacle sensing
 *alongside* the sonar, never replacing it. Full design in Master Hardware Design §6.5
 and Software Design §6.5/§6.6; the traps are here.
 
@@ -611,6 +611,16 @@ and Software Design §6.5/§6.6; the traps are here.
 - **Power from 3.3V, NOT 5V.** It accepts both, but on UART the logic level follows the
   supply and the Pi's RX is not 5V tolerant. Under 80mA off Pi header pin 1 — which
   already carries the whole I²C device bus, see below.
+- 🔴 **AND FROM THE RIGHT 3.3V. This cost a full session on 2026-09-15.** The sensor was wired
+  to the **TPSM chain's** 3.3V, which has been dead since the ISO1540 came out on 2026-09-08.
+  It then failed in the most misleading way available: **LED lit, TX idling high against a
+  forced pull-down, answering a few commands after each power cycle and then going silent.**
+  Every "is it powered?" test passed. It also enumerated fine over USB-C — but USB supplies its
+  own power, so that proved nothing about the rover rail. Moving 3.3V to the **Pi's own 3V3 /
+  I²C rail (R4)** fixed it instantly: 200/200 frames.
+  **The lesson generalises: prove which RAIL a device is on, not merely that it has voltage.**
+  A marginal supply boots a chip far enough to look healthy and not far enough to work, and on
+  this rover the TPSM/AMS1117 chain is fitted-but-dead, so it looks like a legitimate 3.3V tap.
 - **The TCA9548A is NOT needed for this** (a change from the 2026-09-11 design). The mux
   was mandated because a bare VL53L7CX uploads ~84KB of firmware over I²C at every init;
   the onboard RP2040 does that locally now. I²C traffic is just 64 values per frame.

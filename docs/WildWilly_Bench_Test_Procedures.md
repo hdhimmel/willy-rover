@@ -224,11 +224,16 @@ conservative the stopping behaviour looks.
 **Why:** `tof.py::read_frame()` deliberately raises `NotImplementedError` — the wire format
 had never been observed. `ENABLE_TOF=False`.
 
-> **PARTIALLY CLOSED 2026-09-15.** The transport and the protocol are now established and
-> the Pi side is fully verified. What is **not** established is a working sensor: the unit
-> bought 2026-09-14 produced a handful of valid readings and has emitted nothing since.
-> A replacement was ordered 2026-09-15. **The steps below marked ✅ do not need redoing on
-> the replacement — only the sensor-dependent ones do.**
+> ✅ **LARGELY CLOSED 2026-09-15 — the sensor works.** Transport, protocol and sensor are all
+> verified: **200/200 clean frames** at 0.13s each, 62–63 of 64 zones live.
+>
+> **Root cause of the day spent getting there: it was powered from the dormant TPSM chain**, not
+> from the Pi's 3V3 / I²C rail (R4). A marginal supply boots the RP2040 far enough to light its
+> LED, hold TX idle-high and answer a few commands, then go quiet — so every "is it powered?"
+> check passed. **Prove which RAIL a device is on, not just that it has voltage.**
+>
+> What remains: the near-field zone anomaly below, one longer stability run, `read_frame()`,
+> and the floor profile.
 
 **Pi side — VERIFIED 2026-09-15, does not need rechecking:**
 
@@ -293,12 +298,17 @@ three times on 2026-09-15.
 
 | check | result |
 |---|---|
-| Raw frame observed (paste a sample) | partial 2026-09-15 — mm values incl. 1070, 969, 878; `4000` invalid markers |
-| Frame length and structure match library source | ✅ protocol derived and implemented |
-| All 64 zones return data | |
-| Stable multi-minute stream (`-n 200`) | ❌ original unit: never achieved |
-| Floor profile captured, zones with no data | |
+| Raw frame observed (paste a sample) | ✅ 2026-09-15 — `status=0x53 cmd=2 len=128`, payload LE uint16 mm; sample row `1087 1145 1182 1211 1167 1203 1227 1212` |
+| Frame length and structure match library source | ✅ 128 bytes = 64 zones × uint16, exactly as derived |
+| All 64 zones return data | ⚠ **62–63 of 64.** Rows 1–4 read **5–14mm**, below the sensor's 20mm minimum, with scattered zeros and two `4000`s. Rows 5–8 read a sensible 1.0–1.2m. **Check the protective film on the optics first** (CLAUDE.md's first ToF trap — a ~5×3mm square the vendor docs never mention), then the bench pose. Do NOT run the floor profile until this is understood — `calibrate_tof_floor.py` would bake it into the baseline |
+| Stable multi-minute stream (`-n 200`) | ✅ **200/200, zero dropouts, 0.13s/frame.** Run took ~1.8 min — repeat at `-n 600` to fully satisfy "multi-minute" before `ENABLE_TOF=True` |
+| Floor profile captured, zones with no data | blocked on the near-field anomaly above |
 | Reads consistent at fixed distance | |
+
+**Supply — record this, it was the whole fault.** 3.3V must come from the **Pi 3V3 / I²C rail
+(R4)**, never the TPSM/AMS1117 chain, which has been dormant since 2026-09-08. The sensor adds
+up to 80mA to R4 and is now its largest single consumer; nothing monitors that rail, so if it
+goes tight the symptom is I²C flakiness appearing after `ENABLE_TOF` goes True.
 
 **Note:** re-run the floor capture after **any** mechanical change. The profile is tied to
 the sensor's exact pose; a shifted bracket invalidates it. That failure is loud rather than

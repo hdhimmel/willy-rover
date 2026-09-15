@@ -524,10 +524,12 @@ now known** — read verbatim from `DFRobot_MatrixLidar.cpp` and implemented in
 `scripts/tof_probe.py` (request `[0x55][argsNumH][argsNumL][cmd][args]`, `argsNum = len+1`;
 reply `[status][cmd][lenL][lenH][payload]`, `0x53` SUCCESS / `0x63` FAILED / `0xFF` filler;
 **polled, never streaming**). What is missing is a *working sensor*: unit #1 returned a handful
-of valid readings and nothing since, and a replacement was ordered. `read_frame()` still raises
-`NotImplementedError` on purpose — §6.5 requires a stable multi-minute stream before this
-reaches the reflex path, and implementing against a protocol we have not yet seen hold up under
-load is the same guess this note was written to avoid. Everything above it takes any
+of valid readings and nothing since, and a replacement was ordered. **Updated again the same day: the sensor works.** It was never faulty — it was powered from the
+dormant TPSM chain; moved to the Pi's 3V3 rail it returned **200/200 clean frames** at 0.13s
+each. `read_frame()` is therefore **unblocked and is now the next piece of work**: the protocol
+is proven end-to-end against real hardware, not merely read out of a header. It still raises
+`NotImplementedError` as of this entry only because nothing has been written yet — no longer
+because anything is unknown. Everything above it takes any
 callable returning 64 millimetre values, which is exactly how it was developed and
 tested with the rover powered down. `ENABLE_TOF=False`.
 

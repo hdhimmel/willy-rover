@@ -1287,7 +1287,7 @@ default is usually more effective than lowering it.
 
 ---
 
-### 6.5 Multi-zone ToF — DFRobot SEN0628 (SOFTWARE BUILT 2026-09-14; UNIT #1 FAULTY, REPLACEMENT ORDERED 2026-09-15)
+### 6.5 Multi-zone ToF — DFRobot SEN0628 (WORKING 2026-09-15 — 200/200 clean frames)
 
 > **Software status.** `tof.py`, the `sensors.py` fusion and
 > `scripts/calibrate_tof_floor.py` are written and tested (24 tests). Only the UART frame
@@ -1373,11 +1373,40 @@ the DIP set to UART, so USB silence is not evidence of a fault. v1.3 fixes *"the
 invalid values remained unchanged — all invalid values will be uniformly set to 4000"*, so
 **seeing 4000s is evidence of v1.3, not of a defect.**
 
-**Unit #1 (bought 2026-09-14) is suspect and a replacement was ordered 2026-09-15.** It
+~~**Unit #1 (bought 2026-09-14) is suspect and a replacement was ordered 2026-09-15.** It
 returned a handful of valid millimetre readings on 2026-09-15 and has emitted nothing since —
 across four power cycles, both firmware versions, both transports, and with both data lines
 confirmed connected. It never met §6.5's stable-multi-minute-stream bar. Return window to
-~2026-10-14.
+~2026-10-14.~~
+
+✅ **RETRACTED THE SAME DAY. THE SENSOR WAS NEVER FAULTY — IT WAS ON A DEAD POWER RAIL.**
+Its 3.3V was taken from the **TPSM chain**, which has been dormant since the ISO1540 came out on
+2026-09-08 (§0: *"still physically fitted, just unused"*; the AMS1117 below it has no input).
+Owner moved the supply to the **Pi's own 3V3 / I²C rail (R4)** and it worked immediately:
+
+> **200/200 clean frames**, 128-byte payloads, 62–63 of 64 zones live, **0.13s per frame**,
+> zero dropouts. `SETMODE_8x8` succeeds (3.6s — it is slow, this is normal), then `getAllData`
+> returns in 130ms. Measured with `scripts/tof_probe.py -n 200`, 2026-09-15.
+
+**WHY THIS FOOLED EVERY "IS IT POWERED?" CHECK, which is the part worth remembering.** A
+marginal supply is not an absent one. The LED lit, the RP2040 booted far enough to hold its TX
+line idle-high against a forced pull-down, and it answered a few commands after each power
+cycle before going quiet. Every one of those reads as "powered and alive". It enumerated over
+USB-C too — but USB supplies its own power, so that proved nothing about the rover rail.
+**The diagnosis that was missed: prove which RAIL a device is on, not merely that it has some
+voltage.** The correct rail was written in CLAUDE.md the whole time — *"under 80mA off Pi header
+pin 1, which already carries the whole I²C device bus."*
+
+⚠ **Consequence for the R4 budget, and nothing monitors it.** The SEN0628 draws up to **80mA**
+and is now the single largest consumer on the Pi's 3V3 pin, alongside eleven devices' logic and
+the bus pull-ups. §2.2's R4 row already flags that this is *"a budget that exists"*. There is no
+INA260 on R4, so if it goes tight the symptom will be I²C flakiness rather than anything
+labelled a power fault — and it would start appearing only once `ENABLE_TOF` goes True. Watch
+for that correlation specifically.
+
+**Firmware v1.3 was flashed 2026-09-15** (board `E66554A14B3CA123`) during the mis-diagnosis.
+Harmless, and §6.5 requires v1.3 anyway. **The replacement ordered that day is now a spare**,
+not a swap.
 
 **Why both, and not a swap.** The two sensors fail in opposite directions.
 Sonar is blind to chair legs, soft furnishings and angled surfaces. ToF is blind

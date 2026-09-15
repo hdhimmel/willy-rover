@@ -203,9 +203,9 @@ def read_frame(port=None,baud=None,timeout=0.2):
             'skippable filler; getAllData is 55 00 01 02; payload is little-endian uint16 mm, '
             '64 zones = 128 bytes, 4000 = invalid. It is POLLED, never streaming -- passive '
             'listening returns nothing, and that is correct. '
-            'What is missing is a working sensor: unit #1 returned a handful of valid readings '
-            'on 2026-09-15 and nothing since, and a replacement was ordered. Implement this '
-            'against a real stable stream (scripts/tof_probe.py -n 200) rather than against the '
-            'protocol alone -- Master Hardware Design 6.5 requires a stable multi-minute stream '
-            'before this goes anywhere near the reflex path. Everything above this function is '
-            'complete and tested, and takes any callable returning 64 millimetre values.')
+            'The sensor WORKS as of 2026-09-15: 200/200 clean frames at 0.13s each via '
+            'scripts/tof_probe.py -n 200, once its 3.3V was moved off the dormant TPSM chain '
+            'onto the Pi 3V3 / I2C rail. So this function is unblocked and is simply not '
+            'written yet -- port the framing out of scripts/tof_probe.py, which already does '
+            'exactly this. Everything above this function is complete and tested, and takes any '
+            'callable returning 64 millimetre values.')
