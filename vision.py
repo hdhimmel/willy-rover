@@ -9,12 +9,31 @@ log=logsetup.setup('vision')
 # pursuit_task.py, mapping.py, brain.py) see one unchanged interface either way, which is what
 # this module's original docstring anticipated when it called detect() "the swap point".
 #
-# LOCALIZATION IS A HEURISTIC, NOT A CALIBRATED MEASUREMENT: there is no depth sensor and no
-# camera calibration has been run on this unit (no focal-length/lens-distortion bench check,
+# LOCALIZATION IS A HEURISTIC, NOT A CALIBRATED MEASUREMENT. No camera calibration has been run
+# on this unit (no focal-length/lens-distortion bench check,
 # same category of gap as arm.py's uncalibrated joint limits — §20.6 territory). distance_cm
 # below is a rough pinhole estimate from bounding-box size vs. an assumed object width; bearing
 # is a rough estimate from pixel offset vs. an assumed horizontal FOV. Both are usable for
 # coarse "closer/farther, left/right" approach control, not for precision placement.
+#
+# THERE IS A DEPTH SENSOR, AND IT IS NOT THIS MODULE. Corrected 2026-09-15 -- the line above
+# used to read "there is no depth sensor", which stopped being true when the multi-zone ToF
+# (DFRobot SEN0628, 8x8 zones, 20-3500mm) was specified. See tof.py and Master Hardware Design
+# 6.5. Division of labour, and it matters because the two are easy to conflate:
+#
+#   vision.py  WHAT a thing is, and roughly where -- class, bearing, coarse range. Deliberative.
+#              Feeds world_model.py for planning and classification. Per Master Hardware Design
+#              12 rule 18 it does NOT gate a stop.
+#   tof.py     HOW FAR the floor and obstacles actually are. Reflex layer. It is the actual drop
+#              and near-obstacle detector; vision only proposes candidates for it to confirm.
+#
+# So do NOT reach for localize() when what you want is distance-to-floor or a cliff edge, and do
+# not "improve" distance_cm by fusing ToF zones into it -- they answer different questions at
+# different layers, and blending them would put a deliberative estimate inside a reflex path.
+# Related trap already recorded in Master Hardware Design 5.4: localize() models no ground plane
+# and no camera tilt, so it is wrong for floor geometry regardless of how accurate its ranging
+# gets. ENABLE_TOF is currently False (no working sensor -- unit #1 faulty, replacement ordered
+# 2026-09-15), which changes none of this.
 _ASSUMED_OBJECT_WIDTH_CM=8.0   # generic small handheld object — no real per-class size table
 _ASSUMED_HFOV_DEG=70.0         # typical USB webcam-class FOV, not bench-measured for the OV9281
 _FOCAL_PX_ESTIMATE=600.0       # rough: focal_px = (frame_w/2) / tan(HFOV/2) at 640px width

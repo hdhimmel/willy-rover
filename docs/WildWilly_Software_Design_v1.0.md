@@ -593,7 +593,7 @@ conflate:
 | Mapping | Where the stairs are | Deliberative |
 | Vision (15° down) | Propose stair candidates during a mapping run; discontinuities at range | Deliberative |
 | Lidar (when fitted) | **Localisation.** Scan matching, so the pose the standoff is measured from is trustworthy | Deliberative |
-| VL53L7CX | The actual drop detector | **Reflex** |
+| **SEN0628 multi-zone ToF** (the VL53L7CX behind its RP2040) | The actual drop detector | **Reflex** |
 
 A 2D lidar cannot see a descending staircase — it is empty space in a horizontal
 scan plane. Its contribution is knowing where the rover is well enough for a 15cm
@@ -739,7 +739,11 @@ first; this is load-bearing, not just a precaution.
 and camera id. Bearing and range come from a separate `localize()` call and are
 documented in-code as heuristic, not calibrated ranging — this remains true
 for the Hailo backend too; the accuracy improvement is detection quality/speed,
-not ranging calibration. Per Master Hardware Design §12 rule 18: perception
+not ranging calibration. **The fix for ranging is not a better camera heuristic, it is §6.5's
+multi-zone ToF** — a real depth sensor at the reflex layer. Do not fuse ToF zones into
+`localize()`: they answer different questions at different layers, and blending them would put
+a deliberative estimate inside a reflex path. (`vision.py`'s header asserted "there is no depth
+sensor" until 2026-09-15.) Per Master Hardware Design §12 rule 18: perception
 feeds `world_model.py` for planning and classification only. It does not gate
 a stop.
 

@@ -274,7 +274,11 @@ control loop.
 **Design update 2026-08-23:** two dedicated physical cut switches, SW-M and
 SW-A, added to the distribution tree (Master Hardware Design rev 2.1 Section
 2.1/2.3) -- SW-M in P3 on the motor supply; SW-A in P6, on the arm servo supply (6V DROK input — was the DZS, replaced 2026-08-28),
-which has no current monitor. SW-M's placement was intended to close the motor side of
+~~which has no current monitor.~~ **which IS monitored, as of the 2026-09-15 identity
+correction: INA260 0x44 sits on R3, the 6V arm rail. SW-A cuts the 6V DROK's input, so
+throwing it collapses R3 and 0x44 would read the drop — making the arm side of G-1
+observable in software for the first time. Not yet implemented; see Master Hardware
+Design §2.3.** SW-M's placement was intended to close the motor side of
 this gap by reading the current monitor then downstream of it (0x44). **That
 route closed on 2026-08-28** when 0x44 moved upstream to the +12V main input,
 reopening the motor side of G-1. ~~Recommended fix: relocate INA260 0x45 into P3
@@ -1656,10 +1660,30 @@ separately under FR-1200.
     person therefore ranges about 6x too near, making him report "arrived" from across
     the room.
 
+    **A width table is the stopgap; the multi-zone ToF is the real answer** (added
+    2026-09-15). `localize()` infers range from bounding-box size against an *assumed*
+    object width, so it is wrong by whatever ratio the assumption is wrong --- a per-class
+    table shrinks that error but never removes the assumption. §6.5's ToF measures distance
+    directly. Note the layering though: ToF is a **reflex** sensor and `localize()` is
+    deliberative, so the ToF should inform the standoff decision rather than being fused
+    into `localize()`'s estimate.
+
     If a doorway is shut he **knocks and asks to be let in**, up to three attempts. The
     knock is a bounded, timed arm oscillation from a sonar-measured standoff --- never
-    "move until contact", because the arm rail has no current monitor and nothing would
-    detect a servo pressing against a door.
+    "move until contact", ~~because the arm rail has no current monitor and nothing would
+    detect a servo pressing against a door.~~
+
+    ⚠ **The premise changed 2026-09-15: the arm rail DOES have a current monitor.** INA260
+    **0x44** sits on R3, the 6V arm servo rail (owner-confirmed; reads 6.043V). The claim above
+    was written when 0x44 was believed to be on the +12V bus.
+
+    **The conclusion still stands, but now on its own merits rather than on a missing sensor.**
+    A rail-level monitor sees *aggregate* current across all arm servos, not per-joint stall, so
+    it is a poor contact detector: one servo pressing a door is a small fraction of a 9A
+    worst-case draw, and §14's open item 3 records that no overcurrent trip threshold exists
+    anywhere in the documentation to compare against. Keep the knock bounded and timed. If
+    contact sensing is ever wanted, this monitor is a starting point that now exists --- it is
+    not, by itself, sufficient.
 
 -   **FR-1000-005 (permission to roam).** Owner decision 2026-09-09. The two
     triggers that start motion nobody asked for --- the `IDLE_TIMEOUT` wander

@@ -236,7 +236,7 @@ distribution, bus node board and motor drivers in the body tray.
 | P4 | +12V bus → F3 → Switch 2 → **DROK-Pi** (9V to Witty Pi) | 16 AWG | F3 |
 | P5 | +12V bus → F4 → **DROK-5V** input | 16 AWG | F4 10A |
 | P6 | +12V bus → F5 → **SW-A** → **DROK-6V** input | 16 AWG | F5 |
-| P8 | +12V bus → F6 polyfuse (RXEF110 1.1A) → **TPSM84205** (12V→5V) → **AMS1117-3.3** → isolated 3.3V rail (VCC2) | 20–22 AWG | F6 PTC |
+| ~~P8~~ | ~~+12V bus → F6 polyfuse (RXEF110 1.1A) → **TPSM84205** (12V→5V) → **AMS1117-3.3** → isolated 3.3V rail (VCC2)~~ **DORMANT since 2026-09-08 (§0):** VCC2 does not exist, so this chain feeds nothing. TPSM still fitted; AMS1117 has no input. Device logic runs from Pi 3V3 (R4) | 20–22 AWG | F6 PTC |
 | P7 | Charge Y-cable (main + balance) → battery side of KCD4 | 14 AWG | — |
 
 **Distribution tree diagram:**
@@ -347,10 +347,18 @@ encoders need 3.3V or 5V is — the vendor part number was never captured, and t
 out to want 5V, note the MCP23017 runs at 3.3V and its inputs are NOT 5V tolerant, so
 moving them is not a rail change but a level-shifting job on twelve signal lines.
 
-⚠ **Isolated rail VCC2 — two-stage power chain (2026-08-28 repair).** The 2026-08-25
+⚠ **Isolated rail VCC2 — two-stage power chain (2026-08-28 repair).** ⛔ **OUT OF SERVICE
+since 2026-09-08 — re-marked 2026-09-15.** VCC2 was removed with the ISO1540, so this chain
+now powers nothing; the TPSM84205 remains physically fitted but dormant and the AMS1117-3.3 has
+no input. **I²C device logic runs from the Pi's own 3.3V (R4), and the encoders from R5
+(DROK-4).** The failure analysis below is retained because it is still the reason the encoders
+died on 2026-08-25 and still governs the §14 thermal-watch item — but nothing it describes is
+currently powered.
+
+The 2026-08-25
 root cause stands: the old AMS1117-3.3, fed 5.14V from the servo rail, degraded
-into thermal foldback and sagged to 2.83V, killing all six Hall encoders. The
-repair now installed uses a **two-stage chain** to eliminate the dissipation:
+into thermal foldback and sagged to 2.83V, killing all six Hall encoders. ~~The
+repair now installed uses~~ **The 2026-08-28 repair used** a **two-stage chain** to eliminate the dissipation:
 
 - **Stage 1:** +12V bus → F6 polyfuse (RXEF110, 1.1A hold) → **TPSM84205** buck (12V → 5V at ~95% efficiency)
 - **Stage 2:** TPSM 5V output → **AMS1117-3.3** (5V → 3.3V at ~80% efficiency, now dropping only ~1.7V at bus current)
@@ -584,11 +592,30 @@ first, the balance Y a minute later.
 > the Pi's own I²C via two passive hubs. The roll-call in §3.3 is still
 > correct. Retained for history.
 
-### 3.1 Topology
+### 3.1 Topology — ⛔ REMOVED HARDWARE, HISTORICAL RECORD ONLY
 
-The Pi's I²C controller (GND1 domain) is separated from every device (GND2
+> **EVERYTHING IN §3.1 DESCRIBES PARTS THAT ARE NO LONGER IN THE ROVER.** Re-marked
+> 2026-09-15 because §3's banner was not enough: the text below was written in the present
+> tense, so every paragraph and both diagrams went on asserting a live topology, and a reader
+> landing here from a search had no way to tell. That is this project's dominant documentation
+> defect — *correct writing left in place* — and a banner two headings up does not fix it.
+>
+> **AS-BUILT, and the only thing to design against: see §0 and the §3.3 roll-call.** One
+> non-isolated I²C segment on the Pi's own `/dev/i2c-1`, via two passive GODIY hubs. **No
+> ISO1540. No Side 1 / Side 2. No VCC2. No GND2.** Device logic runs from the **Pi's own 3.3V**
+> (header pin 1, rail R4). The TPSM84205 is still physically fitted but dormant; the AMS1117-3.3
+> has no input and is out of service.
+>
+> Kept rather than deleted because it is the only record of why the parts were fitted, and
+> §16's fault history refers back to it.
+
+~~The Pi's I²C controller (GND1 domain) is separated from every device (GND2
 domain) by an ISO1540 bidirectional isolator. Side 2 is powered by a
-**two-stage power chain** (updated 2026-08-28):
+**two-stage power chain** (updated 2026-08-28):~~
+
+**As it WAS, until 2026-09-08:** the Pi's I²C controller (GND1 domain) *was* separated from
+every device (GND2 domain) by an ISO1540 bidirectional isolator, and Side 2 *was* powered by a
+two-stage chain:
 
 - **+12V bus → F6 polyfuse → TPSM84205 (5V out) → AMS1117-3.3 (3.3V out) → VCC2 rail**
 
@@ -897,7 +924,7 @@ role-colouring and differs from the sonar harness key in §6.1.
 | Row | GND | 3V3 | SDA | SCL | Device | Addr |
 |-----|-----|-----|-----|-----|--------|------|
 | 1 | X | — | — | — | Star-ground bond — board GND rail ↔ system star point | — |
-| 2 | X | X | X | X | ISO1540 Side 2 | — |
+| ~~2~~ | ~~X~~ | ~~X~~ | ~~X~~ | ~~X~~ | ~~ISO1540 Side 2~~ **REMOVED 2026-09-08 — column 2 is free** | — |
 | 3 | X | X | X | X | ADS1115 logic | 0x48 |
 | 4 | X | — | — | — | ADS1115 ADDR→GND | 0x48 |
 | 5 | X | X | X | X | INA260 servo/steering | 0x40 |
@@ -1157,6 +1184,23 @@ anywhere in it. That is adequate for what it does today and wrong for floor
 geometry — do not extend it for stair detection without adding the tilt and the
 height explicitly.
 
+> **The camera is not the drop detector — §6.5's ToF is.** Added 2026-09-15, because this
+> section discussed floor and stair geometry at length without once pointing at the sensor that
+> actually measures it, and a reader could reasonably leave here thinking the camera solves it.
+>
+> | | Job | Layer |
+> |---|---|---|
+> | **Camera** (this section) | *Proposes* stair candidates during a mapping run; discontinuities at range | Deliberative |
+> | **Multi-zone ToF, §6.5** | *The actual drop detector.* Per-zone floor profile; a zone returning meaningfully shorter than its stored baseline is an obstacle, a zone returning nothing where floor is expected is a drop | **Reflex** |
+>
+> They are not redundant and they are not interchangeable: a camera estimate must never gate a
+> stop (§12 rule 18), and a reflex detector must never wait on a deliberative one. The two also
+> fail in opposite directions — ToF looks straight through **glass** that the camera and sonar
+> both see, which is the same argument §6.5 makes for keeping sonar alongside ToF.
+>
+> Cross-references: Software Design §6.5 (front obstacle fusion) and §6.6 (stair standoff);
+> `tof.py`; `vision.py`'s header, which until 2026-09-15 asserted "there is no depth sensor".
+
 ### 5.5 Audio I/O
 
 Two USB audio devices, split by role since the mic swap of 2026-09-09. They are
@@ -1243,7 +1287,7 @@ default is usually more effective than lowering it.
 
 ---
 
-### 6.5 Multi-zone ToF — DFRobot SEN0628 (ON ORDER; SOFTWARE BUILT 2026-09-14)
+### 6.5 Multi-zone ToF — DFRobot SEN0628 (SOFTWARE BUILT 2026-09-14; UNIT #1 FAULTY, REPLACEMENT ORDERED 2026-09-15)
 
 > **Software status.** `tof.py`, the `sensors.py` fusion and
 > `scripts/calibrate_tof_floor.py` are written and tested (24 tests). Only the UART frame
