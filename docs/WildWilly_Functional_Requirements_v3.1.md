@@ -1460,25 +1460,65 @@ live-verified — see `motors.py::Steering`'s own comment.
 
 Seven servos on PCA9685 0x43, channels CH0--CH6; CH7 is unused.
 
-**Channel order is not joint order.** As remapped 2026-09-06 the board runs
-shoulders on CH0/CH1, elbow CH2, wrist pitch CH3, wrist rotate CH4, gripper
-CH5, base yaw CH6. `config.py` is the authority and Master Hardware Design
-rev 2.1 §8 carries the table plus the remap history; any channel number quoted
-from a revision older than 2026-09-06 is stale.
+**Channel order is not joint order, and the 2026-09-06 remap was never true of
+the hardware.** Measured on the bench 2026-09-17, one channel at a time with the
+owner observing which joint moved: **wrist pitch CH0, elbow CH1, shoulder CH2,
+second shoulder axis CH3, wrist rotate CH4, gripper CH5, base yaw CH6.** CH0--CH3
+were exactly reversed versus the paper remap; CH4--CH6 were already right. CH7 and
+every spare channel on 0x42 were probed and are electrically empty. `config.py` and
+Master Hardware Design §11.1 carry the corrected table.
 
--   **FR-700-001 (all joints).** Each joint responds on its own channel across
-    its range. The shoulder is a mirrored pair (CH0 = J1a, CH1 = J1b) driving
-    one physical axis and must be commanded together as
-    `J1b = 2 × 1500µs − J1a`. Driving either shoulder servo alone fights the
-    other through the linkage and is a mechanical-damage risk --- test the pair
-    as a unit from the outset. Note that CH0 was the deliberately-unused
-    channel from 2026-08-21 until the 2026-09-06 remap; confirm a servo is
-    seated on it before the first commanded motion, or J1a silently does
-    nothing while J1b drives the linkage alone.
+-   **FR-700-001 (all joints).** ✅ **MET 2026-09-17** --- every one of the seven
+    joints was driven and observed moving. The channel map in `config.py` is now
+    the measured one.
+
+    ⚠ **The mirrored-pair requirement is RETRACTED.** This clause used to require
+    the shoulder be commanded as `J1b = 2 × 1500µs − J1a`. Hardware does not
+    support it: driving CH2/CH3 mirrored versus identically drew statistically the
+    same settled current (0.197A vs 0.176A, two amplitudes), where a genuine shared
+    axis driven the wrong way would fight hard. The derivation has been removed from
+    `arm.py`; keeping it would have commanded CH3 to 2250µs with the shoulder at its
+    verified 750µs waving position. What CH3 does on its own is not yet established.
+
+    **The "confirm a servo is seated on CH0" caution was correct and is what
+    surfaced all of this** --- it is retained in spirit as the rule below.
+
+    **New requirement, learned the expensive way.** Any commanded arm motion must
+    monitor INA260 `0x44` current **from inside the movement loop** and release the
+    channel if it stays above `ARM_CURRENT_LIMIT_A` (2.5A) for
+    `ARM_CURRENT_LIMIT_S` (0.4s). A limit evaluated only after a move completes does
+    not protect anything: one MG996R elbow servo was destroyed on 2026-09-17 by
+    being held at ~8A across repeated tests, because current was being read as
+    evidence of *motion* rather than of *load*. **Current draw tells you what the
+    motor is doing, never what the joint is doing --- confirm a joint physically
+    moved before interpreting its current curve.**
+
+    ⚠ **`ARM_SERVO_CENTER_US` must never be applied to the elbow.** That position
+    drew 8A indefinitely on the destroyed servo; `arm.py`'s `center_all()` now skips
+    CH1. The replacement settles at 0.388A there, so the position itself is sound,
+    but the exclusion stands until FR-700-002 calibration defines a real centre.
 
 -   **FR-700-002 (preset positions).** Named poses are repeatable to within
     the mechanical backlash of the joint, and a stow pose is reachable from
     any starting configuration without self-collision.
+
+    **Two poses exist as of 2026-09-17**, both owner-designated and verified on
+    hardware: `ARM_POSE_WAVE_HELLO` (elbow 1000µs, shoulder 750µs, wrist 1500µs
+    oscillating 1380↔1620µs) holding at ~0.33A, and `ARM_POSE_REST` (elbow 2610µs,
+    shoulder 2010µs, wrist 2450µs). **`ARM_POSE_REST` does not yet satisfy this
+    requirement**: it holds a sustained 0.87A because the wrist sits against its
+    travel limit, and its elbow value is outside the servo's 500--2500µs range
+    (past ~2530µs the servo stops responding). A rest pose is held indefinitely by
+    definition, so it should be re-derived below 2300µs on the wrist, where the same
+    shape holds for 0.23A.
+
+    **Self-collision constraint, owner-stated:** the elbow must be opened before the
+    shoulder moves, or the arm strikes the top of the chassis. Any pose sequencer
+    has to honour joint ordering, not just endpoints.
+
+    **Holding is nearly free; moving costs amps.** A held pose draws ~0.2--0.4A.
+    Releasing a channel makes the arm go limp and fold, so poses are held, not
+    released.
 
 -   **FR-700-003 (joint limits).** Software limits are enforced per joint
     before any command reaches the driver. As with steering, a servo held

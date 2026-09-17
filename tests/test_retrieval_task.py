@@ -67,9 +67,9 @@ def test_grasp_full_sequence_completes_in_exactly_four_ticks():
     assert rt.state=='VERIFY'
     assert rt.arm.pulses==[
         ('base',config.ARM_SERVO_CENTER_US),('gripper',config.ARM_SERVO_MIN_US),
-        ('shoulder_a',config.ARM_SERVO_CENTER_US-300),('elbow',config.ARM_SERVO_CENTER_US-300),
+        ('shoulder',config.ARM_SERVO_CENTER_US-300),('elbow',config.ARM_SERVO_CENTER_US-300),
         ('gripper',config.ARM_SERVO_MAX_US),
-        ('shoulder_a',config.ARM_SERVO_CENTER_US),('elbow',config.ARM_SERVO_CENTER_US),
+        ('shoulder',config.ARM_SERVO_CENTER_US),('elbow',config.ARM_SERVO_CENTER_US),
     ]
 
 # --- abort() can now land mid-grasp (this is the point of the fix) ---

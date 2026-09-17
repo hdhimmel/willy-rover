@@ -75,7 +75,7 @@ refresh; treat those as approximate.
 | `mapping.py` | 68 | Learning-mode map recording session |
 | `diagnostics.py` | 64 | Standalone read-only self-test |
 | `privacy.py` | 59 | Mic/camera disable flag |
-| `arm.py` | 59 | Arm servo primitives |
+| `arm.py` | 59 | Arm servo primitives. Channel map corrected against hardware 2026-09-17; mirrored-pair derivation removed; `center_all()` excludes the elbow |
 | `storage.py` | 53 | Data root resolution and availability check |
 | `logsetup.py` | 42 | Logging config and `log_event` structured tags |
 | `arm_jog.py` | 39 | Interactive bench-calibration jog tool |
@@ -357,6 +357,14 @@ legitimately needs one where passive observation does not.
    self-test runs, and why it is excluded from the expected-address set.
 2. `start()` brings up display, sensors, encoders, current monitors; centres
    steering and arm; starts voice and email background threads.
+
+   ⚠ **"Centres the arm" no longer means every joint.** `Arm.center_all()`
+   deliberately **skips the elbow** as of 2026-09-17. `ARM_SERVO_CENTER_US` (1500µs)
+   drives CH1 into the top of the chassis; the MG996R fitted before that date held
+   ~8A there indefinitely and was destroyed by it. Centring every joint on startup
+   would have repeated that on every boot. The replacement servo settles at 0.388A
+   at 1500µs, so the position itself is fine — the exclusion stays until §20.6
+   calibration defines a real safe centre for that joint.
 3. `_self_test()` runs the I²C scan against `_EXPECTED_I2C` (**eleven** addresses —
    ten plus 0x51, conditional on `ENABLE_WITTY_PI`, which is now True,
    0x70 deliberately excluded), plus `config.validate()` and
@@ -679,7 +687,7 @@ imports or even mentions an AI backend.
 |---|---|---|
 | STUCK recovery action | Hailo (primary), Claude (fallback) | `_action_confidence` + `safety.request()` clamps |
 | retrieve / come_here / follow | intent from a model | `safety.py`, plus vision calibration (still unverified — G-6, P1) |
-| arm presets | intent from a model | `arm.py` limits |
+| arm presets | intent from a model | `arm.py` limits, **plus the INA260 0x44 current guard** |
 
 These are the cases where a wrong answer costs something physical, so nothing here may rest
 on the model alone. The clamps are the authority; the model is a suggestion.
@@ -1215,3 +1223,55 @@ wants it.
 ---
 
 *End of document.*
+
+
+---
+
+## Arm control, as corrected 2026-09-17
+
+`arm.py` changed in three ways after the channel map was measured on hardware. All
+three are load-bearing, not cosmetic.
+
+**1. The channel map was wrong and is now measured.** `_JOINTS` used
+`ARM_SHOULDER_A`/`ARM_SHOULDER_B` on CH0/CH1 per the 2026-09-06 paper remap. The
+hardware has **wrist pitch CH0, elbow CH1, shoulder CH2, second shoulder axis CH3** —
+CH0--CH3 exactly reversed. `ARM_SHOULDER_A` is now `ARM_SHOULDER` (CH2), and the
+`'shoulder_a'` joint key is `'shoulder'`; `retrieval_task.py` and its test were
+updated to match.
+
+**2. The mirrored-pair derivation was removed.** `set_pulse()` used to drive
+`shoulder_b = 2*ARM_SERVO_CENTER_US - shoulder_a` and raise on a direct `shoulder_b`
+command. Hardware says CH2/CH3 are not one axis: mirrored and same-direction commands
+drew statistically identical settled current (0.197A vs 0.176A) where a real shared
+axis driven wrongly would fight hard. The derivation was also unsafe — at the
+verified 750µs waving position it would have commanded CH3 to 2250µs. `set_pulse()`
+is now a plain clamped write and every joint is independently addressable.
+
+**3. `center_all()` skips the elbow.** See the startup note above.
+
+### The current guard, and why it must run inside the loop
+
+Any arm motion must sample INA260 `0x44` **continuously while moving** and write
+`off=0` to the channel once current stays above `ARM_CURRENT_LIMIT_A` (2.5A) for
+`ARM_CURRENT_LIMIT_S` (0.4s). Two failure modes make the naive version useless:
+
+- **Sampling after the move misses the event entirely.** A servo reaches position in
+  well under 300ms. Reading current 300ms after the command returns idle current and
+  reads as "no servo present" — which is exactly how a live channel was first
+  misdiagnosed as empty.
+- **A threshold checked after a move completes protects nothing.** The elbow servo
+  destroyed on 2026-09-17 was held at 7--8A across repeated tests, each of which
+  "completed" normally.
+
+Peak current says nothing about whether holding is safe. **Settled current is the
+number that matters:** a joint that reaches position relaxes to 0.05--0.4A; one that
+stays above that is still fighting and will cook. With the guard in place, no
+subsequent test on any joint tripped it.
+
+### The diagnostic lesson
+
+Four separate conclusions were drawn from current traces in one session — faulty
+servo, gravity geometry, a mechanical stop at ~1350µs, and a dead servo — and **all
+four were wrong**, because nobody checked whether the joint had physically moved.
+A current curve describes what the motor is doing, never what the arm is doing.
+`arm_jog.py` remains the tool for calibration precisely because a human watches it.

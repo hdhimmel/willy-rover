@@ -46,20 +46,38 @@ def main():
     sonars.start(); imu.start(); adc.start(); encoders.start(); current.start()
     time.sleep(1.0)  # let threads take a first reading (current monitor is slowest, 10Hz)
 
-    print(f'\nSonar    front={sonars.front.distance}cm left={sonars.left.distance}cm right={sonars.right.distance}cm')
-    print(f'IMU      healthy={imu.is_healthy}  tilt={imu.tilt:.1f}deg  pitch={imu.pitch:.1f}  roll={imu.roll:.1f}')
+    # CAPTURE EVERY HEALTH FLAG BEFORE ANYTHING IS STOPPED, and build the verdict from these
+    # locals -- never by re-reading .is_healthy further down.
+    #
+    # Fixed 2026-09-16. `is_healthy` is a STALENESS flag: (perf_counter() - last_ok) < window,
+    # where the window is 0.5s for the IMU and 1.0s for encoders and the current monitor, kept
+    # fresh by each sensor's own thread. The verdict used to be computed AFTER the stop() line
+    # below -- by which point nothing has updated anything for the whole shutdown, measured at
+    # 1.147s on the rover against the IMU's 0.5s window. So `ok` read imu.is_healthy as False
+    # every single time and diagnostics.py COULD NEVER PRINT PASS, on any hardware, in any
+    # state -- while printing 'IMU healthy=True' four lines earlier from the same property.
+    # It also returns exit 1, so anything gating on this tool saw a permanent failure.
+    # Same family as the 2026-09-14 ten-versus-eleven-device bug: the tool was wrong, not the
+    # rover. A diagnostic that cries wolf is worse than none, because the next real fault is
+    # the one nobody believes.
+    imu_healthy=imu.is_healthy
     adc_healthy=adc.battery_volts>0
+    encoders_healthy=encoders.is_healthy
+    current_healthy=current.is_healthy
+
+    print(f'\nSonar    front={sonars.front.distance}cm left={sonars.left.distance}cm right={sonars.right.distance}cm')
+    print(f'IMU      healthy={imu_healthy}  tilt={imu.tilt:.1f}deg  pitch={imu.pitch:.1f}  roll={imu.roll:.1f}')
     print(f'Battery  healthy={adc_healthy}  volts={adc.battery_volts:.2f}V  pct={adc.battery_pct}%  charging={adc.is_charging}')
-    print(f'Encoders healthy={encoders.is_healthy}  counts={encoders.counts}')
+    print(f'Encoders healthy={encoders_healthy}  counts={encoders.counts}')
     print('Current rails:')
     for rail,vals in current.all_rails.items():
         print(f'  {rail:9s} {vals["current_a"]:.2f}A  {vals["voltage_v"]:.2f}V  {vals["power_w"]:.2f}W')
-    print(f'  (current monitor healthy={current.is_healthy})')
+    print(f'  (current monitor healthy={current_healthy})')
 
     sonars.stop(); imu.stop(); adc.stop(); encoders.stop(); current.stop()
 
-    ok=(not missing and not config_problems and imu.is_healthy and adc_healthy
-        and encoders.is_healthy and current.is_healthy)
+    ok=(not missing and not config_problems and imu_healthy and adc_healthy
+        and encoders_healthy and current_healthy)
     print(f'\nOverall: {"PASS" if ok else "FAIL"}')
     log.info('Diagnostic test mode run - overall '+('PASS' if ok else 'FAIL')
               +(f'; I2C missing: {sorted(hex(a) for a in missing)}' if missing else '')

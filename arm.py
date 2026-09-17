@@ -30,7 +30,9 @@ class Arm:
     # or IK exist yet — §20.6 bench calibration hasn't been run. This is a driver + primitive
     # set_pulse interface only, clamped to manufacturer defaults; arm_jog.py is the tool for
     # producing real calibration numbers. No autonomous motion is wired to this class anywhere.
-    _JOINTS={'base':config.ARM_BASE,'shoulder_a':config.ARM_SHOULDER_A,'shoulder_b':config.ARM_SHOULDER_B,
+    # Channel numbers corrected against hardware 2026-09-17 -- see the map in config.py. The old
+    # names shoulder_a/shoulder_b implied a mirrored pair; CH2 and CH3 are not one.
+    _JOINTS={'base':config.ARM_BASE,'shoulder':config.ARM_SHOULDER,'shoulder_b':config.ARM_SHOULDER_B,
              'elbow':config.ARM_ELBOW,'wrist_rot':config.ARM_WRIST_ROT,'wrist_pitch':config.ARM_WRIST_PITCH,
              'gripper':config.ARM_GRIPPER}
     _PERIOD_US=1_000_000/config.SERVO_PWM_FREQ
@@ -43,19 +45,25 @@ class Arm:
         self._pca.channels[self._JOINTS[joint]].duty_cycle=int(us/self._PERIOD_US*65535)
         self._pulse[joint]=us
         return us
-    # FR-700-001 (control all arm joints): each joint on its own channel; the shoulder
-    # mirrored pair is handled here as J1b = 2*center - J1a, matching the FRD's spec.
+    # FR-700-001 (control all arm joints): each joint on its own channel.
+    #
+    # THE MIRRORED-PAIR DERIVATION WAS REMOVED 2026-09-17. This used to drive
+    # shoulder_b = 2*center - shoulder_a, per the FRD's J1a/J1b spec. Hardware says CH2 and CH3
+    # are not a mirrored pair: commanding them mirrored and commanding them the same drew
+    # statistically identical current (0.197A vs 0.176A avg), where a genuine shared axis driven
+    # the wrong way would fight hard. Keeping the derivation was actively harmful -- with the
+    # shoulder at its verified 750us waving position it would have driven CH3 to 2250us.
+    # CH3's actual function is still unidentified; it is addressable but nothing here uses it.
     def set_pulse(self,joint,us):
-        # J1a/J1b (shoulder) are a mirrored pair driving one physical pitch axis (§11.1/§11.4) —
-        # command shoulder_a only; shoulder_b is derived, not independently addressable.
-        if joint=='shoulder_b':
-            raise ValueError("shoulder_b is a mirrored slave of shoulder_a, not independently settable")
-        actual=self._drive(joint,us)
-        if joint=='shoulder_a':
-            self._drive('shoulder_b',2*config.ARM_SERVO_CENTER_US-actual)
-        return actual
+        return self._drive(joint,us)
     def pulse(self,joint): return self._pulse[joint]
     @property
-    def joints(self): return [j for j in self._JOINTS if j!='shoulder_b']
+    def joints(self): return list(self._JOINTS)
+    # THE ELBOW IS EXCLUDED, DELIBERATELY. ARM_SERVO_CENTER_US drives CH1 into the top of Willy:
+    # the servo fitted before 2026-09-17 held ~8A at 1500us indefinitely and was destroyed by it.
+    # Centring every joint on startup would repeat that on every boot. The elbow has no known
+    # safe centre until §20.6 calibration establishes one, so it is left where it is.
     def center_all(self):
-        for j in self.joints: self.set_pulse(j,config.ARM_SERVO_CENTER_US)
+        for j in self.joints:
+            if j=='elbow': continue
+            self.set_pulse(j,config.ARM_SERVO_CENTER_US)

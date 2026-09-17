@@ -127,12 +127,12 @@ class RetrievalTask:
             self.arm.set_pulse('base',base_us)
             self.arm.set_pulse('gripper',config.ARM_SERVO_MIN_US)  # open
         elif step==self._GRASP_LOWER:
-            self.arm.set_pulse('shoulder_a',config.ARM_SERVO_CENTER_US-300)  # rough "lower toward table"
+            self.arm.set_pulse('shoulder',config.ARM_SERVO_CENTER_US-300)  # rough "lower toward table"
             self.arm.set_pulse('elbow',config.ARM_SERVO_CENTER_US-300)
         elif step==self._GRASP_CLOSE:
             self.arm.set_pulse('gripper',config.ARM_SERVO_MAX_US)  # close
         elif step==self._GRASP_RAISE:
-            self.arm.set_pulse('shoulder_a',config.ARM_SERVO_CENTER_US)
+            self.arm.set_pulse('shoulder',config.ARM_SERVO_CENTER_US)
             self.arm.set_pulse('elbow',config.ARM_SERVO_CENTER_US)
             self._grasp_step=self._GRASP_OPEN; self.state='VERIFY'; return
         self._grasp_deadline=now+self._GRASP_DELAY_S[step]; self._grasp_step=step+1

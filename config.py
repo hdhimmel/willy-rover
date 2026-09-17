@@ -118,17 +118,71 @@ STEER_LF=0; STEER_RF=1; STEER_LM=2; STEER_RM=3; STEER_LR=4; STEER_RR=5
 SERVO_CENTER_US=1500; SERVO_MIN_US=1000; SERVO_MAX_US=2000
 SERVO_PWM_FREQ=50
 
-# Arm — PCA9685 @0x43, CH1-7 (CH0 unused), base->gripper order (§11.1). J1a/J1b (shoulder) are a mirrored
-# pair driving one physical axis — see arm.py. Wider nominal range than steering (manufacturer
-# spec 500-2500us) though §11.5/§20.6 flag cheap-clone units may bind before the full sweep.
-# No per-joint safe limits, presets, or IK exist yet pending §20.6 bench calibration — arm.py is
-# a driver + manual jog tool only this pass, not autonomous motion.
+# Arm — PCA9685 @0x43. Wider nominal range than steering (manufacturer spec 500-2500us) though
+# §11.5/§20.6 flag cheap-clone units may bind before the full sweep.
 ARM_PCA_ADDR=0x43
-# 2026-09-06 reassignment (owner): physical order base(6)→gripper(5)→wrist(4,3)→elbow(2)→shoulders(1,0).
-# Shoulder pair (CH0-1) move together: J1b = 2×1500µs − J1a. CH7 unused.
-ARM_BASE=6; ARM_SHOULDER_A=0; ARM_SHOULDER_B=1; ARM_ELBOW=2
-ARM_WRIST_PITCH=3; ARM_WRIST_ROT=4; ARM_GRIPPER=5
+#
+# CHANNEL MAP CORRECTED 2026-09-17 AGAINST HARDWARE. Every assignment below was verified by
+# driving one channel at a time with the owner watching which joint moved. The previous map came
+# from a 2026-09-06 paper reassignment that was never tested, and CHANNELS 0-3 WERE EXACTLY
+# REVERSED in it -- it read shoulderA/shoulderB/elbow/wristPitch where the hardware is
+# wristPitch/elbow/shoulder/shoulder. 4, 5 and 6 were already right.
+#
+#   CH0 wrist pitch   CH1 elbow   CH2 shoulder   CH3 shoulder(second axis, function unidentified)
+#   CH4 wrist rotate  CH5 gripper CH6 base       CH7 unused, nothing connected
+#
+# CH2 and CH3 are NOT a mirrored pair. The old "J1b = 2x1500 - J1a" relation is wrong: driving
+# them mirrored vs. same-direction gave statistically identical current (0.197A vs 0.176A), and
+# a shared axis driven the wrong way would fight hard. CH2 is the shoulder lift axis; what CH3
+# does alone has not been established.
+ARM_BASE=6; ARM_WRIST_PITCH=0; ARM_ELBOW=1; ARM_SHOULDER=2; ARM_SHOULDER_B=3
+ARM_WRIST_ROT=4; ARM_GRIPPER=5
 ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
+#
+# DO NOT CENTRE CH1. ARM_SERVO_CENTER_US applied to the elbow drives it into the top of Willy:
+# the servo fitted before 2026-09-17 held ~8A there indefinitely and was destroyed by it. Any
+# homing or park routine that centres every joint will stall the elbow on each startup.
+#
+# DIRECTIONS, owner-confirmed on hardware 2026-09-17:
+#   shoulder CH2 : DECREASING us raises, increasing lowers
+#   gripper  CH5 : INCREASING us closes (jaw contact from ~1700us), decreasing opens
+#
+# GRIP FORCE IS SET BY CURRENT, NOT POSITION. Closing draws 0.075A at 1500us, 0.156A at 1650,
+# 0.215A at 1700, 0.457A at 1750, 1.049A at 1780. Stop feeding past ~0.4-0.5A: it grips there,
+# and beyond that it is stalling and heating. No position means "closed" -- the jaws close on
+# whatever is held.
+#
+# MOVE, THEN KEEP HOLDING. Releasing a channel (off=0) makes the arm go limp and fold. Holding
+# is nearly free -- the full waving pose below sits at ~0.33A -- while MOVING briefly costs amps.
+# Release only when slack is actually wanted.
+#
+# ORDER MATTERS: open the elbow BEFORE moving the shoulder, or the arm strikes the top of Willy.
+#
+# Presets. WAVE_HELLO verified end to end on hardware 2026-09-17; the whole pose holds at ~0.33A
+# on a 6.04V rail with every channel energised. Reach it in the order given, 50us steps on the
+# shoulder -- not as a single jump, which would slam the joint.
+ARM_POSE_WAVE_HELLO={'elbow':1000,'shoulder':750,'wrist_pitch':1500}
+#
+# REST pose, owner-designated 2026-09-17. TWO CAVEATS, both measured, neither yet resolved:
+#
+#  1. It does NOT hold for free. The wrist sits against its travel limit here and draws a
+#     SUSTAINED 0.87A (~5.2W) for as long as the pose is held, with the 6V rail sagging to
+#     6.017V. Every other pose today settled under 0.4A. A rest pose is held indefinitely by
+#     definition, so this is the one place a standing load actually matters. Wrist at 2300us
+#     holds the same shape for 0.23A and 2200us for 0.05A -- prefer one of those if the exact
+#     wrist angle is not load-bearing.
+#  2. The elbow value is OUT OF SPEC (manufacturer range is 500-2500us). Past about 2530us the
+#     servo stopped responding -- peaks collapsed to ~0.1A -- so 2610 is very likely not a
+#     position it actually reaches. Treat ~2530us as the real limit until re-measured.
+ARM_POSE_REST={'elbow':2610,'shoulder':2010,'wrist_pitch':2450}
+ARM_WAVE_WRIST_US=(1380,1620)   # oscillate the wrist between these, ~0.35s per leg, 4 cycles
+ARM_WAVE_APPROACH_STEP_US=50    # shoulder step size travelling to the pose
+#
+# Any arm motion should watch INA260 ARM_6V current and release a channel that stays above this
+# for this long. A threshold checked only AFTER a move completes is useless -- that is how the
+# first elbow servo was destroyed. The check must run inside the movement loop.
+ARM_CURRENT_LIMIT_A=2.5
+ARM_CURRENT_LIMIT_S=0.4
 
 # Wheel encoders — MCP23017 @0x27 (§9.1), quadrature A/B per wheel. counts/rev is a "starting
 # value" from the motor listing, not bench-confirmed.
@@ -294,12 +348,30 @@ ENABLE_WITTY_PI=True
 WITTY_PI_ADDR=0x51
 
 ADS_ADDR=0x48; ADS_CH_BATTERY=0  # AIN0 only; charge-sense divider not yet wired
-# Re-trimmed 2026-08-16: AIN0 read 2.9112V while a multimeter on the pack
-# terminals read 12.2V (2.9112/12.2). Previous value (0.2865, set 2026-08-02)
-# had drifted — direction of drift didn't fit simple aging (raw reading fell
-# while actual pack voltage rose), so if this disagrees with a meter again,
-# check the physical divider connection before just recalibrating again.
-BATTERY_DIVIDER_SCALE=0.2386
+# Re-trimmed 2026-09-17: AIN0 read 3.7229V (raw 29783) against a bench supply set and
+# metered at 11.5V. New scale = 3.7229/11.5 = 0.3237.
+#
+# This is the re-trim the divider fitted 2026-09-02 had been waiting for. The previous
+# 0.2386 (2026-08-16) belonged to the OLD divider and was producing 15.60V from an 11.5V
+# input -- impossible for a 3S pack, and it passed every plausibility guard because the
+# guards only catch readings that are too LOW.
+#
+# NOTE the implied divider is not the one the docs describe. Master Hardware Design v2.0
+# §16 calls it 10k/3.197k = 0.2423; the measured 0.3237 is ~10k/4.7k (0.3197 nominal,
+# within resistor tolerance). Meter the fitted parts before trusting either figure.
+#
+# HEADROOM WARNING: at PGA ±4.096V the ADC saturates at 4.096V, so this scale can only
+# represent a pack up to 4.096/0.3237 = 12.65V. A fully charged 3S LiPo rests at 12.6V --
+# about 50mV of margin. Above that the reading clips and UNDER-reports. Every threshold in
+# the ladder below sits under 11.6V so the safety path is unaffected, but a full-charge or
+# on-charger reading cannot be trusted. Drop to PGA ±6.144V if the top of the range ever
+# needs to be real.
+#
+# Previous values: 0.2481 (MCP3008-era), 0.2865 (2026-08-02), 0.2386 (2026-08-16).
+# If this ever disagrees with a meter again, check the physical divider connection before
+# recalibrating -- that is what the 2026-08-16 trim did, and it was trimming around a
+# hardware change nobody had recorded.
+BATTERY_DIVIDER_SCALE=0.3237
 
 # Battery threshold ladder (§13.2) — one-way toward safer states until voltage recovers above
 # the next threshold up + hysteresis. Supersedes the old flat BAT_LOW/BAT_CRITICAL pair.

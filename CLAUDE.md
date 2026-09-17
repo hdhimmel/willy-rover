@@ -243,9 +243,13 @@ front and right sonar read fine, left returns garbage.
   service is safe to enable on this account.
   
   Two things remain, neither blocking:
-  - **Re-trim `BATTERY_DIVIDER_SCALE` against a meter.** The stored 0.2386 was
-    calibrated for an earlier divider; this one's designed ratio is ~0.2423, about 1.5%
-    off. Low risk, but it is the number `battery_pct` and the shutdown ladder both rest on.
+  - ~~**Re-trim `BATTERY_DIVIDER_SCALE` against a meter.**~~ **DONE 2026-09-17:
+    0.2386 → 0.3237** (A0 3.7229V against 11.5V metered). Not the "~1.5% off, low risk"
+    predicted here — it was **34% off and reporting 15.60V from an 11.5V supply**, which
+    passed every guard because the guards only catch readings that are too LOW. Two new
+    open items: the implied ratio is ~10k/4.7k not the documented 10k/3.197k (meter the
+    parts), and at PGA ±4.096V the scale saturates at 12.65V — ~50mV above a rested 3S
+    pack, so full-charge readings clip.
   - **The software gap stands regardless** — `sensors.py` still cannot tell a real zero
     from a broken sensor, so a *future* divider fault would repeat this silently. See
     Software Design §12 item 13.
@@ -264,15 +268,24 @@ front and right sonar read fine, left returns garbage.
   that. Before trusting any bus observation: `systemctl is-active willy-rover`
   and `sudo lsof /dev/i2c-1`. Only `wp5d` belongs there.
 
-- **CH0 on the arm PCA9685 (0x43) went from deliberately-unused to carrying a shoulder
-  servo, 2026-09-06 — unverified.** From the 2026-08-21 rewire until 2026-09-06, CH0 was
-  explicitly empty and joints sat on CH1–CH7. The 2026-09-06 remap (`444d4f6`, `fb752a1`)
-  reversed the joint order onto CH0–CH6 and put `ARM_SHOULDER_A` (J1a) on CH0. If the
-  servos were not physically re-plugged to match, J1a commands a dead channel while J1b
-  (CH1) moves — which drives one half of the mirrored pair alone, the exact
-  mechanical-damage case FRD FR-700-001 warns about. **Confirm a servo is seated on CH0
-  before commanding the arm.** Note the 2026-08-20 disconnected-connector item below is
-  still open too, so "the arm didn't move" currently has at least two live explanations.
+- ✅ **RESOLVED 2026-09-17 — and the suspicion was right.** This entry warned that the
+  2026-09-06 remap might never have been reflected in the physical wiring. It wasn't.
+  Measured on hardware, one channel at a time with the owner watching:
+  **wrist pitch CH0, elbow CH1, shoulder CH2, second shoulder axis CH3, wrist rotate CH4,
+  gripper CH5, base yaw CH6.** CH0–CH3 are exactly reversed versus the paper remap;
+  CH4–CH6 were already right. CH7 and every spare channel on 0x42 were probed and are
+  empty. `config.py`, `arm.py`, `retrieval_task.py` and all three design docs now carry
+  the measured map.
+
+  **The mirrored pair does not exist.** `J1b = 2×1500µs − J1a` is retracted: mirrored and
+  same-direction commands on CH2/CH3 drew statistically identical settled current
+  (0.197A vs 0.176A). The derivation is removed from `arm.py` — it would have commanded
+  CH3 to 2250µs at the verified 750µs waving position.
+
+  ⚠ **Never centre the elbow.** `ARM_SERVO_CENTER_US` drives CH1 into the top of the
+  chassis; one MG996R was destroyed holding ~8A there. `center_all()` skips it now.
+  **And guard the current from inside the movement loop** (`ARM_CURRENT_LIMIT_A` 2.5A /
+  `ARM_CURRENT_LIMIT_S` 0.4s) — a limit checked after a move completes protects nothing.
 - **FeatherWing motor port order was changed on 2026-09-04 from a bench-verified mapping
   to an assumed one.** `config.MOTOR_PORT` read M1=MIDDLE, M2=FRONT, M3=REAR — established
   2026-08-24 by driving one port at a time and watching which wheel turned. Commit
@@ -354,10 +367,11 @@ citing the old, superseded wording:
    `docs/WildWilly_Master_Hardware_Design_v2.0.md` §7.2. The *port* order within
    a side is a separate question and is NOT settled — see the motor-port pitfall
    in "Hardware pitfalls" above.
-2. **Arm shoulder channels — J1a=CH0, J1b=CH1** as of the 2026-09-06 remap
-   (was CH2/CH3 from 2026-08-21, and CH1/CH2 before that). A mirrored pair
-   driving one physical axis: `J1b = 2×1500µs − J1a`. See §8 — and read the
-   CH0 pitfall in "Hardware pitfalls" above before commanding the arm.
+2. **Arm shoulder channels — CH2 and CH3, measured on hardware 2026-09-17.**
+   Note this matches the *2026-08-21* arrangement, not the 2026-09-06 remap: the
+   plugs were never moved. They are **not** a mirrored pair and there is no
+   `J1b = 2×1500µs − J1a` relation — CH2 is the lift axis (decreasing µs raises),
+   CH3's function is still unidentified. See §8 and the resolved CH0 entry above.
 
 Still genuinely open (not a doc contradiction — a real unverified-hardware
 item, tracked in Master Hardware Design v2.0 §14).

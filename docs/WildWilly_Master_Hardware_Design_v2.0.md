@@ -166,9 +166,11 @@ matches §3.3's table.
    service is safe to enable on this account.
    
    Two things remain, neither blocking:
-   - **Re-trim `BATTERY_DIVIDER_SCALE` against a meter.** The stored 0.2386 was
-     calibrated for an earlier divider; this one's designed ratio is ~0.2423, about 1.5%
-     off. Low risk, but it is the number `battery_pct` and the shutdown ladder both rest on.
+   - ~~**Re-trim `BATTERY_DIVIDER_SCALE` against a meter.**~~ **DONE 2026-09-17: 0.2386 →
+     0.3237.** And it was not the "about 1.5% off, low risk" this paragraph predicted — the
+     measured ratio is **0.3237, not the designed 0.2423**, a 34% error that was reporting
+     15.60V from an 11.5V supply. The fitted divider is not the one §6.2/§16.14 describe
+     (~10k/4.7k, not 10k/3.197k). **Meter the actual resistors.**
    - **The software gap stands regardless** — `sensors.py` still cannot tell a real zero
      from a broken sensor, so a *future* divider fault would repeat this silently. See
      Software Design §12 item 13.
@@ -838,7 +840,7 @@ zero bus errors. Expect eleven, not twelve: `0x70` is All-Call, not a device.
 | 0x42 | PCA9685 | Steering servos, CH0–CH5 |
 | 0x43 | PCA9685 | Arm servos, CH0–CH6 (CH7 unused, remapped 2026-09-06) |
 | 0x44 | INA260 | **R3, 6V arm servo rail** — corrected 2026-09-15 (was recorded as +12V main) |
-| 0x45 | INA260 | **+12V bus → both FeatherWing VIN** — corrected 2026-09-15 (was recorded as the 9V Pi feed) |
+| 0x45 | INA260 | **+12V bus → both FeatherWing VIN** — corrected 2026-09-15 (was recorded as the 9V Pi feed). **Board rebuilt with new parts 2026-09-17** after it stopped ACKing entirely (20/20 direct reads failed while every other address answered); reads 11.364V @ 0.019A since, and identifies correctly as TI/INA260 (`MfgID 0x5449`, `DieID 0x2270`) |
 | 0x48 | ADS1115 | Battery voltage ADC |
 | 0x4A | BNO085 | 9-DoF IMU |
 | 0x60 | FeatherWing | Motor driver, LEFT |
@@ -1250,11 +1252,18 @@ Harness colours: **blue GND, purple ECHO, grey TRIG, white VCC.**
 from midpoint to GND. Midpoint goes to **ADS1115 A0**. Expect ~2.76V at
 11.4V pack, ~3.06V at 12.6V.
 
-Requires calibration — and note §13/§14 item 2: the 2026-08-16 calibration was
-performed against an *earlier* divider, not the 2026-09-02 one now fitted, so the
-stored `BATTERY_DIVIDER_SCALE` is unverified against this hardware. Meter the actual
-voltage at the divider high side,
-compare against the reported value, and set the scale factor in `config.py`.
+⚠ **THE FITTED PARTS DO NOT MATCH THIS DESCRIPTION.** Calibrated 2026-09-17: A0 read
+**3.7229V against a metered 11.5V**, giving a scale of **0.3237**, where the 10k/3.197k
+divider described above would give 0.2423 and ~2.76V. The fitted low-side is closer to
+**4.7k** (10k/4.7k = 0.3197 nominal, within resistor tolerance of the measurement).
+**Meter the actual resistors and correct this section** — the expected-voltage figures
+above are wrong for the hardware as built.
+
+Also note the headroom this leaves: at PGA ±4.096V the ADS1115 saturates at 4.096V, so
+a scale of 0.3237 can only represent a pack up to **12.65V**. A rested 3S LiPo is 12.6V.
+Above that the reading clips and silently under-reports. Every threshold in the ladder
+sits below 11.6V so the safety path is unaffected, but a full-charge or on-charger
+reading cannot be trusted without moving to PGA ±6.144V.
 Verify at two points across the range. The low-voltage shutdown fires from
 calibrated volts, so an error here moves the cutoff.
 
@@ -1741,37 +1750,67 @@ graph TD
     style ARM_SERVO fill:#fff0cc
 ```
 
-**Channel order is not joint order.** Remapped 2026-09-06 (commits `444d4f6`
-then `fb752a1`) to follow the physical wiring order the owner reported; the
-table below matches `config.py`, which is the authority.
+**Channel order is not joint order, and until 2026-09-17 this table was wrong.**
+The mapping below was **measured on hardware on 2026-09-17** — each channel driven
+alone with the owner watching which joint moved. It supersedes the 2026-09-06
+paper remap, which was never true of the physical wiring.
 
-| Joint | Servo | Channel | `config.py` name |
-|-------|-------|---------|------------------|
-| J1a shoulder (right) | MG996R | CH0 | `ARM_SHOULDER_A` |
-| J1b shoulder (left) | MG996R | CH1 | `ARM_SHOULDER_B` |
-| J2 elbow | MG996R | CH2 | `ARM_ELBOW` |
-| J4 wrist pitch | MG90S | CH3 | `ARM_WRIST_PITCH` |
-| J3 wrist rotate | MG90S | CH4 | `ARM_WRIST_ROT` |
-| J5 gripper | MG90S | CH5 | `ARM_GRIPPER` |
-| J0 base yaw | MG996R | CH6 | `ARM_BASE` |
-| — | unused | CH7 | — |
+| Joint | Servo | Channel | `config.py` name | Verified |
+|-------|-------|---------|------------------|----------|
+| J4 wrist pitch | MG90S | **CH0** | `ARM_WRIST_PITCH` | 2026-09-17 |
+| J2 elbow | MG996R | **CH1** | `ARM_ELBOW` | 2026-09-17 |
+| J1 shoulder | MG996R | **CH2** | `ARM_SHOULDER` | 2026-09-17, lift axis |
+| J1b second shoulder axis | MG996R | **CH3** | `ARM_SHOULDER_B` | moves the shoulder; function not yet identified |
+| J3 wrist rotate | MG90S | CH4 | `ARM_WRIST_ROT` | 2026-09-17 |
+| J5 gripper | MG90S | CH5 | `ARM_GRIPPER` | 2026-09-17 |
+| J0 base yaw | MG996R | CH6 | `ARM_BASE` | 2026-09-17 |
+| — | unused | CH7 | — | nothing connected (probed) |
 
-This is the third assignment for this board. The original build put J0–J5 on
-CH0–CH6 in joint order; a 2026-08-21 rewire shifted every joint +1 onto
-CH1–CH7, leaving CH0 unused; the 2026-09-06 remap above reverses the joint
-order and returns the unused channel to CH7. Do not cite a channel number from
-any document revision older than 2026-09-06.
+**CH0–CH3 were exactly REVERSED versus the 2026-09-06 table; CH4, CH5 and CH6 were
+right.** The remap reversed the joint order on paper and the first four plugs were
+never reseated to match — or were reseated as a block in the opposite order. Every
+free channel on both PCA9685s was probed to be sure nothing was hiding elsewhere:
+0x43 CH7 and 0x42 CH6–15 are all electrically empty.
 
-⚠ **CH0 now carries a shoulder servo, and CH0 was the deliberately-unused
-channel from 2026-08-21 until 2026-09-06.** If the shoulder pair was not
-physically moved down onto CH0/CH1 as part of that remap, `ARM_SHOULDER_A`
-commands a dead channel while `ARM_SHOULDER_B` moves — driving one half of the
-mirrored pair alone, which FRD FR-700-001 flags as a mechanical-damage risk
-(the halves fight each other through the linkage). Confirm a servo is actually
-seated on CH0 before commanding the arm.
+⚠ **The mirrored-pair model is WRONG and has been removed from `arm.py`.** J1a/J1b
+were documented as one physical axis with `J1b = 2 × 1500µs − J1a`. Hardware
+disagrees: commanding CH2/CH3 mirrored and commanding them identically drew
+statistically the same current (0.197A vs 0.176A settled, two amplitudes), where a
+genuine shared axis driven the wrong way would fight hard and draw heavily. Keeping
+the derivation was actively dangerous — with the shoulder at its verified 750µs
+waving position it would have commanded CH3 to 2250µs.
 
-J1a and J1b are a mirrored pair driving one physical axis:
-`J1b = 2 × 1500µs − J1a`. They must be commanded together.
+**The ⚠ note that used to sit here — "confirm a servo is actually seated on CH0
+before commanding the arm" — was correct in substance and is why this was found.**
+
+**Verified directions and costs (2026-09-17):**
+
+| Joint | Direction | Notes |
+|-------|-----------|-------|
+| Shoulder CH2 | **decreasing µs raises**, increasing lowers | peaks 2.1–2.6A raising, holds 0.17–0.35A |
+| Elbow CH1 | — | 1400→2500µs traversed with no binding (~200°); settles under 0.43A throughout |
+| Gripper CH5 | **increasing µs closes**, decreasing opens | jaw contact from ~1700µs |
+| Wrist CH0 | increasing lowers | free below ~2300µs; 2400µs+ holds a sustained 0.9A |
+
+**Holding a pose is nearly free; moving costs amps.** The full waving pose holds at
+~0.33A. Releasing a channel (`off=0`) makes the arm go limp and fold, so hold poses
+rather than releasing them.
+
+**Order matters: open the elbow before moving the shoulder**, or the arm strikes the
+top of Willy (owner-stated, §11.4).
+
+⚠ **Never apply `ARM_SERVO_CENTER_US` (1500µs) to the elbow.** The servo fitted
+before 2026-09-17 held ~8A there indefinitely and was destroyed by it over the
+course of one bench session. `arm.py`'s `center_all()` now skips the elbow
+deliberately. The replacement servo settles at 0.388A at 1500µs, which proves the
+8A was a damaged servo rather than a mechanical stop — but the exclusion stays until
+§20.6 calibration establishes a real safe centre.
+
+⚠ **Any arm motion must watch INA260 `0x44` current from INSIDE the movement loop**
+and release a channel that stays above ~2.5A for 0.4s (`ARM_CURRENT_LIMIT_A` /
+`ARM_CURRENT_LIMIT_S`). A threshold checked only after a move completes is useless —
+that is precisely how the first elbow servo was destroyed. With the guard in place,
+no subsequent test on any joint tripped it.
 
 The arm connects through a bulkhead connector so it detaches without
 desoldering.
@@ -1980,15 +2019,15 @@ overtaken are corrected below rather than left standing.
 | Pi boots from battery, not USB-C | PASS | Rail 5.144V against a 4.85V floor; `vcgencmd get_throttled` = 0x0, clearing the sticky since-boot bit as well as the live one |
 | Serial console disabled, GP14/GP15 free | PASS | `gpioinfo` shows both unused on the header gpiochip |
 | Bus node board fully populated | PASS | All rail positions landed |
-| Breakout connections verified | **NOT YET — breakout installed 2026-09-14** | GeeekPi Micro GPIO Terminal Block fitted; connections not re-verified. Re-run the §16.13 checks, in particular check 6 — the three ECHO divider junctions at 3.2–3.4V. **If this board has no per-pin LEDs** (the "Micro" line generally does not, unlike GeeekPi's LED variant) then it is electrically passive and adds no load, which removes the LED concerns that applied to the HDO040 candidate. **Confirm that before skipping the re-meter** |
+| Breakout connections verified | **PARTIAL — a GROUND FAULT was found and fixed 2026-09-17** | The GeeekPi board as installed had a ground defect (owner-found and corrected). It is the leading explanation for the two destroyed sonars: with its GND return open, a sensor's return current flows through the TRIG/ECHO lines and the Pi's protection diodes, which floats the sensor's reference, holds ECHO high, and cooks the part — matching every symptom seen. Front channel verified working since. Original note follows: GeeekPi Micro GPIO Terminal Block fitted; connections not re-verified. Re-run the §16.13 checks, in particular check 6 — the three ECHO divider junctions at 3.2–3.4V. **If this board has no per-pin LEDs** (the "Micro" line generally does not, unlike GeeekPi's LED variant) then it is electrically passive and adds no load, which removes the LED concerns that applied to the HDO040 candidate. **Confirm that before skipping the re-meter** |
 | AI accelerator PCIe bond | PASS | `/dev/hailo0`; firmware 5.1.1, HAILO10H |
 | Pi-rail INA260 address | **PASS — 0x45** (corrected 2026-09-13) | `config.py:212` `INA260_PI_ADDR=0x45` ("VERIFIED 9.068V"); `config.py:210` `INA260_MOTOR_ADDR=0x44` is the +12V bus. This row said 0x44 — stale from before the 2026-08-28 correction recorded in §15.8, and it survived the rev 2.1 pass. §0, §2.2 and §16.4 were right |
-| Sonars connected | Connected, not range-tested | — |
+| Sonars connected | **FRONT VERIFIED 2026-09-17** — left and right outstanding | Front reads 79.0–79.5cm stable over 8 samples, ECHO idles LOW. Two original sensors were **destroyed by reverse polarity** and replaced (§16.13). A sensor fitted to the left channel on 2026-09-17 did not respond and coincided with a **+247mA rise on R2** — the shorted-sensor signature — so check connector polarity before powering any newly fitted sonar |
 | Encoder counts on all six channels | Not tested | — |
 | BNO085 interrupt and fusion output | Not tested | INT on GP15 is unused by the driver; library polls over I²C |
-| Battery divider calibration | ⚠ **DONE FOR A DIFFERENT DIVIDER** — see below | `BATTERY_DIVIDER_SCALE` trimmed 0.2865→0.2386 on 2026-08-16 (2.9112V ADC vs 12.2V meter). **That predates the divider now on the board**, which was new on 2026-09-02 (§4.2). The divider is **fed and reading** as of 2026-09-14; what remains is the scale re-trim |
+| Battery divider calibration | **RE-TRIMMED 2026-09-17** | `BATTERY_DIVIDER_SCALE` 0.2386 → **0.3237**, from AIN0 = 3.7229V (raw 29783) against a bench supply metered at 11.5V. The old value belonged to the pre-2026-09-02 divider and was reporting **15.60V from an 11.5V input** — impossible for a 3S pack, and it passed every guard because the guards only catch readings that are too LOW. **Two open items:** the implied ratio (~10k/4.7k) does not match the 10k/3.197k described in §16, so meter the fitted parts; and at PGA ±4.096V this scale saturates at **12.65V**, ~50mV above a rested 3S pack, so full-charge readings are untrustworthy without moving to PGA ±6.144V |
 | Steering servo sweep | Not tested | — |
-| Arm servo range and per-joint limits | Not tested | §20.6 calibration; `arm_jog.py` is the tool |
+| Arm servo range and per-joint limits | **MEASURED 2026-09-17** — channel map corrected; formal per-joint limits still undefined | Every channel identified on hardware (§11.1). Elbow traversed 1400→2500µs with no binding (~200°); shoulder 750→2010µs; wrist 1500→2500µs, free below ~2300µs and holding a sustained 0.9A above it; gripper direction and grip-by-current established. One elbow servo was destroyed during this work (§11.1). §20.6 calibration remains the route to formal limits; `arm_jog.py` is the tool |
 | Motor direction and mapping | Not tested | — |
 | Motor crimps | 1 of 6 verified | — |
 
@@ -2025,7 +2064,14 @@ measurement work rather than wiring.
 
 1. **Motor crimps** — five of six unverified against the colour scheme in
    §7.1. Meter before first motion.
-2. ⚠ **Battery divider calibration — REOPENED 2026-09-13.** It was closed on
+2. ✅ **Battery divider calibration — CLOSED 2026-09-17** (`BATTERY_DIVIDER_SCALE` =
+   **0.3237**, measured 3.7229V ADC against 11.5V metered). The analysis below was right
+   to reopen it and wrong about the magnitude: it guessed ~1.5%, and the real error was
+   34%. What follows is kept because the *reasoning* about dates was sound. **New open
+   item in its place:** the measured ratio implies ~10k/4.7k, not the 10k/3.197k this
+   section describes — meter the fitted parts.
+
+   Original entry: ⚠ **Battery divider calibration — REOPENED 2026-09-13.** It was closed on
    2026-08-16, but that calibration was performed against a **different divider**.
    The one on the board now is new as of 2026-09-02 (§4.2, and three §15 BOM rows
    dated the same day), so an August calibration cannot describe it. A divider
@@ -2681,6 +2727,33 @@ together.
 ### 16.13 Sonar × 3
 
 Harness: white VCC, blue GND, grey TRIG, purple ECHO.
+
+⚠ **REVERSE POLARITY DESTROYS THESE SENSORS, AND IT HAS — TWICE (2026-09-17).**
+The front and right HC-SR04s were found dead: **19Ω across VCC–GND** (a healthy one
+reads **OPEN**), warm to the touch under power, and ECHO held high instead of idling
+low. Root cause was a crimped pin that had not clicked home in its housing and backed
+out, combined with the breakout ground fault of the same date (§5.3). **Check pin
+seating and polarity against the front channel before energising any sonar.**
+
+**The rail tells you before you smell smoke.** A shorted HC-SR04 draws 5V/19Ω ≈ 263mA.
+INA260 `0x40` on R2 read **0.136A on 2026-08-24** and **0.526A on 2026-09-15** — the
+fault was sitting in the log for two days, written up purely as an INA260 *address*
+story, because nobody asked why the current had quadrupled. **Read the current, not
+just the addresses.** Healthy R2 with one sonar fitted is ~0.10A; each additional
+healthy sensor adds ~15mA, so any step of ~250mA is a short.
+
+**Diagnosing a dead channel, in order (all cheap, all decisive):**
+
+| Test | Healthy | Faulty |
+|------|---------|--------|
+| ECHO idle level | LOW | HIGH |
+| ECHO with internal pull-down | goes low / floats | stays HIGH (driven) |
+| Sensor VCC–GND, unplugged | **open circuit** | ~19Ω = destroyed |
+| R2 current step when fitted | ~15mA | ~250mA |
+| Range reading | stable to ±0.5cm | 999cm (the timeout constant) |
+
+A reading of 999cm is `SONAR_TIMEOUT` firing in `sensors.py`, not a measurement:
+`_ping()` waits for ECHO to go low first, and a stuck-high line never lets it start.
 
 | Position | VCC | TRIG → | ECHO → divider → |
 |---|---|---|---|
