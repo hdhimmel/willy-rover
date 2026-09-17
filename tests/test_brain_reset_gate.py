@@ -3,8 +3,10 @@ sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # FR-300-003, applied to all faults not just a future E-stop (owner decision 2026-08-18): once
 # a fault condition clears, brain.py no longer auto-resumes to IDLE -- it keeps braking and waits
-# for an explicit operator screen-tap (display.py's new reset button). RoverBrain._await_reset_
-# or_resume() is the shared gate used by SENSOR_FAULT/TILT_FAULT/STALL_FAULT recovery. Same
+# for an explicit operator action. RoverBrain._await_reset_or_resume() is the shared gate, used
+# by SENSOR_FAULT/TILT_FAULT/STALL_FAULT recovery and -- since 2026-09-17 -- battery SAFE_MODE.
+# That action is a screen tap (display.py's reset button) or the 'reset' voice intent (owner
+# decision 2026-09-17); the voice half has its own coverage in tests/test_voice_reset.py. Same
 # subprocess-under-WILLY_SIMULATE=1 approach as tests/test_brain_battery.py, for the same reason
 # (importing brain.py in-process needs the full display/voice/vision stack this suite
 # deliberately avoids depending on).
@@ -33,6 +35,10 @@ def fb(tapped):
     ns.display=FakeDisplay(tapped); ns.safety=FakeSafety()
     ns._go=lambda s: setattr(ns,"_state",s)
     ns._upd=types.MethodType(RoverBrain._upd,ns)
+    # Bound 2026-09-17: the gate now accepts a voice reset as well as a screen tap, so
+    # _await_reset_or_resume() calls this. This namespace has no .voice at all, which is
+    # deliberate -- it proves the screen-tap path still works with no voice subsystem present.
+    ns._voice_reset_requested=types.MethodType(RoverBrain._voice_reset_requested,ns)
     ns._await_reset_or_resume=types.MethodType(RoverBrain._await_reset_or_resume,ns)
     return ns
 
