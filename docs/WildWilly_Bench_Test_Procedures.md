@@ -25,7 +25,16 @@ The distinction matters because it decides what still needs the rover.
 ### Verified in software — done, no hardware required
 
 These are proven by the test suite (`WILLY_SIMULATE=1 ./venv/bin/python -m pytest`, 398
-passing at time of writing). They need no bench time and are listed so nobody re-does them.
+passing at time of writing; **412 as of 2026-09-17**). They need no bench time and are listed
+so nobody re-does them.
+
+✅ **S-1 sonar array — CLOSED ON HARDWARE 2026-09-17.** All three channels range-tested
+together for the first time since the build: front 49.7cm, left 91.1cm, right 30.9cm, each
+stable to ±0.4cm over 8 samples and each reading its own direction (three distinct
+distances, so no cross-talk). All three ECHO lines idle LOW and go low against an internal
+pull-down. R2 at 4.990V @ 0.026A — no sensor drawing fault current. There is no separate
+S-1 procedure below because the array was closed while debugging it; the method is recorded
+in Master Hardware Design §16.13, which now carries a diagnosis table for a dead channel.
 
 | area | evidence |
 |---|---|
