@@ -151,7 +151,7 @@ class RoverBrain:
         self.witty=WittyPi()
         self._state='INIT'; self._stuck_count=0; self._last_action='none'; self._manual_action=None
         self._idle_t=0.0; self._avoid_start=0.0; self._avoid_phase=None; self._running=False
-        self._motion_enabled=False; self._init_fail_reason=''
+        self._motion_enabled=False; self._init_fail_reason=''; self._selftest_critical=[]
         # Self-test override (owner request 2026-08-24). While motion is gated off by a failed
         # startup self-test, retry the test periodically; after SELFTEST_OVERRIDE_AFTER
         # consecutive failures for the SAME reason, offer an on-screen button letting the
@@ -275,7 +275,22 @@ class RoverBrain:
         # owner decision, not something to flip silently. Logged for visibility only.
         config_problems=config.validate()
         if config_problems: log.warning('Config validation found issues (non-blocking): '+'; '.join(config_problems))
-        problems=[]
+        # PROBLEMS ARE CLASSIFIED, ADDED 2026-09-17. `problems` used to be one flat list, and
+        # brain.py offered the operator an override for ANY entry in it after
+        # SELFTEST_OVERRIDE_AFTER consecutive failures -- which meant "IMU not reporting" was
+        # exactly as overrideable as a log-directory permission warning. An override that
+        # re-enables motion on a rover with no tilt sensing, no wheel feedback, no current
+        # monitoring or no battery sensing is not a judgement call an operator should be offered.
+        #
+        # SAFETY-CRITICAL -> never overrideable. Anything the safety path reads: the I2C bus
+        # itself (every expected address is a motor controller, a sensor, or a power monitor),
+        # the IMU (tilt/stair detection), the battery ADC (the whole shutdown ladder), the
+        # encoders (stall detection) and the current monitors (rail-loss detection).
+        #
+        # NON-CRITICAL -> overrideable. Storage: it costs logging, map persistence and memory
+        # durability, which is real damage to the record but not to anyone's safety. Willy can
+        # be driven home with a read-only data root.
+        problems=[]; critical=[]
         storage_ok,storage_problems=storage.check_storage({'data':config.WILLY_DATA_ROOT,
             'map':config.WILLY_MAP_ROOT,'memory':config.WILLY_MEMORY_ROOT,'log':config.WILLY_LOG_ROOT})
         if not storage_ok: problems.extend(storage_problems)  # §13: startup availability/permission check
@@ -287,17 +302,22 @@ class RoverBrain:
                 while not i2c.try_lock(): pass
                 found=set(i2c.scan()); i2c.unlock()
                 missing=_EXPECTED_I2C-found
-                if missing: problems.append('I2C missing: '+','.join(hex(a) for a in sorted(missing)))
+                if missing: critical.append('I2C missing: '+','.join(hex(a) for a in sorted(missing)))
             except Exception as e:
-                problems.append(f'I2C scan failed: {e}')
+                critical.append(f'I2C scan failed: {e}')
         time.sleep(0.5)  # let sensor threads take a first reading (current monitor is the slowest, 10Hz)
-        if not self.imu.is_healthy: problems.append('IMU not reporting')
-        if self.adc.battery_volts<=0: problems.append('battery ADC not reporting')
-        if not self.encoders.is_healthy: problems.append('encoders not reporting')
-        if not self.current.is_healthy: problems.append('current monitors not reporting')
-        if problems:
-            log.error('SELF-TEST FAILED: '+'; '.join(problems))
-            return False,'; '.join(problems)
+        if not self.imu.is_healthy: critical.append('IMU not reporting')
+        if self.adc.battery_volts<=0: critical.append('battery ADC not reporting')
+        if not self.encoders.is_healthy: critical.append('encoders not reporting')
+        if not self.current.is_healthy: critical.append('current monitors not reporting')
+        # Recorded on self so the override offer can consult it. Set on EVERY self-test run,
+        # pass or fail, so a retry that clears the critical fault also clears the block.
+        self._selftest_critical=list(critical)
+        all_problems=critical+problems
+        if all_problems:
+            log.error('SELF-TEST FAILED: '+'; '.join(all_problems)
+                      +(f'  [SAFETY-CRITICAL, override refused: {"; ".join(critical)}]' if critical else ''))
+            return False,'; '.join(all_problems)
         log.info('Self-test passed — all subsystems present.')
         return True,''
 
@@ -523,11 +543,22 @@ class RoverBrain:
                     self._selftest_fail_count+=1
                 log.warning(f'Self-test retry failed ({self._selftest_fail_count}x): {reason}')
             if self.display.override_tapped():
-                log.error(f'SELF-TEST OVERRIDDEN by operator — motion enabled despite: '
-                          f'{self._init_fail_reason}')
-                self._motion_enabled=True; self._selftest_overridden=True
-                self._go('IDLE'); return
-            offer=self._selftest_fail_count>=config.SELFTEST_OVERRIDE_AFTER
+                # Refuse here as well as hiding the button. The tap event can only have been
+                # armed while the offer stood, but a critical fault can appear between the offer
+                # and the tap -- and this is the last gate before motion is re-enabled, so it
+                # re-checks rather than trusting that the button was never shown.
+                if self._selftest_critical:
+                    log.error('SELF-TEST OVERRIDE REFUSED — safety-critical failure: '
+                              +'; '.join(self._selftest_critical))
+                else:
+                    log.error(f'SELF-TEST OVERRIDDEN by operator — motion enabled despite: '
+                              f'{self._init_fail_reason}')
+                    self._motion_enabled=True; self._selftest_overridden=True
+                    self._go('IDLE'); return
+            # FR-100-004: the override is offered ONLY when every outstanding problem is
+            # non-safety-critical. See the classification in _self_test().
+            offer=(self._selftest_fail_count>=config.SELFTEST_OVERRIDE_AFTER
+                   and not self._selftest_critical)
             self._upd('fault',f'SELF-TEST FAILED: {self._init_fail_reason}',
                        {'front':999,'left':999,'right':999},0.0,offer_override=offer)
             return
@@ -631,10 +662,21 @@ class RoverBrain:
                 log_event(log,'LOW_BATTERY',severity='warning',subsystem='battery',
                           status='return_to_home',volts=f'{bat_v:.2f}')
                 self._go('DOCK')
-        elif self._state in('SAFE_MODE','SHUTDOWN','DOCK'):
-            # Tier no longer forces a battery-driven state. Recovery can skip straight from
-            # shutdown/safe to warn/normal in one hysteresis step (bypassing 'rth') — handle
-            # release here rather than only on DOCK, or SAFE_MODE/SHUTDOWN would never exit.
+        elif self._state=='SAFE_MODE':
+            # FR-300-003 EXTENDED TO THE BATTERY LADDER, 2026-09-17. SAFE_MODE is entered via
+            # safety.emergency_stop() (see the 'safe' tier above), so it is a latched fault like
+            # tilt/sensor/stall -- and it used to be the ONE emergency_stop() path that resumed
+            # automatically the moment voltage recovered. That is the worst place to auto-resume:
+            # a sagging pack recovers as soon as the motors stop loading it, so the rover would
+            # move, sag, cut, recover, and move again in a loop, each cycle taking the pack lower.
+            # Now it holds braked and waits for an explicit operator reset like every other fault.
+            if not self._await_reset_or_resume('battery safe mode',d,tilt,
+                                               'Battery recovered — tap or say reset'): return
+        elif self._state in('SHUTDOWN','DOCK'):
+            # Unchanged. SHUTDOWN is a terminal powering-off path and DOCK is an ordinary
+            # return-to-home task, not an emergency_stop() latch -- neither is a fault to reset.
+            # Recovery can skip straight from shutdown/safe to warn/normal in one hysteresis step
+            # (bypassing 'rth'), so release is handled here rather than only on DOCK.
             self._go('IDLE')
 
         # FR-000 Directive 5 (FR-500-003): stalls halt, not retry blindly. Checked after
@@ -1282,6 +1324,26 @@ class RoverBrain:
             self._roam_permission=False
             log.info('Roam permission revoked -- he must ask again.')
 
+    def _voice_reset_requested(self):
+        # FR-300-003, voice half (owner decision 2026-09-17: reset is a voice command OR a
+        # screen tap). A latched fault returns early from _tick() before _drain_voice_commands()
+        # ever runs, so the intent has to be pulled out of the queue here rather than waiting for
+        # normal dispatch -- otherwise the only way out of a latched fault is the touchscreen.
+        #
+        # Scans the WHOLE queue, not just the head: a fault can sit latched for minutes while
+        # other commands pile up behind it, and the reset must not be stuck behind them. Same
+        # once-only contract as display.reset_tapped() -- the entry is removed when consumed.
+        # getattr twice: a latched-fault unit test can construct a brain namespace with no
+        # voice subsystem at all, and the reset gate must still work from the screen tap.
+        q=getattr(getattr(self,'voice',None),'pending_commands',None)
+        if q is None: return False
+        with q.mutex:
+            for i,cmd in enumerate(q.queue):
+                if cmd.get('intent')=='reset':
+                    del q.queue[i]
+                    return True
+        return False
+
     def _await_reset_or_resume(self,fault_desc,d,tilt,cleared_msg):
         # FR-300-003, applied to all faults (owner decision 2026-08-18, not just a future
         # E-stop): once the underlying fault condition has cleared, don't auto-resume -- keep
@@ -1289,7 +1351,7 @@ class RoverBrain:
         # STALL_FAULT below rather than tripled per call site. Returns True if the tap arrived
         # this tick (caller should fall through to normal dispatch); False if still waiting
         # (caller should return without dispatching).
-        if self.display.reset_tapped():
+        if self.display.reset_tapped() or self._voice_reset_requested():
             self._go('IDLE'); return True
         self.safety.emergency_stop(f'{fault_desc} cleared, awaiting operator reset')
         self._upd('fault',cleared_msg,d,tilt,awaiting_reset=True)

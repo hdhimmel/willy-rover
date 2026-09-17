@@ -101,16 +101,28 @@ class SafetyController:
         # FR-300-002 (immediate motion disable): hard brake + clears any queued/in-flight
         # motion in the same call. brain.py's fault checks (sensor/tilt/battery) and voice
         # 'stop' all funnel through here -- see brain.py's _check_health()/_tick() call sites.
-        # FR-300-001 (continuous physical E-stop monitoring) and FR-300-003 (explicit
-        # operator reset before resuming) are NOT implemented: no physical E-stop GPIO is
-        # polled anywhere in this codebase (grep for ESTOP finds only the log-throttle
-        # constant below), and every fault state this class enters is recovered from
-        # automatically once the triggering condition clears (see brain.py's SAFE_MODE/
-        # SENSOR_FAULT handling) rather than requiring an explicit operator action. FR-300-001
-        # is blocked on hardware (no sense pin wired, see CLAUDE.md); FR-300-003 is a real,
-        # fixable design decision -- deliberately not built here without product sign-off on
-        # what "explicit operator reset" should mean on this rover (a voice intent? a physical
-        # button that doesn't exist yet? something else?), see [[project_willy_rover_frd_closure]].
+        # FR-300-001 (continuous physical E-stop monitoring) is NOT implemented and is blocked
+        # on hardware: no physical E-stop GPIO is polled anywhere in this codebase (grep for
+        # ESTOP finds only the log-throttle constant below) because no sense pin is wired. See
+        # CLAUDE.md. The mushroom switch cuts motor and arm power directly, so the cut itself is
+        # absolute -- what is missing is software AWARENESS that it happened.
+        #
+        # FR-300-003 (explicit operator reset before resuming) IS implemented, in brain.py.
+        # CORRECTED 2026-09-17: this comment used to say it was not, and claimed "every fault
+        # state this class enters is recovered from automatically once the triggering condition
+        # clears". That stopped being true on 2026-08-18 and the comment was never updated -- an
+        # external reviewer read it in September and reported the requirement as open. The
+        # authority is brain.py's _await_reset_or_resume(): a latched fault keeps braking after
+        # its condition clears and waits for an explicit operator action. It covers
+        # SENSOR_FAULT, TILT_FAULT, STALL_FAULT and -- since 2026-09-17 -- battery SAFE_MODE,
+        # which was the last emergency_stop() path that still auto-resumed.
+        #
+        # "Explicit operator reset" means, by owner decision 2026-09-17, EITHER a screen tap
+        # (display.reset_tapped()) OR the 'reset' voice intent (brain._voice_reset_requested()).
+        #
+        # This class deliberately holds no latch of its own. brain.py owns fault state, and
+        # emergency_stop() is re-asserted every tick for as long as the fault stands -- so a
+        # latch here would be a second source of truth for the same condition.
         # Immediate hard brake (not the ramped stop()) — for tilt/battery faults and sustained
         # sensor faults, where a 0.5s ramp-down is the wrong call. Also clears any in-flight timed
         # move so a stale deadline can't fire after recovery.

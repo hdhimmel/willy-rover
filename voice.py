@@ -144,6 +144,11 @@ def is_emergency_stop(text):
 _FAST_PATH_PATTERNS=[
     # --- tier 2: motion / destructive, narrow cores ---
     (_fp(r'stop|halt|freeze|hold (it|on|up)|stop moving|stand still|whoa'),'stop','Stopping.'),
+    # FR-300-003 operator reset (owner decision 2026-09-17: voice OR screen tap). Tier 2 -- it
+    # re-enables motion -- so the core stays narrow. A false positive is cheap in a way the
+    # other tier-2 intents are not: brain.py only consumes 'reset' from a latched fault state
+    # whose triggering condition has ALREADY cleared, so it can never override a live fault.
+    (_fp(r'reset|clear (the )?fault|fault clear|all clear'),'reset','Reset. Motion re-enabled.'),
     (_fp(r'(?:go |move |drive )?forward'),'forward','Going forward.'),
     (_fp(r'(?:go |move |drive )?(?:reverse|backward|back up)'),'reverse','Backing up.'),
     (_fp(r'turn left'),'turn_left','Turning left.'),
