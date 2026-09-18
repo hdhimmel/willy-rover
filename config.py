@@ -192,8 +192,33 @@ ARM_CURRENT_LIMIT_S=0.4
 # Wheel encoders — MCP23017 @0x27 (§9.1), quadrature A/B per wheel. counts/rev is a "starting
 # value" from the motor listing, not bench-confirmed.
 ENCODER_ADDR=0x27
-ENCODER_PINS={'lf':('A',0,1),'lm':('A',2,3),'lr':('B',0,1),
-              'rf':('A',4,5),'rm':('A',6,7),'rr':('B',2,3)}
+# MEASURED 2026-09-18 (E-1) -- LEFT AND RIGHT WERE TRANSPOSED, the same swap found on the
+# motor boards the same day (see MOTOR_PORT above). The encoders were landed at the same time
+# as the motors, so the same left/right confusion propagated into both. Master Hardware Design
+# 7.2 predicted exactly this: the encoder column "may follow the physical wheels, or the port
+# permutation, or neither".
+#
+# Method: drive one wheel 1.0s, compare the MCP23017 resting state before and after, and count
+# over six trials how often each pin changes. A pin on that wheel's encoder changes on most
+# trials (the shaft stops wherever it stops); a pin picking up PWM crosstalk changes rarely and
+# inconsistently. Confirmed on two independent runs.
+#
+# DO NOT sample these pins in a tight loop looking for edges. At 0.6 duty the edge rate is
+# ~7.7kHz and I2C polling tops out near 1.2kHz, which aliases to a CONSTANT reading -- that is
+# why every earlier attempt concluded "no encoder produces any output", which was wrong.
+#
+# WARNING, PHASE B IS NOT VERIFIED AND CURRENTLY READS DEAD. Only the even pin of each pair
+# (Phase A, yellow) produces transitions; every odd pin (Phase B, green) is silent except a
+# flicker on A7. Six wheels failing on exactly the odd pin is one wiring pattern, not six
+# faults -- trace the green wires before trusting any direction-aware decode. Until then the
+# quadrature decode in sensors.py can count distance but cannot resolve direction.
+#
+# The encoder supply was found REVERSED on 2026-09-18 and corrected; lf went from 2/6 to 6/6
+# on its Phase A immediately afterwards. Phase B did not recover, so those output stages may
+# have been damaged by the reverse polarity -- the same failure that destroyed two sonars the
+# previous day, on connectors reassembled during the same rebuild.
+ENCODER_PINS={'lf':('A',4,5),'lm':('A',6,7),'lr':('B',2,3),
+              'rf':('A',0,1),'rm':('A',2,3),'rr':('B',0,1)}
 ENCODER_COUNTS_PER_REV=752   # 11 PPR (motor shaft) x4 quadrature x 17.1:1 reduction.
                              # WAS 3292, derived as "823.1 PPR x4". 823.1/11 implies a 74.8:1
                              # gearbox -- the ratio matching the STALE "6V, 100-200 RPM" motor

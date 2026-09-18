@@ -130,12 +130,28 @@ taken under power.
 3. Run `scripts/encoder_calibration.py` to compare observed counts per revolution against
    the configured 752.
 
-**Record:**
+**RESULT 2026-09-18 — partially closed.**
 
 | measurement | value | notes |
 |---|---|---|
-| Encoder supply, idle | | target 3.3 V |
-| Encoder supply, under load | | sag here explains a lot |
+| Encoder supply, idle | **3.3 V** | in spec; the datasheet range is 3.3–5 V, so undervoltage was never the fault |
+| Encoder supply, under load | **3.3 V** | no sag — the 2026-08-25 theory (2.83 V) is dead |
+| Encoder supply POLARITY | ⚠ **WAS REVERSED** | found and corrected 2026-09-18. LF Phase A went 2/6 → 6/6 immediately after |
+| Pin-to-wheel map | ✅ **measured** | left/right were transposed, same as the motor boards — see Master Hardware Design §7.2 |
+| Phase A (yellow, even pin) | ✅ all six | |
+| Phase B (green, odd pin) | ❌ **dead on all six** | one wiring pattern, not six faults — trace the green wires |
+| Counts per revolution vs 752 | not measured | blocked on Phase B: quadrature needs both channels |
+
+**The method matters more than the numbers here.** Do not poll these pins for edges: at 0.6
+duty the edge rate is ~7.7 kHz against a ~1.2 kHz I²C ceiling, and the aliasing reads as a
+CONSTANT. Three attempts concluded "no encoder output at all" and all three were wrong. Drive
+one wheel ~1 s, compare the MCP23017 resting state before and after, and count across several
+trials which pins change.
+
+**Still open:** the green/Phase-B wiring, and only then counts-per-rev. Note step 3 below is
+itself invalid — `scripts/encoder_calibration.py` is built on hand-turning, which produces
+nothing on this rover (§2.2: the encoder is behind the 17.1:1 gearbox and does not
+back-drive).
 | Channels responding per wheel | | |
 | Observed counts/rev vs 752 | | |
 | Counts plausible at speed, or systematically low? | | bears on FRD G-2 |

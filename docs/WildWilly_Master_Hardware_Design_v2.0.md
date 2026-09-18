@@ -1616,14 +1616,26 @@ actually turned. All six confirmed, and all six turn in the commanded direction.
 front/middle/rear order the port numbers suggest. **0x61 is the LEFT side and 0x60 is
 the RIGHT side.**
 
-| Motor | Position | Driver | Encoder A/B (still unverified) |
+| Motor | Position | Driver | Encoder A/B |
 |-------|----------|--------|-------------|
-| LF | Left front | **0x61 M3** | GPA0 / GPA1 |
-| LM | Left middle | **0x61 M2** | GPA2 / GPA3 |
-| LR | Left rear | **0x61 M1** | GPB0 / GPB1 |
-| RF | Right front | **0x60 M3** | GPA4 / GPA5 |
-| RM | Right middle | **0x60 M2** | GPA6 / GPA7 |
-| RR | Right rear | **0x60 M1** | GPB2 / GPB3 |
+| LF | Left front | **0x61 M3** | **GPA4 / GPA5** |
+| LM | Left middle | **0x61 M2** | **GPA6 / GPA7** |
+| LR | Left rear | **0x61 M1** | **GPB2 / GPB3** |
+| RF | Right front | **0x60 M3** | **GPA0 / GPA1** |
+| RM | Right middle | **0x60 M2** | **GPA2 / GPA3** |
+| RR | Right rear | **0x60 M1** | **GPB0 / GPB1** |
+
+✅ **Encoder column MEASURED 2026-09-18 (E-1) — left and right were transposed here too**,
+the identical swap found on the motor boards the same day. The encoders were landed at the
+same time as the motors, so the same confusion propagated into both columns. This section
+predicted it: the assignment "may follow the physical wheels, or the port permutation, or
+neither."
+
+⚠ **PHASE B (the odd pin of each pair, green wire) IS DEAD and the column above is
+therefore only half-verified.** Only the even pin of each pair produces transitions; every
+odd pin is silent but for a flicker on GPA7. Six wheels failing on exactly the odd pin is one
+wiring pattern, not six faults — trace the green wires before trusting any direction-aware
+decode. Until then the decode can count distance but cannot resolve direction.
 
 **Left and right are from Willie's own point of view, facing forward** — the vehicle
 convention, as if sitting in a car. Standing in front of him mirrors it. Convention
@@ -1660,12 +1672,27 @@ chats normally with no motor supply at all. The +12V bus measured 11.350 V at IN
 `0x45`, upstream of both VIN terminals, which placed the fault in the branch to 0x60.
 Owner reconnected it; the re-run showed all six ports at 0.067–0.070 A.
 
-⚠ **The Encoder A/B column is NOT verified either.** Only the driver ports
-were ever tested. The motor ports turned out not to follow position order, so
-the encoder channel assignment cannot be assumed to either — it may follow the
-physical wheels, or the port permutation, or neither. This affects per-wheel
-odometry attribution only; whole-side drive is unaffected. Settle it the same
-way — **but not by hand.** §2.2 records that hand-turning produces nothing: the
+**How E-1 was finally measured, 2026-09-18, and why every earlier attempt failed.**
+
+Do **not** sample these pins in a tight loop looking for edges. At 0.6 duty the edge rate is
+~7.7 kHz while I²C polling tops out near 1.2 kHz, and the aliasing produces a **constant
+reading**. Three separate attempts — `encoder_map_check.py` and two hand-written probes —
+each concluded "no encoder produces any output on any wheel", and all three were wrong.
+
+What works instead: drive one wheel ~1s, read the MCP23017 resting state before and after,
+and count over several trials how often each pin changes. A pin on that wheel's encoder
+changes on most trials, because the shaft stops wherever it stops; a pin picking up PWM
+crosstalk changes rarely and inconsistently. Two independent runs agreed.
+
+⚠ **The encoder supply was found REVERSED on 2026-09-18** and corrected. LF's Phase A went
+from 2/6 to 6/6 immediately afterwards. Phase B did not recover, so those output stages were
+probably destroyed by the reverse polarity — **the same failure that destroyed two sonars the
+previous day, on connectors reassembled during the same rebuild.** Note that with the supply
+reversed, blue-to-black reads −3.3 V; a meter showing +3.3 V means the probes were swapped
+too, which is how it passed an earlier check. §16's warning applies: meter polarity at every
+connector before first power-up, and do not trust wire colour on these batches.
+
+The old caution follows, for the reasoning. Settle it — **but not by hand.** §2.2 records that hand-turning produces nothing: the
 encoder sits on the motor shaft behind the 17.1:1 gearbox and does not back-drive.
 **Any encoder test must be under power**, driving one wheel at a time and reading which
 channel toggles. `scripts/encoder_calibration.py` is built on hand-turning and is
