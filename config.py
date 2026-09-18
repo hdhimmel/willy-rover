@@ -24,38 +24,43 @@ DISPLAY_W=800; DISPLAY_H=480; DISPLAY_FPS=30; DISPLAY_ROTATE=0
 
 # Drive — 2x Adafruit FeatherWing #2927 MotorKit boards over I2C (§9, §1.3 master doc).
 # Replaces the old GPIO H-bridge pins (freed — no discrete driver chip, no direction/PWM GPIO).
-MOTORKIT_LEFT_ADDR=0x60; MOTORKIT_RIGHT_ADDR=0x61
-# Port order below is M1=REAR, M2=MIDDLE, M3=FRONT on both kits -- NOT the
-# front/middle/rear order the port numbers suggest.
+# ADDRESSES SWAPPED 2026-09-18 AFTER MEASURING THEM. These read 0x60=left, 0x61=right
+# from the original build until M-1 was finally run: the left wheels are on 0x61.
+MOTORKIT_LEFT_ADDR=0x61; MOTORKIT_RIGHT_ADDR=0x60
+# BENCH-VERIFIED 2026-09-18 (M-1). Rover on boxes, wheels clear, service stopped,
+# each port driven ALONE by raw address+port -- never by wheel name, since this dict
+# was the thing under test -- with the owner naming the wheel that actually turned.
 #
-# !! THIS MAPPING IS NOT BENCH-VERIFIED, AND IT REPLACED ONE THAT WAS. !!
-# Until 2026-09-04 this dict read M1=MIDDLE, M2=FRONT, M3=REAR, established
-# 2026-08-24 by driving one port at a time with the rover on a block and having
-# the owner name the wheel that actually turned (M2-left -> left front, M1-right
-# -> right middle, M2-right -> right front; the rest by elimination, the
-# convention symmetric across both kits). Commit 484fbdc changed it to the
-# rear-middle-front order below for "physical layout symmetry" -- an ordering
-# argument, not a measurement. No rewire and no re-run of the one-wheel test is
-# recorded anywhere in this repo.
+#   0x61 M1 -> LEFT REAR     0x60 M1 -> RIGHT REAR
+#   0x61 M2 -> LEFT CENTER   0x60 M2 -> RIGHT CENTER
+#   0x61 M3 -> LEFT FRONT    0x60 M3 -> RIGHT FRONT
 #
-# Re-run that test before trusting anything per-wheel. If the 2026-08-24 result
-# still holds, this dict AND Master Hardware Design v2.0 section 7.2 have to be
-# reverted together -- the doc was synced to follow this file on 2026-09-07
-# because config.py is the authority, so the doc agreeing with it is NOT
-# independent confirmation.
+# Two separate findings, and only one of them was the expected one:
 #
-# A wrong mapping here hides itself, which is why it went unnoticed for weeks
-# the first time: _set() commands all three wheels of a side to the same value,
-# so forward, reverse and skid turns behave correctly either way. It only
-# surfaces under per-wheel work -- odometry attribution, crab/differential
-# steering, stall tracing -- where "lf is dead" points at the wrong physical
-# wheel. That is exactly how the 2026-08-24 error was caught: the dead leg was
-# on 0x60 M1, which under the mapping of the day was the left MIDDLE motor, not
-# the front. (That leg was a disconnected connector, reconnected and confirmed
-# turning 2026-08-25 -- see section 7.2. Independent of the mapping question.)
+# 1. PORT ORDER M1=REAR, M2=MIDDLE, M3=FRONT IS CORRECT. This was the ordering
+#    commit 484fbdc asserted on 2026-09-04 for "physical layout symmetry" -- an
+#    argument, not a measurement, and flagged here as untrustworthy ever since. The
+#    argument happened to be right.
 #
-# The encoder A/B channel assignment in section 7.2 is unverified for the same
-# reason and is NOT settled by settling this one -- see that section.
+# 2. THE BOARD ADDRESSES WERE SWAPPED, AND THAT WAS NEVER SUSPECTED. Every revision
+#    of this file had 0x60=left, 0x61=right. The left wheels are on 0x61. Note the
+#    hardware was rebuilt after the 2026-08-24 test, so that result described
+#    different wiring and could not have caught this.
+#
+# The 2026-08-24 result (M1=MIDDLE, M2=FRONT, M3=REAR) is now superseded and should
+# not be restored -- it predates the rebuild.
+#
+# WHY THIS HID FOR SO LONG, and it is worth understanding before trusting any
+# per-wheel claim in this repo: _set() commands all three wheels of a side to the
+# same value, so forward, reverse and skid turns behave identically whether or not
+# the sides are swapped. A left/right swap is invisible to every gross motion the
+# rover makes. It only surfaces under per-wheel work -- odometry attribution,
+# crab/differential steering, stall tracing -- where "lf stalled" names the wrong
+# physical wheel, on the wrong side of the robot.
+#
+# The encoder A/B channel assignment in Master Hardware Design section 7.2 is
+# unverified for the same reason and is NOT settled by settling this one. It has its
+# own bench test (E-1) and its own swap risk.
 MOTOR_PORT={'lf':(MOTORKIT_LEFT_ADDR,3),'lm':(MOTORKIT_LEFT_ADDR,2),'lr':(MOTORKIT_LEFT_ADDR,1),
             'rf':(MOTORKIT_RIGHT_ADDR,3),'rm':(MOTORKIT_RIGHT_ADDR,2),'rr':(MOTORKIT_RIGHT_ADDR,1)}
 # Raised 2026-08-24. The previous set (ROAM .55 / TURN .50 / SLOW .35 / MAX .80)

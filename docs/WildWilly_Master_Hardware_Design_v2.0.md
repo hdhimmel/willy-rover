@@ -843,8 +843,8 @@ zero bus errors. Expect eleven, not twelve: `0x70` is All-Call, not a device.
 | 0x45 | INA260 | **+12V bus → both FeatherWing VIN** — corrected 2026-09-15 (was recorded as the 9V Pi feed). **Board rebuilt with new parts 2026-09-17** after it stopped ACKing entirely (20/20 direct reads failed while every other address answered); reads 11.364V @ 0.019A since, and identifies correctly as TI/INA260 (`MfgID 0x5449`, `DieID 0x2270`) |
 | 0x48 | ADS1115 | Battery voltage ADC |
 | 0x4A | BNO085 | 9-DoF IMU |
-| 0x60 | FeatherWing | Motor driver, LEFT |
-| 0x61 | FeatherWing | Motor driver, RIGHT |
+| 0x60 | FeatherWing | Motor driver, **RIGHT** — corrected 2026-09-18 by M-1 (§7.2); read LEFT here from the original build until then |
+| 0x61 | FeatherWing | Motor driver, **LEFT** — corrected 2026-09-18 |
 
 **0x70 is the PCA9685 All-Call broadcast address, not a device.** It answers
 whenever either PCA9685 is alive. The LTC4311 bus accelerator has no address
@@ -935,8 +935,8 @@ role-colouring and differs from the sonar harness key in §6.1.
 | 8 | X | X | X | X | LTC4311 | none |
 | 9 | X | X | X | X | BNO085 IMU | 0x4A |
 | 10 | X | X | X | X | MCP23017 encoder | 0x27 |
-| 11 | X | X | X | X | FeatherWing LEFT | 0x60 |
-| 12 | X | X | X | X | FeatherWing RIGHT | 0x61 |
+| 11 | X | X | X | X | FeatherWing **RIGHT** (corrected 2026-09-18) | 0x60 |
+| 12 | X | X | X | X | FeatherWing **LEFT** (corrected 2026-09-18) | 0x61 |
 | 13 | X | X | X | X | PCA9685 steering | 0x42 |
 | 14 | X | X | X | X | PCA9685 arm | 0x43 |
 | 15 | X | X | — | — | Motor LF | — |
@@ -1607,32 +1607,58 @@ Meter each crimp before trusting wire colour — batch variation is documented.
 
 Each FeatherWing drives one side.
 
+✅ **BENCH-VERIFIED 2026-09-18 (M-1).** Rover on boxes, wheels clear, service stopped,
+each port driven alone by raw address and port number — never by wheel name, since
+`config.MOTOR_PORT` was the thing under test — with the owner naming the wheel that
+actually turned. All six confirmed, and all six turn in the commanded direction.
+
 **As-built port order is M1 = REAR, M2 = MIDDLE, M3 = FRONT** — not the
-front/middle/rear order the port numbers suggest. `config.MOTOR_PORT` is the
-authority; this table follows it (synced 2026-09-07).
+front/middle/rear order the port numbers suggest. **0x61 is the LEFT side and 0x60 is
+the RIGHT side.**
 
-| Motor | Position | Driver | Encoder A/B |
+| Motor | Position | Driver | Encoder A/B (still unverified) |
 |-------|----------|--------|-------------|
-| LF | Left front | 0x60 **M3** | GPA0 / GPA1 |
-| LM | Left middle | 0x60 **M2** | GPA2 / GPA3 |
-| LR | Left rear | 0x60 **M1** | GPB0 / GPB1 |
-| RF | Right front | 0x61 **M3** | GPA4 / GPA5 |
-| RM | Right middle | 0x61 **M2** | GPA6 / GPA7 |
-| RR | Right rear | 0x61 **M1** | GPB2 / GPB3 |
+| LF | Left front | **0x61 M3** | GPA0 / GPA1 |
+| LM | Left middle | **0x61 M2** | GPA2 / GPA3 |
+| LR | Left rear | **0x61 M1** | GPB0 / GPB1 |
+| RF | Right front | **0x60 M3** | GPA4 / GPA5 |
+| RM | Right middle | **0x60 M2** | GPA6 / GPA7 |
+| RR | Right rear | **0x60 M1** | GPB2 / GPB3 |
 
-⚠ **This mapping is NOT bench-verified, and it replaced one that was.**
-Until 2026-09-04 both this table and `config.MOTOR_PORT` read
-**M1 = MIDDLE, M2 = FRONT, M3 = REAR**, established 2026-08-24 by driving one
-wheel at a time with the rover on a block and recording which wheel physically
-turned (M2-left → left front, M1-right → right middle, M2-right → right
-front; the rest by elimination, the convention symmetric across both kits).
-Commit `484fbdc` (2026-09-04) changed `config.MOTOR_PORT` to the
-rear-middle-front order above, for "physical layout symmetry" — that is an
-ordering argument, not a measurement, and no record of a rewire or of a re-run
-of the one-wheel test exists in this repo. **Re-run that test before trusting
-per-wheel attribution**: drive one port at a time and record which wheel turns.
-If the 2026-08-24 result still holds, this table and `config.MOTOR_PORT` both
-need reverting together.
+**Left and right are from Willie's own point of view, facing forward** — the vehicle
+convention, as if sitting in a car. Standing in front of him mirrors it. Convention
+agreed with the owner 2026-09-18, because the ambiguity is exactly what makes a side
+swap easy to record wrongly.
+
+**What M-1 actually found, 2026-09-18 — two findings, and the unexpected one mattered
+more.**
+
+1. **The port order was right.** M1 = REAR, M2 = MIDDLE, M3 = FRONT is what commit
+   `484fbdc` asserted on 2026-09-04 for "physical layout symmetry" — an ordering
+   argument, not a measurement, and flagged as untrustworthy here and in `config.py`
+   ever since. The argument happened to be correct.
+
+2. **The board addresses were swapped, and nobody had ever suspected it.** Every
+   revision of this document and of `config.py` read 0x60 = left, 0x61 = right. The
+   left wheels are on **0x61**. The hardware was rebuilt after the 2026-08-24 test, so
+   that earlier result described different wiring and could not have caught this; it is
+   superseded and must not be restored.
+
+**A side swap is invisible to every gross motion the rover makes.** `DriveBase._set()`
+commands all three wheels of a side to the same value, so forward, reverse and skid
+turns behave identically whether or not the sides are transposed. It surfaces only
+under per-wheel work — odometry attribution, crab or differential steering, stall
+tracing — where a fault reported on `lf` names a wheel on the wrong side of the robot.
+That is why this sat undetected through every revision of this document.
+
+**How the right side was found dead, and why that was a wiring fault and not a mapping
+one.** The first M-1 sweep showed all three ports on 0x60 drawing +0.001 A while all
+three on 0x61 drew ~0.070 A. Three motors do not fail together; one board losing motor
+power does. The trap is that **0x60 still answered on I²C** — a FeatherWing's logic
+runs from the 3.3V bus while its motors run from a separate VIN terminal, so the board
+chats normally with no motor supply at all. The +12V bus measured 11.350 V at INA260
+`0x45`, upstream of both VIN terminals, which placed the fault in the branch to 0x60.
+Owner reconnected it; the re-run showed all six ports at 0.067–0.070 A.
 
 ⚠ **The Encoder A/B column is NOT verified either.** Only the driver ports
 were ever tested. The motor ports turned out not to follow position order, so
@@ -2277,7 +2303,7 @@ listed in §15.8 rather than carried as a line item.
 | Component | Role | Qty | Status |
 |-----------|------|-----|--------|
 | JGA25-370B gearmotor + encoder | Drive wheels | 6 | Installed |
-| Adafruit FeatherWing #2927 | I²C motor driver — 0x60 left, 0x61 right | 2 | Installed |
+| Adafruit FeatherWing #2927 | I²C motor driver — **0x61 left, 0x60 right** (corrected 2026-09-18, §7.2) | 2 | Installed |
 | GDW DS041MG servo | Corner steering — PCA9685 0x42 | 6 | Installed |
 
 ### 15.3 Arm

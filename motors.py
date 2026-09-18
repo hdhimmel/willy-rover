@@ -33,8 +33,10 @@ class DriveBase:
                 self.current_speed=(self._actual['lf']+self._actual['rf'])/2
             time.sleep(dt)
     # FR-400-001 (independent left/right control): six wheels individually targetable
-    # (lf/lm/lr vs rf/rm/rr), driver assignment fixed by as-built wiring (0x60 left,
-    # 0x61 right -- see CLAUDE.md).
+    # (lf/lm/lr vs rf/rm/rr), driver assignment fixed by as-built wiring -- **0x61 LEFT,
+    # 0x60 RIGHT**, measured 2026-09-18 by M-1. This comment said "0x60 left, 0x61 right"
+    # from the original build until then, and it was wrong the whole time; see config.py's
+    # MOTOR_PORT block for why a side swap is invisible to everything _set() does.
     def _set(self,l,r):
         with self._lock:
             for w in ('lf','lm','lr'): self._target[w]=l
