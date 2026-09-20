@@ -219,7 +219,29 @@ obstacle sensor at runtime.
 This is the direct answer to §1's cost: **the firmware states its own version, so no document
 can be quietly wrong about which build is flashed.**
 
-### 2.7 The radio stays dark
+### 2.7 ⚠ Pico-E stays silent until spoken to — a consequence of the service port
+
+Added 2026-09-20 with §5.2. The service port is **the Pi's own boot console**: firmware and
+bootloader diagnostics come out of it before Linux exists, and a bootloader may accept input
+on it. A Pico that starts streaming the instant it has power is therefore injecting bytes into
+the Pi's boot process on every single power-up.
+
+So **Pico-E does not transmit until it receives a valid `ID?`.** After that it streams at
+50 Hz as §2.6 describes. Two things fall out of this and both are wanted:
+
+- The Pi controls when the link goes live, which is after `brain.py` is up and the boot
+  console is done with the port.
+- Garbage arriving on Pico-E's RX during boot is already handled — §2.6's command table
+  ignores and logs anything that is not `ID?` or `ZERO`, so boot text cannot be mistaken for a
+  command.
+
+**Pico-S is the opposite and must stay that way: it streams unconditionally from boot.** It is
+on an ordinary header UART with no boot traffic, and §4.5 depends on being able to read
+*silence* as a fault. A sonar board that waits to be asked cannot be distinguished from a
+sonar board that has died. **This asymmetry is deliberate — do not "harmonise" the two
+firmwares by giving them the same startup behaviour.**
+
+### 2.8 The radio stays dark
 
 The Pico 2 **W** is specified because it is what the owner has. **Neither image initialises
 the CYW43.**
@@ -511,12 +533,17 @@ in the tree.
 
 ---
 
-## 5. Pin and UART budget — the two designs interlock
+## 5. Pin and UART budget
 
-**Part B pays for Part A's link.** This is the strongest argument for doing both rather than
-either.
+> **REVISED 2026-09-20 — the owner proposed putting one Pico on the Pi 5's dedicated UART
+> ("service") connector, and it changes this section's conclusion.** ~~Part B pays for Part
+> A's link, which is the strongest argument for doing both rather than either.~~ That was true
+> only while the 40-pin header was the sole source of UARTs. **The service port decouples
+> them**, and §5.2 is now the recommended assignment.
 
-Pi UARTs, current state:
+### 5.1 The 40-pin header, and why it deadlocks
+
+Pi UARTs on the 40-pin header, current state:
 
 | Overlay | Pi GPIO | Device | Status |
 |---|---|---|---|
@@ -526,16 +553,75 @@ Pi UARTs, current state:
 | `uart3-pi5` | GP8/9 | `/dev/ttyAMA3` | **In use** — SEN0628 ToF, verified 2026-09-15 |
 | `uart4-pi5` | GP12/13 | `/dev/ttyAMA4` | **Blocked** — GP13 is left TRIG |
 
-Every free UART on this Pi is blocked by a sonar pin. Moving the sonar to Pico-S frees GP4,
-GP5, GP13, GP14, GP21 and GP26 in one stroke, which unblocks `uart2-pi5` and `uart4-pi5`
-simultaneously:
-
-| Board | Overlay | Pi pins | Device |
-|---|---|---|---|
-| **Pico-S** (sonar) | `uart2-pi5` | GP4 TX, GP5 RX | `/dev/ttyAMA2` |
-| **Pico-E** (encoders) | `uart4-pi5` | GP12 TX, GP13 RX | `/dev/ttyAMA4` |
+**Every free UART on this header is blocked by a sonar pin.** Note the shape of that: it is
+not that the header is full, it is that the three sonars happen to sit on three different
+UARTs' pins. Moving the sonar to Pico-S frees GP4, GP5, GP13, GP14, GP21 and GP26 in one
+stroke, unblocking `uart2-pi5` and `uart4-pi5` together — but it means **Pico-E has nowhere to
+land until Pico-S is done**, which forces the more-broken subsystem to wait on the less-broken
+one.
 
 GP7 additionally frees when the MCP23017 leaves, and §3.2 spends it on the IMU reset.
+
+### 5.2 The service port breaks the deadlock — recommended
+
+The Pi 5 has a **dedicated 3-pin UART connector** on the board (JST-SH 1.0 mm: TX, RX, GND,
+no power), separate from the 40-pin header and from everything in §5.1. It is the Pi's debug
+/ service console port. **Nothing in this repository currently mentions it, and nothing on
+this rover uses it.**
+
+That makes it a free UART that costs zero header GPIO, and it changes the build order:
+
+| Board | Link | Device | Depends on |
+|---|---|---|---|
+| **Pico-E** (encoders) | **Service port** (3-pin UART connector) | `/dev/ttyAMA10` — **verify** | nothing |
+| **Pico-S** (sonar) | `uart2-pi5`, GP4 TX / GP5 RX | `/dev/ttyAMA2` | frees its own pins in the same rewire |
+
+**Pico-E takes the service port, not Pico-S.** Three reasons, and the order matters:
+
+1. **Pico-S is the reflex path and belongs on the most boring connector available.** A 1.0 mm
+   JST-SH on the board edge is the most mechanically fragile connection on this rover, which
+   has already lost time to a loose servo connector, a loose base-side power connector, and
+   two connectors reassembled with reversed polarity. Put the obstacle sensor on a 0.1" header
+   with the rest of the build.
+2. **The failure modes are asymmetric.** A service-port cable working loose on Pico-E drops
+   odometry and stall detection — `is_healthy` goes False and `brain.py:311` escalates it. The
+   same cable on Pico-S would trip §4.5's staleness rule and stop the rover, so a wiggly
+   connector becomes a phantom obstacle that halts Willie mid-session.
+3. **Pico-S frees its own pins anyway.** It was never the blocked one — moving the sonar off
+   GP4/GP5 and using GP4/GP5 for the link is a single atomic rewire. Only Pico-E was stuck.
+
+### 5.3 ⚠ What using the service port costs, and the check to make first
+
+**It is the recovery console**, and this rover has a history that makes that worth something:
+196 restarts masquerading as flaky hardware; the SPI0 fault that killed the process with a
+different signal each time; and the 2026-09-07 watchdog attempt that hit SIGABRT ~500 ms after
+every start and **never reached its own first log line**. That last one is exactly the case
+where a serial console is the only instrument left, because there is nothing in the logs yet.
+
+**But it may already be disabled, in which case this costs nothing.** Master Hardware Design
+§9 disables the console via `raspi-config` → Interface Options → Serial Port, **answering no to
+both prompts** — which turns off the login shell *and* the serial hardware. Whether that also
+cleared the Pi 5 debug connector has never been recorded either way.
+
+**So check before deciding, rather than assuming in either direction:**
+
+```
+ls -l /dev/ttyAMA*                      # is ttyAMA10 present?
+cat /boot/firmware/cmdline.txt          # any console=serial0 / console=ttyAMA10 ?
+systemctl list-units 'serial-getty@*'   # any login shell attached?
+grep -E 'enable_uart|uart' /boot/firmware/config.txt
+```
+
+- **Console already off** → take the port, note in §9 that it is now spoken for, and keep a
+  USB-TTL adapter with the rover for the day it is needed.
+- **Console still live** → this is a real trade. Decide it deliberately and write down that it
+  was decided; do not let it be discovered later by someone who needed it at 2am.
+
+Either way: all four USB ports are occupied, so reaching the console already means unplugging
+something. It is an emergency instrument, not a daily one — which is part of why spending it
+on Pico-E is defensible and spending it on Pico-S is not.
+
+### 5.4 Verifying the overlays
 
 🔴 **VERIFY THE OVERLAY NAMES BEFORE WIRING ANYTHING.** The `-pi5` suffix is not cosmetic and
 getting it wrong is **silent**: `config.txt` looks right, the board boots clean, and the device
@@ -548,12 +634,16 @@ on the rover, not trusted from this table:
 ```
 ls /boot/firmware/overlays/ | grep uart
 dtoverlay -h uart2-pi5          # expect: GPIOs 4-5, Pi 5 only
-dtoverlay -h uart4-pi5          # expect: GPIOs 12-13, Pi 5 only
 sudo cat /sys/kernel/debug/gpio | grep spi0     # must be empty
 ```
 
-After a reboot, `/dev/ttyAMA2` and `/dev/ttyAMA4` exist, and `sudo pinctrl get 4-5` and
-`sudo pinctrl get 12-13` show the alt-function TXD/RXD names.
+After a reboot, `/dev/ttyAMA2` exists and `sudo pinctrl get 4-5` shows the alt-function
+TXD/RXD names.
+
+**The service port needs no overlay at all** — it is a dedicated UART, not a pinmux of header
+GPIO, which is precisely why it sidesteps this whole class of mistake. Its device node still
+has to be confirmed (§5.3), but there is no `dtoverlay` line to get wrong. `uart4-pi5` is no
+longer used by this design; it stays free.
 
 **And `pinctrl` settles "is it even connected?" without a meter**, the same trick that
 separated "sensor absent" from "sensor present but mute" three times on 2026-09-15: force a
@@ -564,33 +654,59 @@ i.e. the Pico is powered and its TX is alive.
 
 ## 6. Migration order
 
-**Pico-S first, then Pico-E.** Counter-intuitive — the encoder problem is more broken — but
-Pico-S frees both UARTs, so Pico-E has nowhere to land until it is done.
+> **REVISED 2026-09-20 alongside §5.** ~~Pico-S first, then Pico-E — counter-intuitive, since
+> the encoder problem is more broken, but Pico-S frees both UARTs so Pico-E has nowhere to land
+> until it is done.~~ **With the service port (§5.2) that ordering constraint is gone.** The two
+> boards are now independent and can be built in either order, or in parallel by two people.
 
-1. **Trace the green wires.** Before any of this. If Phase B is recoverable, Pico-E gets a
-   real quadrature decoder instead of shipping in `MODE_SINGLE` forever. This is independent
-   work and it is the highest-value item on the list.
-2. **Build and bench Pico-S off-rover.** Three HC-SR04s, a bench supply, a tape measure. Prove
-   a stable multi-minute stream before it goes anywhere near the reflex path — the standing
-   rule from the SEN0628, where one reviewer in six had a board reset-looping on current
-   firmware.
-3. **Fit Pico-S, keep `SONAR_BACKEND='gpio'`.** Stream into a logging script, not into
-   `brain.py`. Compare against the live GPIO path for a full session. Both sources read the
-   same three sensors; they should agree.
-4. **Flip `SONAR_BACKEND='pico'`.** Re-run S-1 against a tape measure. The GPIO path stays in
-   the tree.
-5. **Re-pin the UARTs**, confirm `uart2-pi5`/`uart4-pi5` per §5.
-6. **Rehome the IMU reset to GP7** and confirm the BNO085 still resets. Do this *before*
-   pulling the MCP23017, so a failure has one cause.
-7. **Build and bench Pico-E off-rover**, driving the A/B lines from a signal generator or a
-   spare motor.
-8. **Fit Pico-E, keep `ENCODER_BACKEND='mcp23017'`**, log both, compare.
-9. **Flip to `'pico'`, pull the MCP23017**, drop 0x27 from `config.py`, expect **ten** devices.
-10. **Re-run E-1** — including counts-per-rev, which is finally measurable if step 1 succeeded.
+**Recommended: Pico-E first**, because the encoder subsystem is the more broken one and no
+longer has to wait its turn. Pico-S is a self-contained rewire whenever you want it.
 
-**Rollback at every step is a config flag and a re-plug**, because both old paths stay in the
-tree. Do not delete them until E-1 and S-1 have both been re-run and passed on the new
-backends.
+**Step 0, before either, and independent of both: trace the green wires.** If Phase B is
+recoverable, Pico-E ships with a real quadrature decoder instead of living in `MODE_SINGLE`
+(§3.5). This is still the highest-value item on the whole list and none of the rest of it
+substitutes for the work.
+
+### Track E — Pico-E, on the service port
+
+**E0.** Confirm the service port is free and decide the console trade, per §5.3.
+**E1.** **Rehome the IMU reset to GP7** (§3.2) and confirm the BNO085 still resets. Do this
+*before* pulling the MCP23017, so a failure has exactly one possible cause.
+**E2.** Bench Pico-E off-rover, driving the A/B lines from a signal generator or a spare motor
+on a bench supply. Prove the decode against a known edge count before it sees a wheel.
+**E3.** Fit Pico-E and wire the service port, but keep `ENCODER_BACKEND='mcp23017'`. Log both
+sources side by side for a full session — they read the same six encoders and should agree.
+**E4.** Flip `ENCODER_BACKEND='pico'`. The MCP23017 path stays in the tree.
+**E5.** Pull the MCP23017 and drop `ENCODER_ADDR` from `config.py`. **Expect ten devices**, and
+let both `_EXPECTED_I2C` sets derive from config rather than editing them separately (§3.1).
+**E6.** Re-run E-1, including counts-per-rev — which is measurable only if step 0 above (the
+green wires) succeeded. If it did not, record the `MODE_SINGLE` mask instead and leave
+counts-per-rev blank rather than filling it from a single-channel count.
+
+### Track S — Pico-S, on `uart2-pi5`
+
+**S1.** Bench Pico-S off-rover: three HC-SR04s, a bench supply, a tape measure. Prove a stable
+multi-minute stream before it goes anywhere near the reflex path — the standing rule from the
+SEN0628, where one reviewer in six had a board reset-looping on current firmware.
+**S2.** Fit Pico-S and move the three sonar harnesses to it, freeing GP4/GP5/GP13/GP14/GP21/GP26
+in one rewire. Bring up `uart2-pi5` on the now-free GP4/GP5 and confirm it per §5.4.
+**S3.** Keep `SONAR_BACKEND='gpio'` — which is now reading pins with nothing on them, so this
+step is a stream-to-a-logging-script comparison against the *bench* figures from S1, not
+against a live GPIO path. **This is the one ordering trap in Track S:** the moment the
+harnesses move, the old backend stops being a reference. Capture the comparison data before
+S2, not after.
+**S4.** Flip `SONAR_BACKEND='pico'`. Re-run S-1 against a tape measure, and run P-1's staleness
+test (§8) — pull the UART and confirm the rover stops.
+
+### Both tracks
+
+**Rollback is a config flag and a re-plug** at every step, because both old paths stay in the
+tree. Do not delete either until E-1, S-1, P-1 and P-2 have all been re-run and passed on the
+new backends.
+
+Nothing in Track E depends on anything in Track S, or vice versa. They share only the §2
+conventions — frame format, power, watchdog — which is the reason to settle those first and
+not per-board.
 
 ---
 
@@ -657,6 +773,7 @@ that the sweep is a checklist rather than an archaeology exercise later.
 | G-2: raise `i2c_arm_baudrate` if polling is too slow | FRD v3.1 G-2 — **superseded by this design**, which removes the poll entirely |
 | Encoder polling ceiling ~1 kHz, 1 ms sleep protects the bus | `sensors.py:353` comment block |
 | `ENCODER_COUNTS_PER_REV=752` is derived, not measured | `config.py:222`, FRD G-2, Software Design S-2 — **still true**, and not fixed by this design |
+| The serial console is disabled and the Pi 5 service port is unclaimed | `CLAUDE.md` pin section, Master Hardware Design §9 and §16.13, FRD v3.1's left-sonar-garbage signature note — **the service port is not mentioned anywhere today**, so claiming it for Pico-E means *adding* the fact, not correcting one. Record which console state was chosen and why (§5.3) |
 
 **Strike, don't delete.** The MCP23017 and direct-GPIO sonar entries stay visible with a
 marker and a date once superseded, so neither gets re-fitted next month.
