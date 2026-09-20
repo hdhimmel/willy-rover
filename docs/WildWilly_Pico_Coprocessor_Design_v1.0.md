@@ -8,7 +8,7 @@ off the Pi's GPIO. They are separate boards and separate firmware, and §1 says 
 > records an observation. Every number is either quoted from an existing measurement in
 > this repo (cited where it is) or derived from a datasheet figure that is flagged as
 > needing confirmation. Following the convention of the Bench Test Procedures, the result
-> fields in §8 stay blank until someone runs them on the rover.
+> fields in §9 stay blank until someone runs them on the rover.
 >
 > This is a design document and does **not** join the three-document authoritative set
 > (Master Hardware Design, Software Design, Functional Requirements). If the design is
@@ -49,6 +49,7 @@ about what that mode cannot do.
 | A broken sonar reads as "clear" | `sensors.py:43/46` returns `999.0` for *both* "no target" and "echo line stuck" — well past `DIST_CLEAR=60` | Separated into distinct status codes (§4.4) |
 | Sonar has no health check at all | `brain.py:425` checks imu/encoders/current/battery_adc. **Not sonar.** There is no `SonarArray.is_healthy` | §4.5 adds one, and makes staleness fail *safe* |
 | GP14 hazard | Left sonar ECHO sits on UART0 TXD; the serial console must stay disabled forever or left sonar reads garbage | GP14 frees. The hazard class disappears |
+| **Pi CPU** | The sonar busy-waits in Python and burns **an estimated 38–82% of one core**, worst when the path is clear; the encoder thread adds ~1000 wakeups/sec (§7) | Both become a short serial read. Estimated net saving **~0.4–0.8 of a core** |
 
 ### What it costs
 
@@ -193,7 +194,9 @@ S,<seq>,<t_us>,<front_mm>,<left_mm>,<right_mm>,<st_f>,<st_l>,<st_r>,<crc16>\n
   log that rather than absorb it.
 - `t_us` — the Pico's own microsecond clock at sample time. The measurement's timestamp comes
   from the board that took it, never from when Linux happened to read the line.
-- `crc16` — CRC-16-CCITT over everything before the final comma, hex. A frame that fails CRC
+- `crc16` — CRC-16-CCITT over everything before the final comma, hex. **Table-driven on the Pi
+  side, not bitwise** — §7.2 shows the bitwise version costs ~0.75% of a core at 50 Hz, which
+  is most of a percent spent proving the ASCII choice was cheap. A frame that fails CRC
   is **dropped, never repaired**, and logged as desync — the same rule `tof.py` already applies
   to a frame of the wrong length ("desynchronised UART, not data").
 - Both boards **stream unprompted** at a fixed cadence. Neither is request/response. This is a
@@ -260,7 +263,7 @@ firmware image that never goes on the rover**, and it goes on Pico-E, never Pico
 
 Replaces the MCP23017 @ 0x27. Implements fix-plan Priority 1 item 7, which the Gap Analysis
 marked `N/A-HW` on the grounds that "no RP2040 exists on this unit" — that premise changes if
-this is built, and both documents need updating (§9).
+this is built, and both documents need updating (§10).
 
 ### 3.1 What leaves the I²C bus
 
@@ -612,7 +615,7 @@ systemctl list-units 'serial-getty@*'   # any login shell attached?
 grep -E 'enable_uart|uart' /boot/firmware/config.txt
 ```
 
-- **Console already off** → take the port, note in §9 that it is now spoken for, and keep a
+- **Console already off** → take the port, note in §10 that it is now spoken for, and keep a
   USB-TTL adapter with the rover for the day it is needed.
 - **Console still live** → this is a real trade. Decide it deliberately and write down that it
   was decided; do not let it be discovered later by someone who needed it at 2am.
@@ -696,7 +699,7 @@ against a live GPIO path. **This is the one ordering trap in Track S:** the mome
 harnesses move, the old backend stops being a reference. Capture the comparison data before
 S2, not after.
 **S4.** Flip `SONAR_BACKEND='pico'`. Re-run S-1 against a tape measure, and run P-1's staleness
-test (§8) — pull the UART and confirm the rover stops.
+test (§9) — pull the UART and confirm the rover stops.
 
 ### Both tracks
 
@@ -710,7 +713,125 @@ not per-board.
 
 ---
 
-## 7. Interaction with the systemd watchdog
+---
+
+## 7. CPU and power headroom
+
+> ⚠ **Every figure in this section is DERIVED FROM READING THE CODE. None of it is measured.**
+> It is written here because the arithmetic is worth having before the bench session, not
+> because it is evidence. §7.4 is how it becomes evidence. Treat these numbers the way this
+> repo treats any other plausible-looking figure that nobody observed.
+
+**Short answer: yes, substantially — and almost all of it is the sonar half, not the encoders.**
+
+### 7.1 What is spent today
+
+**Sonar dominates, and it costs the most when nothing is happening.**
+
+`sensors.py::_ping()` is two **busy-wait spin loops** in Python — one waiting for ECHO to rise,
+one waiting for it to fall, each polling `GPIO.input()` and `time.perf_counter()` as fast as
+CPython manages. This is not a sleep and it is not a blocking read; it is a hot loop at
+essentially 100% of a core for its whole duration.
+
+`requirements.txt` makes it more expensive than it looks: `RPi.GPIO` here is **`rpi-lgpio`**,
+the Pi 5 drop-in, so each `GPIO.input()` is an **ioctl syscall** rather than a memory-mapped
+register read. The spin is paying kernel entry/exit on every iteration.
+
+How long it spins, per ping — ~0.46 ms for the HC-SR04 to raise ECHO, then the echo-high time,
+which is the round trip `2d/343`:
+
+| Nearest surface | ECHO high | Spin per ping |
+|---|---|---|
+| ~0.5 m | 2.9 ms | ~3.4 ms |
+| ~2 m | 11.7 ms | ~12.2 ms |
+| nothing in range | — | **25 ms** (`SONAR_TIMEOUT`) |
+
+A full sweep is 3 sensors × `SONAR_SAMPLES=3` = **nine pings**, plus 3 × `SONAR_INTERVAL/3`
+= 50 ms of actual sleep:
+
+| Scene | Spin per sweep | Sweep period | Duty on one core |
+|---|---|---|---|
+| Everything close (~0.5 m) | ~31 ms | ~81 ms | **~38%** |
+| Typical room (~2 m) | ~110 ms | ~160 ms | **~69%** |
+| Open space / no return | ~230 ms | ~280 ms | **~82%** |
+
+🔴 **Note which way that runs.** The clearer the path, the longer the echo takes to come back,
+and the longer the loop spins. **The current design burns the most CPU when there is nothing
+to see** — which is most of a roam session, and exactly when Willie should be cheapest.
+
+**Encoders cost less but wake more.** The poll loop is ~1 kHz of `_update()` + `sleep(0.001)`.
+Each `_update()` is two `smbus2` register reads, where the thread is **blocked in the I²C
+driver rather than spinning**, so the CPU cost is mostly CPython overhead — call it 2–3% of a
+core. The subtler cost is **~1000 timer wakeups per second**, which keeps the package out of
+deeper idle states continuously.
+
+**One aside the Pico also fixes.** `_ping()` opens with `time.sleep(0.000002)` and
+`time.sleep(0.00001)` to shape a 10 µs TRIG pulse. Linux cannot honour a 2 µs sleep — the
+nanosleep floor plus scheduler granularity puts the real pulse somewhere in the tens to
+hundreds of microseconds, and jittery. The HC-SR04 wants *at least* 10 µs so this is harmless
+in practice, but it is two syscalls per ping, and on a PIO state machine the pulse becomes
+exact for free.
+
+### 7.2 What replaces it
+
+Pico-E streams at 50 Hz, Pico-S at ~16 Hz. Per frame the Pi does one buffered serial read, a
+`split(',')`, a handful of `int()` calls, and a CRC check.
+
+⚠ **The CRC must be table-driven, or it quietly eats the saving.** CRC-16-CCITT computed
+bitwise over a ~60-byte frame is ~480 CPython loop iterations, roughly 150 µs; at 50 Hz that
+is ~0.75% of a core spent checksumming. A 256-entry lookup table makes the same frame ~20 µs,
+about 0.1%. §2.6 chose ASCII framing for debuggability on the argument that the cost is
+negligible — **that argument holds only with the table.**
+
+Total added, both links: **under 1% of one core.**
+
+### 7.3 Net, and what it is actually worth
+
+**Removes an estimated 0.4–0.8 of a core; adds under 0.01.** But be precise about what that
+buys, because it is easy to oversell:
+
+- **The Pi 5 has four cores.** Freeing most of one does not make anything single-threaded
+  faster. What it buys is *headroom*, and headroom only matters where something is currently
+  contending.
+- **Where it does contend:** `TICK_OVERRUN_THRESHOLD_S=0.15` and `vision.py::detect()` running
+  **synchronously on the tick thread** — `CLAUDE.md` explicitly flags watching for
+  `TICK_OVERRUN` during the first mapping/pursuit session. A sonar thread spinning 110–230 ms
+  out of every sweep is competing with exactly that.
+- **GIL — and this is the part I cannot resolve from the code.** Whether `rpi-lgpio` releases
+  the GIL around its ioctl is not something this repo records and I have not verified it. If it
+  does **not**, the spin loop is blocking every other Python thread for its whole duration and
+  the real win is considerably larger than the CPU percentage suggests. **Worth settling with
+  `py-spy` during §7.4 rather than assuming either way.**
+- **Power, weakly.** Dropping from ~1000 wakeups/sec plus a near-continuous spin to ~66 serial
+  reads/sec improves idle residency. The 5 V rail's worst case is already near 9 A against an
+  8 A UBEC, and `WHISPER_CPU_THREADS=3` was capped **specifically to keep peak draw off that
+  rail** — so this moves the right way, on a rail with no margin. It is a second-order effect,
+  not a headline.
+
+### 7.4 ⚠ Measure the baseline BEFORE the migration
+
+```
+# per-thread CPU, named threads
+ps -L -o tid,pcpu,comm -p $(pgrep -f 'venv/bin/python3 main.py')
+top -H -p $(pgrep -f main.py)
+
+# where the time actually goes, and whether the GIL is held
+py-spy top    --pid $(pgrep -f main.py)
+py-spy record --pid $(pgrep -f main.py) -d 60 -o before.svg
+
+vcgencmd measure_clock arm ; vcgencmd get_throttled
+grep -c TICK_OVERRUN <the day's log>
+```
+
+Take it in all three scenes from §7.1 — nose to a wall, normal room, and pointed at open space
+— because the spread between them *is* the finding. One number from one scene proves nothing.
+
+🔴 **This has to happen before Track S touches the harnesses.** The moment the sonar leaves the
+Pi's GPIO there is no baseline left to compare against, and the CPU claim in this section
+becomes permanently unverifiable. Same ordering trap as §6's Track S step S3, for the same
+reason.
+
+## 8. Interaction with the systemd watchdog
 
 Both Picos add startup time: two serial opens, two `ID?` handshakes, and a wait for the first
 valid frame from each.
@@ -728,7 +849,7 @@ it staler.
 
 ---
 
-## 8. Bench procedures to add
+## 9. Bench procedures to add
 
 To be appended to `WildWilly_Bench_Test_Procedures.md` in that document's format, with
 **result fields blank until someone runs them.**
@@ -752,7 +873,7 @@ hand-turning; it needs rewriting before P-2 can use it.
 
 ---
 
-## 9. Documents that must be updated IF this is built
+## 10. Documents that must be updated IF this is built
 
 Per the standing rule — *when you change a constant, a part, an address, a revision or a
 decision, `grep -rn` the OLD value across the whole repo before calling it done.*
