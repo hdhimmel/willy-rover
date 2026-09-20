@@ -16,7 +16,6 @@
 | Date | 2026-09-14 |
 | Owner | Howard Himmel |
 | Status | Implemented and off-hardware tested; partially live-verified. **Filename retains `v1.0` deliberately** — renaming breaks cross-references in the Master Hardware Design, the FRD and `CLAUDE.md`. The Revision field is authoritative. |
-| Supersedes | Software Design v1.0 (2026-08-18) |
 | Companions | Master Hardware Design **rev 2.2**; Functional Requirements v3.1 |
 
 **Scope of this document.** This describes the software as it is currently
@@ -875,7 +874,7 @@ fix is `dtparam=i2c_arm_baudrate=400000` (~4x, no wiring — this bus already
 carries an LTC4311 for exactly this), tested against a full roll-call first
 
 > **Note:** reason (1) below is **void** — it rested on an isolation barrier the
-> bus never really had, and on hardware that is out of the build. **Reasons (2)
+> bus never really had. **Reasons (2)
 > and (3) still stand and the retraction still holds** — an interrupt only says
 > "something changed", so learning what still costs a register read.
 >

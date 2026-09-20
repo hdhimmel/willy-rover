@@ -16,7 +16,6 @@
 | Date | 2026-09-20 |
 | Owner | Howard Himmel |
 | Status | Build complete; AI accelerator bonded; live verification in progress. **Filename retains `v2.0` deliberately** — renaming would break every cross-reference in Software Design, the FRD and `CLAUDE.md`. The revision field above is authoritative. |
-| Supersedes | As-Built Design Document v1.0 (2026-08-15) |
 | Companions | Functional Requirements v3.1; Software Design v1.0 |
 | Historical record | Master Engineering Package rev 6.2.0 retains all incident history, superseded designs, and revision lineage. Retain it. |
 
@@ -24,67 +23,6 @@
 It contains no incident narrative, no superseded design options, and no
 revision archaeology. Where a past failure produced a standing rule, the rule
 appears in §12 as a constraint — without the story behind it.
-
-**Changes in revision 2.2 (2026-09-20).** Three things.
-
-**1. Removed hardware is now deleted, not struck.** The ISO1540 isolator, the
-TPSM84205, the AMS1117-3.3 and the VCC2/GND2 two-domain scheme have been scrubbed
-from this document rather than retained under superseded banners. That treatment had
-grown to roughly 400 lines describing parts that are not in the rover, which is the
-opposite of this document's stated scope. **The history is not lost — Master
-Engineering Package rev 6.2.0 retains it**, and is the place to look for the isolator
-incidents, the two-stage regulator repair and the thermal-foldback analysis. Where a
-standing rule came out of that history, the rule survives without the part: §2.2 keeps
-the encoder-rail sag that killed all six Hall sensors, §10 keeps the cross-domain
-measurement warning. §16.2 and §16.3 are gone, so §16's subsections have been
-renumbered 16.1–16.14 and every cross-reference updated. §12 lost rules 2, 3 and 5 and
-was renumbered 1–16; §14 lost item 6 and was renumbered.
-
-**2. §4 is a different board.** The 30-column bus node board is out of the rover,
-replaced by the passive **EPLZON Mini 17 rev 15.1 signal conditioning board** — built
-and resistance-verified 2026-09-16. I²C distribution is no longer on a board at all;
-the two GODIY hubs are the whole fan-out. New: §6.6 (FSR402 gripper force sense, fitted
-and uncalibrated) and §16.14. **`BATTERY_DIVIDER_SCALE` is now wrong** — it was
-calibrated against the old board's mis-built divider, and the new board is built to the
-drawn value. §6.2 and §14 item 12 carry it as a safety item, not a tidiness one.
-
-**3. These documents state what is true, not how they arrived at it.** Struck
-passages, superseded-but-retained blocks, "original text follows" notes, and dated
-"corrected on / this row previously said / that was wrong" narration are gone from all
-three. Where a wrong claim had a live correction beside it, only the correction
-remains; closed open items are deleted rather than annotated. §14 and Software Design
-§12 were both trimmed and renumbered, with cross-references updated.
-
-**Where a past error produced a standing rule, the rule survives without the story** —
-verify a monitor by reading its rail rather than a constant; a paper remap is not a
-rewiring; read the artifact before theorising from an error string. Those are §12
-constraints and inline cautions now, not incident reports.
-
-**Anything found to be wrong is corrected in place.** §16.11's arm channel map was
-still the superseded paper mapping and disagreed with both §8 and `config.py:158`; it
-now matches. §14's battery item still carried a "the divider is unfed again" block
-describing a board that is no longer in the rover.
-
-A document that records what a thing used to be is one you have to read twice to learn
-what it is. **The history lives in Master Engineering Package rev 6.2.0 and
-`docs/archive/`** — that is where to look for it.
-
-**4. §16.1 is a new device I/O index** — every device, every labelled line, its
-direction, and the device and pin on the other end, in one table. The per-device
-subsections that follow keep the detail; the index is for tracing a wire without
-reading fifteen of them. Note it has **no `Row` column**: drops used to be identified
-by a bus-node-board column number, and that board is gone, so a drop is now identified
-by device and hub port.
-
-**5. §4.7 records a design that is not built.** The MCP23017 is to be replaced by two
-Pico 2 W boards on UART. It is marked as design throughout and changes no as-built
-claim; §6.3, §13 and §16.6 carry forward-references rather than edits.
-
-**Changes in revision 2.0.** §5.2 rewritten: the AI HAT+ 2 is now PCIe-bonded
-and enumerating, and the driver package line that made it fail to bind is
-recorded. §13 verification status and §14 open items advanced to the
-2026-08-18 state. §17 added: document map and the reference-integrity defect
-in `CLAUDE.md`. Everything else is carried forward unchanged from v1.0.
 
 **Scope baseline.** Drive, see, talk/listen, arm pick-and-place on flat ground,
 and basic flat-terrain autonomy. Stair-climbing is a stretch goal, not a
@@ -96,16 +34,6 @@ baseline requirement.
 
 **Bus topology captured 2026-09-08; signal conditioning board 2026-09-16.**
 Where any later section disagrees with this one, this one is authoritative.
-Hardware that has left the build is deleted rather than struck — see Document
-Control, and Master Engineering Package rev 6.2.0 for the history.
-
-### What was removed
-
-| Part | Status |
-|---|---|
-| **I²C isolation** | Removed. One electrical segment, one ground, one 3.3V supply. |
-| **The separate bus-logic supply (P8 path, F6 polyfuse)** | Removed. All I²C device logic runs from the Pi's own 3.3V, header pin 1. |
-| **Seengreat breakout HAT + ribbon** | Removed. |
 
 ### Current topology
 
@@ -196,10 +124,8 @@ matches §3.3's table.
    service is safe to enable on this account.
    
    Two things remain, neither blocking:
-   - **The calibration belongs to a board that is out of the rover.** The 2026-09-17
-     re-trim measured **0.3237** against the old bus node board, whose fitted low-side
-     was ~4.7k rather than the 3.2k it was drawn as. The rev 15.1 board (§4) is built
-     to the drawn value. **Re-meter — see §6.2 and §14.**
+   - ⛔ **`BATTERY_DIVIDER_SCALE=0.3237` does not describe the fitted divider.** The
+     rev 15.1 board (§4) is 10k/3.2k, nominal **0.242**. **Re-meter — see §6.2 and §14.**
    - **The software gap stands regardless** — `sensors.py` still cannot tell a real zero
      from a broken sensor, so a *future* divider fault would repeat this silently. See
      Software Design §12 item 7.
@@ -637,16 +563,14 @@ devices will answer while their loads are dead.
 ## 4. Signal Conditioning Board
 
 **EPLZON Mini 17, rev 15.1 — BUILT and resistance-verified 2026-09-16.**
-Supersedes the 30-column bus node board, which is out of the rover.
 
 Entirely passive: **ten resistors and one connector.** No ICs, no capacitors,
 no regulators, no power conversion. It sits between the Pi 5, the three
 HC-SR04 sonars, the ADS1115, the 12V pack and the gripper's FSR402.
 
-**I²C distribution is no longer on a board.** The two daisy-chained passive
-GODIY hubs are the entire fan-out (§0, §3.1). The device-zone tap allocation
-that used to live here is gone with the old board; a device's drop is now
-identified by its hub port, not by a column number.
+**I²C distribution is not on a board.** The two daisy-chained passive GODIY hubs
+are the entire fan-out (§0, §3.1), and a device's drop is identified by its hub
+port.
 
 ### 4.1 What software needs to know
 
@@ -965,10 +889,7 @@ architectural constraint on how it may be used is §12 rule 15.
 
 ### 5.3 GPIO breakout
 
-**The Seengreat RPi PX00 Expansion A and its ribbon are OUT of the build** (§1),
-removed 2026-09-08 with the rest of the old bus hardware. Until its
-replacement arrives the header has no breakout: everything lands on the Pi's
-40-pin header directly.
+**There is no Seengreat breakout in this build** (§1).
 
 **Replacement: GeeekPi Micro GPIO Terminal Block Breakout Board — INSTALLED
 2026-09-14** (owner-confirmed). The Xikentec HDO040 photographed on 2026-09-09 was
@@ -2107,9 +2028,8 @@ measurement work rather than wiring.
 ---
 
 12. **Battery divider calibration, AGAIN — the constant belongs to a board that
-    is out of the rover.** `BATTERY_DIVIDER_SCALE=0.3237` was measured
-    2026-09-17 against the old bus node board, whose fitted low-side was ~4.7k.
-    The rev 15.1 signal board (§4) is 10k/3.2k by design, nominal **0.242**. The
+    does not describe the fitted divider.** `BATTERY_DIVIDER_SCALE` is **0.3237**;
+    the rev 15.1 signal board (§4) is 10k/3.2k by design, nominal **0.242**. The
     stored value therefore under-reports the pack by roughly a quarter, and
     `config.py` records the battery-tier ladder as the primary safety mechanism.
     **Run §4.5's powered divider check, record the 12V-in / pin-14-out pair, and
@@ -2130,10 +2050,11 @@ measurement work rather than wiring.
     if not, and record the gauge.** Nothing monitors R5 either — no INA260 — and
     the encoders have already been lost once to an unmonitored 3.3V rail.
 
+---
+
 ## 15. Bill of Materials
 
-Current components only. Anything superseded, retired or never fitted is
-listed in §15.8 rather than carried as a line item.
+Current components only.
 
 ### 15.1 Compute and interface
 
@@ -2229,38 +2150,12 @@ listed in §15.8 rather than carried as a line item.
 PETG filament; M2.5 and M3 fasteners; 12–14 AWG, 16 AWG, 20 AWG and 22 AWG
 wire; JST-PH 6-pin motor connectors; Dupont connectors; threadlocker.
 
-### 15.8 Removed from the design
-
-Listed so their absence is deliberate and traceable, not an omission.
-
-| Component | Reason |
-|-----------|--------|
-| MCP3008 SPI ADC | Replaced by ADS1115 on I²C. Freed GP8–GP11. |
-| TB6612FNG discrete drivers | Replaced by 2 × FeatherWing #2927 |
-| Pimoroni Nano HAT Hacker | Replaced by the Seengreat breakout |
-| MPU-6050 IMU | Superseded at design stage by the BNO085 |
-| 3 × 470µF 25V "buck output surge buffer" | Never assigned to a converter; bucks carry their own output capacitance and both servo rails carry bulk downstream |
-| 0.1µF encoder filter capacitors | Never fitted. At ~114 Hz per channel they would have destroyed the count against the MCP23017's internal pull-ups. |
-| 2 × 1000µF interim arm decoupling | Superseded — the single Rubycon can was fitted instead |
-| 2×3S paraboard | Replaced by main + balance Y cables |
-| Elecbee 5V/5A buck | Retired in favour of the current Pi rail buck |
-| FEICHAO 8A UBEC | Replaced 2026-08-28 by a dedicated 5V DROK. Worst-case draw on this rail was already near 9A against the UBEC's 8A rating (§12), so it was running with no margin. |
-| DZS Elec 12A adjustable buck | Replaced 2026-08-28 by a dedicated 6V DROK. One converter per rail, reliable similar components (owner). |
-
-**One item to confirm:** the Pi rail buck's identity is recorded inconsistently
-across older documents — a DROK 12A LCD unit in some, an Elecbee 5V/5A in
-others. The rail measures correctly and the monitor is confirmed at **0x45**, so
-this is a labelling question rather than an electrical one. Confirm the part
-physically and settle §15.6. *(R1's 9V has no INA260 at all — the Witty Pi HAT
-monitors its own VIN, and 0x45 is on the +12V bus. See §16.3.)*
-
 ---
 
 ## 16. Complete Pin-to-Pin Connection Schedule
 
 Every conductor in the design, by connector or harness. §9 gives the Pi header
-view; this gives the device view. Supersedes the standalone
-`WildWilly_PIN_TO_PIN_SCHEDULE_v1.0` document.
+view; this gives the device view.
 
 > **Rail naming.** There is exactly ONE of each rail — **VCC, GND, SDA, SCL**.
 > Any `2`-suffixed rail name (`VCC2`, `GND2`, `SDA2`, `SCL2`) anywhere in this
@@ -2394,11 +2289,9 @@ connector (§4.2).
 | **GODIY hub × 2** | upstream | bidir | passive fan-out | Raspberry Pi 5 / hub 1 | `GP2` / `GP3` |
 | | ports | bidir | one drop per device | All I²C devices | VCC / GND / SDA / SCL |
 
-**What this table does not have, and why.** There is no `Row` column any more.
-Device drops used to be identified by a column number on the bus node board;
-that board is out of the rover (§4) and the GODIY hubs have no such numbering,
-so a drop is identified by its device and its hub port. Any surviving "row N"
-reference in the subsections below is a leftover from that scheme.
+**There is no `Row` column.** The GODIY hubs have no port numbering scheme, so a
+drop is identified by its device and its hub port. Any "row N" reference in the
+subsections below is a leftover and should be read as "this device's drop".
 
 > ⚠ **Rows that change under §4.7.** The MCP23017 block disappears entirely; its
 > twelve encoder lines move to Pico A, and `GPB4` → BNO085 `RST` moves to Pico

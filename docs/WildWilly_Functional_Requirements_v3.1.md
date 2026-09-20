@@ -21,35 +21,12 @@ Version 3.1**
                           WildWilly Software Design rev 1.1 --- module
                           architecture and control layering.
 
-  Supersedes              v3.0 (2026-08-15), v2.3, v2.2
   -----------------------------------------------------------------------
 
-*v3.2 (2026-09-13) is the first revision since v2.2 to **add requirements**, and says
-so because the header claimed the opposite while four new IDs were being inserted
-beneath it.*
-
-***Requirements added since v3.1:***
-
-| ID | Added | Subject |
-|----|-------|---------|
-| FR-1000-005 | 2026-09-09 | Obtain operator permission before unprompted autonomous motion |
-| FR-1200-005 | 2026-09-11 | Hold a standoff from mapped stairs until stair mode is enabled |
-| FR-2000-012 | 2026-09-11 | Execute commands from the owner by email, including motion |
-| FR-2000-013 | 2026-09-11 | Verify inbound authentication results before acting |
-
-*The count is therefore **117**, not 113. v3.2 also reconciles §V, FR-100, FR-300,
-FR-2000 and G-2 against the as-built state.*
-
-*v3.0 gave every previously empty Acceptance Criteria section concrete pass/fail
-conditions, added a verification-status register (§V), and aligned all hardware
-references with the as-built configuration. **No requirement was added, removed or
-reworded** in v3.0 or v3.1; all 113 requirement IDs from v2.2 were retained
-unchanged, except the four added above.*
-
-*v3.1 (2026-08-18) advances §V to the current implementation state, adds §V.1
-recording which requirement groups now have implementing modules and test
-coverage, and adds §V.2 listing the four known gaps where a requirement cannot
-currently be satisfied as written. Requirement text is untouched.*
+**This document carries 117 requirement IDs.** §V is the verification-status
+register; §V.1 records which requirement groups have implementing modules and test
+coverage, and §V.2 lists the known gaps where a requirement cannot currently be
+satisfied as written.
 
 # V. Verification Status Register
 
