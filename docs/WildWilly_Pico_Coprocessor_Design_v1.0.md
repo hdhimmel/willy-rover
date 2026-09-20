@@ -153,12 +153,45 @@ Both Picos are 3.3 V devices with non-5V-tolerant inputs, exactly like the MCP23
 
 **Each Pico gets its own hardware UART at 115200 8N1**, matching the SEN0628 precedent.
 
-I²C was considered and rejected. The bus is a **single non-isolated electrical segment** with
-two passive hubs and no containment; a single device holding SDA or SCL low takes the whole
-rover down, which is exactly what happened repeatedly on 2026-09-07/08. Putting the reflex
-ranging sensor behind that bus would make the obstacle stop depend on the one shared resource
-with a documented history of total failure. The whole point of Pico-S is to *shorten* the path
-from echo to stop, not to route it through the rover's most fragile component.
+I²C was considered and rejected — revisited 2026-09-20 and the answer did not change, but the
+reasoning is worth writing down properly because **the obvious objection to I²C is the wrong
+one.**
+
+**What is NOT the reason: bus load.** Two Picos on I²C would be far *lighter* than what they
+replace. Rough figures at 100 kHz:
+
+| | Transactions/s | Approx. bus occupancy |
+|---|---|---|
+| MCP23017 today | ~1000 × 2 single-byte register reads | **~40–75%** — it is the bus's dominant talker, and `sensors.py:353` says so |
+| Pico-E over I²C, 50 Hz × ~20-byte frame | 50 | ~10% |
+| Pico-E over UART | 0 | **0%** |
+
+So "I²C would load the bus" is not the argument. I²C would be a large improvement on the
+status quo. It is simply worse than UART for no compensating benefit, and three specific
+things make it worse:
+
+1. **Clock stretching is how a firmware I²C target wedges this bus.** A Pico acting as an I²C
+   peripheral holds SCL low whenever its firmware is not ready with the next byte. On the
+   scope and in the kernel log that is **indistinguishable from the stuck-low failure that
+   cost two days on 2026-09-07/08** — `lost arbitration`, `controller timed out`, phantom
+   devices from `0x08` up. A UART link cannot do that to anything.
+2. **It re-couples the reflex path to the rover's most fragile shared resource.** One
+   non-isolated segment, two passive hubs, no containment. The point of Pico-S is to *shorten*
+   the path from echo to stop, not to route it through the component with a documented history
+   of total failure.
+3. **Pull-ups.** Master Hardware Design §3.2 settled 2026-09-14 that the 4.7 kΩ rail pair is
+   **not fitted** and the bus runs on the Pi's own **1.8 kΩ** plus uncatalogued breakout
+   pull-ups — already on the strong side — with an explicit standing instruction: **do not add
+   pull-ups anywhere without measuring the combined value first.** Two more boards on the
+   segment is two more chances to violate that silently.
+
+And a fourth, smaller: over I²C you lose `cat /dev/ttyAMA2`, which §2.6 chose ASCII framing
+specifically to preserve.
+
+**What I²C would genuinely buy**, and it is not nothing: two wires, no UART to allocate, and
+none of §5.3's service-port physical-access question under the AI HAT. If the service port
+turns out to be unreachable, that is a real temptation — **take `uart4-pi5` instead** (§5.3's
+fallback). Slower to schedule, but it keeps the reflex path off the bus.
 
 USB was also rejected: all four rover USB ports are occupied (`CLAUDE.md`, 2026-09-13), and
 that constraint is what put the ToF on UART in the first place.
@@ -279,6 +312,19 @@ from `config.py`, so removing `ENCODER_ADDR` must be done there and allowed to p
 
 Also unchanged and still true: **0x70 belongs in neither set.** It is the PCA9685 all-call
 broadcast. Expect ten devices after this change, not eleven, and not twelve.
+
+**What the bus gains is the quietly biggest win in this design.** `sensors.py:353`'s comment
+says the encoder thread's 1 ms sleep exists *only* to stop it starving I²C bus 1 — which is
+shared with both MotorKits (`0x60`/`0x61`, i.e. **the stop commands**), the ADS1115 feeding the
+brownout logic, and the BNO085. Removing the MCP23017 does not throttle that talker, it deletes
+it. Every remaining transaction on the bus is a safety-relevant one that no longer queues behind
+an encoder poll.
+
+It also **retires FRD G-2's fallback plan.** G-2 proposed `dtparam=i2c_arm_baudrate=400000` if
+polling proved too slow. That is no longer needed — which is a relief, because raising the
+clock 4× on a segment running strong pull-ups, two passive hubs and a documented fragility
+history was itself a risk worth not taking. Fewer devices also means less bus capacitance, so
+the LTC4311 accelerator has less to do, not more.
 
 ### 3.2 ⚠ The IMU reset line has to go somewhere
 
