@@ -1,4 +1,4 @@
-import json,os,time,config,logsetup
+import json,os,threading,time,config,logsetup
 log=logsetup.setup('tof')
 
 # FR-1000-002 / FR-1200-005. DFRobot SEN0628 -- VL53L7CX behind an RP2040, 8x8 zones, 60 degrees
@@ -183,6 +183,73 @@ class ToFSensor:
                         f'report NO_DATA rather than a guessed baseline')
         log.info(f'Floor profile captured from {samples} frame(s)')
         return FloorProfile(zones)
+
+
+class FramePoller:
+    """Wraps a BLOCKING frame source in a thread so the tick never waits on the sensor.
+
+    This exists because of a specific defect. `brain.py::_tick()` reads
+    `SonarArray.distances` every tick; `distances` calls `ToFSensor.nearest_obstacle_cm()`,
+    which calls the source. With `read_frame` as that source the source is a polled
+    request/response round trip measured at ~0.13s (`scripts/tof_probe.py`, 200 frames,
+    2026-09-15) -- so every tick would block for 2.6 ticks of a 20Hz loop, against
+    `TICK_OVERRUN_THRESHOLD_S=0.15`. Wiring the ToF in without this would have traded a dead
+    sensor for a permanently overrunning control loop.
+
+    It wraps the SOURCE rather than the ToFSensor deliberately: `tof.py`'s whole design is that
+    the frame source is injected and everything above it is testable without hardware. A poller
+    that takes any callable and returns any callable keeps that property -- and `ToFSensor`,
+    `SonarArray.distances` and `tests/test_sonar_tof_fusion.py` need no change at all.
+
+    STALENESS RETURNS None, WHICH IS THE ToF's CORRECT DEGRADATION and not the sonar's. A frame
+    older than `stale_after` is reported as no frame, so `ToFSensor` marks itself unavailable
+    and `distances` falls back to sonar alone -- "unavailable is not a fault" (see this module's
+    header). Do NOT copy this rule to the sonar: nothing sits underneath the sonar, so there a
+    stale reading must stop the rover, not be ignored. Holding the last good frame forward would
+    be worse than either -- a dead sensor would go on reporting an obstacle, or worse, clear
+    floor, indefinitely.
+
+    NOT FOR `capture_profile()`. That averages N frames and needs N *distinct* ones; through a
+    poller it would average one cached frame N times. `scripts/calibrate_tof_floor.py` passes
+    `read_frame` directly and must keep doing so."""
+
+    def __init__(self,source,interval=None,stale_after=None):
+        self.source=source
+        self.interval=config.TOF_POLL_INTERVAL_S if interval is None else interval
+        self.stale_after=config.TOF_STALE_AFTER_S if stale_after is None else stale_after
+        self._frame=None; self._last_ok=None
+        self._lock=threading.Lock(); self._running=False; self._thread=None
+
+    def start(self):
+        self._running=True
+        self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
+
+    def stop(self):
+        self._running=False
+        if self._thread is not None: self._thread.join(timeout=2.0)
+
+    def _loop(self):
+        while self._running:
+            try:
+                frame=self.source()
+                # A source returning None is a failed read, not a fresh "nothing there" -- it
+                # must not refresh the timestamp, or a permanently failing sensor would look
+                # healthy for ever.
+                if frame is not None:
+                    with self._lock: self._frame=frame; self._last_ok=time.monotonic()
+            except Exception:
+                # The thread must outlive any transport error. ToFSensor logs the unavailability
+                # once it sees None; logging every failed read here would fill the disk at
+                # 1/interval Hz for as long as a cable is unplugged.
+                log.debug('ToF frame poll failed',exc_info=True)
+            time.sleep(self.interval)
+
+    def __call__(self):
+        """The injected source. Never blocks on hardware; returns the last frame, or None."""
+        with self._lock:
+            if self._last_ok is None: return None
+            if time.monotonic()-self._last_ok>self.stale_after: return None
+            return self._frame
 
 
 def read_frame(port=None,baud=None,timeout=0.2):

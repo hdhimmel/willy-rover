@@ -700,10 +700,16 @@ Found while answering §4.8, **pre-existing and not caused by anything in this d
   `TICK_OVERRUN_THRESHOLD_S=0.15` that is 2.6 ticks of a 20 Hz loop spent blocked, sitting
   right on the overrun threshold, **every tick**.
 
-**The fix is a poller thread on the Pi, not a coprocessor.** Give the ToF its own loop exactly
-as `SonarArray._loop` already does for the sonars: poll at its own cadence, cache the latest
-frame, and let `nearest_obstacle_cm()` read the cache so the tick never blocks. That is a few
-lines, keeps every rule in `tof.py` testable, and needs no new hardware.
+✅ **FIXED 2026-09-20, in `tof.FramePoller` + `brain.py`.** The poller wraps the *source*
+rather than `ToFSensor`, which keeps `tof.py`'s injected-transport design intact — `ToFSensor`,
+`SonarArray.distances` and `tests/test_sonar_tof_fusion.py` needed no change. A frame older
+than `TOF_STALE_AFTER_S` is served as **no frame**, so a dead sensor degrades to sonar alone
+instead of holding its last reading forward. `tests/test_tof_poller.py` pins all of it.
+
+⚠ **`read_frame()` is still unwritten, and §5.5 now says it is an I²C transport rather than
+the UART one its docstring describes.** The wiring and the tick fix are done and are
+transport-agnostic; the transport itself is still the open work, and it needs the sensor's I²C
+address first.
 
 **This is the honest answer to "should the lidar move to the sonar Pico": the thing that makes
 it look attractive is a blocking poll, and a blocking poll is a threading bug, not a hardware

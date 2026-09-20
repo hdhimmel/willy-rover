@@ -97,6 +97,15 @@ TOF_PORT='/dev/ttyAMA3'     # UART, not I2C -- keeps it off a bus that took the 
                             # (§6.5): the Pi 4 mapping does not carry over to the RP1.
 TOF_BAUD=115200             # fixed in the sensor's firmware, not configurable
 TOF_ZONES=64                # 8x8. A frame of any other length is a desynchronised UART, not data
+TOF_POLL_INTERVAL_S=0.2     # tof.FramePoller's cadence. The sensor answers a getAllData in ~0.13s
+                            # (scripts/tof_probe.py, 200 frames, 2026-09-15), so 0.2s is roughly
+                            # back-to-back without pinning the link. NOT the tick rate -- the tick
+                            # reads a cached frame and never waits on this.
+TOF_STALE_AFTER_S=1.0       # a cached frame older than this is reported as NO frame, so ToFSensor
+                            # goes unavailable and distances() falls back to sonar alone. Matches
+                            # SENSOR_FAULT_GRACE_S's precedent. This is the ToF's degradation rule
+                            # and NOT the sonar's -- nothing sits under the sonar, so a stale sonar
+                            # reading must stop the rover rather than be ignored.
 # Floor-profile margin. A zone counts as an obstacle only when it returns this much SHORTER than
 # its own stored floor distance, and as a drop when it returns this much LONGER (or nothing).
 # Wide enough to absorb carpet pile, a rug edge and a few mm of ride height -- without a margin

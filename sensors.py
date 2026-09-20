@@ -59,7 +59,9 @@ class SonarArray:
         self.right=Sonar(config.SONAR_RIGHT_TRIG,config.SONAR_RIGHT_ECHO)
         self._sensors=[self.front,self.left,self.right]
         self._running=False; self._thread=None
-        # Optional multi-zone ToF (§6.5). Set by brain.py when ENABLE_TOF; None otherwise, which
+        # Optional multi-zone ToF (§6.5). Set by brain.py when ENABLE_TOF -- which it genuinely
+        # is as of 2026-09-20; this comment asserted that wiring for weeks while brain.py
+        # contained no such assignment, leaving the fusion branch below dead code. None otherwise, which
         # is also what an unavailable sensor degrades to. ALONGSIDE the sonar, never replacing
         # it -- the two are blind to different things, and ToF looks straight through glass.
         self.tof=None

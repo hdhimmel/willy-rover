@@ -15,6 +15,7 @@ from memory_store import MemoryStore
 from smart_home import SmartHomeClient
 from voice import VoicePipeline
 from vision import ObjectDetector
+from tof import ToFSensor,FramePoller,read_frame
 from retrieval_task import RetrievalTask
 from pursuit_task import PursuitTask
 from email_client import EmailClient
@@ -123,6 +124,18 @@ class RoverBrain:
         self.steering=_init_device(Steering,'steering')
         self.safety=SafetyController(self.motors)
         self.sonars=_init_device(SonarArray,'sonars')
+        # FR-1000-002 / §6.5. THE ToF WAS NEVER ACTUALLY WIRED IN. `sensors.py`'s SonarArray
+        # comment has said "Set by brain.py when ENABLE_TOF" since the subsystem was built, and
+        # brain.py contained no such assignment -- so `SonarArray.tof` stayed None for the life
+        # of the process and the fusion branch in `distances` was dead code. Found 2026-09-20.
+        #
+        # The source is a FramePoller, never `read_frame` directly: `distances` is read on the
+        # tick thread and the raw transport is a ~0.13s blocking round trip, which would overrun
+        # TICK_OVERRUN_THRESHOLD_S every tick. See tof.FramePoller's docstring.
+        self._tof_poller=None
+        if config.ENABLE_TOF:
+            self._tof_poller=FramePoller(read_frame)
+            self.sonars.tof=ToFSensor(source=self._tof_poller)
         self.imu=_init_device(IMU,'imu')
         self.adc=_init_device(ADC,'adc')
         self.encoders=_init_device(Encoders,'encoders')
@@ -231,6 +244,7 @@ class RoverBrain:
         # FR-100-002 (initialize I2C bus and connected devices): bringing up every sensor
         # and actuator subsystem is the whole point of start() below.
         self.display.start(); self.sonars.start(); self.imu.start(); self.adc.start()
+        if self._tof_poller is not None: self._tof_poller.start()
         self.encoders.start(); self.current.start()
         self.steering.center_all(); self.arm.center_all()
         # v2.2: voice/email run their own background threads regardless of self-test result —
@@ -339,6 +353,7 @@ class RoverBrain:
         self.voice.stop(); self.email.stop(); self.detector.close()
         self.memory.close()  # FR-1900-011: persist any new/updated memory before power-off
         self.world_model.close()  # §9/§10: persist rooms/landmarks/objects/routes before power-off
+        if self._tof_poller is not None: self._tof_poller.stop()
         self.motors.cleanup(); self.sonars.stop(); self.imu.stop(); self.adc.stop()
         self.encoders.stop(); self.current.stop(); self.display.stop()
         if self._shutdown_after_stop:
