@@ -23,7 +23,7 @@ log=logsetup.setup('vision')
 #
 #   vision.py  WHAT a thing is, and roughly where -- class, bearing, coarse range. Deliberative.
 #              Feeds world_model.py for planning and classification. Per Master Hardware Design
-#              12 rule 18 it does NOT gate a stop.
+#              12 rule 15 it does NOT gate a stop.
 #   tof.py     HOW FAR the floor and obstacles actually are. Reflex layer. It is the actual drop
 #              and near-obstacle detector; vision only proposes candidates for it to confirm.
 #

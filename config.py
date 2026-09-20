@@ -106,6 +106,21 @@ TOF_FLOOR_PROFILE_PATH='tof_floor_profile.json'
 TOF_PROFILE_SAMPLES=10      # frames averaged when capturing; one frame carries per-zone noise
                             # straight into the baseline everything else is measured against
 
+# I2C bus 1 clock. THE KERNEL IS AUTHORITATIVE, NOT THIS CONSTANT -- the bus speed is set by
+# dtparam=i2c_arm_baudrate in /boot/firmware/config.txt and needs a reboot. This value exists so
+# sensors.py has one number to pass to busio.I2C() instead of a hardcoded literal that silently
+# disagrees with the kernel, and so the intended speed is recorded somewhere a reader will find.
+# Keep the two in sync by hand; scripts/i2c_bus_check.py reports the kernel's actual value.
+#
+# 100000 is the Pi default and what this bus has always run at. 400000 is a candidate worth
+# ~4x on every transaction -- the BNO085 alone is polled at IMU_POLL_HZ=100 and clock-stretches,
+# which costs more at the lower speed. It is NOT a free change: Master Hardware Design v2.0 s3.2
+# computes ~2.2us to threshold from the Pi's 1.8k pull-ups into ~400pF of cabling, against a
+# 2.5us bit at 400kHz. That is marginal on paper, and the LTC4311 accelerator is fitted for
+# exactly this reason. Validate with scripts/i2c_bus_check.py (20 consecutive clean roll-calls,
+# zero new kernel i2c errors) BEFORE leaving it raised. Revert on any device dropping out.
+I2C_BAUDRATE=100000
+
 IMU_ADDR=0x4A; IMU_TILT_LIMIT=25; IMU_TILT_WARN=18; IMU_POLL_HZ=100  # BNO085, §8.2/§8.5
 # RST wired to MCP23017 (§9.1's same chip, ENCODER_ADDR) port B bit 4 — confirmed 2026-08-08
 # (previously only documented as "spare pin", no bit number). MCP230xx get_pin() numbering is
@@ -233,8 +248,8 @@ ENCODER_COUNTS_PER_REV=752   # 11 PPR (motor shaft) x4 quadrature x 17.1:1 reduc
                              # same doc section that had the motor spec wrong. Confirm with
                              # scripts/encoder_calibration.py before trusting odometry -- see
                              # G-2 (FRD v3.1). Interrupt-driven decode (2026-08-18) is retracted
-                             # (2026-08-23): would break ISO1540 galvanic isolation and would not
-                             # have reduced I2C transaction count anyway. Polling is the real
+                             # (2026-08-23): would not have reduced I2C transaction count anyway,
+                             # and is moot under Master Hardware Design 4.7. Polling is the real
                              # mechanism -- see sensors.py::Encoders._loop().
 
 # Odometry (§8, WildWilly_Claude_Fix_Implementation_Plan.md). This comment used to cite a

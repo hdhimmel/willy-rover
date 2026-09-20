@@ -68,10 +68,6 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                           live-verified           non-isolated segment ---
                                                   20 consecutive scans,
                                                   zero errors, 2026-09-08.
-                                                  ("passes through the
-                                                  isolator" until
-                                                  2026-09-13; the ISO1540
-                                                  was removed 2026-09-08.)
                                                   Encoder and IMU checks
                                                   outstanding.
 
@@ -184,7 +180,7 @@ recorded in FR-300's Acceptance Criteria: the E-stop's physical power cut
 satisfies FR-300-001/002/003 without a Pi-side sense line. Remaining pre-drive
 items are physical, not requirement-level: motor crimps unverified on five of six
 units (FR-400), and the steering servo V+ current path (~9A worst case against an
-8A UBEC, Master Hardware Design §14 item 16).
+8A UBEC, Master Hardware Design §12 rule 13).
 
 ## V.1 Implementation and test coverage (2026-08-18)
 
@@ -357,22 +353,11 @@ this session's history of real I²C fragility on this bus.
 **Interrupt-driven decode (decided 2026-08-18) --- retracted 2026-08-23, do
 not implement as designed.** Three independent problems, not one:
 
-1. ~~**Breaks galvanic isolation.**~~ **PREMISE GONE 2026-09-08 — marked
-   2026-09-13.** The ISO1540 was removed and there is no isolation barrier to
-   cross, so this reason for the retraction no longer applies. *The retraction
-   itself still stands on the remaining points below* — and note Software Design
-   already carried an equivalent "premise corrected" marker on this argument while
-   this copy did not. Retained as history: the MCP23017 lived on the isolated side
-   of the ISO1540 (Master Hardware Design §3.1); its INTA pin was referenced to
-   that isolated 3.3V domain, so wiring it to GP7 would have run a conductor across
-   the barrier, and doing it correctly would have needed another isolator channel.
-
-   ⚠ **Premise corrected 2026-08-28.** Reason 1 as written does not hold: GND1
-   and GND2 are not galvanically separate and never were (Master Hardware Design
-   §3.1). A non-isolated regulator cannot create a ground domain, the star-ground
-   bond ties the rails deliberately, and six sonar GPIO wires already cross the
-   barrier. The retraction still stands on reasons 2 and 3, which are unaffected —
-   but do not cite galvanic isolation as the blocker in future decisions.
+1. ~~**Breaks galvanic isolation.**~~ **PREMISE WITHDRAWN.** This reason was
+   void even when written — the bus never had a real isolation barrier — and the
+   hardware it referred to is out of the build. **Do not cite galvanic isolation
+   as a blocker in future decisions.** The retraction stands on reasons 2 and 3,
+   which are unaffected.
 2. **Saves no I²C transactions.** INTA only reports "something on port A
    changed" --- actually learning what changed still requires an I²C read
    (`INTCAP` or `GPIO`). Every edge costs a bus transaction either way, so
@@ -398,10 +383,19 @@ toward bearing, open gripper, lower by a fixed offset, close, raise --- is a
 working approximation. `arm_jog.py` is the tool that closes this; nothing else
 does.
 
-**G-4 --- FR-1700-006, hand-off confirmation is timed, not sensed.** There is
-no tactile or force sensor on the gripper, so the rover cannot detect that the
-person has actually taken the object. The implementation waits for either an
-explicit voice confirmation or a fixed timeout before releasing.
+**G-4 --- FR-1700-006, hand-off confirmation is timed, not sensed.** The
+implementation waits for either an explicit voice confirmation or a fixed
+timeout before releasing, so the rover cannot detect that the person has
+actually taken the object.
+
+⚠ **The hardware half of this gap is now closed. The software half is not.**
+An **FSR402 force sensor is fitted to the gripper** and read as ADS1115 **A1**
+(Master Hardware Design §6.6, §16.13), built into the signal conditioning board
+2026-09-16. It is **uncalibrated** and nothing in the codebase reads A1 —
+`retrieval_task.py:18` still records the hand-off as time-based, correctly.
+This item stays open until the sensor is calibrated (its response is
+logarithmic; a linear scale reads plausibly and is wrong) and
+`_process_handoff` consults it. It is no longer a hardware limitation.
 
 **G-5 --- watchdog and tick-overrun thresholds are inconsistent.**
 `willy-rover.service` now sets `WatchdogSec=500ms`, which requires the process
@@ -1003,9 +997,8 @@ critical defect, not a tuning issue.
 
 # Acceptance Criteria
 
-Verification of FR-100-002 through FR-100-004 is the bus node board
-commissioning gate (Master Engineering Package rev 6.2.0 §17.5). Pass
-conditions:
+Verification of FR-100-002 through FR-100-004 is the commissioning gate for the
+signal conditioning board (Master Hardware Design §4.5). Pass conditions:
 
 -   **FR-100-002 (I²C bus and device init).** `i2cdetect -y 1` enumerates the
     **eleven** expected devices: 0x27 MCP23017, 0x40/0x44/0x45 INA260, 0x42/0x43
@@ -1024,29 +1017,18 @@ conditions:
     verified on the strength of it.
 
 -   **FR-100-002, false-negative exclusion.** A blank or partial scan while the
-    base is unpowered is expected behaviour, not a fault --- Side 2 of the
-    isolation barrier **no longer exists — corrected 2026-09-08.** The ISO1540,
-    the VCC2 rail and the whole isolated power chain were removed from the
-    build; every device now sits on the Pi's own I²C via two passive hubs, with
-    logic fed from the 3.3V DROK (R5). See Master Hardware Design §0.
+    base is unpowered is expected behaviour, not a fault. Every device sits on
+    the Pi's own I²C via two passive hubs; **device logic is fed from the Pi's
+    own 3.3V, header pin 1** (Master Hardware Design §0 — this paragraph
+    previously said "the 3.3V DROK (R5)", which was corrected on 2026-09-14:
+    R5 feeds the Hall encoders and nothing else).
 
-    **The requirement's substance is unchanged**: a blank or partial scan while
-    the base is unpowered is still expected behaviour, because the DROKs that
-    feed device logic run off the +12V main. The startup self-test must still
-    distinguish "base off" from "bus fault". Only the mechanism changed.
-
-    *Superseded text, retained for history:* the barrier was fed off
-    the +12V main** — TPSM84205 (12V→5V) into AMS1117-3.3 (5V→3.3V) (Master
-    Hardware Design §4, §16.2; the +12V source replaced the 5V servo rail on
-    2026-08-28, and the TPSM stage was installed 2026-09-07). Corrected
-    2026-09-07: this paragraph previously named a single-stage TPSM84203EAB with
-    the AMS1117 retired, which was a planned design that was never built — the
-    AMS1117-3.3 is still the final stage. All downstream devices go dark when
-    the Pi is powered by USB-C alone. The rail source changed but this
-    behaviour did not: the bus still depends on base power. The
-    startup self-test must distinguish "base off" from "bus fault" before
-    reporting a failure, or every dev-only session will raise a spurious
-    critical.
+    **The requirement's substance is unchanged.** The devices themselves stay
+    powered from the Pi, but their *loads* — the FeatherWing motor supply, the
+    servo rails, the encoders on R5 — die with the +12V main, so a scan taken
+    with the base off can legitimately look wrong. The startup self-test must
+    still distinguish "base off" from "bus fault" before reporting a failure,
+    or every dev-only session raises a spurious critical.
 
 -   **FR-100-003 (startup self-test).** The self-test additionally confirms the
     BNO085 interrupt is live on GP15 and that all six wheels' encoder channels
@@ -1059,17 +1041,16 @@ conditions:
     motion following a failed or skipped self-test is a critical defect.
 
 Pre-power hardware conditions that gate the first execution of this test are
-listed in rev 6.2.0 §17.5 and are not restated here; the three marked BLOCKING
-(regulator decoupling, SDA2/SCL2 pull-ups, ISO1540 orientation) have each
-already cost hardware on this build. **The SDA2/SCL2 pull-up condition can no
-longer be satisfied as written (2026-09-07): the 4.7kΩ rail pair has been
-removed from the board.** Whether the bus still meets I²C rise-time now depends
-on the LTC4311 and on whatever pull-ups the device breakouts carry, neither of
-which is measured. See Master Hardware Design §3.2.
-already cost hardware on this build. All three now have concrete hole
-assignments and a bare-board meter check in Master Hardware Design §4.5 — note
-in particular that the TPSM requires a 94µF ceramic Cout minimum, and that the
-entire SDA/SCL separation depends on the board's centre gap breaking column 30.
+Master Hardware Design §12's **Before power-up** rules. Two bear on this test
+directly: **bus pull-ups metered, not assumed** (the 4.7kΩ rail pair is not
+fitted; the bus runs on the Pi's own 1.8kΩ plus whatever the breakouts carry,
+and the LTC4311 is what makes that viable — §3.2), and **ADS1115 A0 metered in
+band** before power, since an open divider presents pack voltage to the ADC.
+The signal conditioning board has its own commissioning gate: the full
+resistance matrix in Master Hardware Design §4.5, which **passed 2026-09-16**,
+followed by the powered divider check, which **has not been run**. Note in
+particular that P1-14↔P1-17 must read **3.2k** — 4.7k or 10k means one leg of
+the parallel pair is unseated and battery voltage reads about a third high.
 
 # FR-200 Power Monitoring and Protection
 
@@ -1792,9 +1773,7 @@ separately under FR-1200.
 -   **Known false positives to handle explicitly.** Two states look like
     faults but are not, and must be distinguished rather than reported as
     errors. A blank or partial I²C scan with the base unpowered is expected ---
-    the device bus dies with the 12V rails. *(Was "the isolated bus dies with the 12V
-    chain"; the ISO1540 was removed 2026-09-08 and FR-100's version of this note was
-    corrected then while this one was not.)* And the Pi-rail monitor showing
+    the device bus dies with the 12V rails. And the Pi-rail monitor showing
     a healthy voltage with near-zero current while the Pi is plainly running
     indicates USB-C bench power, not a sensor fault.
 

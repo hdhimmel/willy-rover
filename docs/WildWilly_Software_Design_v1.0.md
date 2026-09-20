@@ -116,7 +116,7 @@ as a property of the codebase rather than a convention.
 ```
 
 The separation between the deliberative and reflex layers is the same rule
-carried in Master Hardware Design §12 rules 18–19. An obstacle stop must never
+carried in Master Hardware Design §12 rules 15–16. An obstacle stop must never
 depend on a detection frame arriving.
 
 ### 2.2 The safety gate
@@ -533,7 +533,7 @@ now known** — read verbatim from `DFRobot_MatrixLidar.cpp` and implemented in
 reply `[status][cmd][lenL][lenH][payload]`, `0x53` SUCCESS / `0x63` FAILED / `0xFF` filler;
 **polled, never streaming**). What is missing is a *working sensor*: unit #1 returned a handful
 of valid readings and nothing since, and a replacement was ordered. **Updated again the same day: the sensor works.** It was never faulty — it was powered from the
-dormant TPSM chain; moved to the Pi's 3V3 rail it returned **200/200 clean frames** at 0.13s
+on a dormant supply rail; moved to the Pi's 3V3 rail it returned **200/200 clean frames** at 0.13s
 each. `read_frame()` is therefore **unblocked and is now the next piece of work**: the protocol
 is proven end-to-end against real hardware, not merely read out of a header. It still raises
 `NotImplementedError` as of this entry only because nothing has been written yet — no longer
@@ -761,7 +761,7 @@ not ranging calibration. **The fix for ranging is not a better camera heuristic,
 multi-zone ToF** — a real depth sensor at the reflex layer. Do not fuse ToF zones into
 `localize()`: they answer different questions at different layers, and blending them would put
 a deliberative estimate inside a reflex path. (`vision.py`'s header asserted "there is no depth
-sensor" until 2026-09-15.) Per Master Hardware Design §12 rule 18: perception
+sensor" until 2026-09-15.) Per Master Hardware Design §12 rule 15: perception
 feeds `world_model.py` for planning and classification only. It does not gate
 a stop.
 
@@ -907,25 +907,21 @@ matters only once the encoders produce edges at all; they have produced none sin
 fix is `dtparam=i2c_arm_baudrate=400000` (~4x, no wiring — this bus already
 carries an LTC4311 for exactly this), tested against a full roll-call first
 
-> **Note 2026-09-08:** the retraction below cites the ISO1540 and the isolated
-> side. Both are gone — the isolator was removed and there is no isolation
-> barrier any more (Master Hardware Design §0). Reason (1) is therefore void in
-> addition to having had its premise corrected on 2026-08-28. **Reasons (2) and
-> (3) still stand and the retraction still holds** — an interrupt only says
-> "something changed", so learning what still costs a register read. Waveshare's
-> MCP23017 board can also mirror INTA/INTB in `IOCON`, so either pin could reach
-> GP7 if interrupt-driven decode is ever revisited.
+> **Note:** reason (1) below is **void** — it rested on an isolation barrier the
+> bus never really had, and on hardware that is out of the build. **Reasons (2)
+> and (3) still stand and the retraction still holds** — an interrupt only says
+> "something changed", so learning what still costs a register read.
+>
+> ⚠ **The whole question is moot under Master Hardware Design §4.7:** the
+> MCP23017 is to be replaced by a Pico 2 W doing quadrature decode in PIO, over
+> UART. There is no expander left to interrupt.
 
 given this session's I²C fragility history.
 
 *Interrupt-driven decode (decided 2026-08-18) — retracted 2026-08-23.*
-Reverted for three reasons: (1) the MCP23017 lives on the isolated side of
-the ISO1540 (§3.1); wiring its INTA pin to a bare Pi GPIO runs a conductor
-straight across the isolation barrier, which needs its own isolator channel
-to do safely — a part and a failure mode added for the gain described in
-(2); **[Premise corrected 2026-08-28: GND1/GND2 are not
-galvanically separate and never were — Master Hardware Design §3.1. The
-retraction stands on (2) and (3); do not cite isolation as the blocker.]** (2) INTA only signals "something on port A changed" — learning what
+Reverted for three reasons: (1) ~~an isolation barrier the INTA wire would have
+crossed~~ — **void, see the note above; do not cite isolation as the blocker**;
+(2) INTA only signals "something on port A changed" — learning what
 still costs an I²C read (`INTCAP`/`GPIO`), so every edge costs a bus
 transaction regardless, same as today's polling, which already decodes all
 twelve channels in two reads per cycle; interrupt-driven is not cheaper and
@@ -1180,8 +1176,7 @@ wants it.
     model/path is viable for this
     task. `ENABLE_HAILO_LLM` stays off until this is understood.
 11. ~~**A real, separate I2C hardware fault found 2026-08-23**~~ — **CLOSED
-    2026-09-11.** Superseded by the 2026-09-08 bus rebuild: the isolator, the
-    isolated rail and the Seengreat breakout are all out, and the rebuilt flat
+    2026-09-11.** Superseded by the 2026-09-08 bus rebuild, and the rebuilt flat
     topology verified eleven devices across 20 consecutive scans with zero errors
     (Master Hardware Design §0). The loose 3.3V wire and the non-responding 0x40
     both belonged to a bus that no longer exists.
@@ -1190,8 +1185,8 @@ wants it.
     `config.py:212` measured (9.068V). *(My 2026-09-11 closure claimed §0 recorded
     9.5V and that this item was wrong; §0 was the wrong one, owner-confirmed
     2026-09-14.)* The under-voltage problem it was chasing was separately
-    root-caused to a degraded AMS1117 (2026-08-21) and the rail has since been
-    rebuilt entirely.
+    root-caused to a degraded regulator on the old bus supply (2026-08-21); that
+    rail has since been rebuilt entirely and the part is out of the build.
 13. **`sensors.py` cannot tell a broken sensor from a real zero.**
     **The hardware fault is FIXED as of 2026-09-14** — the divider is fed, in spec,
     and reading real pack voltage. **This software gap is not.** It was found because
