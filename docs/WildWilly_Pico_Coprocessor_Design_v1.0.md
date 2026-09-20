@@ -113,14 +113,88 @@ clear. This is cheap insurance and it costs two resistors per line.
 
 ### 2.2 Power — prove the rail, not the voltage
 
-Both boards take **5 V from R2 (DROK-5V) into `VSYS`**, and use the Pico's own onboard
-buck to make 3.3 V. Not the Pi's 3V3 pin, and not the `3V3` pad.
+**Owner-specified 2026-09-20, and it is the right call for a reason worth stating:
+each Pico is powered from the same rail as the sensors it reads.**
 
-- `VSYS` accepts a wide input (nominally 1.8–5.5 V), so 5 V is comfortable.
-- Pi header pin 1 is already a loaded rail carrying eleven devices' logic, the bus pull-ups
-  and the SEN0628 (`CLAUDE.md`, corrected 2026-09-14). Do not add two more MCUs to it.
-- R2 is the sonar's existing VCC rail, so Pico-S and its three HC-SR04s share one supply and
-  one ground reference — which is what you want for a pulse-timing measurement.
+| Board | Rail | Feeds today | Into |
+|---|---|---|---|
+| **Pico-E** (encoders) | **R5 — 3.3 V, DROK-4** | the six motor Hall encoders, and nothing else | `VSYS` |
+| **Pico-S** (sonar) | **R2 — 5 V, DROK-5V** | steering servos, **sonar VCC**, Pi screen | `VSYS` |
+
+~~Both boards take 5 V from R2.~~ Superseded: Pico-E moves to R5.
+
+**Why same-rail matters more than it looks.** Today the encoders run from R5 while the
+MCP23017 reading them runs from Pi header pin 1 — **sensor and receiver on different rails**,
+so every encoder signal crosses a rail boundary. Putting Pico-E on R5 removes that boundary:
+the Hall outputs swing against the same supply their reader's thresholds are referenced to.
+Pico-S on R2 gets the same property for free, since R2 is already the sonar VCC.
+
+It also **removes a whole class of silent failure.** If R5 dies today, the encoders go mute
+but the MCP23017 keeps happily reporting zeros — which is indistinguishable from six stopped
+wheels, and is very close to the reading that produced three wrong "no encoder produces any
+output" conclusions in 2026-08. With the reader on the same rail, a dead R5 means a **dead
+link**: the stream stops, `is_healthy` goes False and `brain.py:311` escalates it. **The
+failure becomes loud instead of plausible.**
+
+### 2.2.1 How to feed them
+
+**3.3 V goes into `VSYS`, not into the `3V3` pad.** The Pico 2 W's onboard regulator is a
+**buck-boost** rated 1.8–5.5 V in, so 3.3 V is inside its range and nothing needs disabling;
+it is simply operating near its transition point, which costs a little efficiency and nothing
+else. Feeding the `3V3` pin directly is a legitimate alternative **only** with `3V3_EN` pulled
+low to shut down the onboard SMPS — otherwise two regulators fight over the same node. Unless
+there is a reason to want the Pico's logic rail to be *literally* R5, take `VSYS` and move on.
+
+5 V into `VSYS` for Pico-S is unremarkable and well inside range.
+
+⚠ **Both boards talk UART to the Pi while being powered from a different rail than the Pi.**
+That link has no ground of its own — it references the Pi's. **Confirm R5's and R2's grounds
+are genuinely the same node as the Pi's, and that the return path is not a long thin wire.**
+On a rover where six motors draw amps through harnesses running to the wheels, a few hundred
+millivolts of ground offset between the two ends of a 3.3 V UART eats the noise margin that
+makes it work. This is the one new failure mode that same-rail power introduces, and it is
+cheap to rule out with a meter.
+
+### 2.2.2 Budgets — and one of them is unmeasurable
+
+- **Not Pi header pin 1, for either board.** It already carries every I²C device's logic, the
+  bus pull-ups and the SEN0628, against a pin the Pi 5 rates for a few hundred mA. Adding two
+  MCUs to the rover's one genuinely shared logic rail is the opposite of what these boards are
+  for.
+- **R5 has room, and `CLAUDE.md` will tell you it does not — see §2.2.3.** Its real load is
+  six Hall encoders. A Pico 2 W with the radio dark is tens of mA. Get DROK-4's rating and
+  write it down; it is the one number this section cannot supply.
+- 🔴 **R5 has no INA260. Pico-E's draw is invisible to software.** `0x40` watches R2,
+  `0x44` R3, `0x45` the +12 V bus — **R1 and R5 have no monitor at all.** So Pico-S's addition
+  shows up in `scripts/power_logger.py` and Pico-E's never will. R5's budget can only ever be
+  checked with a meter, which means it has to be checked deliberately or not at all.
+- **R2 is the tight one.** Worst-case 5 V draw is already near 9 A against an 8 A UBEC, and
+  Master Hardware Design §14 item 4 — the AI HAT+ 2's draw on this same rail — is **still
+  open**, described there as "the tightest in the design". Pico-S is small, but it is being
+  added to a deficit nobody has closed. §14 item 5 (log the three INA260s through a
+  representative run and integrate) is the work that settles it.
+
+### 2.2.3 ⚠ `CLAUDE.md` is wrong about R5, and wrong in the direction that blocks this
+
+Found while checking the budget above. `CLAUDE.md` carries two sentences that the Master
+Hardware Design **already struck on 2026-09-14**:
+
+> "It also means the bus does not load the Pi's own 3V3 pin."
+> "⚠ R5 is now a single point of failure for both the encoders and the entire I²C bus …
+> Budget its draw — six Hall encoders, eleven I²C devices, and every pull-up on the bus."
+
+Both are false. The I²C bus runs on **Pi header pin 1**; **R5 feeds the encoders and nothing
+else**. `CLAUDE.md` says so itself, ~90 lines earlier, in the section that made the correction
+— and then contradicts it in the rails table's own footnotes.
+
+**This is not pedantry, it is load-bearing right now.** Anyone sizing R5 for Pico-E from
+`CLAUDE.md` reads "six Hall encoders, eleven I²C devices, and every pull-up on the bus" and
+concludes the rail is nearly full. It is carrying six Hall encoders. **The stale text argues
+against the correct decision.**
+
+Exactly the species `CLAUDE.md` opens with — the edit landed where someone was looking and a
+paragraph two sections away went on asserting the old state. It should be struck there the way
+§2.2 of the hardware doc struck it.
 
 🔴 **Budget it, and then prove which rail you actually landed on.** Worst-case 5 V draw is
 already documented as near 9 A against an 8 A UBEC rating, and **Master Hardware Design §14
@@ -310,8 +384,16 @@ This is a tripwire. `CLAUDE.md` records that `brain.py::_EXPECTED_I2C` and
 `tests/test_expected_i2c_agreement.py` exists to stop it happening again. Both sets derive
 from `config.py`, so removing `ENCODER_ADDR` must be done there and allowed to propagate.
 
+⚠ **That arithmetic depends on §5.5.** With the ToF on UART the bus holds eleven devices and
+removing `0x27` leaves **ten**. **If the ToF is now on I²C it is a twelfth device**, and
+removing `0x27` leaves **eleven** — and the ToF then has to *join* both `_EXPECTED_I2C` sets,
+under a `config.TOF_I2C_ADDR` that does not exist yet, or the self-test will pass a bus with a
+missing cliff detector. **Settle the roll-call with `i2cdetect -y 1` before writing either
+number into code.**
+
 Also unchanged and still true: **0x70 belongs in neither set.** It is the PCA9685 all-call
-broadcast. Expect ten devices after this change, not eleven, and not twelve.
+broadcast, cleared by `PCA9685.reset()` during construction, so counting it toward the total
+would let a scan pass while a real device is absent.
 
 **What the bus gains is the quietly biggest win in this design.** `sensors.py:353`'s comment
 says the encoder thread's 1 ms sleep exists *only* to stop it starving I²C bus 1 — which is
@@ -656,7 +738,7 @@ Pi UARTs on the 40-pin header, current state:
 | `uart0` | GP14/15 | `/dev/ttyAMA0` | **Blocked** — GP14 is left sonar ECHO, GP15 is the BNO085 interrupt |
 | `uart1-pi5` | GP0/1 | `/dev/ttyAMA1` | **Reserved** — AI HAT EEPROM, do not use |
 | `uart2-pi5` | GP4/5 | `/dev/ttyAMA2` | **Blocked** — GP4 right TRIG, GP5 front TRIG |
-| `uart3-pi5` | GP8/9 | `/dev/ttyAMA3` | **In use** — SEN0628 ToF, verified 2026-09-15 |
+| `uart3-pi5` | GP8/9 | `/dev/ttyAMA3` | ⚠ **FREE as of 2026-09-20** — owner states the SEN0628 ToF is now on **I²C**, not this UART. See §5.5 |
 | `uart4-pi5` | GP12/13 | `/dev/ttyAMA4` | **Blocked** — GP13 is left TRIG |
 
 **Every free UART on this header is blocked by a sonar pin.** Note the shape of that: it is
@@ -674,6 +756,10 @@ The Pi 5 has a **dedicated 3-pin UART connector** on the board (JST-SH 1.0 mm: T
 no power), separate from the 40-pin header and from everything in §5.1. It is the Pi's debug
 / service console port. **Nothing in this repository currently mentions it, and nothing on
 this rover uses it.**
+
+⚠ **If §5.5 is confirmed, this section is an option rather than a necessity** — `uart3-pi5`
+would be free and Pico-E could take GP8/GP9 with no console trade at all. The reasoning below
+stands on its own merits; it is simply no longer forced.
 
 That makes it a free UART that costs zero header GPIO, and it changes the build order:
 
@@ -768,6 +854,42 @@ longer used by this design; it stays free.
 separated "sensor absent" from "sensor present but mute" three times on 2026-09-15: force a
 pull-down on the Pi's RX pin and re-read. Still high means something is actively driving it,
 i.e. the Pico is powered and its TX is alive.
+
+### 5.5 ⚠ OWNER-STATED 2026-09-20: the ToF moved to I²C — unresolved consequences
+
+**Recorded, not yet reconciled.** The owner states the SEN0628 is on I²C. The sensor's DIP
+switch selects UART-vs-I²C and address, so this is a switch change, not a rewire, and it is
+entirely plausible. It is written here rather than swept through the repo because **it
+contradicts a lot of recently-verified text and one measurement settles all of it.**
+
+🔴 **Run `i2cdetect -y 1` and report the result before anything below is acted on.** The
+device count is the fastest check: **twelve** rows plus the `0x70` broadcast means the ToF is
+on the bus and answering.
+
+**What it changes here, if confirmed:**
+
+1. **`uart3-pi5` (GP8/GP9) is free.** That is a *third* header UART, and it means **Pico-E no
+   longer depends on the service port.** §5.3's console trade and the AI-HAT physical-access
+   risk both become optional rather than load-bearing — take GP8/GP9 and neither question has
+   to be answered. This is the single biggest consequence and it strictly simplifies the build.
+2. **The roll-call arithmetic changes.** See §3.1 — it is no longer "expect ten".
+3. **`config.TOF_PORT='/dev/ttyAMA3'` and `TOF_BAUD` are stale**, and `tof.read_frame()` —
+   still unwritten (§4.9) — is now an I²C transport. `scripts/tof_probe.py`'s framing was
+   written against the UART and does not port unchanged.
+
+**What it costs, and it should be named rather than absorbed.** `CLAUDE.md` chose UART on
+2026-09-13 with an explicit reason: *"UART keeps it off the I²C bus entirely."* The ToF is
+**Reflex** tier (Software Design §6.5) and the only cliff detector this rover has. Putting it
+on the single non-isolated segment — the one that took the whole rover down for two days — is
+precisely the coupling §2.4 rejects for the Pico links. **That trade may be fine; §2.4's own
+figures say the ToF's 64-value frames are light traffic. But it is a decision, and right now
+it exists only as one line in a chat.** Write down why, the way the UART choice was written
+down.
+
+⚠ **And re-check the pull-ups.** Master Hardware Design §3.2's standing instruction — *do not
+add pull-ups anywhere without measuring the combined value first* — applies to the SEN0628
+breakout exactly as it does to a Pico. The bus is already on the Pi's 1.8 kΩ plus uncatalogued
+breakout pull-ups.
 
 ---
 
@@ -1010,6 +1132,8 @@ that the sweep is a checklist rather than an archaeology exercise later.
 | G-2: raise `i2c_arm_baudrate` if polling is too slow | FRD v3.1 G-2 — **superseded by this design**, which removes the poll entirely |
 | Encoder polling ceiling ~1 kHz, 1 ms sleep protects the bus | `sensors.py:353` comment block |
 | `ENCODER_COUNTS_PER_REV=752` is derived, not measured | `config.py:222`, FRD G-2, Software Design S-2 — **still true**, and not fixed by this design |
+| ⚠ **R5 feeds "eleven I²C devices and every pull-up"** — FALSE, struck in the hardware doc 2026-09-14 | **`CLAUDE.md`'s rails-table footnotes still carry it unstruck**, along with "the bus does not load the Pi's own 3V3 pin". Both contradict `CLAUDE.md`'s own correction ~90 lines earlier. See §2.2.3 — this one actively argues against the correct R5 decision |
+| ⚠ **The SEN0628 ToF is on UART / `uart3-pi5` is in use** | `CLAUDE.md`'s ToF section ("UART is the chosen interface", "keeps it off the I²C bus entirely"), `config.py:95` `TOF_PORT`, `config.py:98` `TOF_BAUD`, `tof.py`'s `read_frame()` docstring, `scripts/tof_probe.py`, Master Hardware Design §6.5, Software Design §6.5/§6.6 — **all pending §5.5's `i2cdetect` confirmation** |
 | The serial console is disabled and the Pi 5 service port is unclaimed | `CLAUDE.md` pin section, Master Hardware Design §9 and §16.13, FRD v3.1's left-sonar-garbage signature note — **the service port is not mentioned anywhere today**, so claiming it for Pico-E means *adding* the fact, not correcting one. Record which console state was chosen and why (§5.3) |
 
 **Strike, don't delete.** The MCP23017 and direct-GPIO sonar entries stay visible with a
