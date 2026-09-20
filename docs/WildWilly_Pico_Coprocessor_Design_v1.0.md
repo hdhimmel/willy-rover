@@ -123,9 +123,12 @@ buck to make 3.3 V. Not the Pi's 3V3 pin, and not the `3V3` pad.
   one ground reference — which is what you want for a pulse-timing measurement.
 
 🔴 **Budget it, and then prove which rail you actually landed on.** Worst-case 5 V draw is
-already documented as near 9 A against an 8 A UBEC rating. Two Pico 2 Ws add little (tens of
-mA each with the radio dark), but "little" is not "nothing" and this rail has no margin to
-spend carelessly.
+already documented as near 9 A against an 8 A UBEC rating, and **Master Hardware Design §14
+item 4 — the AI HAT+ 2's draw on this same rail — is still OPEN**, described there as "the
+tightest in the design". Two Pico 2 Ws add little (tens of mA each with the radio dark), but
+they are being added to a budget that **nobody has closed**. "Little" is not "nothing" on a
+rail with an unresolved deficit, and §14 item 5 (log the three INA260s through a
+representative run and integrate, rather than estimating) is the work that settles it.
 
 And the lesson the SEN0628 taught on 2026-09-15 applies verbatim: **the TPSM/AMS1117 chain
 is fitted but dead, and it looks like a legitimate tap.** A Pico brought up on a marginal or
@@ -524,6 +527,60 @@ changed that would break `test_sonar_tof_fusion.py`, and should.
 `config.SONAR_BACKEND = 'gpio' | 'pico'`, defaulting to `'gpio'`. The direct-GPIO path stays
 in the tree.
 
+### 4.8 ⚠ The SEN0628 ToF does NOT move to Pico-S
+
+Asked 2026-09-20 and decided here so it is not re-opened. Both the sonar and the ToF are
+reflex-tier front sensing (Software Design §6.5 classes the ToF as **Reflex** — it is the only
+cliff detector this rover has), and they already fuse in one place, so putting them on one
+board looks natural. **It is still wrong.**
+
+1. **Pico-S is the board whose firmware must change almost never** (§1). The ToF's rules are
+   the opposite — floor margins still want tuning against real carpet, the uncalibrated
+   semantics are new, and one reviewer in six saw a board reset-looping. Putting the evolving
+   subsystem on the safety-critical binary is exactly the coupling §1 split these boards to
+   avoid.
+2. **It would put an MCU in front of an MCU.** The SEN0628 was chosen over a bare VL53L7CX
+   *because* its onboard RP2040 already does the coprocessing — the ~84 KB firmware upload per
+   init happens locally and the host just reads 64 values. An RP2350 in front of it adds a hop
+   and does no decode work that is not already done.
+3. **The classification must not leave `tof.py`.** That module is ~200 lines of floor-profile
+   reasoning written so every rule is testable with no hardware — its own header says the
+   transport "is the only part that cannot be". Moving it to firmware trades that coverage for
+   nothing, and the 64-zone profile is a JSON file under `WILLY_MEMORY_ROOT` that
+   `scripts/calibrate_tof_floor.py` writes; in Pico flash it needs a calibration protocol
+   instead.
+
+**What the question is right about.** Two real benefits exist and neither outweighs the above:
+co-timestamping (today sonar and ToF are sampled at unrelated moments and `min()`'d as though
+simultaneous), and freeing `uart3-pi5` — which nothing needs. If the ToF ever *does* come off
+the Pi's UART, it goes to **Pico-E**, the changeable board, never Pico-S.
+
+### 4.9 ⚠ But it points at a real defect — and the fix is a thread, not a Pico
+
+Found while answering §4.8, **pre-existing and not caused by anything in this design:**
+
+- **`tof.read_frame()` is unwritten** — it raises `NotImplementedError`. The protocol is known
+  and `scripts/tof_probe.py` already implements it; the port is simply not done.
+- **`brain.py` never wires the ToF in at all.** `sensors.py:62` states the field is "Set by
+  `brain.py` when `ENABLE_TOF`" — **`brain.py` contains no such assignment**, so
+  `SonarArray.tof` is `None` for the life of the process and §4.6's fusion branch is dead code.
+  The comment asserts a wiring that does not exist, which is the species `CLAUDE.md` opens with.
+- **And when it *is* wired, it will block the tick.** `brain.py:565` reads `self.sonars.distances`
+  on the tick thread. `distances` calls `tof.nearest_obstacle_cm()`, which calls `_frame()`,
+  which — with `read_frame` as the source — is a **~130 ms** polled round trip
+  (`scripts/tof_probe.py`: 200 frames at 0.13 s each). Against
+  `TICK_OVERRUN_THRESHOLD_S=0.15` that is 2.6 ticks of a 20 Hz loop spent blocked, sitting
+  right on the overrun threshold, **every tick**.
+
+**The fix is a poller thread on the Pi, not a coprocessor.** Give the ToF its own loop exactly
+as `SonarArray._loop` already does for the sonars: poll at its own cadence, cache the latest
+frame, and let `nearest_obstacle_cm()` read the cache so the tick never blocks. That is a few
+lines, keeps every rule in `tof.py` testable, and needs no new hardware.
+
+**This is the honest answer to "should the lidar move to the sonar Pico": the thing that makes
+it look attractive is a blocking poll, and a blocking poll is a threading bug, not a hardware
+shortage.**
+
 ### 4.7 Tests to add
 
 - **Staleness → `front = 0.0` → `obstacle_ahead()` is True.** This is the load-bearing test
@@ -623,6 +680,19 @@ grep -E 'enable_uart|uart' /boot/firmware/config.txt
 Either way: all four USB ports are occupied, so reaching the console already means unplugging
 something. It is an emergency instrument, not a daily one — which is part of why spending it
 on Pico-E is defensible and spending it on Pico-S is not.
+
+⚠ **And check you can physically reach it with the AI HAT+ 2 fitted.** The good news is that
+the HAT **attaches by PCIe FFC, not the 40-pin header** (Master Hardware Design §5.2), so it
+does not stack over the header and the GeeekPi breakout keeps working — that is what makes
+§5.1's GP4/GP5 plan viable at all. But the Pi 5's 3-pin UART connector is a 1.0 mm JST-SH on
+the board edge, and the HAT sits above the board with its FFC routed across it. **Before
+committing to the service port, confirm the connector is reachable and the cable can route out
+without being pinched by the HAT or its ribbon.** If it cannot, Pico-E falls back to
+`uart4-pi5` (GP12/13) once Pico-S frees GP13, and §6's two tracks re-couple into the original
+order — which is a schedule cost, not a design failure.
+
+Header pins 27/28 (`ID_SD`/`ID_SC`, i.e. GP0/GP1) stay reserved for the HAT's EEPROM regardless
+— already reflected in §5.1's `uart1-pi5` row.
 
 ### 5.4 Verifying the overlays
 
