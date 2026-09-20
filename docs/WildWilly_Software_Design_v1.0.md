@@ -17,7 +17,7 @@
 | Owner | Howard Himmel |
 | Status | Implemented and off-hardware tested; partially live-verified. **Filename retains `v1.0` deliberately** — renaming breaks cross-references in the Master Hardware Design, the FRD and `CLAUDE.md`. The Revision field is authoritative. |
 | Supersedes | Software Design v1.0 (2026-08-18) |
-| Companions | Master Hardware Design **rev 2.1**; Functional Requirements v3.1 |
+| Companions | Master Hardware Design **rev 2.2**; Functional Requirements v3.1 |
 
 **Scope of this document.** This describes the software as it is currently
 written, in the repository `hdhimmel/willy-rover`. It describes structure and
@@ -341,11 +341,8 @@ legitimately needs one where passive observation does not.
      `_EXPECTED_I2C` and the self-test expects eleven devices (§4.1 step 3). The flag exists
      precisely so the address is only expected once the hardware is present — enabling it
      before installation would make the self-test report a real device as missing every run.
-     It was flipped when the HAT went in. *(Rewritten 2026-09-13: this bullet previously
-     carried a struck "stays False" clause alongside "flip both on then, not before", which
-     read as contradicting the sentence in front of it.)*
-   - ~~**Open, unresolved**: the battery is wired via VUSB (USB-C), not the VIN screw
-     terminal…~~ **CLOSED 2026-09-13 — the premise no longer holds.** Witty Pi was refed
+     It was flipped when the HAT went in.
+   - **Witty Pi input — settled.** Witty Pi was refed
      through its **VIN screw terminal** from DROK-Pi on 2026-08-23 (Master Hardware Design
      §2.2), so registers #22/#23 monitor the input they were documented for and the question
      of whether they apply to a dropping VUSB is moot. The safety position is unchanged:
@@ -525,10 +522,8 @@ profile and the availability contract; `sensors.py::distances()` holds the fusio
 `scripts/calibrate_tof_floor.py` captures the profile. 24 tests
 (`tests/test_tof.py`, `tests/test_sonar_tof_fusion.py`).
 
-**What is deliberately NOT written: `tof.read_frame()`.** ~~The sensor has not arrived, so
-the wire format has never been observed, and it raises `NotImplementedError` with that
-said plainly rather than guessing at a frame layout.~~ **Updated 2026-09-15: the protocol IS
-now known** — read verbatim from `DFRobot_MatrixLidar.cpp` and implemented in
+**What is deliberately NOT written: `tof.read_frame()`.** **The protocol IS
+known as of 2026-09-15** — read verbatim from `DFRobot_MatrixLidar.cpp` and implemented in
 `scripts/tof_probe.py` (request `[0x55][argsNumH][argsNumL][cmd][args]`, `argsNum = len+1`;
 reply `[status][cmd][lenL][lenH][payload]`, `0x53` SUCCESS / `0x63` FAILED / `0xFF` filler;
 **polled, never streaming**). What is missing is a *working sensor*: unit #1 returned a handful
@@ -770,13 +765,11 @@ a stop.
 `AIProvider` alternative to `LocalAIProvider`, sharing the NPU with vision the
 same way (`Hailo.TARGET`). It loads and runs (`hailo_platform.genai.LLM`,
 model `qwen2:1.5b` — Phi-2 is not obtainable on this rover's delivery path),
-~~but a 32-case intent-reliability batch scored **0% (0/32)** against it,
-versus 75% for the existing CPU `LocalAIProvider`. Failure modes: a recurring
-identical JSON-truncation position across unrelated prompts, and repeated
-literal echoing of the prompt's own angle-bracket placeholder syntax.~~
+and initially scored **0% (0/32)** on a 32-case intent-reliability batch
+against 75% for the CPU `LocalAIProvider`.
 
 **Corrected 2026-09-14 — the 0% was a framing bug on our side, and the
-"JSON truncation" never existed.** The model is Qwen2, ChatML-trained, and
+"JSON truncation" it appeared to show never existed.** The model is Qwen2, ChatML-trained, and
 `generate_all()` does not apply its chat template. It was being handed a bare
 instruction string, so it continued the prompt template rather than answering
 it — 820 characters of the JSON skeleton echoed back five and a half times.
@@ -824,11 +817,6 @@ it on the face. *(That was INA260 0x44 when written; it is **0x45** as of 2026-0
 the correction below, and note the check spent three weeks pointed at the arm rail.)* That is detection only: it never stops or faults, and it is not
 a substitute for a sense line.
 
-~~**Broken 2026-08-28.** 0x44 moved from the motor branch to the +12V main input,
-upstream of SW-M, so a cut no longer collapses the voltage it reads and this
-check reports healthy unconditionally. Recommended fix: relocate INA260 0x45
-(redundant now that the Witty Pi 5 HAT+ measures Pi current) into P3 downstream
-of SW-M, then repoint the `'motor'` rail key at it. Owner decision pending.~~
 
 ✅ **FIXED 2026-09-15 — but note how long the two halves were apart.** The hardware half of
 that recommendation was carried out: **0x45 now sits on the +12V bus** (reads 11.174V against
@@ -843,16 +831,10 @@ same 43mV of margin meant ordinary arm-servo droop would log `MOTOR POWER LOST` 
 bus perfectly healthy. Repointed to the `'bus_12v'` key, with the rail constants renamed for
 voltage rather than consumer, and pinned by `tests/test_motor_rail_identity.py` (4 tests).
 
-> ~~**UNVERIFIED as of 2026-08-28.**~~ ~~**CLOSED 2026-09-14, owner-confirmed.** The
-> three monitors are settled: **0x40 = 5V** (servos, sonar — measured 5.148V),
-> **0x44 = +12V main** (11.373V), **0x45 = Pi feed at 9V** (9.068V). Each reads the
-> voltage its assignment predicts, and the rails are 5/9/12V apart — not confusable.
-> `config.py` already recorded all three measurements, which is the bus-voltage check
-> this note asked for.~~
 >
-> ⚠ **RE-OPENED AND RE-CLOSED 2026-09-15.** That 2026-09-14 closure reasoned from `config.py`'s
-> *stored* August numbers rather than from a fresh read, and the monitors had been relocated in
-> between. Re-measured live: **0x40 = 4.986V (R2 5V), 0x44 = 6.043V (R3 6V arm), 0x45 = 11.174V
+> ⚠ **Rail identities, settled 2026-09-15 by a live read.** An earlier closure had
+> reasoned from `config.py`'s *stored* August numbers rather than a fresh read, while
+> the monitors had been relocated in between. Re-measured live: **0x40 = 4.986V (R2 5V), 0x44 = 6.043V (R3 6V arm), 0x45 = 11.174V
 > (+12V bus)**; owner confirms the 9V is monitored by the Witty Pi HAT, not an INA260.
 >
 > The note's own instruction was right and was not followed: it asked for a **bus-voltage read**,
@@ -870,7 +852,7 @@ gate E-stop once the sense pin exists; this is not a placeholder built ahead
 of the hardware, it's a real behavior change for the three faults that
 already fire today. `tests/test_brain_reset_gate.py` covers the brain.py-side
 logic off-hardware; the touchscreen's own tap detection needs the physical
-5" DSI panel (Master Hardware Design rev 2.1 §15.3) to verify.
+5" DSI panel (Master Hardware Design rev 2.2 §15.3) to verify.
 
 **S-2 — Encoder polling under-samples at speed. RECOMPUTED 2026-09-13, and the
 answer got worse.**
@@ -919,8 +901,8 @@ carries an LTC4311 for exactly this), tested against a full roll-call first
 given this session's I²C fragility history.
 
 *Interrupt-driven decode (decided 2026-08-18) — retracted 2026-08-23.*
-Reverted for three reasons: (1) ~~an isolation barrier the INTA wire would have
-crossed~~ — **void, see the note above; do not cite isolation as the blocker**;
+Reverted for three reasons: (1) an isolation barrier the INTA wire would have
+crossed — **void; do not cite isolation as the blocker**;
 (2) INTA only signals "something on port A changed" — learning what
 still costs an I²C read (`INTCAP`/`GPIO`), so every edge costs a bus
 transaction regardless, same as today's polling, which already decodes all
@@ -1082,7 +1064,7 @@ what the tests protect rather than by when they were written.
 | `test_sd_notify.py` (6) | sd_notify wire format, inertness without `NOTIFY_SOCKET`, abstract-socket translation, no exception into the 20 Hz tick from a dead socket, and that `READY=1` survives a failed self-test |
 | `test_expected_i2c_agreement.py` (5) | `brain.py` and `diagnostics.py` must expect the same bus |
 | `test_identity_store.py` (16) | FR-2100 store/matcher — three bands, pending-is-inert, wipe |
-| `test_battery_plausibility.py` (7) | §12 item 13 — a broken sensor is not a flat pack |
+| `test_battery_plausibility.py` (7) | §12 item 7 — a broken sensor is not a flat pack |
 | `test_tof.py` (17) | Floor profile, obstacle/drop classification, availability |
 | `test_sonar_tof_fusion.py` (7) | `min()` fusion, incl. the glass case sonar must still catch |
 
@@ -1132,62 +1114,30 @@ wants it.
 > requires hands on hardware. **No result in it has been observed**; the fields stay blank until
 > someone runs the procedure and writes down what happened.
 
-1. ~~Repoint `CLAUDE.md`.~~ Done 2026-08-18 — points at the current trio now,
-   with an explicit note on the rev 6.2.0-is-real-but-uncommitted situation.
-2. **Watchdog threshold inconsistency (S-6) — partially addressed 2026-08-18.**
+1. **Watchdog threshold inconsistency (S-6) — partially addressed 2026-08-18.**
    The two known tick-blocking culprits are fixed (see S-6); still needs a
    live `systemctl cat willy-rover.service` check and live verification that
    no tick now approaches the kill threshold.
-3. ~~**Wire an E-stop sense line (S-1).**~~ **NOT REQUIRED — closed by owner decision
-   2026-08-24, see S-1.** The latching mushroom switch cuts motor and arm power
-   physically and absolutely, and FR-300-001/002/003 are satisfied in hardware. This
-   item read as a live requirement and contradicted S-1's closure; corrected
-   2026-09-13. Retained only as an *optional* future enhancement — if a sense pin is
-   ever wanted for observability, the statement below is why it would help.
-
-   Original text: Blocks Directive 1 from being
-   represented in software at all.
-4. **Run `arm_jog.py` and record real per-joint limits (S-4).** Nothing else
+2. **Run `arm_jog.py` and record real per-joint limits (S-4).** Nothing else
    unblocks retrieval.
-5. ~~Give `Encoders.stalled()` a caller (S-7).~~ Done 2026-08-18 for the stall
-   half (see S-7) — not yet live-verified. Overcurrent half still open (no
-   trip threshold defined).
-6. **Bench-confirm `ENCODER_COUNTS_PER_REV`, `WHEEL_DIAMETER_M`,
+3. **`Encoders.stalled()` — overcurrent half still open.** The stall half was
+   given a caller 2026-08-18 (see S-7), not yet live-verified; the overcurrent
+   half has no trip threshold defined.
+4. **Bench-confirm `ENCODER_COUNTS_PER_REV`, `WHEEL_DIAMETER_M`,
    `TRACK_WIDTH_M` (S-2, S-3).**
-7. ~~Confirm smart-home direction with the owner (S-8).~~ Done 2026-08-18 —
-   outbound (Willie sends commands out) confirmed correct.
-8. ~~Integrate the accelerator into `vision.py` (§7).~~ Done 2026-08-21 —
-   Hailo YOLOv8 backend shipped, live-verified, enabled (`ENABLE_HAILO_VISION`).
-9. **Steering kinematics (crab/point-turn/arc turning).** Owner decision
+5. **Steering kinematics (crab/point-turn/arc turning).** Owner decision
    2026-08-18: deliberately deferred until basic drive is live-verified.
    Skid-steer stays the only turning mechanism — not an open question
    anymore, a scheduled-later item. See `motors.py::Steering`'s comment.
-10. ~~**Understand why the Hailo LLM (`qwen2:1.5b`) scored 0% on the intent-
-    reliability batch (§7).**~~ **Answered 2026-09-14: no ChatML role framing.**
-    The guesses recorded here were all wrong, which is worth keeping visible —
-    `clear_context()` was already correct, and simplifying the prompt alone did
-    not help. What helped was framing the prompt as a chat turn. Now 78% of
-    utterances produce an executable action, up from 16%. **The remaining
-    question is a different one: vocabulary drift** — the model returns `fetch`
-    for `retrieve` and `halt` for `stop`, understanding the request correctly
-    but labelling it with a synonym, at confidence 0.8-1.0. That is what to
-    attack next, and a confidence floor cannot help with it. Superseded text
-    kept below for the record; the original question is closed. Whether this
-    model/path is viable for this
-    task. `ENABLE_HAILO_LLM` stays off until this is understood.
-11. ~~**A real, separate I2C hardware fault found 2026-08-23**~~ — **CLOSED
-    2026-09-11.** Superseded by the 2026-09-08 bus rebuild, and the rebuilt flat
-    topology verified eleven devices across 20 consecutive scans with zero errors
-    (Master Hardware Design §0). The loose 3.3V wire and the non-responding 0x40
-    both belonged to a bus that no longer exists.
-12. ~~**Power delivery reworked 2026-08-23.**~~ — **CLOSED 2026-09-11.** Witty Pi
-    is fed from DROK-Pi at **~9V**, which is what this item said and what
-    `config.py:212` measured (9.068V). *(My 2026-09-11 closure claimed §0 recorded
-    9.5V and that this item was wrong; §0 was the wrong one, owner-confirmed
-    2026-09-14.)* The under-voltage problem it was chasing was separately
-    root-caused to a degraded regulator on the old bus supply (2026-08-21); that
-    rail has since been rebuilt entirely and the part is out of the build.
-13. **`sensors.py` cannot tell a broken sensor from a real zero.**
+6. **Hailo LLM vocabulary drift.** The original question — why `qwen2:1.5b`
+    scored 0% on the intent-reliability batch — was answered 2026-09-14: no
+    ChatML role framing. Framing the prompt as a chat turn took executable
+    actions from 16% to 78%. **What remains is a different problem:** the model
+    returns `fetch` for `retrieve` and `halt` for `stop`, understanding the
+    request correctly but labelling it with a synonym, at confidence 0.8–1.0. A
+    confidence floor cannot help with that. `ENABLE_HAILO_LLM` stays off until
+    it is addressed.
+7. **`sensors.py` cannot tell a broken sensor from a real zero.**
     **The hardware fault is FIXED as of 2026-09-14** — the divider is fed, in spec,
     and reading real pack voltage. **This software gap is not.** It was found because
     Master Hardware Design §0 recorded ADS1115 A0 at 0.0146V while the divider was

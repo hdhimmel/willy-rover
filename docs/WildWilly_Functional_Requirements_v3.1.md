@@ -15,7 +15,7 @@ Version 3.1**
   Status                  Hardware build complete; live verification in
                           progress
 
-  Companion documents     WildWilly Master Hardware Design rev 2.1 --- current
+  Companion documents     WildWilly Master Hardware Design rev 2.2 --- current
                           hardware configuration. Section references of the
                           form §n refer to it unless stated otherwise.
                           WildWilly Software Design rev 1.1 --- module
@@ -92,10 +92,10 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   exists, so FR-200-001/
                                                   003/004 are NOT proven.
                                                   See Master Hardware
-                                                  Design rev 2.1 §0 and
+                                                  Design rev 2.2 §0 and
                                                   open item 2, and
                                                   Software Design §12
-                                                  item 13 for the
+                                                  item 7 for the
                                                   software consequence.
 
   FR-300 Safety / E-stop  SATISFIED by hardware   Owner decision 2026-08-24:
@@ -268,18 +268,15 @@ against it. Directive 1 is enforced physically but is not represented in the
 control loop.
 
 **Design update 2026-08-23:** two dedicated physical cut switches, SW-M and
-SW-A, added to the distribution tree (Master Hardware Design rev 2.1 Section
+SW-A, added to the distribution tree (Master Hardware Design rev 2.2 Section
 2.1/2.3) -- SW-M in P3 on the motor supply; SW-A in P6, on the arm servo supply (6V DROK input — was the DZS, replaced 2026-08-28),
-~~which has no current monitor.~~ **which IS monitored, as of the 2026-09-15 identity
-correction: INA260 0x44 sits on R3, the 6V arm rail. SW-A cuts the 6V DROK's input, so
+**which IS monitored: INA260 0x44 sits on R3, the 6V arm rail. SW-A cuts the 6V DROK's input, so
 throwing it collapses R3 and 0x44 would read the drop — making the arm side of G-1
 observable in software for the first time. Not yet implemented; see Master Hardware
 Design §2.3.** SW-M's placement was intended to close the motor side of
 this gap by reading the current monitor then downstream of it (0x44). **That
 route closed on 2026-08-28** when 0x44 moved upstream to the +12V main input,
-reopening the motor side of G-1. ~~Recommended fix: relocate INA260 0x45 into P3
-downstream of SW-M — the Witty Pi 5 HAT+ measures the Pi's own current, making
-0x45 redundant where it currently sits. Owner decision pending.~~ ✅ **DONE — hardware
+reopening the motor side of G-1. ✅ **CLOSED — hardware
 2026-09-08/14, software 2026-09-15.** 0x45 now sits on the +12V bus (measured 11.174V against
 an owner-metered pack of 11.36V) and `brain.py::_check_motor_rail()` reads it via the
 `'bus_12v'` key. **The two halves were three weeks apart**, and in between the check was
@@ -291,12 +288,6 @@ mushroom E-stop is **not yet confirmed** -- whether these replace it, are
 driven by it, or are independent. Do not close this gap in code until that's
 settled, since it changes what "E-stop fired" actually means in the wiring.
 
-> ~~**UNVERIFIED as of 2026-08-28.** This regression assumes the device moving to
-> the 12V input is 0x44. The owner subsequently described the three monitors by
-> *rail* as Pi / UBEC 5V / DZS 6V, with the 5V and 6V staying put — which makes
-> the **Pi-rail** monitor the one that moves, and this regression spurious. That
-> conflicts with `config.py`'s measured 0x44 = 11.373V on the motor bus. Resolve
-> by reading bus voltage at 0x40/0x44/0x45 before treating this as fact.~~
 >
 > ✅ **RESOLVED 2026-09-15 by doing exactly what this note asked** — reading bus voltage at all
 > three addresses live, rather than quoting a stored figure. Result: **0x40 = 4.986V (R2 5V),
@@ -320,7 +311,7 @@ were themselves corrected two days later, on 2026-08-25, and it was never revisi
 With the measured values:
 
 -   `ENCODER_COUNTS_PER_REV` = **752**, not 3292 --- 11 PPR × 4 quadrature × **17.1:1**
-    reduction (`config.py:119`; Master Hardware Design rev 2.1 §7.1). The 823.1 PPR /
+    reduction (`config.py:119`; Master Hardware Design rev 2.2 §7.1). The 823.1 PPR /
     74.8:1 figures were never real.
 -   **620 RPM is the OUTPUT speed**, which the old text treated as unresolved.
     `config.py:123` settles it --- 620 RPM from a ~10.6k RPM bare motor through 17.1:1
@@ -353,7 +344,7 @@ this session's history of real I²C fragility on this bus.
 **Interrupt-driven decode (decided 2026-08-18) --- retracted 2026-08-23, do
 not implement as designed.** Three independent problems, not one:
 
-1. ~~**Breaks galvanic isolation.**~~ **PREMISE WITHDRAWN.** This reason was
+1. **Breaks galvanic isolation — PREMISE WITHDRAWN.** This reason was
    void even when written — the bus never had a real isolation barrier — and the
    hardware it referred to is out of the build. **Do not cite galvanic isolation
    as a blocker in future decisions.** The retraction stands on reasons 2 and 3,
@@ -715,8 +706,7 @@ visible as a logged overrun before it became a kill.
 > has a number attached — bare "stop" is safe by construction, conversational
 > "please stop right now" is not.
 >
-> ~~This is an owner decision, and three options exist...~~ **DECIDED AND FIXED
-> 2026-09-14.** `voice.py::is_emergency_stop()` now claims natural stop language
+> **DECIDED AND FIXED 2026-09-14.** `voice.py::is_emergency_stop()` now claims natural stop language
 > deterministically, before any model is consulted.
 >
 > It was **not** fixed by making the matcher broader, which the owner explicitly
@@ -795,8 +785,8 @@ visible as a logged overrun before it became a kill.
 >    large margin and still slow for conversation; STT, not the LLM, is now the
 >    dominant cost, which redirects where any further latency work should go.
 >
-> 5. ~~**The motion path has never been benchmarked at all.**~~ **BENCHMARKED AND FIXED
->    2026-09-14 — see the motion-path section below.** The original text follows.
+> 5. **The motion path: BENCHMARKED AND FIXED 2026-09-14** — see the motion-path
+>    section below.
 >
 >    schema (`{intent, args, reply}`). The STUCK path uses `_MOTION_SCHEMA`
 >    (`{action, duration, speed}`) with a different prompt built at
@@ -1107,14 +1097,11 @@ conditions:
     scale factor in `config.py` is set. Rail currents are read from the three
     INA260s at **0x40 (R2, 5V — steering servos, sonar, screen), 0x44 (R3, 6V arm
     servo rail) and 0x45 (+12V bus → both FeatherWing VIN)**. R1's 9V has no INA260;
-    the Witty Pi HAT monitors its own VIN. ~~0x44/0x45 were transposed in docs until
-    2026-08-24; 0x44 moved upstream to the main input 2026-08-28. **Identities CONFIRMED
-    2026-09-14 (owner).** Each monitor reads the voltage its assignment predicts — 0x40 = 5.148V,
-    0x44 = 11.373V, 0x45 = 9.068V — and the rails are 5/9/12V apart, so they cannot be
-    confused.~~ **CORRECTED 2026-09-15**: that 2026-09-14 confirmation quoted `config.py`'s stored
-    August numbers rather than a live read, and the monitors had been physically relocated in
-    between. Measured live with the pack at 11.36V: **0x40 = 4.986V, 0x44 = 6.043V,
-    0x45 = 11.174V**.
+    the Witty Pi HAT monitors its own VIN. **Measured live 2026-09-15 with the pack
+    at 11.36V: 0x40 = 4.986V, 0x44 = 6.043V, 0x45 = 11.174V.** Earlier confirmations
+    of these identities quoted `config.py`'s stored August numbers rather than a live
+    read, while the monitors had been physically relocated in between — **verify a
+    monitor by reading its rail, never by reading a constant.**
 
     ⚠ **The voltage half of FR-200-001 cannot currently be verified at all.** The
     divider fitted on 2026-09-02 has no +12V feed and A0 reads 0.0146V, so there is no
@@ -1175,7 +1162,7 @@ directly: *the Pi doesn't need this, the main power down is sufficient.*
 Rationale and scope, recorded so this is traceable rather than silently relaxed:
 
 -   The E-stop is a **latching mushroom switch that physically cuts motor and
-    arm power** (Master Hardware Design rev 2.1 §2.3). That cut is absolute and
+    arm power** (Master Hardware Design rev 2.2 §2.3). That cut is absolute and
     does not depend on software running, being responsive, or being correct.
     Software awareness would add logging and a reset gate — it would not make
     the stop itself any more reliable.
@@ -1194,10 +1181,7 @@ so it keeps issuing drive commands into unpowered controllers and logs nothing
 about the event. Two partial mitigations exist as of 2026-08-24:
 `brain.py::_check_motor_rail()` was written to detect motor-bus voltage
 collapse via INA260 0x44 while that monitor sat inline on the motor branch.
-~~**As of 2026-08-28 it no longer can** — 0x44 moved upstream of SW-M to the
-+12V main input, so a cut does not collapse what it reads. Retained here as
-the description of intent; the check currently reports a healthy rail
-unconditionally.~~ ✅ **WORKING AGAIN 2026-09-15.** It now reads **0x45** via the
+✅ **WORKING AGAIN 2026-09-15.** It now reads **0x45** via the
 `'bus_12v'` rail key, and 0x45 sits on the +12V bus downstream of SW-M. Between
 2026-08-28 and 2026-09-15 it was worse than merely blind: 0x44 had moved to the **6V
 arm rail**, which idles at 6.043V against `MOTOR_RAIL_MIN_V=6.0`, so a genuine cut
@@ -1550,7 +1534,7 @@ Master Hardware Design §11.1 carry the corrected table.
     **Unchanged by the 2026-09-13 SEN0628 decision:** that sensor's UART is planned
     for GP8/GP9, not GP14/GP15, so it does not reintroduce this conflict. The warning
     stands as written and the serial console must remain disabled — see Master
-    Hardware Design rev 2.1 §5.3 and §6.5.
+    Hardware Design rev 2.2 §5.3 and §6.5.
 
 -   **FR-800-003 (tilt detection).** Excessive tilt is detected from IMU
     output and halts motion. Verify the threshold against the rover's actual
@@ -1691,10 +1675,9 @@ separately under FR-1200.
 
     If a doorway is shut he **knocks and asks to be let in**, up to three attempts. The
     knock is a bounded, timed arm oscillation from a sonar-measured standoff --- never
-    "move until contact", ~~because the arm rail has no current monitor and nothing would
-    detect a servo pressing against a door.~~
+    "move until contact".
 
-    ⚠ **The premise changed 2026-09-15: the arm rail DOES have a current monitor.** INA260
+    ⚠ **The arm rail DOES have a current monitor (2026-09-15).** INA260
     **0x44** sits on R3, the 6V arm servo rail (owner-confirmed; reads 6.043V). The claim above
     was written when 0x44 was believed to be on the +12V bus.
 
