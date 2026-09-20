@@ -43,9 +43,8 @@ FR-2000 and G-2 against the as-built state.*
 *v3.0 gave every previously empty Acceptance Criteria section concrete pass/fail
 conditions, added a verification-status register (§V), and aligned all hardware
 references with the as-built configuration. **No requirement was added, removed or
-reworded** in v3.0 or v3.1; all 113 requirement IDs from v2.2 were retained unchanged.
-That statement remained in this header until 2026-09-13 while the four requirements
-above were being added under it.*
+reworded** in v3.0 or v3.1; all 113 requirement IDs from v2.2 were retained
+unchanged, except the four added above.*
 
 *v3.1 (2026-08-18) advances §V to the current implementation state, adds §V.1
 recording which requirement groups now have implementing modules and test
@@ -279,10 +278,8 @@ route closed on 2026-08-28** when 0x44 moved upstream to the +12V main input,
 reopening the motor side of G-1. ✅ **CLOSED — hardware
 2026-09-08/14, software 2026-09-15.** 0x45 now sits on the +12V bus (measured 11.174V against
 an owner-metered pack of 11.36V) and `brain.py::_check_motor_rail()` reads it via the
-`'bus_12v'` key. **The two halves were three weeks apart**, and in between the check was
-reading 0x44 — which had moved to the 6V arm rail — so a real cut was undetectable and arm
-droop could raise a false one. Pinned by `tests/test_motor_rail_identity.py`. The arm
-side (SW-A) still needs either a new INA260 or a direct switch-state sense.
+`'bus_12v'` key, pinned by `tests/test_motor_rail_identity.py`. The arm side (SW-A)
+still needs either a new INA260 or a direct switch-state sense.
 Relationship between SW-M/SW-A and the previously-documented latching
 mushroom E-stop is **not yet confirmed** -- whether these replace it, are
 driven by it, or are independent. Do not close this gap in code until that's
@@ -305,9 +302,6 @@ settled, since it changes what "E-stop fired" actually means in the wiring.
 **G-2 --- FR-500-002/004, encoder counts ARE under-sampled at speed.
 RECOMPUTED 2026-09-13.**
 
-This gap previously argued that the "~8.5 kHz per channel" figure was wrong and the
-real rate was "roughly 450-4,400 Hz". **That argument was built on constants which
-were themselves corrected two days later, on 2026-08-25, and it was never revisited.**
 With the measured values:
 
 -   `ENCODER_COUNTS_PER_REV` = **752**, not 3292 --- 11 PPR × 4 quadrature × **17.1:1**
@@ -322,10 +316,8 @@ So at full speed:
     620 RPM / 60 × 752 counts/rev  =  ~7,770 Hz per channel
 
 **~7.8 kHz against `sensors.py`'s ~1 kHz poll ceiling --- roughly 8× oversubscribed.**
-The old text was arguing this *down* toward 450-4,400 Hz; the real figure is close to
-the 8.5 kHz it was disputing. **The original concern was substantially right and the
-2026-08-23 correction that dismissed it was wrong.** This is no longer "genuinely
-unresolved" --- expect under-sampling and plan for it.
+**Expect under-sampling at speed and plan for it.** The per-channel rate is close
+to 8.5 kHz, not the few hundred Hz a lower counts-per-rev figure would imply.
 
 **Resolution:** bench test, not more arithmetic --- mark one wheel, jog it a
 known number of turns, read the counts. This settles counts/rev and the
@@ -344,10 +336,9 @@ this session's history of real I²C fragility on this bus.
 **Interrupt-driven decode (decided 2026-08-18) --- retracted 2026-08-23, do
 not implement as designed.** Three independent problems, not one:
 
-1. **Breaks galvanic isolation — PREMISE WITHDRAWN.** This reason was
-   void even when written — the bus never had a real isolation barrier — and the
-   hardware it referred to is out of the build. **Do not cite galvanic isolation
-   as a blocker in future decisions.** The retraction stands on reasons 2 and 3,
+1. **Galvanic isolation — NOT A REASON.** There is no isolation barrier on this
+   bus and never effectively was. **Do not cite galvanic isolation as a blocker in
+   future decisions.** The retraction stands on reasons 2 and 3,
    which are unaffected.
 2. **Saves no I²C transactions.** INTA only reports "something on port A
    changed" --- actually learning what changed still requires an I²C read
@@ -412,12 +403,11 @@ byte-identical to the repository copy except for a single missing line,
 repository file had been correct since 2026-08-02 (`df24199`) and simply was
 never deployed --- a stale unit for over a month.
 
-This reframes every dated entry in this gap. From 2026-08-02 until 2026-09-07
-**no systemd watchdog was armed at all**, so none of the mid-tick kills
-described above could actually have occurred, including the one the 2026-09-07
-G-5 update attributes to `f18af62`. That call was a real defect against the
-documented design and against `ask_sync()`'s contract, and it is still worth
-having fixed --- but it was never killing the process in the field, and this
+**No systemd watchdog was armed at all** between 2026-08-02 and 2026-09-07, so
+none of the mid-tick kills described above could actually have occurred. The
+`f18af62` call was a real defect against the documented design and against
+`ask_sync()`'s contract, and is still worth having fixed --- but it was never
+killing the process in the field, and this
 register should not be read as saying it was.
 
 The inverse gap ran for the same period and is the more serious one:
@@ -557,12 +547,9 @@ visible as a logged overrun before it became a kill.
 **G-6 --- FR-1500, Hailo NPU intent parsing: root cause found and fixed
 2026-09-14. Gap narrowed sharply, not closed.**
 
-> **The 0% was our bug, not the model's.** Everything this entry said between
-> 2026-08-23 and today blamed "the model's own output quality (recurring JSON
-> truncation, literal echoing of the prompt's placeholder syntax)". The echoing
-> was real. The diagnosis drawn from it was wrong, and wrong in the way this
-> register keeps warning about: a conclusion taken from an error message instead
-> of from the artifact. Nobody had looked at the bytes.
+> **The 0% was our bug, not the model's**, and it was diagnosed wrong for weeks
+> by reasoning from the symptom rather than the bytes. **Read the artifact before
+> theorising from an error string.**
 >
 > **What was actually happening.** The Hailo model is Qwen2. It ships a ChatML
 > chat template (`llm.prompt_template`) and its stop tokens are `<|im_end|>` and
@@ -632,9 +619,9 @@ visible as a logged overrun before it became a kill.
 > temperature and top_p moved the score by one case out of 32, i.e. noise. They
 > are now passed explicitly (`HAILO_LLM_TEMPERATURE`, `HAILO_LLM_TOP_P`,
 > `HAILO_LLM_MAX_TOKENS`) because leaving four generation parameters at `None` is
-> wrong on its own merits, but nothing should read that as the fix. Recorded here
-> because a plausible wrong hypothesis that gets quietly dropped is how the
-> original misdiagnosis survived three weeks.
+> wrong on its own merits, but nothing should read that as the fix. **Record a
+> hypothesis you abandoned** — a plausible wrong one that gets quietly dropped is
+> how a misdiagnosis survives.
 >
 > **The prompt lives in two places and must stay in sync.**
 > `voice.py::_interpret_local()` is what the rover sends;
@@ -741,8 +728,7 @@ visible as a logged overrun before it became a kill.
 >    here --- it is a live-behaviour decision for the owner, now that there is
 >    finally a real measurement to make it against.
 > 2. **The "0.7 confidence floor" is not a confidence threshold, and cannot be
->    tuned.** Corrected 2026-09-14 after reading the code rather than the
->    comments. `brain.py:1007` compares `HAILO_LLM_CONFIDENCE_FLOOR` against
+>    tuned.** `brain.py:1007` compares `HAILO_LLM_CONFIDENCE_FLOOR` against
 >    `AIResult.action_confidence`, and `ai_provider.py::_action_confidence()`
 >    returns **only 1.0 or 0.0** — 1.0 when the action name is recognised and
 >    duration/speed are in range, 0.0 otherwise. It is a boolean structural gate
@@ -994,8 +980,7 @@ signal conditioning board (Master Hardware Design §4.5). Pass conditions:
     **eleven** expected devices: 0x27 MCP23017, 0x40/0x44/0x45 INA260, 0x42/0x43
     PCA9685, 0x48 ADS1115, 0x4A BNO085, **0x51 Witty Pi 5**, 0x60/0x61 FeatherWing.
     Any missing address fails the gate; the run must not continue to FR-100-004
-    release. *(Corrected 2026-09-13 — this said ten and omitted 0x51, while §V's own
-    roll-call note said eleven. `brain.py:71` adds 0x51 to `_EXPECTED_I2C` whenever
+    release. *(`brain.py:71` adds 0x51 to `_EXPECTED_I2C` whenever
     `ENABLE_WITTY_PI` is True, which it is, so the gate has expected eleven since the
     HAT was fitted.)*
 
@@ -1009,9 +994,8 @@ signal conditioning board (Master Hardware Design §4.5). Pass conditions:
 -   **FR-100-002, false-negative exclusion.** A blank or partial scan while the
     base is unpowered is expected behaviour, not a fault. Every device sits on
     the Pi's own I²C via two passive hubs; **device logic is fed from the Pi's
-    own 3.3V, header pin 1** (Master Hardware Design §0 — this paragraph
-    previously said "the 3.3V DROK (R5)", which was corrected on 2026-09-14:
-    R5 feeds the Hall encoders and nothing else).
+    own 3.3V, header pin 1** (Master Hardware Design §0). R5 feeds the Hall
+    encoders and nothing else.
 
     **The requirement's substance is unchanged.** The devices themselves stay
     powered from the Pi, but their *loads* — the FeatherWing motor supply, the
@@ -1292,8 +1276,7 @@ left side (LF, LM, LR) and 0x61 the right (RF, RM, RR).
     since 2026-08-28 sits on the **+12V main input**, not the motor branch — so the
     reading includes every 12V consumer, not the motors alone. An unramped six-motor
     start is still one of the larger transients on that rail and remains visible, but
-    read it as total system draw. *(Corrected 2026-09-13 — this said "the motor-rail
-    INA260", which no longer exists.)*
+    read it as total system draw.
 
 -   **FR-400-004 (speed limits).** A command above the software cap is clamped,
     not refused silently and not passed through. This is Directive 4 and is a
@@ -1428,22 +1411,21 @@ Seven servos on PCA9685 0x43, channels CH0--CH6; CH7 is unused.
 **Channel order is not joint order, and the 2026-09-06 remap was never true of
 the hardware.** Measured on the bench 2026-09-17, one channel at a time with the
 owner observing which joint moved: **wrist pitch CH0, elbow CH1, shoulder CH2,
-second shoulder axis CH3, wrist rotate CH4, gripper CH5, base yaw CH6.** CH0--CH3
-were exactly reversed versus the paper remap; CH4--CH6 were already right. CH7 and
-every spare channel on 0x42 were probed and are electrically empty. `config.py` and
-Master Hardware Design §11.1 carry the corrected table.
+second shoulder axis CH3, wrist rotate CH4, gripper CH5, base yaw CH6.** CH7 and
+every spare channel on 0x42 were probed and are electrically empty. `config.py:158`
+and Master Hardware Design §8 / §16.11 carry the same table.
 
 -   **FR-700-001 (all joints).** ✅ **MET 2026-09-17** --- every one of the seven
     joints was driven and observed moving. The channel map in `config.py` is now
     the measured one.
 
-    ⚠ **The mirrored-pair requirement is RETRACTED.** This clause used to require
-    the shoulder be commanded as `J1b = 2 × 1500µs − J1a`. Hardware does not
-    support it: driving CH2/CH3 mirrored versus identically drew statistically the
-    same settled current (0.197A vs 0.176A, two amplitudes), where a genuine shared
-    axis driven the wrong way would fight hard. The derivation has been removed from
-    `arm.py`; keeping it would have commanded CH3 to 2250µs with the shoulder at its
-    verified 750µs waving position. What CH3 does on its own is not yet established.
+    ⚠ **Do NOT command the shoulder as a mirrored pair** (`J1b = 2 × 1500µs − J1a`).
+    Hardware does not support it: driving CH2/CH3 mirrored versus identically drew
+    statistically the same settled current (0.197A vs 0.176A, two amplitudes), where
+    a genuine shared axis driven the wrong way would fight hard. The derivation is
+    not in `arm.py`, and reinstating it would command CH3 to 2250µs with the shoulder
+    at its verified 750µs waving position. **What CH3 does on its own is not yet
+    established.**
 
     **The "confirm a servo is seated on CH0" caution was correct and is what
     surfaced all of this** --- it is retained in spirit as the rule below.
@@ -1798,9 +1780,7 @@ separately under FR-1200.
                     run
   -----------------------------------------------------------------------
 
-# Acceptance Criteria
-
-**Priority corrected 2026-09-13.** FR-1200-001 through -004 were marked High while
+# Acceptance Criteria FR-1200-001 through -004 were marked High while
 the mission table (M-006) reclassifies stair climbing as **STRETCH**. The mission
 classification is the intent; the priority column was stale. **FR-1200-005 remains
 High** — holding a standoff from stairs is a safety behaviour required *now*, and is
@@ -2167,9 +2147,7 @@ section behind it until now. Added 2026-08-02, v1.4.
 
 -   Wake-word detection, speech-to-text and response run on-device using the
     NPU accelerator, with no network dependency for core interaction.
-    **Which stage runs where, clarified 2026-09-13** — §V records intent parsing as
-    "live-verified on CPU only", which reads as contradicting this line. Both are
-    true of different stages: wake word (openwakeword) and STT (faster-whisper) run
+    **Which stage runs where:** wake word (openwakeword) and STT (faster-whisper) run
     on **CPU**; `ENABLE_HAILO_STT` is False. Vision runs on the **Hailo NPU**. Intent
     parsing is Hailo-primary (`ENABLE_HAILO_LLM=True`) with a Claude fallback, but
     has only ever been live-verified on the CPU path, which is what §V records. The
@@ -2597,9 +2575,7 @@ before the hard cutoff would ever be needed. The critical-level cutoff
 remains a backstop for cases where the proactive path didn\'t trigger in
 time (e.g. rapid voltage drop).
 
-# Acceptance Criteria
-
-**Corrected 2026-09-13.** This heading previously carried a generic document-level
+# Acceptance Criteria This heading previously carried a generic document-level
 summary — "WildWilly shall initialize correctly, operate safely under manual control,
 detect faults, avoid obstacles…" — which belongs at the front of the FRD, not under
 FR-1900, and left FR-1900 with no pass conditions at all. FR-1900-011's

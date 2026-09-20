@@ -48,13 +48,26 @@ and uncalibrated) and §16.14. **`BATTERY_DIVIDER_SCALE` is now wrong** — it w
 calibrated against the old board's mis-built divider, and the new board is built to the
 drawn value. §6.2 and §14 item 12 carry it as a safety item, not a tidiness one.
 
-**3. Strikethrough is gone from all three documents.** Every `~~struck~~` passage,
-superseded-but-retained block and "original text follows" note has been removed across
-this document, the FRD and the Software Design. Where a struck claim had a live
-correction beside it, only the correction remains; where an open item had been closed,
-the item is deleted. §14 lost two more items and Software Design §12 lost six, both
-renumbered with cross-references updated. **A document that records what a thing used
-to be is a document you have to read twice to learn what it is.**
+**3. These documents state what is true, not how they arrived at it.** Struck
+passages, superseded-but-retained blocks, "original text follows" notes, and dated
+"corrected on / this row previously said / that was wrong" narration are gone from all
+three. Where a wrong claim had a live correction beside it, only the correction
+remains; closed open items are deleted rather than annotated. §14 and Software Design
+§12 were both trimmed and renumbered, with cross-references updated.
+
+**Where a past error produced a standing rule, the rule survives without the story** —
+verify a monitor by reading its rail rather than a constant; a paper remap is not a
+rewiring; read the artifact before theorising from an error string. Those are §12
+constraints and inline cautions now, not incident reports.
+
+**Anything found to be wrong is corrected in place.** §16.11's arm channel map was
+still the superseded paper mapping and disagreed with both §8 and `config.py:158`; it
+now matches. §14's battery item still carried a "the divider is unfed again" block
+describing a board that is no longer in the rover.
+
+A document that records what a thing used to be is one you have to read twice to learn
+what it is. **The history lives in Master Engineering Package rev 6.2.0 and
+`docs/archive/`** — that is where to look for it.
 
 **4. §16.1 is a new device I/O index** — every device, every labelled line, its
 direction, and the device and pin on the other end, in one table. The per-device
@@ -113,11 +126,9 @@ Both hubs are **passive fan-outs**, so this is **one electrical segment**. There
 is no segmentation and no containment: any device holding SDA or SCL low takes
 the entire bus down. That happened repeatedly on 2026-09-07/08.
 
-**RESOLVED 2026-09-14 — the 4.7kΩ rail pull-ups are NOT fitted.** Owner-confirmed.
-This section previously claimed they were re-fitted, contradicting §3.2 and the §15
-BOM, which both said removed. §3.2 and the BOM were right.
+**The 4.7kΩ rail pull-ups are NOT fitted** (owner-confirmed).
 
-The bus therefore runs on the **Pi's own 1.8kΩ pull-ups on GP2/GP3**, plus whatever
+The bus runs on the **Pi's own 1.8kΩ pull-ups on GP2/GP3**, plus whatever
 the device breakouts carry. That is adequate — see §3.2's recomputation — and the 20
 consecutive clean scans confirm it.
 
@@ -131,15 +142,14 @@ that was **not** built.
 
 | Rail | Volts | Source | Feeds | Monitor |
 |------|-------|--------|-------|---------|
-| R1 | **9V** | DROK-Pi | Witty Pi 5 VIN → Pi | **Witty Pi HAT** (no INA260 — corrected 2026-09-15) |
+| R1 | **9V** | DROK-Pi | Witty Pi 5 VIN → Pi | **Witty Pi HAT** (no INA260) |
 | R2 | 5V | DROK-5V | Steering servos, sonar VCC, Pi screen | INA260 `0x40` |
 | R3 | 6V | DROK-6V | Arm servo distribution | — |
-| R5 | **3.3V** | DROK-4 | **Motor Hall encoders ONLY** — corrected 2026-09-14 | — |
+| R5 | **3.3V** | DROK-4 | **Motor Hall encoders ONLY** | — |
 | — | +12V | Battery via F1/KCD4/Q1 | Both FeatherWing VIN, all DROK inputs | INA260 `0x45` |
 
-⚠ **CORRECTED 2026-09-14 — I²C device logic is fed from the PI'S OWN 3.3V, not
-R5.** Owner-stated. Every table in this document said R5 fed "Hall encoders and all
-I²C device logic"; it feeds **the encoders only**. Two consequences, both material:
+⚠ **I²C device logic is fed from the PI'S OWN 3.3V, not R5** (owner-stated). R5
+feeds **the encoders only**. Two consequences, both material:
 
 1. **Pi header pin 1 (3V3) is loaded, and always has been.** It powers the whole
    device bus. The breakout HAT therefore **does** need a 3V3 line — it was dropped
@@ -250,10 +260,7 @@ distribution, signal conditioning board and motor drivers in the body tray.
 | P7 | Charge Y-cable (main + balance) → battery side of KCD4 | **12.6V** charge in | — | 14 AWG | — |
 | **P8** | +12V bus → **DROK-4** input | 12V → **3.3V** | **R5** | *unrecorded* | ⚠ **NO FUSE RECORDED** |
 
-**P8 was missing from this table entirely until 2026-09-20.** The rail it feeds
-(R5, the Hall encoders — §2.2) has been documented since 2026-08-28 and the
-converter has been fitted and live since 2026-09-11, but the path that gets 12V
-to it was never written down. Two things about it are still unknown:
+**Two things about P8 are unknown and need confirming at the hardware:**
 
 - ⚠ **Whether it is fused at all.** Every other +12V branch takes a numbered
   fuse (F2–F5). P8 appears to tap the bus directly. **Confirm physically and
@@ -343,14 +350,12 @@ graph TD
 | R1 | **9V** | **DROK-Pi** buck | Witty Pi 5 VIN (KF350-2P) → Witty Pi → Pi 5 | **Witty Pi HAT monitors its own VIN — no INA260** |
 | R2 | 5V | **DROK-5V** buck | Steering servo distribution, sonar VCC, Pi screen | INA260 **0x40** |
 | R3 | 6V | **DROK-6V** buck | Arm servo distribution | INA260 **0x44** |
-| R5 | **3.3V** | **DROK-4** buck | **Motor Hall encoders (JGA25-370B) ONLY** — corrected 2026-09-14; I²C device logic runs from the Pi's own 3.3V | — |
+| R5 | **3.3V** | **DROK-4** buck | **Motor Hall encoders (JGA25-370B) ONLY**; I²C device logic runs from the Pi's own 3.3V | — |
 | **R4** | **3V3** | **Pi header pin 1** | **All I²C device logic** (owner-stated 2026-09-14), plus the SEN0628. A live rail with a real load and a real budget — the Pi 5's 3V3 pin is good for a few hundred mA, which eleven devices' logic plus pull-ups sits inside, but it *is* a budget | — |
 | — | +12V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | INA260 **0x45** (P3 monitoring) |
 | — | +12V main | Battery via F1/KCD4/Q1 | All four DROK inputs | — |
 
-**R1 = 9V — owner-confirmed 2026-09-14, dispute closed.** §0 briefly recorded 9.5V and
-an earlier revision propagated that; it was wrong. `config.py:212`'s "VERIFIED 9.068V", §2.1's P4
-row, its diagram and §16.3 were all correct throughout.
+**R1 = 9V**, owner-confirmed, and `config.py:212` records "VERIFIED 9.068V".
 
 ⚠ **DROK inventory status — updated 2026-09-11.** Four DROK adjustable units, **all
 four now fitted and live** (§0): DROK-Pi (**9V**, R1), DROK-5V (R2), DROK-6V (R3),
@@ -358,7 +363,7 @@ DROK-4 (**3.3V**, R5). The rail voltages are settled; the note below is retained
 because one question inside it is still genuinely open.
 
 **Still open: what the encoders themselves want.** R5 is set to 3.3V and also feeds
-the encoders **and nothing else** (corrected 2026-09-14), which makes this question
+the encoders **and nothing else**, which makes this question
 **cleanly testable**: R5 can be changed without risk to any I²C device. Whether these Hall
 encoders need 3.3V or 5V is — the vendor part number was never captured, and the
 2.83V that killed them is uncomfortably close to 3.3V's lower tolerance. If they turn
@@ -392,11 +397,9 @@ or 5V** — the vendor part number was never recorded. If they want 4.5V+, R5 is
 the wrong rail regardless of how it measures.
 
 
-⚠ **R4 corrected 2026-08-25 (owner).** This table previously listed encoder
-distribution on R4, the Pi's own 3V3 header pin. That is wrong as-built: **the
-encoders are powered from the same rail as the MCP23017 expander that reads
-them**, so they share a reference. As-built that rail is **R5, the DROK-4 3.3V
-supply** (§0).
+**Encoders and their reader share a rail, and therefore a reference** — both on
+**R5, the DROK-4 3.3V supply** (§0). That property is deliberate; §4.7 preserves
+it when the expander is replaced.
 
 **Why a sagging rail killed the encoders and nothing else.** Every I²C device
 has enough headroom to keep working at 2.83V — MCP23017 down to 1.8V, PCA9685 to
@@ -605,23 +608,25 @@ zero bus errors. Expect eleven, not twelve: `0x70` is All-Call, not a device.
 | 0x40 | INA260 | 5V servo/steering rail current |
 | 0x42 | PCA9685 | Steering servos, CH0–CH5 |
 | 0x43 | PCA9685 | Arm servos, CH0–CH6 (CH7 unused, remapped 2026-09-06) |
-| 0x44 | INA260 | **R3, 6V arm servo rail** — corrected 2026-09-15 (was recorded as +12V main) |
-| 0x45 | INA260 | **+12V bus → both FeatherWing VIN** — corrected 2026-09-15 (was recorded as the 9V Pi feed). **Board rebuilt with new parts 2026-09-17** after it stopped ACKing entirely (20/20 direct reads failed while every other address answered); reads 11.364V @ 0.019A since, and identifies correctly as TI/INA260 (`MfgID 0x5449`, `DieID 0x2270`) |
+| 0x44 | INA260 | **R3, 6V arm servo rail** |
+| 0x45 | INA260 | **+12V bus → both FeatherWing VIN**. **Board rebuilt with new parts 2026-09-17** after it stopped ACKing entirely (20/20 direct reads failed while every other address answered); reads 11.364V @ 0.019A since, and identifies correctly as TI/INA260 (`MfgID 0x5449`, `DieID 0x2270`) |
 | 0x48 | ADS1115 | Battery voltage ADC |
 | 0x4A | BNO085 | 9-DoF IMU |
-| 0x60 | FeatherWing | Motor driver, **RIGHT** — corrected 2026-09-18 by M-1 (§7.2); read LEFT here from the original build until then |
-| 0x61 | FeatherWing | Motor driver, **LEFT** — corrected 2026-09-18 |
+| 0x60 | FeatherWing | Motor driver, **RIGHT**; read LEFT here from the original build until then |
+| 0x61 | FeatherWing | Motor driver, **LEFT** |
 
 **0x70 is the PCA9685 All-Call broadcast address, not a device.** It answers
 whenever either PCA9685 is alive. The LTC4311 bus accelerator has no address
 at all — it is a transparent pass-through and never appears in a scan.
 
-⚠ **REVERSED 2026-09-14 — a blank scan on USB-C power is now a FAULT, not expected.**
-This said a blank or partial scan with the base unpowered was normal, because
-dies with the 12V chain, so the Pi on USB-C alone sees nothing". That was true when
-device logic came off the isolated rail. **It does not any more: device logic runs
-from the Pi's own 3.3V, so a USB-C-powered Pi powers the whole device bus.** Expect a
-full eleven-device roll-call on USB-C alone. A blank scan means a real bus fault.
+⚠ **A blank scan on USB-C power is a FAULT, not expected behaviour.** Device logic
+runs from the Pi's own 3.3V, so a USB-C-powered Pi powers the whole device bus.
+**Expect a full eleven-device roll-call on USB-C alone.** A blank scan means a real
+bus fault.
+
+What *does* still go dark with the base unpowered is anything drawing from the 12V
+rails — the FeatherWing motor supply, the servo rails, the encoders on R5 — so
+devices answer while their loads are dead.
 
 What *does* still change with the base unpowered is anything drawing from the 12V
 rails — the FeatherWings' motor supply, the servo rails, the encoders on R5 — so
@@ -855,7 +860,7 @@ device sits on the other end of P1's TRIG and ECHO pins.
 | Radio | **unused — do not initialise** (§12) | **unused — do not initialise** (§12) |
 
 **Why Pico A sits on R5.** Encoders and their reader share a rail and therefore
-a reference — the property §2.2 was deliberately corrected to get. The Pico's
+a reference, which is the property §2.2 requires. The Pico's
 buck-boost holds 3.3V down to 1.8V in, so when R5 sags the encoders go static
 while the Pico stays alive to report it. The 2026-08-25 failure becomes a
 reported fault instead of a multi-day mystery.
@@ -923,8 +928,7 @@ bypasses the Pi's onboard input protection, so brownout protection is
 **not implemented in software at all.** Earlier revisions of this document
 claimed it was "firmware-only, via the INA260 at 0x44"; no such code exists
 (`safety.py` has no INA260 logic; `config.py:177` — monitors are log-only
-with no trip thresholds). Corrected 2026-08-28. There is no hardware
-supervisor either.
+with no trip thresholds). There is no hardware supervisor either.
 
 ### 5.2 AI HAT+ 2
 
@@ -992,14 +996,10 @@ times: eleven as first written on 2026-09-09, twelve when the ToF UART was added
 2026-09-13, thirteen when 3V3 was restored on 2026-09-14. **Count from this table, not
 from any prose figure elsewhere in the repo.**
 
-⚠ **REVERSED 2026-09-14 — 3V3 IS required, and this paragraph was wrong.** It said
-Pi 3V3 had no consumer and that device logic came from the DROK R5 rail. **It does
-not: the I²C device logic is fed from the Pi's own 3.3V** (owner-stated). R5/DROK-4
-feeds the **motor encoders only**.
-
-So **a 3V3 line does land here**, and it was removed from this list on 2026-09-11 on a
-false premise. It carries the entire device bus plus the SEN0628 — a real load on a
-pin the Pi 5 rates for a few hundred mA.
+⚠ **A 3V3 line IS required here.** The I²C device logic is fed from the Pi's own
+3.3V (owner-stated); R5/DROK-4 feeds the **motor encoders only**. That line carries
+the entire device bus plus the SEN0628 — a real load on a pin the Pi 5 rates for a
+few hundred mA.
 
 **The BNO085's other GPIO line does not land here either.** RST runs to
 MCP23017 **GPB4**, not to the Pi header (§6.3), which is why the expander must
@@ -1041,7 +1041,7 @@ is already mostly spent by the Pi's own 1.8kΩ pull-ups.
 
 ---
 
-**The 15° down-angle was undocumented until 2026-09-11** and is load-bearing for
+**The 15° down-angle is load-bearing for
 FR-1200-005: it is what puts the ground plane in frame, which is what makes
 camera-based stair-edge detection possible at all. Mount height is still
 unrecorded — **measure it**, because a ground-plane model needs both numbers and
@@ -1068,7 +1068,7 @@ height explicitly.
 > both see, which is the same argument §6.5 makes for keeping sonar alongside ToF.
 >
 > Cross-references: Software Design §6.5 (front obstacle fusion) and §6.6 (stair standoff);
-> `tof.py`; `vision.py`'s header, which until 2026-09-15 asserted "there is no depth sensor".
+> `tof.py`; and `vision.py`'s header.
 
 ### 5.5 Audio I/O
 
@@ -1208,17 +1208,15 @@ decision 2026-09-10, unchanged.
 | In the box | Sensor, PH2.0-4P cable, aluminium bracket + support, M3 screws and standoffs |
 | Docs | SKU SEN0628 — DFRobot wiki, `DFRobot_MatrixLidar` GitHub library, UF2 firmware over USB-C |
 
-**The FOV in the previous revision was wrong.** It recorded ~90° as the vertical
-spread, from the MusRock listing's "90° × 90°" claim. ST's real figure, which DFRobot
-states correctly, is **60° H × 60° V**, 90° on the *diagonal*. That matters: a 60°
-vertical puts the floor intersection at roughly **1.7× the mounting height**, not 1×,
-so materially fewer zones see carpet than the floor-profile section below assumed.
+⚠ **FOV is 60° H × 60° V — the 90° figure in some listings is the *diagonal*.**
+ST's real figure, which DFRobot states correctly, is 60×60. That matters: a 60°
+vertical puts the floor intersection at roughly **1.7× the mounting height**, not
+1×, so materially fewer zones see carpet than a 90° assumption predicts.
 
 **What the RP2040 changes:**
 
 - **No firmware upload on the Pi's bus.** A bare VL53L7CX needs ~84KB pushed at every
-  init; the RP2040 does that locally. That was the entire reason the previous revision
-  mandated the TCA9548A, and **that requirement is withdrawn**.
+  init; the RP2040 does that locally. **No TCA9548A multiplexer is required.**
 - **UART is available**, so the sensor can stay off the I²C bus completely.
 - **A firmware layer now sits between us and the sensor.** It does expose the raw 8×8
   matrix (confirmed in a purchaser's account of the serial output — rows y0–y7, eight
@@ -1451,11 +1449,9 @@ software still does not read it, so the FRD's statement remains true of the
 2026-08-25), quadrature encoders at 11 PPR on the motor shaft. One 6-pin JST-PH
 per motor.
 
-⚠ **This spec was wrong until 2026-08-25** — it read "6V nominal, ~100–200 RPM",
-which is a different gearbox entirely. Anything reasoned from the old figure is
-suspect, including any assumption that the motors were being over-driven by the
-11.4V rail. They are not: 12V motors on a 12V rail, running at their rated
-voltage.
+These are **12V motors on a 12V rail, running at their rated voltage** — they are
+not being over-driven by the 11.4V bus. The 100–200 RPM variants of this family are
+a different gearbox; do not reason about torque or counts from their figures.
 
 **620 RPM is a low-reduction, speed-optimised gearbox, and that is the reason
 drive torque is low.** Torque scales with gear reduction, so the 100–200 RPM
@@ -1486,17 +1482,16 @@ ENCODER_COUNTS_PER_REV, already flagged unconfirmed in config.py.
 recorded — capture it before ordering replacements, since JGA25-370 is a family
 covering many ratios and wire colours differ between batches (§7.2).
 
-That ratio also corrected `config.ENCODER_COUNTS_PER_REV`. It was 3292, derived
-as "823.1 PPR ×4"; 823.1 ÷ 11 PPR implies a **74.8:1** gearbox — the reduction
-matching the stale 100–200 RPM spec above, not these motors. The real figure is
-11 PPR × 4 × 17.1 = **752**, making the old constant 4.375× too high. Since
-`odometry.py` divides by it, reported distances were ~23% of actual from the
+That ratio sets `config.ENCODER_COUNTS_PER_REV` = 11 PPR × 4 × 17.1 = **752**.
+A figure of 3292 ("823.1 PPR ×4") implies a 74.8:1 gearbox, which belongs to the
+100–200 RPM variants, not these motors — it is 4.375× too high. Since
+`odometry.py` divides by it, that error reports distances at ~23% of actual from the
 encoder side alone; combined with the wheel-diameter error fixed the same day
 (0.065m assumed against 0.1016m real), dead reckoning under-reported by roughly
 **6.8×** before 2026-08-25.
 
-The 11 PPR figure itself still comes from this same section, which was wrong
-about the motors — so 752 is derived, not measured. `scripts/encoder_calibration.py`
+The 11 PPR figure comes from the same vendor section, so **752 is derived, not
+measured.** `scripts/encoder_calibration.py`
 confirms it by driving a wheel a known number of revolutions **under power** — not by
 hand, which produces no counts at all (§2.2: the encoder is behind the 17.1:1 gearbox
 and does not back-drive) — and settles
@@ -1606,8 +1601,7 @@ The old caution follows, for the reasoning. Settle it — **but not by hand.** �
 encoder sits on the motor shaft behind the 17.1:1 gearbox and does not back-drive.
 **Any encoder test must be under power**, driving one wheel at a time and reading which
 channel toggles. `scripts/encoder_calibration.py` is built on hand-turning and is
-therefore invalid on this hardware. (Contradiction corrected 2026-09-14; this section
-and §11.2 both said to turn wheels by hand.)
+therefore invalid on this hardware.
 
 **RESOLVED 2026-08-25 — the LEFT MIDDLE motor on 0x60 M1 was a disconnected
 connector, not a failed motor.** Reconnected during teardown; the wheel was
@@ -1713,10 +1707,9 @@ graph TD
     style ARM_SERVO fill:#fff0cc
 ```
 
-**Channel order is not joint order, and until 2026-09-17 this table was wrong.**
-The mapping below was **measured on hardware on 2026-09-17** — each channel driven
-alone with the owner watching which joint moved. It supersedes the 2026-09-06
-paper remap, which was never true of the physical wiring.
+**Channel order is not joint order.** The mapping below was **measured on hardware
+on 2026-09-17** — each channel driven alone with the owner watching which joint
+moved. Trust it over any paper mapping.
 
 | Joint | Servo | Channel | `config.py` name | Verified |
 |-------|-------|---------|------------------|----------|
@@ -1729,11 +1722,12 @@ paper remap, which was never true of the physical wiring.
 | J0 base yaw | MG996R | CH6 | `ARM_BASE` | 2026-09-17 |
 | — | unused | CH7 | — | nothing connected (probed) |
 
-**CH0–CH3 were exactly REVERSED versus the 2026-09-06 table; CH4, CH5 and CH6 were
-right.** The remap reversed the joint order on paper and the first four plugs were
-never reseated to match — or were reseated as a block in the opposite order. Every
-free channel on both PCA9685s was probed to be sure nothing was hiding elsewhere:
-0x43 CH7 and 0x42 CH6–15 are all electrically empty.
+Every free channel on both PCA9685s was probed to be sure nothing was hiding
+elsewhere: 0x43 CH7 and 0x42 CH6–15 are all electrically empty.
+
+> **A paper remap is not a rewiring.** Writing a channel reassignment down does not
+> move the plugs. **Drive one channel at a time and watch the joint** before trusting
+> any arm mapping, including this one.
 
 ⚠ **The mirrored-pair model is WRONG and has been removed from `arm.py`.** J1a/J1b
 were documented as one physical axis with `J1b = 2 × 1500µs − J1a`. Hardware
@@ -1784,7 +1778,7 @@ desoldering.
 
 | Pin | BCM | Connects to |
 |-----|-----|-------------|
-| 1 | 3V3 | **Feeds ALL I²C device logic** (owner-stated 2026-09-14), plus the SEN0628 ToF (<80mA, §6.5). ⚠ This row read "no consumer as-built" until 2026-09-14 — it was never true; the bus has always run from this pin |
+| 1 | 3V3 | **Feeds ALL I²C device logic** (owner-stated), plus the SEN0628 ToF (<80mA, §6.5). A live rail with a real budget, not a spare pin |
 | 2, 4 | 5V | Pi buck output |
 | 3 | GP2 | I²C SDA → GODIY hubs → all devices (§0) |
 | 5 | GP3 | I²C SCL → GODIY hubs → all devices (§0) |
@@ -1912,7 +1906,7 @@ not obvious from the schematic.
 
 11. Never run USB-C and the Pi buck simultaneously — two sources on one rail.
 12. Do not erode the Pi rail margin. Floor is 4.85V; measured 5.144V.
-13. The 5V rail worst case is already near 9A. **Rate it against DROK-5V, not the FEICHAO 8A UBEC** — the UBEC was replaced 2026-08-28 (§2.2). The DROK's rating is not recorded here; record it before treating any headroom figure as real. (Corrected 2026-09-14.)
+13. The 5V rail worst case is already near 9A. **Rate it against DROK-5V, not the FEICHAO 8A UBEC** — the UBEC was replaced 2026-08-28 (§2.2). The DROK's rating is not recorded here; record it before treating any headroom figure as real.
     Budget any new load on this rail before fitting it.
 14. Packs within 0.05V per cell before paralleling. Main Y first, balance Y
     a minute later.
@@ -1945,8 +1939,7 @@ not obvious from the schematic.
 
 ## 13. Verification Status
 
-Status as of **2026-09-11**. Rows carried from 2026-08-18 that §0 has since
-overtaken are corrected below rather than left standing.
+Status as of **2026-09-11**.
 
 | Item | Status | Evidence |
 |------|--------|----------|
@@ -1983,7 +1976,7 @@ overtaken are corrected below rather than left standing.
 | Signal conditioning board built | **PASS 2026-09-16** | Rev 15.1, full resistance matrix (§4.5). **Powered divider check still outstanding**, and it is what yields the battery calibration constant |
 | Breakout connections verified | **PARTIAL — a GROUND FAULT was found and fixed 2026-09-17** | The GeeekPi board as installed had a ground defect (owner-found and corrected). It is the leading explanation for the two destroyed sonars: with its GND return open, a sensor's return current flows through the TRIG/ECHO lines and the Pi's protection diodes, which floats the sensor's reference, holds ECHO high, and cooks the part — matching every symptom seen. Front channel verified working since. Original note follows: GeeekPi Micro GPIO Terminal Block fitted; connections not re-verified. Re-run the §16.12 checks, in particular check 6 — the three ECHO divider junctions at 3.2–3.4V. **If this board has no per-pin LEDs** (the "Micro" line generally does not, unlike GeeekPi's LED variant) then it is electrically passive and adds no load, which removes the LED concerns that applied to the HDO040 candidate. **Confirm that before skipping the re-meter** |
 | AI accelerator PCIe bond | PASS | `/dev/hailo0`; firmware 5.1.1, HAILO10H |
-| Pi-rail INA260 address | **PASS — 0x45** (corrected 2026-09-13) | `config.py:212` `INA260_PI_ADDR=0x45` ("VERIFIED 9.068V"); `config.py:210` `INA260_MOTOR_ADDR=0x44` is the +12V bus. |
+| Pi-rail INA260 address | **PASS — 0x45** | `config.py:212` `INA260_PI_ADDR=0x45` ("VERIFIED 9.068V"); `config.py:210` `INA260_MOTOR_ADDR=0x44` is the +12V bus. |
 | Sonars connected | ✅ **ALL THREE RANGE-TESTED AND WORKING, 2026-09-17** — first time since the build | Front 49.7cm, left 91.1cm, right 30.9cm, each stable to ±0.4cm over 8 samples and each reading its own direction (three distinct distances, so no cross-talk). **All three ECHO lines idle LOW and go low against a pull-down** — the healthy signature on every channel. Rail 4.990V @ **0.026A**, against 0.101A with one sensor and the 0.348A that flagged a short earlier the same day: no sensor is drawing fault current. Getting here took finding a reversed crimp pin that had not clicked home, a ground fault on the GeeekPi breakout (§5.3), and replacing two sensors destroyed by reverse polarity (§16.12) |
 | Encoder counts on all six channels | Not tested | — . ⚠ To be superseded: the MCP23017 path is replaced by Pico A (§4.7), and the bus drops to ten devices when 0x27 leaves |
 | BNO085 interrupt and fusion output | Not tested | INT on GP15 is unused by the driver; library polls over I²C |
@@ -1993,20 +1986,14 @@ overtaken are corrected below rather than left standing.
 | Motor direction and mapping | Not tested | — |
 | Motor crimps | 1 of 6 verified | — |
 
-⚠ **This section previously read "Nothing in the hardware build is outstanding."
-That was corrected on 2026-09-11 because it was false then, and the items it cited —
-an unfed battery divider, a breakout on order, an unresolved pull-up question — were
-all closed on 2026-09-14, along with the arm servo connector.
-
-**What remains is verification, not construction**, which is what the original line
-was trying to say and was simply three weeks early in saying it. Still outstanding:
+**What remains is verification, not construction.** Still outstanding:
 
 - **Encoder signal path** — no edges on any of six channels since 2026-08-25. Must be
   tested under power; hand-turning produces nothing (§16.9).
 - **Motor mapping** — `MOTOR_PORT` unverified since 2026-09-04, bench test needed.
 - **`arm_jog.py`** — per-joint limits still "Not tested"; now unblocked by the
   connector repair.
-- **`BATTERY_DIVIDER_SCALE`** — re-trim against a meter.
+- **`BATTERY_DIVIDER_SCALE`** — wrong for the fitted board; re-meter (§14 item 12).
 - **Breakout connections** — installed 2026-09-14, not re-verified (§16.12 check 6).
 - **SEN0628** — not yet fitted.
 
@@ -2026,65 +2013,22 @@ measurement work rather than wiring.
 
 1. **Motor crimps** — five of six unverified against the colour scheme in
    §7.1. Meter before first motion.
-2. ✅ **Battery divider calibration — CLOSED 2026-09-17** (`BATTERY_DIVIDER_SCALE` =
-   **0.3237**, measured 3.7229V ADC against 11.5V metered). The analysis below was right
-   to reopen it and wrong about the magnitude: it guessed ~1.5%, and the real error was
-   34%. What follows is kept because the *reasoning* about dates was sound. **New open
-   item in its place:** the measured ratio implies ~10k/4.7k, not the 10k/3.197k this
-   section describes — meter the fitted parts.
+2. **Battery sense cross-check — the software mitigation, and what it does not
+   cover.** `brain.py::_check_battery_crosscheck()` compares the ADS1115 divider
+   against INA260 `0x45` on the +12V bus and raises `⚠BATTERY SENSE SUSPECT` on
+   the face when they disagree (`tests/test_battery_crosscheck.py`).
 
+   **It does not catch an implausible reading** — `sensors.py`'s floor already
+   rejects those. What it catches is the more dangerous case that clears the
+   floor: a divider reading 7.5V from an 11.2V pack is plausible, gets adopted,
+   and walks the tier ladder to a shutdown nobody ordered.
 
-   **The stored value is plausible but unverified.** The current divider is 10kΩ
-   high against 10kΩ∥4.7kΩ ≈ 3.197kΩ low, giving a designed ratio of
-   3.197/(10+3.197) = **0.2423**. `BATTERY_DIVIDER_SCALE=0.2386` is within about
-   1.5% of that, which suggests the new divider was built to reproduce the
-   calibrated ratio rather than to replace it. Treat that as an explanation, not a
-   verification.
+   `0x45` is a usable proxy for pack voltage whenever the divider is suspect,
+   allowing ~0.19V for the fuse-and-switch drop.
 
-   **This also bears on §0's open item.** §0 says the divider "appears never to
-   have been fed", and a real August calibration would mean an earlier divider
-   *was* fed. Both can be true — different dividers. **And as of 2026-09-14 the
-   owner confirms the present divider is fed, in spec, and the ADS1115 reports real
-   pack voltage.** The "never fed" reading and the open-circuit theory that briefly
-   replaced it are both withdrawn — the feed was simply connected after §0 was
-   written. **What remains of this item is only the re-trim**: the stored
-   `BATTERY_DIVIDER_SCALE=0.2386` was calibrated for an earlier divider, and this
-   one's designed ratio is ~0.2423. Meter the pack, compare against `battery_pct`,
-   and adjust.
+   **The calibration constant itself is item 12** — it belongs to a board that is
+   no longer in the rover.
 
-   The software gap it exposed —
-   `sensors.py` cannot tell a broken sensor from a real zero — is unchanged by the
-   repair and stays open at Software Design §12 item 7.
-
-   ⛔ **RE-OPENED 2026-09-15 — THE DIVIDER IS UNFED AGAIN, AND THIS IS A SAFETY ITEM NOW,
-   NOT A CALIBRATION ONE.** Owner investigating the divider as of this entry. Measured:
-
-   | | |
-   |---|---|
-   | A0 | **0.025V**, stable over 6s (5-count spread) — should be ~2.7V off an 11.36V pack |
-   | `battery_volts` | 0.09V, rejected by `accept_battery_raw()`'s 5.0V floor |
-   | A1 | 0.002V |
-   | **A2 / A3** | **0.906V / 0.905V** — UNCONNECTED (`config.py:249`), so this is what a floating input reads on this board |
-
-   **That last row is the diagnosis.** A0 is *not* floating — it sits at 0.025V, pulled to
-   ground by the divider's low leg — so the wire from the divider midpoint to A0 is intact and
-   the **+12V feed into the top resistor is open**. The ADS1115 itself is healthy: it ACKs,
-   converts, and reads all four channels cleanly. Meter the high side at `V21`. Read all four
-   channels before suspecting the chip; the unconnected pair is a free control.
-
-   **Consequence while it is open:** `config.py` records the battery-tier ladder as the primary
-   safety mechanism and it currently has no input. The plausibility floor holds correctly, so
-   nothing acts on the bad number — but nothing will act on a genuinely flat pack either. Do
-   not leave Willie running unattended until it is repaired. `0x45` on the +12V bus is a usable
-   proxy meanwhile (10.97V at 13:41 on 2026-09-15; pack metered 11.36V earlier that day, a
-   0.19V fuse-and-switch drop).
-
-   **Mitigation landed the same day:** `brain.py::_check_battery_crosscheck()` compares the two
-   sources and raises `⚠BATTERY SENSE SUSPECT` on the face when they disagree. It would NOT
-   have caught this particular fault — 0.09V is already rejected by the implausibility floor —
-   but it catches the more dangerous one that clears that floor: a divider reading 7.5V from an
-   11.2V pack is plausible, gets adopted, and walks the tier ladder to a shutdown nobody
-   ordered. `tests/test_battery_crosscheck.py` (3).
 3. **PCA9685 V+ current path** — servo current now flows through each board's
    V+ terminal, PCB trace and channel headers rather than signal current
    only. Worst-case steering draw is near 9A. Confirm against the board's
@@ -2095,21 +2039,21 @@ measurement work rather than wiring.
    run and integrate, rather than relying on estimates.
 6. **Pi-rail buck identity** — DROK 12A LCD versus Elecbee 5V/5A across older
    documents. Electrically settled: the rail measures correctly and its
-   monitor is confirmed at **0x45** (corrected 2026-09-14; `config.py:212`). This is a labelling question only. Identify
+   monitor is confirmed at **0x45** (`config.py:212`). This is a labelling question only. Identify
    the physical part and fix §15.6.
 7. **JGA25-370B Hall output drive type** — push-pull or open-collector is
    unknown, and no official datasheet exists for this motor family. This
    decides whether external pull-ups are needed at all. Meter one output
    against VCC and GND with the shaft held.
 8. **Hailo NPU intent-parsing LLM — root cause found and fixed 2026-09-14, and it
-    WAS a config issue**, after three weeks written up as a real model failure
-    (`qwen2:1.5b` scoring 0% on a 32-case reliability batch). The model is ChatML-trained and the
+    WAS a config issue.** `qwen2:1.5b` had scored 0% on a 32-case reliability
+    batch. The model is ChatML-trained and the
     prompt was being sent with no role framing, so it continued the prompt
     template instead of answering it. 16% → 78% of utterances now produce an
     action the rover can carry out; the CPU path rose 72% → 97% from the same
     work. Still open, for different reasons now: see FRD v3.1 G-6 and Software
     Design v1.0 §7.
-9. ⚠ **RETARGET OR CLOSE (flagged 2026-09-13).** This item names **§3.1's** I²C
+9. ⚠ **RETARGET OR CLOSE.** This item names **§3.1's** I²C
    3.3V connector — but that bus was rebuilt on 2026-09-08 and §3.1's topology no
    longer exists. The loose connector it describes belonged to the isolated bus. If a
    mechanically marginal connection remains on the *current* flat topology, retarget
@@ -2146,11 +2090,11 @@ measurement work rather than wiring.
     11.36V — each value matches its rail, with the ~0.19V bus-vs-pack delta being the fuse and
     switch drop.
 
-    **Not a documentation error — a hardware change nobody followed.** The August figures were
-    correct when taken; the monitors were physically relocated afterwards (the unmerged
-    `docs/eplzon-rev3.2-ina260-relocation` branch), and neither `config.py` nor the design docs
-    followed them. Software Design §8 and FRD G-1 had both *recommended* precisely this
-    relocation; the hardware half was done and the software half was not, for about three weeks.
+> **A hardware change with no software half is worse than no change.** The monitors
+> were physically relocated (the unmerged `docs/eplzon-rev3.2-ina260-relocation`
+> branch) and neither `config.py` nor the docs followed. Recorded as a standing
+> caution, not as history: **verify a monitor by reading its rail, never by reading
+> a constant.**
 
     **It was not cosmetic.** `brain.py::_check_motor_rail()` — the only software observability
     for a motor-power cut — read the rail named `'motor'`, which had become the 6V arm monitor.
@@ -2158,9 +2102,7 @@ measurement work rather than wiring.
     arm-servo droop would have raised a false alarm. Repointed at the 12V bus, constants renamed
     for voltage rather than consumer, pinned by `tests/test_motor_rail_identity.py`.
 
-    ⚠ **The M-1 gate this item previously imposed is WITHDRAWN.** It said M-1 must wait because
-    the FeatherWing VIN might be browned out at 6V. That was wrong — 6.043V was the arm rail.
-    The +12V bus reads 11.174V and is healthy, so **M-1 is not blocked by rail voltage.**
+    **M-1 is not blocked by rail voltage** — the +12V bus reads 11.174V and is healthy.
 
 ---
 
@@ -2183,11 +2125,10 @@ measurement work rather than wiring.
     blocking unknowns are `dtoverlay=uart2` on the running image, and the UART
     framing contract that has to replace the 999cm sentinel before sonar can sit
     behind a serial link at all.
-16. ⚠ **P8 has no recorded fuse and no recorded gauge** (§2.1). The 12V feed to
-    DROK-4 was absent from the distribution tree until 2026-09-20; every other
-    +12V branch takes F2–F5. **Confirm whether a fuse exists, fit one if not,
-    and record the gauge.** Nothing monitors R5 either — no INA260 — and the
-    2026-08-25 encoder deaths happened on an unmonitored 3.3V rail.
+16. ⚠ **P8 has no recorded fuse and no recorded gauge** (§2.1). Every other +12V
+    branch takes a numbered fuse, F2–F5. **Confirm whether a fuse exists, fit one
+    if not, and record the gauge.** Nothing monitors R5 either — no INA260 — and
+    the encoders have already been lost once to an unmonitored 3.3V rail.
 
 ## 15. Bill of Materials
 
@@ -2216,7 +2157,7 @@ listed in §15.8 rather than carried as a line item.
 | Component | Role | Qty | Status |
 |-----------|------|-----|--------|
 | JGA25-370B gearmotor + encoder | Drive wheels | 6 | Installed |
-| Adafruit FeatherWing #2927 | I²C motor driver — **0x61 left, 0x60 right** (corrected 2026-09-18, §7.2) | 2 | Installed |
+| Adafruit FeatherWing #2927 | I²C motor driver — **0x61 left, 0x60 right** (§7.2) | 2 | Installed |
 | GDW DS041MG servo | Corner steering — PCA9685 0x42 | 6 | Installed |
 
 ### 15.3 Arm
@@ -2238,7 +2179,7 @@ listed in §15.8 rather than carried as a line item.
 | Adafruit LTC4311 | I²C accelerator — no address | 1 | Installed |
 | MCP23017 | Encoder GPIO expander, 0x27 | 1 | Installed |
 | ADS1115 | Battery voltage ADC, 0x48 | 1 | Installed |
-| INA260 current sensor | **0x40 = R2 5V, 0x44 = R3 6V arm, 0x45 = +12V bus** (corrected 2026-09-15) | 3 | Installed |
+| INA260 current sensor | **0x40 = R2 5V, 0x44 = R3 6V arm, 0x45 = +12V bus** | 3 | Installed |
 | Adafruit PCA9685 | 0x42 steering, 0x43 arm | 2 | Installed |
 | 1000µF 16V electrolytic | PCA9685 0x42 V+, C2 pad | 1 | Installed |
 | Rubycon 2200µF 16V low-ESR | PCA9685 0x43 V+, C2 pad | 1 | Installed |
@@ -2266,7 +2207,7 @@ listed in §15.8 rather than carried as a line item.
 | **DROK-Pi** adjustable buck | 12V → **9V** for Witty Pi VIN (R1) | 1 | **Installed** — live rail (§0) |
 | **DROK-5V** adjustable buck | 12V → 5.0V for steering servos, sonar VCC, screen (R2, INA260 0x40) | 1 | **Installed** — live rail (§0) |
 | **DROK-6V** adjustable buck | 12V → 6.0V for arm servos (R3) | 1 | **Installed** — live rail (§0) |
-| **DROK-4** adjustable buck | R5 — **3.3V**, **Hall encoders only** (corrected 2026-09-14). I²C device logic is on the Pi's own 3.3V | 1 | **Installed** — live rail |
+| **DROK-4** adjustable buck | R5 — **3.3V**, **Hall encoders only**. I²C device logic is on the Pi's own 3.3V | 1 | **Installed** — live rail |
 | — | — | — | — |
 | Rubycon ZL 1000µF 16V low-ESR | Pi 5V rail bulk, at header (from Witty Pi) | 1 | Installed |
 | 0.1µF ceramic | Pi 5V rail HF bypass | 1 | Installed |
@@ -2308,7 +2249,7 @@ Listed so their absence is deliberate and traceable, not an omission.
 
 **One item to confirm:** the Pi rail buck's identity is recorded inconsistently
 across older documents — a DROK 12A LCD unit in some, an Elecbee 5V/5A in
-others. The rail measures correctly and the monitor is confirmed at **0x45** (corrected 2026-09-14), so
+others. The rail measures correctly and the monitor is confirmed at **0x45**, so
 this is a labelling question rather than an electrical one. Confirm the part
 physically and settle §15.6. *(R1's 9V has no INA260 at all — the Witty Pi HAT
 monitors its own VIN, and 0x45 is on the +12V bus. See §16.3.)*
@@ -2427,8 +2368,12 @@ connector (§4.2).
 | | `CH0`–`CH5` | out | steering PWM | Steering servos LF, RF, LM, RM, LR, RR | signal |
 | **PCA9685** `0x43` | `V+` | pwr in | 6V (R3) | DROK-6V | output |
 | | logic | bidir | I²C, `A0`+`A1` bridged | GODIY hub | — |
-| | `CH0`–`CH2` | out | arm PWM | Shoulder R, Shoulder L, Elbow (MG996R) | signal |
-| | `CH3`–`CH5` | out | arm PWM | Wrist pitch, Wrist rotate, Gripper (MG90S) | signal |
+| | `CH0` | out | arm PWM | Wrist pitch (MG90S) | signal |
+| | `CH1` | out | arm PWM | Elbow (MG996R) | signal |
+| | `CH2` | out | arm PWM | Shoulder, lift axis (MG996R) | signal |
+| | `CH3` | out | arm PWM | Second shoulder axis (MG996R) | signal |
+| | `CH4` | out | arm PWM | Wrist rotate (MG90S) | signal |
+| | `CH5` | out | arm PWM | Gripper (MG90S) | signal |
 | | `CH6` | out | arm PWM | Base yaw (MG996R) | signal |
 | | `CH7` | — | unused | — | — |
 | **Motor × 6** | red | pwr in | motor + | FeatherWing | motor terminal (+) |
@@ -2492,11 +2437,12 @@ monitors were physically relocated after 2026-08-24 and nothing followed them:
 | 0x44 | 11.373V | **6.043V** | **R3, 6V arm servo rail** |
 | 0x45 | 9.068V | **11.174V** | **+12V bus → both FeatherWing VIN** |
 
-**R1's 9V has no INA260** — the Witty Pi HAT monitors its own VIN. The constants were renamed
-to state the *voltage* rather than a consumer (`INA260_5V_ADDR` / `INA260_ARM_6V_ADDR` /
-`INA260_BUS_12V_ADDR`), because a name like `INA260_MOTOR_ADDR` silently stops being true when
-the wire moves — which is exactly what happened, and it left `brain.py`'s motor-cut detector
-watching the arm supply for three weeks.
+**R1's 9V has no INA260** — the Witty Pi HAT monitors its own VIN.
+
+> **Name a monitor for its voltage, not its consumer.** The constants are
+> `INA260_5V_ADDR` / `INA260_ARM_6V_ADDR` / `INA260_BUS_12V_ADDR` because a name
+> like `INA260_MOTOR_ADDR` silently stops being true the moment the wire moves,
+> and nothing in software notices.
 
 **Physical placement (owner, 2026-08-24).** Viewed from the **front** of Willie,
 left to right:
@@ -2507,10 +2453,10 @@ left to right:
 | **Middle** | 0x44 | **6V** | **DROK-6V → arm servo distribution** |
 | **Right** | 0x40 | 5V | **5V DROK** → servos, sonar VCC, Pi screen |
 
-⚠ **Voltages and rails corrected 2026-09-15; the POSITIONS are not re-verified.** The
-address→position mapping above is from 2026-08-24 and only the wiring is known to have changed
-— but since the relocation moved wires, confirm which physical board is which before using this
-table to find one by hand.
+⚠ **The POSITIONS are not verified against the current wiring.** Voltages and rails
+are live-measured, but the address→position mapping predates the relocation that moved
+those wires. **Confirm which physical board is which** before using this table to find
+one by hand.
 
 Left and right were owner-stated; the middle follows by elimination (only three
 boards). Note the layout is 9V, 12V, 5V left-to-right — not sorted by voltage and
@@ -2539,7 +2485,7 @@ Four wires only. Transparent to the bus; never appears in a scan.
 of any device.** It is an edge-rate accelerator: on a long drop cable it adds
 capacitance at the wrong point and can mis-trigger. With twelve taps at 300–400pF and the 4.7kΩ rail pull-ups **not fitted** (§3.2), it
 earns its place — but **it is not what keeps the bus inside I²C timing**, which this
-paragraph claimed until 2026-09-14. §3.2's recomputation is the stronger claim: the
+paragraph would suggest. §3.2's recomputation is the stronger claim: the
 Pi's own 1.8kΩ pull-ups on GP2/GP3 now serve the whole segment, and 1.8kΩ at 400pF is
 ~2.2µs against a 10µs bit. The bus meets timing without the accelerator; the LTC4311
 improves margin rather than supplying it.
@@ -2589,12 +2535,9 @@ Convention: yellow to the even-numbered pin, green to the odd.
 
 **Connector note (owner-confirmed 2026-08-23, physical inspection):** the
 connector style at this end is the **same physical connector style** as the
-motor-side JST-PH plug (§7.1) — not Dupont as previously assumed here from
-the BOM's separate listing of "JST-PH 6-pin motor connectors" and "Dupont
-connectors" (§15.7). The two ends differ in **wire-color assignment**, not
-connector type. Do not use the earlier Dupont assumption when sourcing
-replacement connectors or planning the G-2 interrupt wire (§14 item 9) —
-match the actual JST-PH style in hand.
+motor-side JST-PH plug (§7.1) — **not Dupont**, despite the BOM listing both
+(§15.7). The two ends differ in **wire-colour assignment**, not connector type.
+Match the actual JST-PH style in hand when sourcing replacements.
 
 ### 16.7 FeatherWing #2927 × 2 — rows 11–12
 
@@ -2603,10 +2546,8 @@ match the actual JST-PH style in hand.
 | 0x60 | 11 | +12V via F2 and SW-M (no current monitor since 2026-08-28) | VCC/GND/SDA/SCL row 11 | M1 = LR, M2 = LM, M3 = LF, M4 spare |
 | 0x61 | 12 | same | row 12 | M1 = RR, M2 = RM, M3 = RF, M4 spare |
 
-Port order matches §7.2 and `config.MOTOR_PORT` — rear on M1, front on M3.
-This table previously read M1 = front / M3 = rear, which agreed with neither
-§7.2 nor `config.py`; corrected 2026-09-07. See the §7.2 warning — the
-rear-middle-front order itself is not bench-verified.
+Port order matches §7.2 and `config.MOTOR_PORT` — **rear on M1, front on M3.**
+See the §7.2 warning: the rear-middle-front order itself is not bench-verified.
 
 Standalone — no Feather host board. Direction and PWM are internal, so there
 are no direction GPIOs and no STBY pin.
@@ -2664,20 +2605,25 @@ Each plugs into a 3-pin channel header on the 0x42 board.
 Each plugs into a 3-pin channel header on the 0x43 board, through the arm
 bulkhead connector.
 
-| Joint | Servo | Channel |
-|---|---|---|
-| J1a shoulder right | MG996R | CH0 |
-| J1b shoulder left | MG996R | CH1 |
-| J2 elbow | MG996R | CH2 |
-| J4 wrist pitch | MG90S | CH3 |
-| J3 wrist rotate | MG90S | CH4 |
-| J5 gripper | MG90S | CH5 |
-| J0 base yaw | MG996R | CH6 |
-| — | unused | CH7 |
+| Joint | Servo | Channel | `config.py` |
+|---|---|---|---|
+| J4 wrist pitch | MG90S | **CH0** | `ARM_WRIST_PITCH` |
+| J2 elbow | MG996R | **CH1** | `ARM_ELBOW` |
+| J1 shoulder (lift axis) | MG996R | **CH2** | `ARM_SHOULDER` |
+| J1b second shoulder axis | MG996R | **CH3** | `ARM_SHOULDER_B` |
+| J3 wrist rotate | MG90S | CH4 | `ARM_WRIST_ROT` |
+| J5 gripper | MG90S | CH5 | `ARM_GRIPPER` |
+| J0 base yaw | MG996R | CH6 | `ARM_BASE` |
+| — | unused | CH7 | — |
 
-Synced to `config.py` 2026-09-07 — see §8 for the remap history and the CH0
-warning. J1a and J1b drive one axis as a mirrored pair and are commanded
-together.
+**Measured on hardware 2026-09-17**, each channel driven alone with the owner
+watching which joint moved, and matching `config.py:158-159`. §8 carries the
+per-joint detail. CH7 on 0x43 and CH6–15 on 0x42 were probed and are
+electrically empty.
+
+**J1b's function is not yet identified** — it moves the shoulder, but whether it
+is a mirrored partner to CH2 or an independent axis is unresolved. Do not command
+it as a mirrored pair on that assumption.
 
 ### 16.12 Sonar × 3
 
@@ -2870,8 +2816,7 @@ None of these touch the 40-pin header except the display's power tap.
 **Verified closed 2026-09-11 by reading `CLAUDE.md` itself.** It now states "Do
 not cite the old Master Engineering Package (any revision) as authoritative",
 explains that rev 6.0.7 contains no §5.7/§17.4, and records the correction. This
-section stayed titled "open" for three weeks after the fix landed, while Software
-Design had recorded it done on 2026-08-18 and was right all along.
+Software Design recorded it done on 2026-08-18.
 
 The finding is retained below because the *failure mode* is worth keeping.
 
