@@ -271,7 +271,7 @@ def read_frame(port=None,baud=None,timeout=0.2):
             '64 zones = 128 bytes, 4000 = invalid. It is POLLED, never streaming -- passive '
             'listening returns nothing, and that is correct. '
             'The sensor WORKS as of 2026-09-15: 200/200 clean frames at 0.13s each via '
-            'scripts/tof_probe.py -n 200, once its 3.3V was moved off the dormant TPSM chain '
+            'scripts/tof_probe.py -n 200, once its 3.3V was moved off a dormant supply rail '
             'onto the Pi 3V3 / I2C rail. So this function is unblocked and is simply not '
             'written yet -- port the framing out of scripts/tof_probe.py, which already does '
             'exactly this. Everything above this function is complete and tested, and takes any '

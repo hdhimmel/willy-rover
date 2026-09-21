@@ -16,8 +16,7 @@
 | Date | 2026-09-14 |
 | Owner | Howard Himmel |
 | Status | Implemented and off-hardware tested; partially live-verified. **Filename retains `v1.0` deliberately** — renaming breaks cross-references in the Master Hardware Design, the FRD and `CLAUDE.md`. The Revision field is authoritative. |
-| Supersedes | Software Design v1.0 (2026-08-18) |
-| Companions | Master Hardware Design **rev 2.1**; Functional Requirements v3.1 |
+| Companions | Master Hardware Design **rev 2.2**; Functional Requirements v3.1 |
 
 **Scope of this document.** This describes the software as it is currently
 written, in the repository `hdhimmel/willy-rover`. It describes structure and
@@ -75,7 +74,7 @@ refresh; treat those as approximate.
 | `mapping.py` | 68 | Learning-mode map recording session |
 | `diagnostics.py` | 64 | Standalone read-only self-test |
 | `privacy.py` | 59 | Mic/camera disable flag |
-| `arm.py` | 59 | Arm servo primitives. Channel map corrected against hardware 2026-09-17; mirrored-pair derivation removed; `center_all()` excludes the elbow |
+| `arm.py` | 59 | Arm servo primitives. Channel map measured on hardware; mirrored-pair derivation removed; `center_all()` excludes the elbow |
 | `storage.py` | 53 | Data root resolution and availability check |
 | `logsetup.py` | 42 | Logging config and `log_event` structured tags |
 | `arm_jog.py` | 39 | Interactive bench-calibration jog tool |
@@ -116,7 +115,7 @@ as a property of the codebase rather than a convention.
 ```
 
 The separation between the deliberative and reflex layers is the same rule
-carried in Master Hardware Design §12 rules 18–19. An obstacle stop must never
+carried in Master Hardware Design §12 rules 15–16. An obstacle stop must never
 depend on a detection frame arriving.
 
 ### 2.2 The safety gate
@@ -181,8 +180,7 @@ the inconsistency between this threshold and the systemd watchdog interval.
 
 `brain.py`'s dispatch table in `_tick()` has **fifteen entries**. The full state set is
 **seventeen**: `INIT` and `SENSOR_FAULT` are real states handled outside that table, and
-the table below lists all of them. (Corrected 2026-09-13 — the text said "fifteen states"
-while the table listed sixteen rows and omitted `WAVE` entirely.)
+the table below lists all of them.
 
 | State | Class | Entered when |
 |-------|-------|--------------|
@@ -315,9 +313,7 @@ legitimately needs one where passive observation does not.
    first import everywhere in this codebase, not a live re-read — don't assume setting the env
    var later in the same process affects code that already imported `config`.**
 
-   **Witty Pi 5 HAT+ (RTC and power management). Software was prepared ahead of physical
-   installation on 2026-08-20; the hardware IS NOW INSTALLED and live at 0x51 — corrected
-   2026-09-11, having said "not yet on the unit" for three weeks after it was fitted.** Per its own user manual
+   **Witty Pi 5 HAT+ (RTC and power management). Installed and live at 0x51.** Per its own user manual
    (UUGear, rev 1.03), it's an I²C-only device at 0x51 (`config.WITTY_PI_ADDR`) using no other
    GPIO. Two integration points, deliberately scoped narrow:
    - **Vendor software handles almost everything.** The `.deb` install (`wp5` CLI + `wp5d`
@@ -335,17 +331,13 @@ legitimately needs one where passive observation does not.
      wording, not a write) is best-effort against the documentation — **still not
      independently confirmed against the real device.** The hardware IS fitted (0x51 answers,
      §0 roll-call); what remains unverified is whether this heartbeat protocol actually
-     satisfies the watchdog. Corrected 2026-09-13 — this line said the hardware did not
-     exist, three weeks after it was installed.
+     satisfies the watchdog.
    - `config.ENABLE_WITTY_PI` is **`True`** (`config.py:227`), so `brain.py:71` adds 0x51 to
      `_EXPECTED_I2C` and the self-test expects eleven devices (§4.1 step 3). The flag exists
      precisely so the address is only expected once the hardware is present — enabling it
      before installation would make the self-test report a real device as missing every run.
-     It was flipped when the HAT went in. *(Rewritten 2026-09-13: this bullet previously
-     carried a struck "stays False" clause alongside "flip both on then, not before", which
-     read as contradicting the sentence in front of it.)*
-   - ~~**Open, unresolved**: the battery is wired via VUSB (USB-C), not the VIN screw
-     terminal…~~ **CLOSED 2026-09-13 — the premise no longer holds.** Witty Pi was refed
+     It was flipped when the HAT went in.
+   - **Witty Pi input — settled.** Witty Pi was refed
      through its **VIN screw terminal** from DROK-Pi on 2026-08-23 (Master Hardware Design
      §2.2), so registers #22/#23 monitor the input they were documented for and the question
      of whether they apply to a dropping VUSB is moot. The safety position is unchanged:
@@ -525,15 +517,13 @@ profile and the availability contract; `sensors.py::distances()` holds the fusio
 `scripts/calibrate_tof_floor.py` captures the profile. 24 tests
 (`tests/test_tof.py`, `tests/test_sonar_tof_fusion.py`).
 
-**What is deliberately NOT written: `tof.read_frame()`.** ~~The sensor has not arrived, so
-the wire format has never been observed, and it raises `NotImplementedError` with that
-said plainly rather than guessing at a frame layout.~~ **Updated 2026-09-15: the protocol IS
-now known** — read verbatim from `DFRobot_MatrixLidar.cpp` and implemented in
+**What is deliberately NOT written: `tof.read_frame()`.** **The protocol IS
+known as of 2026-09-15** — read verbatim from `DFRobot_MatrixLidar.cpp` and implemented in
 `scripts/tof_probe.py` (request `[0x55][argsNumH][argsNumL][cmd][args]`, `argsNum = len+1`;
 reply `[status][cmd][lenL][lenH][payload]`, `0x53` SUCCESS / `0x63` FAILED / `0xFF` filler;
 **polled, never streaming**). What is missing is a *working sensor*: unit #1 returned a handful
 of valid readings and nothing since, and a replacement was ordered. **Updated again the same day: the sensor works.** It was never faulty — it was powered from the
-dormant TPSM chain; moved to the Pi's 3V3 rail it returned **200/200 clean frames** at 0.13s
+on a dormant supply rail; moved to the Pi's 3V3 rail it returned **200/200 clean frames** at 0.13s
 each. `read_frame()` is therefore **unblocked and is now the next piece of work**: the protocol
 is proven end-to-end against real hardware, not merely read out of a header. It still raises
 `NotImplementedError` as of this entry only because nothing has been written yet — no longer
@@ -761,7 +751,7 @@ not ranging calibration. **The fix for ranging is not a better camera heuristic,
 multi-zone ToF** — a real depth sensor at the reflex layer. Do not fuse ToF zones into
 `localize()`: they answer different questions at different layers, and blending them would put
 a deliberative estimate inside a reflex path. (`vision.py`'s header asserted "there is no depth
-sensor" until 2026-09-15.) Per Master Hardware Design §12 rule 18: perception
+sensor" until 2026-09-15.) Per Master Hardware Design §12 rule 15: perception
 feeds `world_model.py` for planning and classification only. It does not gate
 a stop.
 
@@ -770,13 +760,11 @@ a stop.
 `AIProvider` alternative to `LocalAIProvider`, sharing the NPU with vision the
 same way (`Hailo.TARGET`). It loads and runs (`hailo_platform.genai.LLM`,
 model `qwen2:1.5b` — Phi-2 is not obtainable on this rover's delivery path),
-~~but a 32-case intent-reliability batch scored **0% (0/32)** against it,
-versus 75% for the existing CPU `LocalAIProvider`. Failure modes: a recurring
-identical JSON-truncation position across unrelated prompts, and repeated
-literal echoing of the prompt's own angle-bracket placeholder syntax.~~
+and initially scored **0% (0/32)** on a 32-case intent-reliability batch
+against 75% for the CPU `LocalAIProvider`.
 
-**Corrected 2026-09-14 — the 0% was a framing bug on our side, and the
-"JSON truncation" never existed.** The model is Qwen2, ChatML-trained, and
+**The 0% was a framing bug on our side, and the "JSON truncation" it appeared to
+show never existed.** The model is Qwen2, ChatML-trained, and
 `generate_all()` does not apply its chat template. It was being handed a bare
 instruction string, so it continued the prompt template rather than answering
 it — 820 characters of the JSON skeleton echoed back five and a half times.
@@ -820,44 +808,28 @@ representation in the control loop and cannot be logged. What changed is that
 this is now an accepted design position rather than an open gap. Partial
 observability was added the same day — `brain.py::_check_motor_rail()` watches
 the **+12V bus monitor** for the voltage collapse a cut produces, logging it and surfacing
-it on the face. *(That was INA260 0x44 when written; it is **0x45** as of 2026-09-15 — see
-the correction below, and note the check spent three weeks pointed at the arm rail.)* That is detection only: it never stops or faults, and it is not
-a substitute for a sense line.
+it on the face. The monitor is INA260 **0x45**. That is detection only: it never
+stops or faults, and it is not a substitute for a sense line.
 
-~~**Broken 2026-08-28.** 0x44 moved from the motor branch to the +12V main input,
-upstream of SW-M, so a cut no longer collapses the voltage it reads and this
-check reports healthy unconditionally. Recommended fix: relocate INA260 0x45
-(redundant now that the Witty Pi 5 HAT+ measures Pi current) into P3 downstream
-of SW-M, then repoint the `'motor'` rail key at it. Owner decision pending.~~
 
-✅ **FIXED 2026-09-15 — but note how long the two halves were apart.** The hardware half of
-that recommendation was carried out: **0x45 now sits on the +12V bus** (reads 11.174V against
-an owner-metered pack of 11.36V) and **0x44 moved to the 6V arm rail** (reads 6.043V, matching
+✅ **Rail assignments as fitted.** **0x45 sits on the +12V bus** (reads 11.174V against
+an owner-metered pack of 11.36V) and **0x44 on the 6V arm rail** (reads 6.043V, matching
 the DROK-6V spec). R1's 9V is monitored by the Witty Pi HAT, not by any INA260.
 
-**The software half — "repoint the `'motor'` rail key at it" — was never done**, so for about
-three weeks `_check_motor_rail()` watched the *arm* supply while believing it watched the motor
-bus. That failed in both directions at once: a genuine cut collapses the +12V bus and leaves the
-arm rail at ~6.04V, safely above `MOTOR_RAIL_MIN_V=6.0`, so **the cut was undetectable**; and the
-same 43mV of margin meant ordinary arm-servo droop would log `MOTOR POWER LOST` with the motor
+> **A rail key pointed at the wrong monitor fails in both directions at once.** A
+> genuine cut collapses the +12V bus and leaves the arm rail at ~6.04V, safely above
+> `MOTOR_RAIL_MIN_V=6.0`, so **the cut is undetectable**; and the
 bus perfectly healthy. Repointed to the `'bus_12v'` key, with the rail constants renamed for
 voltage rather than consumer, and pinned by `tests/test_motor_rail_identity.py` (4 tests).
 
-> ~~**UNVERIFIED as of 2026-08-28.**~~ ~~**CLOSED 2026-09-14, owner-confirmed.** The
-> three monitors are settled: **0x40 = 5V** (servos, sonar — measured 5.148V),
-> **0x44 = +12V main** (11.373V), **0x45 = Pi feed at 9V** (9.068V). Each reads the
-> voltage its assignment predicts, and the rails are 5/9/12V apart — not confusable.
-> `config.py` already recorded all three measurements, which is the bus-voltage check
-> this note asked for.~~
 >
-> ⚠ **RE-OPENED AND RE-CLOSED 2026-09-15.** That 2026-09-14 closure reasoned from `config.py`'s
-> *stored* August numbers rather than from a fresh read, and the monitors had been relocated in
-> between. Re-measured live: **0x40 = 4.986V (R2 5V), 0x44 = 6.043V (R3 6V arm), 0x45 = 11.174V
+> ⚠ **Rail identities, settled 2026-09-15 by a live read.** An earlier closure had
+> reasoned from `config.py`'s *stored* August numbers rather than a fresh read, while
+> the monitors had been relocated in between. Re-measured live: **0x40 = 4.986V (R2 5V), 0x44 = 6.043V (R3 6V arm), 0x45 = 11.174V
 > (+12V bus)**; owner confirms the 9V is monitored by the Witty Pi HAT, not an INA260.
 >
-> The note's own instruction was right and was not followed: it asked for a **bus-voltage read**,
-> and a stored measurement from three weeks earlier is not that. The rails really are far apart
-> and really are unconfusable — *once actually measured*.
+> **A stored measurement is not a bus-voltage read.** The rails are far apart and
+> unconfusable — *once actually measured*.
 
 
 The reset-gate *mechanism* itself is no longer blocked on that wiring, though.
@@ -870,20 +842,17 @@ gate E-stop once the sense pin exists; this is not a placeholder built ahead
 of the hardware, it's a real behavior change for the three faults that
 already fire today. `tests/test_brain_reset_gate.py` covers the brain.py-side
 logic off-hardware; the touchscreen's own tap detection needs the physical
-5" DSI panel (Master Hardware Design rev 2.1 §15.3) to verify.
+5" DSI panel (Master Hardware Design rev 2.2 §15.3) to verify.
 
 **S-2 — Encoder polling under-samples at speed. RECOMPUTED 2026-09-13, and the
 answer got worse.**
 
-This entry argued, on 2026-08-23, that the "~8.5kHz/channel" concern was overstated
-and the real figure was "roughly 450–4,400 Hz". **That argument used constants which
-were themselves corrected two days later**, on 2026-08-25, and it was never revisited.
 With the measured values:
 
 - `ENCODER_COUNTS_PER_REV` = **752**, not 3292 — 11 PPR × 4 quadrature × **17.1:1**,
   not 823.1 PPR × 4 on a ~74.8:1 box (`config.py:119`, Master Hardware Design §7.1).
-- **620 RPM is the OUTPUT speed**, which the old entry treated as unresolved.
-  `config.py:123` settles it: 620 RPM from a ~10.6k RPM bare motor through 17.1:1.
+- **620 RPM is the OUTPUT speed.** `config.py:123`: 620 RPM from a ~10.6k RPM bare
+  motor through 17.1:1.
   It is corroborated by the ~3.3 m/s theoretical top speed on 101.6mm wheels.
 
 So the per-channel edge rate at full speed is:
@@ -892,10 +861,7 @@ So the per-channel edge rate at full speed is:
 620 RPM / 60 × 752 counts/rev  =  ~7,770 Hz per channel
 ```
 
-**~7.8 kHz against a ~1 kHz poll ceiling — roughly 8× oversubscribed.** The 2026-08-23
-entry was arguing this concern *down* toward 450–4,400 Hz; the real number is close to
-the 8.5 kHz it was disputing. **The original concern was substantially right, and the
-correction that dismissed it was wrong.**
+**~7.8 kHz against a ~1 kHz poll ceiling — roughly 8× oversubscribed.**
 
 This does not change what to do — a bench test still settles it, and arithmetic is not
 a substitute for one. It changes the expectation you should carry into that test: plan
@@ -907,25 +873,21 @@ matters only once the encoders produce edges at all; they have produced none sin
 fix is `dtparam=i2c_arm_baudrate=400000` (~4x, no wiring — this bus already
 carries an LTC4311 for exactly this), tested against a full roll-call first
 
-> **Note 2026-09-08:** the retraction below cites the ISO1540 and the isolated
-> side. Both are gone — the isolator was removed and there is no isolation
-> barrier any more (Master Hardware Design §0). Reason (1) is therefore void in
-> addition to having had its premise corrected on 2026-08-28. **Reasons (2) and
-> (3) still stand and the retraction still holds** — an interrupt only says
-> "something changed", so learning what still costs a register read. Waveshare's
-> MCP23017 board can also mirror INTA/INTB in `IOCON`, so either pin could reach
-> GP7 if interrupt-driven decode is ever revisited.
+> **Note:** reason (1) below is **void** — it rested on an isolation barrier the
+> bus never really had. **Reasons (2)
+> and (3) still stand and the retraction still holds** — an interrupt only says
+> "something changed", so learning what still costs a register read.
+>
+> ⚠ **The whole question is moot under Master Hardware Design §4.7:** the
+> MCP23017 is to be replaced by a Pico 2 W doing quadrature decode in PIO, over
+> UART. There is no expander left to interrupt.
 
 given this session's I²C fragility history.
 
 *Interrupt-driven decode (decided 2026-08-18) — retracted 2026-08-23.*
-Reverted for three reasons: (1) the MCP23017 lives on the isolated side of
-the ISO1540 (§3.1); wiring its INTA pin to a bare Pi GPIO runs a conductor
-straight across the isolation barrier, which needs its own isolator channel
-to do safely — a part and a failure mode added for the gain described in
-(2); **[Premise corrected 2026-08-28: GND1/GND2 are not
-galvanically separate and never were — Master Hardware Design §3.1. The
-retraction stands on (2) and (3); do not cite isolation as the blocker.]** (2) INTA only signals "something on port A changed" — learning what
+Reverted for three reasons: (1) an isolation barrier the INTA wire would have
+crossed — **void; do not cite isolation as the blocker**;
+(2) INTA only signals "something on port A changed" — learning what
 still costs an I²C read (`INTCAP`/`GPIO`), so every edge costs a bus
 transaction regardless, same as today's polling, which already decodes all
 twelve channels in two reads per cycle; interrupt-driven is not cheaper and
@@ -934,9 +896,8 @@ plausibly worse (one transaction per edge vs. one per poll for everything);
 needed, and GP7 was the only free pin earmarked. There's also a stuck-
 interrupt failure mode if edges outrun userspace servicing. The
 `IOCON.MIRROR`/`INTCON`/`GPINTEN` configuration and `GPIO.add_event_detect()`
-callback this entry previously described need to be reverted in
-`sensors.py::Encoders`; polling remains the actual mechanism. GP7 reverts to
-free/unused.
+callback must not be used in `sensors.py::Encoders`; polling is the actual
+mechanism, and GP7 stays free.
 
 **S-3 — Odometry rests on two unmeasured constants.** `WHEEL_DIAMETER_M` and
 `TRACK_WIDTH_M` are both marked UNCONFIRMED placeholders in `config.py`. Every
@@ -959,8 +920,8 @@ tick, so a single tick blocking anywhere *near* 500ms gets the process killed
 by systemd mid-tick, before that tick's own overrun-logging (which runs after
 `_tick()` returns) ever executes. The two known code paths that could push a
 tick that long — `retrieval_task.py`'s `_grasp()` (~1.1s) and the wave-hello
-gesture (~1.5s), both previously blocking via `time.sleep()` — are now
-non-blocking, tick-serviced step machines. No other per-tick blocking call is
+gesture (~1.5s) — are non-blocking, tick-serviced step machines rather than
+`time.sleep()` calls. No other per-tick blocking call is
 currently known, which closes the *known cause*, not the risk structurally.
 Raising `WatchdogSec` or lowering `TICK_OVERRUN_THRESHOLD_S` further is still
 sound general hygiene, just no longer urgent the same way. Unverified on live
@@ -1086,7 +1047,7 @@ what the tests protect rather than by when they were written.
 | `test_sd_notify.py` (6) | sd_notify wire format, inertness without `NOTIFY_SOCKET`, abstract-socket translation, no exception into the 20 Hz tick from a dead socket, and that `READY=1` survives a failed self-test |
 | `test_expected_i2c_agreement.py` (5) | `brain.py` and `diagnostics.py` must expect the same bus |
 | `test_identity_store.py` (16) | FR-2100 store/matcher — three bands, pending-is-inert, wipe |
-| `test_battery_plausibility.py` (7) | §12 item 13 — a broken sensor is not a flat pack |
+| `test_battery_plausibility.py` (7) | §12 item 7 — a broken sensor is not a flat pack |
 | `test_tof.py` (17) | Floor profile, obstacle/drop classification, availability |
 | `test_sonar_tof_fusion.py` (7) | `min()` fusion, incl. the glass case sonar must still catch |
 
@@ -1097,7 +1058,7 @@ second classification onward. The I²C drift only appeared when two files were c
 device-sharing refcount leak has no symptom until the *next* process start. All three had been
 live for weeks behind passing tests.
 
-**Three of them were written wrong before the code was.** In each case the test was corrected,
+**Three tests were wrong before the code was.** In each case the test was fixed,
 not the code: an array-wrapped payload is legitimately *recovered* rather than rejected; `READY=1`
 lives in `start()` rather than `__init__`; and a repo-wide grep for the old prompt literal had to
 become an AST scan, because docstrings quote that literal deliberately to record the fix. Noted
@@ -1136,63 +1097,30 @@ wants it.
 > requires hands on hardware. **No result in it has been observed**; the fields stay blank until
 > someone runs the procedure and writes down what happened.
 
-1. ~~Repoint `CLAUDE.md`.~~ Done 2026-08-18 — points at the current trio now,
-   with an explicit note on the rev 6.2.0-is-real-but-uncommitted situation.
-2. **Watchdog threshold inconsistency (S-6) — partially addressed 2026-08-18.**
+1. **Watchdog threshold inconsistency (S-6) — partially addressed 2026-08-18.**
    The two known tick-blocking culprits are fixed (see S-6); still needs a
    live `systemctl cat willy-rover.service` check and live verification that
    no tick now approaches the kill threshold.
-3. ~~**Wire an E-stop sense line (S-1).**~~ **NOT REQUIRED — closed by owner decision
-   2026-08-24, see S-1.** The latching mushroom switch cuts motor and arm power
-   physically and absolutely, and FR-300-001/002/003 are satisfied in hardware. This
-   item read as a live requirement and contradicted S-1's closure; corrected
-   2026-09-13. Retained only as an *optional* future enhancement — if a sense pin is
-   ever wanted for observability, the statement below is why it would help.
-
-   Original text: Blocks Directive 1 from being
-   represented in software at all.
-4. **Run `arm_jog.py` and record real per-joint limits (S-4).** Nothing else
+2. **Run `arm_jog.py` and record real per-joint limits (S-4).** Nothing else
    unblocks retrieval.
-5. ~~Give `Encoders.stalled()` a caller (S-7).~~ Done 2026-08-18 for the stall
-   half (see S-7) — not yet live-verified. Overcurrent half still open (no
-   trip threshold defined).
-6. **Bench-confirm `ENCODER_COUNTS_PER_REV`, `WHEEL_DIAMETER_M`,
+3. **`Encoders.stalled()` — overcurrent half still open.** The stall half was
+   given a caller 2026-08-18 (see S-7), not yet live-verified; the overcurrent
+   half has no trip threshold defined.
+4. **Bench-confirm `ENCODER_COUNTS_PER_REV`, `WHEEL_DIAMETER_M`,
    `TRACK_WIDTH_M` (S-2, S-3).**
-7. ~~Confirm smart-home direction with the owner (S-8).~~ Done 2026-08-18 —
-   outbound (Willie sends commands out) confirmed correct.
-8. ~~Integrate the accelerator into `vision.py` (§7).~~ Done 2026-08-21 —
-   Hailo YOLOv8 backend shipped, live-verified, enabled (`ENABLE_HAILO_VISION`).
-9. **Steering kinematics (crab/point-turn/arc turning).** Owner decision
+5. **Steering kinematics (crab/point-turn/arc turning).** Owner decision
    2026-08-18: deliberately deferred until basic drive is live-verified.
    Skid-steer stays the only turning mechanism — not an open question
    anymore, a scheduled-later item. See `motors.py::Steering`'s comment.
-10. ~~**Understand why the Hailo LLM (`qwen2:1.5b`) scored 0% on the intent-
-    reliability batch (§7).**~~ **Answered 2026-09-14: no ChatML role framing.**
-    The guesses recorded here were all wrong, which is worth keeping visible —
-    `clear_context()` was already correct, and simplifying the prompt alone did
-    not help. What helped was framing the prompt as a chat turn. Now 78% of
-    utterances produce an executable action, up from 16%. **The remaining
-    question is a different one: vocabulary drift** — the model returns `fetch`
-    for `retrieve` and `halt` for `stop`, understanding the request correctly
-    but labelling it with a synonym, at confidence 0.8-1.0. That is what to
-    attack next, and a confidence floor cannot help with it. Superseded text
-    kept below for the record; the original question is closed. Whether this
-    model/path is viable for this
-    task. `ENABLE_HAILO_LLM` stays off until this is understood.
-11. ~~**A real, separate I2C hardware fault found 2026-08-23**~~ — **CLOSED
-    2026-09-11.** Superseded by the 2026-09-08 bus rebuild: the isolator, the
-    isolated rail and the Seengreat breakout are all out, and the rebuilt flat
-    topology verified eleven devices across 20 consecutive scans with zero errors
-    (Master Hardware Design §0). The loose 3.3V wire and the non-responding 0x40
-    both belonged to a bus that no longer exists.
-12. ~~**Power delivery reworked 2026-08-23.**~~ — **CLOSED 2026-09-11.** Witty Pi
-    is fed from DROK-Pi at **~9V**, which is what this item said and what
-    `config.py:212` measured (9.068V). *(My 2026-09-11 closure claimed §0 recorded
-    9.5V and that this item was wrong; §0 was the wrong one, owner-confirmed
-    2026-09-14.)* The under-voltage problem it was chasing was separately
-    root-caused to a degraded AMS1117 (2026-08-21) and the rail has since been
-    rebuilt entirely.
-13. **`sensors.py` cannot tell a broken sensor from a real zero.**
+6. **Hailo LLM vocabulary drift.** The original question — why `qwen2:1.5b`
+    scored 0% on the intent-reliability batch — was answered 2026-09-14: no
+    ChatML role framing. Framing the prompt as a chat turn took executable
+    actions from 16% to 78%. **What remains is a different problem:** the model
+    returns `fetch` for `retrieve` and `halt` for `stop`, understanding the
+    request correctly but labelling it with a synonym, at confidence 0.8–1.0. A
+    confidence floor cannot help with that. `ENABLE_HAILO_LLM` stays off until
+    it is addressed.
+7. **`sensors.py` cannot tell a broken sensor from a real zero.**
     **The hardware fault is FIXED as of 2026-09-14** — the divider is fed, in spec,
     and reading real pack voltage. **This software gap is not.** It was found because
     Master Hardware Design §0 recorded ADS1115 A0 at 0.0146V while the divider was
@@ -1227,25 +1155,23 @@ wants it.
 
 ---
 
-## Arm control, as corrected 2026-09-17
+## Arm control
 
-`arm.py` changed in three ways after the channel map was measured on hardware. All
-three are load-bearing, not cosmetic.
+`arm.py` rests on three facts established by driving the hardware, all
+load-bearing rather than cosmetic.
 
-**1. The channel map was wrong and is now measured.** `_JOINTS` used
-`ARM_SHOULDER_A`/`ARM_SHOULDER_B` on CH0/CH1 per the 2026-09-06 paper remap. The
-hardware has **wrist pitch CH0, elbow CH1, shoulder CH2, second shoulder axis CH3** —
-CH0--CH3 exactly reversed. `ARM_SHOULDER_A` is now `ARM_SHOULDER` (CH2), and the
-`'shoulder_a'` joint key is `'shoulder'`; `retrieval_task.py` and its test were
-updated to match.
+**1. The channel map is measured, not derived.** The hardware has **wrist pitch
+CH0, elbow CH1, shoulder CH2, second shoulder axis CH3**, wrist rotate CH4, gripper
+CH5, base yaw CH6. `_JOINTS` uses `ARM_SHOULDER` (CH2) and the joint key is
+`'shoulder'`; `retrieval_task.py` and its test match.
 
-**2. The mirrored-pair derivation was removed.** `set_pulse()` used to drive
-`shoulder_b = 2*ARM_SERVO_CENTER_US - shoulder_a` and raise on a direct `shoulder_b`
-command. Hardware says CH2/CH3 are not one axis: mirrored and same-direction commands
-drew statistically identical settled current (0.197A vs 0.176A) where a real shared
-axis driven wrongly would fight hard. The derivation was also unsafe — at the
-verified 750µs waving position it would have commanded CH3 to 2250µs. `set_pulse()`
-is now a plain clamped write and every joint is independently addressable.
+**2. There is no mirrored-pair derivation, and there must not be one.**
+`set_pulse()` is a plain clamped write; every joint is independently addressable.
+**Do not reinstate `shoulder_b = 2*ARM_SERVO_CENTER_US - shoulder_a`.** CH2/CH3 are
+not one axis — mirrored and same-direction commands drew statistically identical
+settled current (0.197A vs 0.176A) where a real shared axis driven wrongly would
+fight hard — and the derivation is unsafe: at the verified 750µs waving position it
+commands CH3 to 2250µs.
 
 **3. `center_all()` skips the elbow.** See the startup note above.
 

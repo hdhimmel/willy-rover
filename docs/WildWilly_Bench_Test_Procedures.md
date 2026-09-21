@@ -252,7 +252,7 @@ had never been observed. `ENABLE_TOF=False`.
 > ✅ **LARGELY CLOSED 2026-09-15 — the sensor works.** Transport, protocol and sensor are all
 > verified: **200/200 clean frames** at 0.13s each, 62–63 of 64 zones live.
 >
-> **Root cause of the day spent getting there: it was powered from the dormant TPSM chain**, not
+> **Root cause of the day spent getting there: it was powered from a dormant supply rail**, not
 > from the Pi's 3V3 / I²C rail (R4). A marginal supply boots the RP2040 far enough to light its
 > LED, hold TX idle-high and answer a few commands, then go quiet — so every "is it powered?"
 > check passed. **Prove which RAIL a device is on, not just that it has voltage.**
@@ -331,7 +331,7 @@ three times on 2026-09-15.
 | Reads consistent at fixed distance | |
 
 **Supply — record this, it was the whole fault.** 3.3V must come from the **Pi 3V3 / I²C rail
-(R4)**, never the TPSM/AMS1117 chain, which has been dormant since 2026-09-08. The sensor adds
+(R4)**. The rail it was originally on is out of the build entirely. The sensor adds
 up to 80mA to R4 and is now its largest single consumer; nothing monitors that rail, so if it
 goes tight the symptom is I²C flakiness appearing after `ENABLE_TOF` goes True.
 

@@ -117,7 +117,11 @@ class IMU:
     # called it optional, a still-unreconciled contradiction (not addressed by this change).
     def __init__(self):
         if not config.SIMULATE_HARDWARE:
-            self._i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
+            # frequency= does NOT set the bus speed on Blinka/Linux -- the kernel i2c driver
+            # does, via dtparam=i2c_arm_baudrate. Passing config.I2C_BAUDRATE keeps the stated
+            # intent in one place rather than leaving a 100000 literal here that would quietly
+            # contradict the kernel the moment the dtparam is raised. See config.I2C_BAUDRATE.
+            self._i2c=busio.I2C(board.SCL,board.SDA,frequency=config.I2C_BAUDRATE)
             mcp=MCP23017(self._i2c,address=config.ENCODER_ADDR)
             reset_pin=mcp.get_pin(config.IMU_RST_MCP_PIN)
             self._bno=BNO08X_I2C(self._i2c,reset=reset_pin,address=config.IMU_ADDR)
@@ -290,8 +294,8 @@ class ADC:
 class Encoders:
     # MCP23017 @0x27 (§9.1), quadrature A/B per wheel, polled. G-2 (FRD v3.1 §V.2): interrupt-
     # driven decode was decided 2026-08-18 and retracted 2026-08-23 -- it would have wired the
-    # MCP23017's INTA pin (isolated side of ISO1540, §3.1) straight to a bare Pi GPIO, running a
-    # conductor across the isolation barrier, and would not actually have reduced I2C transaction
+    # MCP23017's INTA pin straight to a bare Pi GPIO for no gain: it would not have reduced
+    # I2C transaction
     # count anyway (an interrupt only says "something changed"; learning what still costs a
     # register read, same as polling). The "~8.5kHz/channel" figure that motivated it was also
     # wrong -- it double-counted the gearbox reduction already baked into ENCODER_COUNTS_PER_REV.
