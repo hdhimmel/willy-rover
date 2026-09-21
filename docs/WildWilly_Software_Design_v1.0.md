@@ -517,19 +517,31 @@ profile and the availability contract; `sensors.py::distances()` holds the fusio
 `scripts/calibrate_tof_floor.py` captures the profile. 24 tests
 (`tests/test_tof.py`, `tests/test_sonar_tof_fusion.py`).
 
-**What is deliberately NOT written: `tof.read_frame()`.** **The protocol IS
-known as of 2026-09-15** — read verbatim from `DFRobot_MatrixLidar.cpp` and implemented in
-`scripts/tof_probe.py` (request `[0x55][argsNumH][argsNumL][cmd][args]`, `argsNum = len+1`;
-reply `[status][cmd][lenL][lenH][payload]`, `0x53` SUCCESS / `0x63` FAILED / `0xFF` filler;
-**polled, never streaming**). What is missing is a *working sensor*: unit #1 returned a handful
-of valid readings and nothing since, and a replacement was ordered. **Updated again the same day: the sensor works.** It was never faulty — it was powered from the
-on a dormant supply rail; moved to the Pi's 3V3 rail it returned **200/200 clean frames** at 0.13s
-each. `read_frame()` is therefore **unblocked and is now the next piece of work**: the protocol
-is proven end-to-end against real hardware, not merely read out of a header. It still raises
-`NotImplementedError` as of this entry only because nothing has been written yet — no longer
-because anything is unknown. Everything above it takes any
-callable returning 64 millimetre values, which is exactly how it was developed and
-tested with the rover powered down. `ENABLE_TOF=False`.
+**The sensor works and the protocol is known; `tof.read_frame()` is the one piece not
+written.** The protocol was read verbatim from `DFRobot_MatrixLidar.cpp` and is implemented in
+`scripts/tof_probe.py` — request `[0x55][argsNumH][argsNumL][cmd][args]` with
+`argsNum = len+1`; reply `[status][cmd][lenL][lenH][payload]`, `0x53` SUCCESS / `0x63` FAILED /
+`0xFF` filler; **polled, never streaming**. On the Pi's 3V3 rail the sensor returns **200/200
+clean frames** at 0.13 s each, so the protocol is proven end-to-end against real hardware
+rather than merely read out of a header. `read_frame()` raises `NotImplementedError` only
+because nothing has been written yet.
+
+**The frame source is injected, and in production it is a poller, not the transport.**
+`brain.py` builds `tof.FramePoller(read_frame)` and assigns `sonars.tof` when
+`config.ENABLE_TOF`. The poller exists because `distances` is read on the tick thread and the
+transport is a ~0.13 s blocking round trip — 2.6 ticks of a 20 Hz loop against
+`TICK_OVERRUN_THRESHOLD_S`, every tick. It wraps the *source* rather than `ToFSensor`, which
+keeps the injected-transport design intact: `ToFSensor`, `distances` and
+`tests/test_sonar_tof_fusion.py` are unchanged.
+
+A cached frame older than `TOF_STALE_AFTER_S` is served as **no frame**, so `ToFSensor` marks
+itself unavailable and the rover falls back to sonar alone. That is the ToF's degradation rule
+and not the sonar's — see §6.8.4, where nothing sits underneath the sonar and staleness must
+mean stop. Holding the last good frame forward would be worse than either.
+
+`capture_profile()` must keep taking `read_frame` directly: it averages N frames and needs N
+*distinct* ones, which a poller cannot supply. `scripts/calibrate_tof_floor.py` does this
+correctly. Covered by `tests/test_tof_poller.py`. `ENABLE_TOF=False`.
 
 A multi-zone ToF sensor joins the front sonar — see Master Hardware Design §6.5 for
 the part and the mounting constraints. The software consequence is deliberately
@@ -717,6 +729,171 @@ Not a better prompt, and not a better threshold. Either a more capable on-device
 moving the specific failing intents off the model entirely — which is what was done for
 `stop` on 2026-09-14, and is the pattern to follow for any other intent whose failure has a
 physical consequence.
+
+## 6.8 Pico coprocessor link — protocol, backends and failure semantics
+
+The hardware side of the two-Pico redesign is Master Hardware Design §4.7: Pico A takes the
+six quadrature encoders, Pico B takes the three HC-SR04s and the BNO085 reset. This section is
+the software half — the wire protocol, how the backends slot in, and what each failure mode
+means. It is design; nothing here is fitted.
+
+### 6.8.1 Frame format
+
+One line protocol, both boards, newline-terminated ASCII at 115200 8N1.
+
+```
+A,<seq>,<t_us>,<lf>,<lm>,<lr>,<rf>,<rm>,<rr>,<mode>,<crc16>\n
+B,<seq>,<t_us>,<front_mm>,<left_mm>,<right_mm>,<st_f>,<st_l>,<st_r>,<crc16>\n
+```
+
+ASCII rather than binary, deliberately. The encoder stream at 50 Hz is under 1 KB/s against
+11.5 KB/s available, so compactness buys nothing — while `cat /dev/ttyAMA2` showing readable
+frames is a diagnostic that needs no script, no library and no bench rig. This rover has lost
+whole sessions to devices that were silent for reasons a human eye would have caught in a
+second.
+
+- `seq` — monotonic uint16, wraps. A reset to 0 means that Pico rebooted; the Pi logs it rather
+  than absorbing it, because a rebooting board and a dead board must not look alike.
+- `t_us` — the Pico's own microsecond clock at sample time. The measurement carries the
+  timestamp of the board that took it, never of the moment Linux got round to reading the line.
+- `crc16` — CRC-16-CCITT over everything before the final comma, hex. **Table-driven on the Pi
+  side.** A bitwise implementation over a ~60-byte frame is ~480 CPython iterations, roughly
+  150 µs, which at 50 Hz is ~0.75% of a core spent checksumming — most of what the ASCII choice
+  is supposed to cost nothing. A 256-entry table makes it ~20 µs. A frame failing CRC is
+  dropped and logged as desync, never repaired; `tof.py` already applies that rule to a frame
+  of the wrong length and the reasoning is identical.
+
+Commands, Pi to Pico:
+
+| Command | Pico A | Pico B |
+|---|---|---|
+| `ID?` | replies `ID,pico-a,<fw>,<sha>` and begins streaming | replies `ID,pico-b,<fw>,<sha>` |
+| `ZERO` | zeroes all six counts | not accepted |
+| `IMURST` | not accepted | pulses BNO085 RST, replies with an explicit ack |
+| anything else | ignored and logged | ignored and logged |
+
+`ID?` exists so `diagnostics.py` can print both firmware versions in its FR-1100-004 report.
+The firmware states its own version, so no document can be wrong about which build is flashed.
+
+### 6.8.2 The two boards start differently, and must keep doing so
+
+**Pico A stays silent until it receives a valid `ID?`.** Its link is the Pi 5 service port,
+which is the Pi's own boot console: firmware and bootloader diagnostics come out of it before
+Linux exists, and a bootloader may accept input on it. A board that streams from power-on
+injects bytes into every boot. Waiting to be asked also puts the Pi in control of when the link
+goes live, which is after `brain.py` is up and the console is done with the port.
+
+**Pico B streams unconditionally from boot.** It is on an ordinary header UART with no boot
+traffic, and §6.8.4 depends on being able to read *silence* as a fault. A sonar board that
+waits to be asked cannot be distinguished from a sonar board that has died.
+
+This asymmetry is load-bearing. Do not harmonise the two firmwares by giving them the same
+startup behaviour.
+
+### 6.8.3 Backends slot in behind the existing interfaces
+
+Both classes keep their current public surface exactly. `PicoEncoders` satisfies the same
+contract as `Encoders` — `counts`, `counts_per_sec`, `stalled(wheel, commanded)`, `is_healthy`
+— and `PicoSonarArray` the same as `SonarArray`, including `distances` staying THE fusion point
+where the SEN0628 pulls `front` down and never up.
+
+`config.ENCODER_BACKEND` and `config.SONAR_BACKEND` select between `'mcp23017'`/`'pico'` and
+`'gpio'`/`'pico'`. Both existing paths stay in the tree as working fallbacks, the same pattern
+`vision.py` uses for its CPU path. In each module the transport is one thin function at the
+bottom, mirroring `tof.read_frame()`, so the frame parser and every rule above it are testable
+with no hardware and no `pyserial` installed.
+
+### 6.8.4 Failure semantics — and the sonar's rule is not the ToF's
+
+`tof.py` states that unavailable is not a fault: a dropped ToF means fall back to sonar alone
+and log it. That is correct for the ToF, because sonar sits underneath it.
+
+**Nothing sits underneath the sonar.** For Pico B, unavailable *is* a fault:
+
+- `SonarArray` gains `is_healthy`, which it does not have today, and `brain.py`'s health checks
+  gain a `'sonar'` key alongside imu/encoders/current/battery_adc.
+- A frame older than a small multiple of the sweep period makes `distances` report
+  **`front = 0.0`**, not the last good value. Zero is below `DIST_STOP`, so the existing reflex
+  logic stops the rover with no new state, no new threshold and no new branch — the same
+  fail-safe-by-construction argument the `min()` fusion already makes.
+- Sides degrade to `0.0` on the same rule, so `better_side()` cannot recommend a turn into
+  unknown space.
+- The last good reading is never held forward. A stale distance is the one output strictly
+  worse than no output.
+
+**This also retires the 999 cm sentinel.** `sensors.py`'s `_ping()` returns `999.0` on both
+timeout branches — for a genuine no-target *and* for an echo line that never rose or never
+fell. `999.0` is far past `DIST_CLEAR`, so a cut wire currently reports maximum confidence in a
+clear path, and `safety.py`'s context defaults to the same value. Pico B separates the cases,
+because at the pin it can see the difference:
+
+| Status | Meaning | Pi-side treatment |
+|---|---|---|
+| `OK` | echo returned within the window | distance is valid |
+| `NO_TARGET` | triggered, no echo within max range | clear, out to max range |
+| `NO_ECHO` | echo line never rose | **fault** — sensor or wiring |
+| `STUCK` | echo rose and never fell | **fault** — stuck line |
+
+`NO_TARGET` is the only non-`OK` code meaning "clear". The other two are sustained faults on
+the existing `SENSOR_FAULT_GRACE_S` path, which already stops the rover.
+
+### 6.8.5 Encoders: full quadrature, and the single-channel mode
+
+One PIO state machine per wheel, six of the RP2350's twelve, running a 4× quadrature decode;
+Pico B uses three more for echo pulse measurement. Rate is computed on the Pico over a fixed
+window and shipped, so `counts_per_sec` — and therefore `stalled()`, the Directive 5 consumer —
+stops depending on Linux scheduling jitter.
+
+Phase B is currently dead on all six wheels, which is a wiring fault and not something a
+coprocessor fixes. A quadrature decoder fed one live channel and one dead one produces nothing,
+so the firmware probes at startup: if a wheel's channel A transitions while B does not over N
+counts, that wheel enters `MODE_SINGLE` and the frame's `<mode>` field carries a 6-bit mask of
+which wheels are in it.
+
+In `MODE_SINGLE` the firmware counts A edges only and reports magnitude with no sign. Stall
+detection still works, because `stalled()` only asks whether the rate is near zero while
+commanded. Distance still works to whatever accuracy counts-per-rev allows. **Direction does
+not**, and `odometry.py` must be told that wheel's sign is unknown.
+
+**The sign must never be taken from the commanded direction.** It is the obvious substitute and
+it makes the encoder confirm whatever the motor was told to do, destroying the one thing
+odometry exists for — detecting that a wheel did *not* do what it was told. `MODE_SINGLE` is a
+limp-home state; the exit is tracing the green wires.
+
+### 6.8.6 What this costs and returns on the Pi
+
+Derived from the code, not measured; §P-1/P-2 in the Bench Test Procedures capture the real
+numbers, and the baseline must be taken before the harnesses move.
+
+`Sonar._ping()` is two busy-wait spin loops in Python, and under `rpi-lgpio` every
+`GPIO.input()` in them is an ioctl. The second loop runs for the echo-high duration, which is
+the round trip — so it spins *longer* the further away the nearest surface is. Across a
+nine-ping sweep that is roughly 38% of a core with everything at half a metre, ~69% in a
+typical room, and ~82% with nothing in range. **The current design costs the most CPU when
+there is nothing to see**, which is most of a roam session.
+
+The encoder thread is smaller — blocked in the I²C driver rather than spinning, call it 2–3% of
+a core — but wakes ~1000 times a second and keeps the package out of deeper idle states.
+
+Two serial reads at 50 Hz and ~16 Hz replace both, for well under 1% of a core. The headroom
+matters where something contends: `detect()` runs synchronously on the tick thread against
+`TICK_OVERRUN_THRESHOLD_S`, and `WHISPER_CPU_THREADS=3` was capped specifically to keep peak
+draw off the 5V rail. Whether `rpi-lgpio` releases the GIL around its ioctl is not recorded
+anywhere and has not been verified; if it does not, the spin also blocks every other Python
+thread and the gain is larger than the CPU figure suggests. `py-spy` settles it.
+
+### 6.8.7 Tests
+
+Frame parser: valid frame, bad CRC, short frame, garbage, a partial line split across two
+reads. Sequence reset logged as a reboot rather than absorbed. `MODE_SINGLE` propagating to
+`odometry.py` as unknown-sign and never as a command-derived sign. `NO_ECHO`/`STUCK` raising a
+health fault while `NO_TARGET` does not. Interface-equivalence tests pinning each Pico backend
+against the class it replaces. `test_expected_i2c_agreement.py` passing with `0x27` removed and
+the count at ten.
+
+And one named so nobody deletes it as redundant: **stale frame produces `front = 0.0`, and
+`obstacle_ahead()` is therefore True.** That single assertion is what keeps the reflex layer
+fail-safe once it is behind a serial link.
 
 ## 7. Perception and the Accelerator
 

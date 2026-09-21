@@ -432,6 +432,120 @@ a deliberately failed self-test produces a degraded-but-running rover rather tha
 
 ---
 
+## P-0 — CPU baseline, BEFORE the sonar harnesses move
+
+**Why:** the whole CPU case for the Pico redesign (Software Design §6.8.6) is derived from
+reading the code, not measured. The moment the sonar harnesses leave the Pi's GPIO there is no
+baseline left to compare against and the claim becomes permanently unverifiable. **This is the
+one procedure here with a deadline.**
+
+**Procedure:**
+
+1. Service running, rover on boxes, nothing driving.
+2. `ps -L -o tid,pcpu,comm -p $(pgrep -f 'venv/bin/python3 main.py')`
+3. `py-spy top --pid $(pgrep -f main.py)` and
+   `py-spy record --pid $(pgrep -f main.py) -d 60 -o before.svg`
+4. Repeat all of the above in **three scenes**: nose to a wall (~0.5 m), normal room (~2 m),
+   and pointed at open space with nothing in range. The spread between them is the finding —
+   one number from one scene proves nothing.
+5. `vcgencmd measure_clock arm`, `vcgencmd get_throttled`, and the day's `TICK_OVERRUN` count.
+
+**Record:**
+
+| measurement | close (~0.5 m) | room (~2 m) | open |
+|---|---|---|---|
+| sonar thread %CPU | | | |
+| encoder thread %CPU | | | |
+| total process %CPU | | | |
+| TICK_OVERRUN count over 10 min | | | |
+| GIL held during the spin? (py-spy) | | | |
+
+**Pass:** there is no pass condition — this is a baseline, not a test. It exists so P-1 and
+P-2 have something to be measured against.
+
+---
+
+## P-1 — Pico B, sonar coprocessor
+
+**Why:** Pico B carries the reflex ranging. A fault here is not a degraded sensor, it is a
+rover that does not stop.
+
+**Bench it off-rover first.** Three HC-SR04s, a bench supply, a tape measure. Nothing goes near
+the reflex path until a stable multi-minute stream exists — the standing rule from the SEN0628,
+where one reviewer in six had a board reset-looping on shipping firmware.
+
+**Procedure:**
+
+1. Stream for ≥10 minutes. Count CRC failures and sequence resets.
+2. Tape-measure each channel at 20, 50 and 100 cm. Compare against S-1's figures
+   (front 49.7 cm, left 91.1 cm, right 30.9 cm, ±0.4 cm over 8 samples).
+3. Unplug one sensor. Confirm `NO_ECHO` within one sweep.
+4. Short one echo line. Confirm `STUCK`, not a distance.
+5. **Pull the UART with the service running. Confirm the rover STOPS.**
+6. Re-run P-0's measurements for comparison.
+
+**Record:**
+
+| measurement | value |
+|---|---|
+| CRC failures / sequence resets in 10 min | |
+| Distance error at 20 / 50 / 100 cm, each channel | |
+| `NO_ECHO` raised within one sweep of unplug | |
+| `STUCK` raised on a shorted echo line | |
+| **Stale frame → `front = 0.0` → rover stops** | |
+| Full-sweep rate | |
+| Sonar thread %CPU after | |
+
+**Pass:** zero CRC failures over ten minutes, every channel within a few percent at all three
+distances, both fault codes raised correctly, **and step 5 stops the rover.** Step 5 failing
+is a blocking failure regardless of how well the rest went — a sonar link that fails open is
+worse than the GPIO path it replaced.
+
+---
+
+## P-2 — Pico A, encoder coprocessor
+
+**Why:** settles counts-per-rev, proves the under-sampling is gone, and confirms the bus drops
+to ten devices cleanly.
+
+**Do not hand-turn the wheels.** The encoder is on the motor shaft behind the 17.1:1 gearbox
+and does not back-drive — 30 s of hand-turning produced one distinct pin state while 3 s of
+driving produced seven. Every measurement here is taken under power. This also makes
+`scripts/encoder_calibration.py` invalid as written, since it is built on hand-turning; it
+needs rewriting before step 3.
+
+**Procedure:**
+
+1. Bench off-rover first, driving A/B from a signal generator: counts must match a known edge
+   count exactly.
+2. Fitted, `ENCODER_BACKEND='mcp23017'`, log both sources side by side for a full session.
+   They read the same six encoders and must agree.
+3. Mark one wheel. Drive a known number of turns at low duty, then at full duty. Compare
+   observed counts/rev against the configured 752 **at both speeds** — a figure that is right
+   at low duty and low at full duty is the under-sampling signature.
+4. Block one wheel while commanded. Confirm `stalled()` within `STALL_GRACE_S`.
+5. Record the `MODE_SINGLE` mask per wheel.
+6. Pull the MCP23017. `i2cdetect -y 1` must show **ten** devices plus the `0x70` broadcast.
+
+**Record:**
+
+| measurement | value |
+|---|---|
+| Bench count vs known edge count | |
+| MCP23017 and Pico agreement over a session | |
+| Observed counts/rev at low duty | |
+| Observed counts/rev at full duty | |
+| `MODE_SINGLE` mask | |
+| `stalled()` within `STALL_GRACE_S` | |
+| Device count after `0x27` leaves | |
+| Encoder thread %CPU after | |
+
+**Pass:** counts/rev agree within a few percent **at both duties**, stall raised correctly, ten
+devices on the bus. If Phase B is still dead, counts/rev stays blank and the `MODE_SINGLE` mask
+is recorded instead — **do not fill counts/rev from a single-channel count.**
+
+---
+
 ## Suggested order
 
 Each stage assumes the one before it. Doing them out of order produces measurements that
@@ -446,8 +560,12 @@ have to be retaken.
    loop cannot be confused with a drive fault.
 6. **V-1** vision range — gate for `retrieve`/`come_here`/`follow`; settle the camera-facing
    question first or skip it.
-7. **T-1** ToF — last, because it is the only one that needs new code written against
-   observed bytes.
+7. **T-1** ToF — the only one that needs new code written against observed bytes.
+8. **P-0** CPU baseline — **before any Pico work touches the sonar harnesses**, because the
+   baseline cannot be retaken afterwards.
+9. **P-1** Pico B sonar, then **P-2** Pico A encoders. P-2 benefits from E-1's Phase B question
+   being settled first; if it is not, P-2 records the `MODE_SINGLE` mask and leaves counts/rev
+   blank.
 
 ---
 

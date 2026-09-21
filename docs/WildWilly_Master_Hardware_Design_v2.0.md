@@ -840,6 +840,18 @@ than this one.
 8. **USB back-feed.** Reflashing a rover-powered Pico over USB pushes 5V onto
    the Pi rail through the VBUS→VSYS Schottky — two sources on one rail, §12.
    Series Schottky in the feed, or unplug the rover feed first.
+9. **Do not rely on the RP2350's internal pull-downs.** Early silicon carries an
+   erratum in which a GPIO configured as input with the internal pull-down enabled
+   can latch at an intermediate voltage instead of resolving low. Both boards have
+   inputs that idle low — sonar ECHO, and encoder lines at rest — so **specify
+   external pull-downs** unless the stepping in hand is confirmed clear against the
+   current errata sheet. Two resistors per line is cheap next to a phantom edge on
+   a reflex input.
+10. **PIO budget, so nobody discovers it late.** The RP2350 has 12 state machines
+    across 3 blocks. Pico A uses **6** (one 4× quadrature decoder per wheel, A/B on
+    adjacent pins with A even, so one `in pins, 2` reads a pair). Pico B uses **3**
+    (one echo pulse-width counter per sonar). Neither board is close to the limit,
+    and both have a whole block spare for a status LED or future capture.
 
 ---
 
