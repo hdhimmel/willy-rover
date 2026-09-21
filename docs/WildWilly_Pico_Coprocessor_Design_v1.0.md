@@ -704,7 +704,31 @@ changed that would break `test_sonar_tof_fusion.py`, and should.
 `config.SONAR_BACKEND = 'gpio' | 'pico'`, defaulting to `'gpio'`. The direct-GPIO path stays
 in the tree.
 
-### 4.8 ⚠ The SEN0628 ToF does NOT move to Pico-S
+### 4.8 ⚠ The ToF's TRANSPORT moves to Pico-S; its REASONING does not
+
+> **REVISED 2026-09-21. The original verdict below conflated two different things and got one
+> of them wrong.** It was written when the ToF was on its own UART, safely off the shared bus.
+> §5.5 changed that: the ToF is on I²C, which puts a **Reflex**-tier sensor — the only cliff
+> detector on this rover — on the single non-isolated segment that took the whole rover down
+> for two days. Moving it behind Pico-S is then not "an MCU in front of an MCU", it is
+> **segmentation**: exactly the containment the shelved TCA9548A was bought for, on a private
+> bus with one device on it, where a wedged sensor takes down Pico-S's bus and not the rover's.
+>
+> **The split that resolves it: Pico-S carries the ToF's wires, never its judgement.**
+> Pico-S reads 64 raw millimetre values over its own I²C and puts them in its frame with the
+> same timestamp as the sonar. `tof.py` keeps every rule — the floor profile, obstacle-vs-drop
+> classification, "uncalibrated reports nothing", "unavailable is not a fault" — unchanged and
+> still testable with no hardware, fed by the frame instead of by `read_frame`.
+>
+> That also dissolves objection 1 below: **Pico-S's firmware stays simple precisely because it
+> decides nothing.** Reading 64 uint16 and forwarding them is not evolving logic; the evolving
+> logic is the classification, and that never leaves the Pi. Objection 3 stands as written and
+> is now the rule that governs the split. Objection 2 is withdrawn.
+>
+> Bonus: it fixes the co-timestamping the original text credited and dismissed. Sonar and ToF
+> are sampled at unrelated moments today and `min()`'d as though simultaneous.
+
+**The original 2026-09-20 reasoning, retained because two thirds of it still governs:**
 
 Asked 2026-09-20 and decided here so it is not re-opened. Both the sonar and the ToF are
 reflex-tier front sensing (Software Design §6.5 classes the ToF as **Reflex** — it is the only
@@ -731,6 +755,39 @@ board looks natural. **It is still wrong.**
 co-timestamping (today sonar and ToF are sampled at unrelated moments and `min()`'d as though
 simultaneous), and freeing `uart3-pi5` — which nothing needs. If the ToF ever *does* come off
 the Pi's UART, it goes to **Pico-E**, the changeable board, never Pico-S.
+
+### 4.8.1 What does NOT move, and why
+
+Asked 2026-09-21: how far should the I²C devices move onto the Picos? **Only the ToF.**
+
+| Device | Verdict |
+|---|---|
+| **SEN0628 ToF** | → **Pico-S.** Reflex-tier front/cliff sensing that already fuses with the sonar at one point. Same tier, same consumer, same frame |
+| **FeatherWings `0x60`/`0x61`** | **Stay.** See below — this is the one that looks tempting and is not |
+| **BNO085 `0x4A`** | **Stay.** Tilt gates motion through `safety.py`; it is not front sensing, and routing a tilt fault over a serial link buys nothing |
+| **ADS1115 `0x48`, INA260 ×3, PCA9685 ×2** | **Stay.** Monitoring and actuation, not reflex ranging. Moving them adds hops and removes nothing from the safety path |
+
+**Bus after: twelve → ten.** The MCP23017 leaves (§3.1) and the ToF leaves. The dominant talker
+is gone and the only Reflex sensor on the segment is gone, with **no new coupling anywhere**.
+
+🔴 **The motor drivers must not move, and the reason is not conservatism.**
+`safety.py::SafetyController` is the single authoritative gate between any motion source and
+the motors — enforced, not merely documented, by `tests/test_no_direct_drive_bypass.py`'s AST
+scan. Directives 1-5, `approve_motion()`'s clamp, and the voice/email command gating all live
+on the Pi. Putting the FeatherWings behind Pico-S means either:
+
+- **the Pi still decides and the Pico just drives** — strictly worse, because the stop now
+  crosses a serial link and a second MCU with no compensating gain; or
+- **Pico-S decides** — which closes the reflex loop on one MCU and genuinely survives the Pi
+  crashing, a real benefit on a rover with 196 restarts and a SIGABRT crash-loop in its
+  history — but is a **re-derivation of the entire safety model**, not an increment.
+
+**And there is a cheaper answer to "the Pi wedged" that this rover already owns and has never
+used.** The Witty Pi HAT's watchdog is configured (200 missed heartbeats) and the systemd
+watchdog **has never once run** — `WatchdogSec` is commented out pending `Type=notify` (§8).
+Those are the designed answers to a wedged Pi. Arm and bench them first. If a hardware reflex
+loop is still wanted afterwards, it deserves its own FRD requirements and its own safety case,
+**not a paragraph in a coprocessor design.**
 
 ### 4.9 ⚠ But it points at a real defect — and the fix is a thread, not a Pico
 
@@ -822,6 +879,12 @@ That makes it a free UART that costs zero header GPIO, and it changes the build 
 |---|---|---|---|
 | **Pico-E** (encoders) | **Service port** (3-pin UART connector) | `/dev/ttyAMA10` — **verify** | nothing |
 | **Pico-S** (sonar) | `uart2-pi5`, GP4 TX / GP5 RX | `/dev/ttyAMA2` | frees its own pins in the same rewire |
+
+> ✅ **SIMPLIFIED 2026-09-21 — the service port is no longer needed.** With the ToF off
+> `uart3-pi5` (§5.5), the recommended allocation is **Pico-E on `uart3-pi5` (GP8/GP9)** and
+> **Pico-S on `uart2-pi5` (GP4/GP5)**. Both are ordinary header UARTs on the breakout, plain
+> 3.3 V TTL. **No console trade, no AI-HAT access question, no RS485 HAT, no service port.**
+> This section stays as the documented fallback if either overlay disappoints on the bench.
 
 **Pico-E takes the service port, not Pico-S.** Three reasons, and the order matters:
 
