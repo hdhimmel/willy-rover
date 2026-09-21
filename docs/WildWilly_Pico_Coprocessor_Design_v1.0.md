@@ -270,6 +270,55 @@ fallback). Slower to schedule, but it keeps the reflex path off the bus.
 USB was also rejected: all four rover USB ports are occupied (`CLAUDE.md`, 2026-09-13), and
 that constraint is what put the ToF on UART in the first place.
 
+### 2.4.1 RS485/RS232 serial HAT — evaluated 2026-09-21, not recommended
+
+The Sequent Microsystems **SM-I-025** (two serial ports, RS485 + RS232, stackable) was proposed.
+**It does not add UARTs — it wraps two of the Pi's existing ones in line transceivers:**
+
+| Port | Pi pins | Device |
+|---|---|---|
+| RS485 | physical 8/10 = **GP14/GP15** | `/dev/ttyAMA0` |
+| RS232 | physical 32/33 = **GP12/GP13** | `/dev/ttyAMA4` |
+
+*(Useful side-effect: that independently corroborates §5.1's extrapolated `uart4-pi5` =
+GP12/GP13 = `/dev/ttyAMA4` row, which was flagged there as unverified.)*
+
+**Three reasons it does not fit:**
+
+1. **There is no UART shortage left to solve.** With the ToF on I²C (§5.5) `uart3-pi5`
+   (GP8/GP9) is free, `uart2-pi5` (GP4/GP5) frees when the sonar moves, and the service port
+   may be available too. Two Picos need two UARTs; there are three.
+2. **Its RS485 half — the valuable half — wants GP15, which carries the BNO085 INT wire.**
+   That line is *physically landed* though unused by the driver (`sensors.py:115`; Master
+   Hardware Design §9 row 9: "wired but unused — the library polls over I²C"). As a UART RX,
+   GP15 is an input that the IMU's interrupt output would drive — injecting edges into the
+   receive line. Using this port means physically unplugging that wire.
+3. **Neither port can reach a Pico directly.** RS232 swings ±5–12 V and RS485 is differential;
+   a Pico's 3.3 V TTL pins are neither. Each Pico would need its own transceiver anyway — at
+   which point the HAT is not what is providing the capability.
+
+⚠ **But the instinct behind it is right, and §2.2's ground-offset warning is what it is
+answering.** RS485 is differential with ±7 V common-mode tolerance and is the textbook fix for
+exactly the offset problem flagged there.
+
+**It is armouring the wrong segment, though.** The long, motor-noisy runs on this rover are
+the **sensor harnesses** — twelve encoder lines out to the wheels, three sonar pairs to the
+front and flanks. The Pi↔Pico hop is a few inches inside the body. Putting RS485 on the short
+protected run while the exposed runs stay single-ended buys very little.
+
+**If RS485 is wanted, two better routes than this HAT:**
+
+- **Cheap:** a 3.3 V transceiver pair (MAX3485 / SN65HVD72 class, auto-direction or with DE/RE
+  driven) on a UART already free — one at each end. Same differential benefit, no HAT, no
+  GP14/GP15 contest, no unplugging the IMU wire.
+- **Actually compelling:** mount **Pico-E out at the chassis near the wheels** and run one
+  differential pair back to the Pi. That shortens twelve encoder lines from "across the rover"
+  to inches and makes the only long run a robust differential one. That is a real architecture
+  change — different mounting, different power routing, and R5 would have to reach the new
+  location — but it is the version where RS485 earns its place. **Do not buy for this until a
+  bench run shows plain TTL actually failing** (§9's P-1/P-2 record CRC-failure counts, which is
+  exactly the evidence that would justify it).
+
 ### 2.5 Both Picos run their own watchdog
 
 Enable the RP2350 hardware watchdog in both images, fed from the main loop, timeout ~250 ms.
