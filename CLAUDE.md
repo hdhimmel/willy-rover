@@ -92,8 +92,8 @@ probe at boot.
 | 0x48 | ADS1115 | Battery voltage ADC, A0. **See the divider pitfall below** |
 | 0x4A | BNO085 | 9-DoF IMU |
 | 0x51 | Witty Pi 5 HAT+ | On the Pi header, its own power domain |
-| 0x60 | FeatherWing | Motor driver, LEFT side |
-| 0x61 | FeatherWing | Motor driver, RIGHT side |
+| 0x60 | FeatherWing | Motor driver, **RIGHT** side — measured M-1, 2026-09-18 |
+| 0x61 | FeatherWing | Motor driver, **LEFT** side — measured M-1, 2026-09-18 |
 
 **0x70 is NOT a device.** It is the PCA9685 All-Call broadcast address and
 answers whenever either PCA9685 is alive. Any roll-call check that counts
@@ -286,15 +286,20 @@ front and right sonar read fine, left returns garbage.
   chassis; one MG996R was destroyed holding ~8A there. `center_all()` skips it now.
   **And guard the current from inside the movement loop** (`ARM_CURRENT_LIMIT_A` 2.5A /
   `ARM_CURRENT_LIMIT_S` 0.4s) — a limit checked after a move completes protects nothing.
-- **FeatherWing motor port order was changed on 2026-09-04 from a bench-verified mapping
-  to an assumed one.** `config.MOTOR_PORT` read M1=MIDDLE, M2=FRONT, M3=REAR — established
-  2026-08-24 by driving one port at a time and watching which wheel turned. Commit
-  `484fbdc` changed it to M1=REAR, M2=MIDDLE, M3=FRONT for "physical layout symmetry",
-  which is an ordering argument, not a measurement, and no rewire or re-test is recorded.
-  The docs were synced to `config.py` on 2026-09-07 because `config.py` is the authority,
-  **but the mapping itself is unverified.** Re-run the one-wheel test before trusting
-  per-wheel odometry, stall attribution, or crab steering. See Master Hardware Design
-  v2.0 §7.2.
+- **FeatherWing motor mapping — MEASURED 2026-09-18 (M-1), and one half of it was
+  backwards.** Rover on boxes, each port driven alone by raw address and port — never by
+  wheel name, since the mapping was the thing under test — with the owner naming the wheel
+  that actually turned:
+
+      0x61 M1 -> LEFT REAR     0x60 M1 -> RIGHT REAR
+      0x61 M2 -> LEFT CENTER   0x60 M2 -> RIGHT CENTER
+      0x61 M3 -> LEFT FRONT    0x60 M3 -> RIGHT FRONT
+
+  **Port order M1=REAR, M2=MIDDLE, M3=FRONT is correct** — commit `484fbdc` asserted it on
+  2026-09-04 from "physical layout symmetry", which was an argument rather than a
+  measurement, and the argument happened to be right. **The board addresses were the thing
+  that was wrong**, reversed in every document until this measurement. `config.py:29` and
+  `config.py:64` carry the measured truth. See Master Hardware Design v2.0 §7.2.
 - **Arm servo connector(s) — RECONNECTED 2026-09-14, owner-confirmed.** Open from
   2026-08-20, when voice `arm_home`/`wave` dispatched correctly in software (heard,
   matched, `brain.py::_drain_voice_commands()` called `arm.center_all()`/`_start_wave()`,
@@ -362,11 +367,13 @@ internal inconsistencies). Master Hardware Design v2.0 gives each a single,
 unambiguous answer now — recorded here only so nobody re-opens them by
 citing the old, superseded wording:
 
-1. **Motor side assignment — resolved.** 0x60 drives the LEFT side (LF/LM/LR),
-   0x61 drives the RIGHT side (RF/RM/RR), one board per side. See
-   `docs/WildWilly_Master_Hardware_Design_v2.0.md` §7.2. The *port* order within
-   a side is a separate question and is NOT settled — see the motor-port pitfall
-   in "Hardware pitfalls" above.
+1. **Motor side assignment — measured on hardware, M-1, 2026-09-18.**
+   **`0x61` drives the LEFT side (LF/LM/LR) and `0x60` drives the RIGHT side
+   (RF/RM/RR)**, one board per side — the reverse of what every document asserted
+   until that measurement. `config.py:29` carries it
+   (`MOTORKIT_LEFT_ADDR=0x61`, `MOTORKIT_RIGHT_ADDR=0x60`). The *port* order within
+   a side was settled by the same session — see the motor-port entry in "Hardware
+   pitfalls" above. See `docs/WildWilly_Master_Hardware_Design_v2.0.md` §7.2.
 2. **Arm shoulder channels — CH2 and CH3, measured on hardware 2026-09-17.**
    Note this matches the *2026-08-21* arrangement, not the 2026-09-06 remap: the
    plugs were never moved. They are **not** a mirrored pair and there is no
@@ -780,13 +787,18 @@ board (owner-confirmed 2026-09-09). Everything live runs off these four DROKs:
 | R5 | **3.3V** | DROK-4 | **Motor Hall encoders ONLY** (corrected 2026-09-14) |
 
 **R5 is settled at 3.3V** — that resolves the "3V or 5V, voltage TBD" question
-open in Master Hardware Design §2.2 since 2026-08-28. It also means the bus does
-not load the Pi's own 3V3 pin.
+open in Master Hardware Design §2.2 since 2026-08-28.
 
-⚠ **R5 is now a single point of failure for both the encoders and the entire
-I²C bus.** That is precisely the role the AMS1117 held when it failed twice and
-took the bus down with it. Budget its draw — six Hall encoders, eleven I²C
-devices, and every pull-up on the bus.
+⚠ **R5's entire load is the six Hall encoders.** It does not feed the I²C bus and
+never did — all I²C device logic runs from **Pi header pin 1**, which is the rail
+with a budget worth watching: eleven devices' logic plus every pull-up plus the
+SEN0628, against a pin the Pi 5 rates for a few hundred mA.
+
+**That makes R5 cleanly separable, which matters.** Since the encoders are its only
+consumer, R5 can be changed without risking the MCP23017, either PCA9685, or
+anything else on the bus — so the "do these encoders want 5V?" question is a clean
+experiment, not a risky one. **R5 also has no INA260**, so its draw is invisible to
+software and can only be checked with a meter.
 
 ⚠ **3.3V is the documented *minimum* for these encoders.** The 2026-08-25
 root-cause notes Hall encoders "typically need 3.3V minimum and often 4.5V" —
