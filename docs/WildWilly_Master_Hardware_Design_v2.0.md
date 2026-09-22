@@ -2308,7 +2308,8 @@ subsections below is a leftover and should be read as "this device's drop".
 | SCL | SCL rail row 3 |
 | ADDR | GND rail row 4 — selects 0x48 |
 | A0 | Battery divider midpoint |
-| A1–A3, ALRT | unconnected |
+| A1 | Gripper force — signal board `P1-16` (§6.6) |
+| A2, A3, ALRT | unconnected. **A2 is the spare to use for R5 rail sense** — 10k/10k divider, never direct: A2 at 3.3V sits at VDD with no margin, and would exceed it if R5 is ever raised to 5V |
 
 ### 16.3 INA260 × 3
 
