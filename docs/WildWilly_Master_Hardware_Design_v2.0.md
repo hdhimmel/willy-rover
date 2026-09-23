@@ -172,9 +172,14 @@ converters, all three INA260s, and the main distribution and ground block.
 
 ### 1.1 Control level board layout
 
-**Drawing:** `docs/drawings/WildWilly_Control_Level_Layout.svg` — plan view,
-dimensions in mm, **origin lower-left**. Every coordinate below is that board's
-lower-left corner.
+![Control level board layout](drawings/WildWilly_Control_Level_Layout.svg)
+
+Plan view, dimensions in mm, **origin lower-left**. Every coordinate below is
+that board's lower-left corner. Source:
+`docs/drawings/WildWilly_Control_Level_Layout.svg`.
+
+*If the drawing above does not appear, your viewer is not rendering SVG — open
+the file directly. There is no PNG fallback in the repository.*
 
 The drawing is generated, not hand-drawn:
 `docs/drawings/gen_control_level_layout.py` holds the placement as data and
