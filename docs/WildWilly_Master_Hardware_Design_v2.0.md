@@ -163,8 +163,109 @@ accelerator for vision and speech.
 | Power | 2 × 3S 8000mAh LiPo in parallel |
 | Bus | **Single non-isolated I²C segment, 11 devices** (see §0). One rail domain, one ground |
 
-Physical layout: Pi 5, SI board and audio HAT in the head assembly; power
-distribution, signal conditioning board and motor drivers in the body tray.
+**Physical layout.** Pi 5, SI board and audio HAT in the head assembly. The body
+is two decks: the **control level** (§1.1) carries the logic, motor drivers, servo
+drivers and signal conditioning; the **power level** below it carries the four DROK
+converters, all three INA260s, and the main distribution and ground block.
+
+---
+
+### 1.1 Control level board layout
+
+**Drawing:** `docs/drawings/WildWilly_Control_Level_Layout.svg` — plan view,
+dimensions in mm, **origin lower-left**. Every coordinate below is that board's
+lower-left corner.
+
+⚠ **This layout is drawn for the §4.7 configuration** — both Pico 2 W boards
+placed, no MCP23017. The expander has no position on this deck.
+
+| Deck | Value |
+|---|---|
+| Size | **200 × 140 × 4.4 mm** |
+| Floor | 2.4 mm, rising to 4.4 mm at a 3 mm lip |
+| Corners | R5 |
+| Harness notch | **15 × 60 mm** — the single main harness exit |
+| Chassis mounts | 4 × Ø3.6 M3 on a **94.0 × 124.0** pattern, **Ø9 keep-out** |
+| Lattice | 2.9 × 7.8 mm slots, 1.5 mm ribs on 4.25 mm X pitch, 2.25 mm cross-ribs every ~10 mm in Y. **M2.5 standoffs** |
+| Occupancy | **61% fill**, 25,141 mm² usable, room for 2 more stacks |
+
+**Not on this level — the board below carries them:** the four DROK converters,
+all three INA260s, and the main distribution and ground block. The EPLZON power
+stack on *this* deck is the tap and fan-out between the two levels, not the
+conversion itself.
+
+#### Placement
+
+| Board | Position | Footprint | Height | Mounting holes |
+|---|---|---|---|---|
+| **Pico A** — 6 × quadrature encoders, VSYS from R5 3V3 | (4, 4) | 21 × 51 | ≈9.5 | 47.0 × 11.4, Ø2.1 |
+| **Pico B** — 3 × HC-SR04 + BNO085 RST, VSYS from Pi 5V | (27, 4) | 21 × 51 | ≈9.5 | 47.0 × 11.4, Ø2.1 |
+| **PCA9685 `0x42`** — steering CH0–5, V+ = 5V (R2), 1000µF on C2 | (60, 4) | 62.5 × 25.4 | ≈20 | 55.9 × 19.0, Ø2.5 |
+| **PCA9685 `0x43`** — arm, V+ = 6V (R3), 2200µF Rubycon on C2 | (60, 32) | 62.5 × 25.4 | ≈26 | 55.9 × 19.0, Ø2.5 |
+| **FeatherWing ×2** — `0x60` RIGHT, `0x61` LEFT | (60, 60) | 50.8 × 22.9, **×2 stacked** | ≈32 | 45.72 × 17.78, Ø2.5 |
+| **Fuse block** — 50 mm edge faces the notch | (142, 14) | 38 × 50 | ≈35 | own mounts |
+| **EPLZON power stack** — **×2 stacked** | (145, 68) | 50 × 40 | ≈30 | same board, same holes |
+| **ADS1115 `0x48`** — A0 battery ÷, A1 FSR | (60, 85) | 25.4 × 17.78 | ≈9 | **MEASURE** |
+| **BNO085 `0x4A`** — X/Y axes parallel to chassis | (88, 85) | 25.4 × 22.86 | ≈4.6 | 20.32 × 17.78 |
+| **LTC4311** — inline on the trunk | (116, 85) | 25.4 × 17.78 | ≈9 | **MEASURE** |
+| **EPLZON signal board rev 15.1** — 3 × ECHO ÷, battery ÷, FSR ÷, P1 1×17 | (4, 86) | 50 × 40 | ≈14 | same as power boards |
+| **I²C hub** — GODIYMODULES, 10 ports + 1 input | (60, 110) | 60 × 25 | ≈12 | **UNKNOWN — MEASURE** |
+
+#### The EPLZON power stack
+
+Two identical 50 × 40 boards on standoffs, sharing a hole pattern:
+
+- **LOWER — battery entry and protection.** Battery in, **Q1** (the FQP27P06
+  reverse-polarity FET, §2.3), and +12V out. This is where raw pack voltage
+  lands on the control level, so it is the one board on this deck that is live
+  whenever the pack is connected and the main switch is closed.
+- **UPPER — regulated output side.** 9V / 5V / 6V / 3.3V back up from the
+  converters on the power level, out to loads.
+
+⚠ **The upper board's contents are from the drawing and still want confirming.**
+The lower board is owner-confirmed.
+
+#### Stacking
+
+Only hole-matched boards are stacked. A dashed outline on the drawing is a
+second board above on standoffs.
+
+| Stacked | Left flat | Why |
+|---|---|---|
+| FeatherWing ×2 | PCA9685 ×2 | Different rails (5V vs 6V), and `0x43` carries the 2200µF can |
+| EPLZON power ×2 | ADS1115, LTC4311 | Different outlines — they don't share a pattern |
+| | Pico A, Pico B | Patterns match, but stacking them would run the encoder and sonar harnesses together. Kept apart deliberately |
+
+#### One hub, not two
+
+The drawing assumes a **single** GODIYMODULES hub: 10 ports plus 1 input covers
+all 8 drops with 2 spare. §0 and §3.1 describe two daisy-chained hubs — that
+was the earlier arrangement, and the single-hub form is better for the bus,
+since every drop then radiates from one point instead of two.
+
+#### Measure before you build
+
+Four dimensions on the drawing are derived or assumed rather than read from a
+datasheet:
+
+| Item | Status |
+|---|---|
+| I²C hub 60 × 25 | **Derived** — the minimum that fits 44 pins at 2.54 mm pitch. No published data |
+| I²C hub hole pattern | **Unknown** |
+| ADS1115 holes | **Measure** — the fitted part may differ from the Adafruit #1085 outline used |
+| LTC4311 holes | **Measure** — DONGKER module, no published dimensions; Adafruit #4756 outline used as a placeholder |
+
+#### Notes on specific placements
+
+- **LTC4311 sits inline on the trunk**, which is what §16.4 requires — shortest
+  leads of any device, never on a drop cable.
+- **BNO085 is 29 mm from the FeatherWings.** That is the closest any quiet device
+  sits to a motor driver on this deck; if IMU noise ever becomes suspect, this
+  distance is the first thing to question.
+- **ADS1115 is nearest the signal board**, keeping the A0 and A1 analog runs
+  short.
+- **Pico A sits beside the encoder harness, Pico B beside the sonar side**, so
+  the two bundles never share a route.
 
 ---
 
@@ -397,7 +498,8 @@ addressed around the same time.
 - ⚠ **P8 (DROK-4 / R5) has no recorded branch fuse** — it is the only +12V
   branch without one (§2.1). Confirm physically; fit one if absent.
 - **Q1** FQP27P06 P-channel MOSFET for reverse polarity, with a 220nF
-  gate-source cap limiting turn-on inrush.
+  gate-source cap limiting turn-on inrush. **Located on the lower board of the
+  control level's EPLZON power stack** (§1.1), with battery in and +12V out.
 - **D1** P6KE15A TVS for transients.
 - Dual 3S BMS, one per pack.
 - Latching mushroom E-stop cuts motors and arm.
@@ -1524,11 +1626,12 @@ encoder sits on the motor shaft behind the 17.1:1 gearbox and does not back-driv
 channel toggles. `scripts/encoder_calibration.py` is built on hand-turning and is
 therefore invalid on this hardware.
 
-**RESOLVED 2026-08-25 — the LEFT MIDDLE motor on 0x60 M1 was a disconnected
-connector, not a failed motor.** Reconnected during teardown; the wheel was
-confirmed turning under command on 2026-08-25.
+**A motor reading zero current was a disconnected connector, not a failed
+motor** (2026-08-25, on `0x60 M1` — **right rear** under the measured side
+mapping; the note was written when the sides were believed transposed).
+Reconnected, and the wheel turned under command.
 
-Kept because the diagnostic reasoning generalises to the other five legs. The
+The diagnostic reasoning generalises to the other five legs. The
 symptom was zero current draw at 0.35/0.60/0.80/0.90 duty in both directions,
 against ~0.11 A for every healthy motor free-running. Twelve consecutive
 pulses gave identical near-zero readings — that repeatability is what pointed
@@ -1569,8 +1672,8 @@ through the board. The board takes its own V+ from the 5V rail (R2, DROK).
 graph TD
     PI["Raspberry Pi 5"]
     
-    FWL["FeatherWing LEFT<br/>Motor Driver<br/>0x60<br/>12V VIN"]
-    FWR["FeatherWing RIGHT<br/>Motor Driver<br/>0x61<br/>12V VIN"]
+    FWL["FeatherWing LEFT<br/>Motor Driver<br/>0x61<br/>12V VIN"]
+    FWR["FeatherWing RIGHT<br/>Motor Driver<br/>0x60<br/>12V VIN"]
     
     ENC["MCP23017 GPIO<br/>Encoder Inputs<br/>0x27"]
     
@@ -1870,12 +1973,13 @@ Status as of **2026-09-11**.
 > neither a failed part.** This is now the fourth and fifth instance of this rover's
 > signature failure, and the pattern is worth trusting over any instinct to replace a chip.
 >
-> **`0x61` (FeatherWing RIGHT).** Found at 09:12 as a `willy-rover.service` crash loop —
+> **`0x61` (FeatherWing — LEFT side; recorded as RIGHT before M-1 measured the
+> sides).** Found at 09:12 as a `willy-rover.service` crash loop —
 > 46 restarts, one every ~13s. `motors.py:15` builds both MotorKits in one comprehension,
 > `brain.py:112` retries 8× over ~6s, then the `ValueError` propagates out of
 > `RoverBrain.__init__` and main exits 1. Bus was otherwise perfect: ten devices, no kernel
-> errors, `throttled=0x0`, and `MOTORKIT_RIGHT_ADDR=0x61` unchanged since `fe0b019`
-> (2026-08-02). **Diagnostic value: 0x60 answered and 0x61 did not, on the same SDA/SCL
+> errors, and the address constant unchanged since `fe0b019` (2026-08-02).
+> **Diagnostic value: 0x60 answered and 0x61 did not, on the same SDA/SCL
 > pair** — that rules out the bus in one step and localises the fault to one board's drop.
 > Recovered after the wiring was handled. The stack had been opened the previous day for the
 > breakout HAT (`ffe6c5e`), which is the likeliest disturbance.
@@ -2251,12 +2355,12 @@ connector (§4.2).
 | | `GPB2` / `GPB3` | in | RR encoder A / B | Motor RR | yellow / green |
 | | `GPB4` | out | IMU reset | BNO085 | `RST` |
 | | `GPB5`–`GPB7` | — | unused | — | — |
-| **FeatherWing** `0x60` | `VIN` | pwr in | +12V via F2 and SW-M | +12V bus | INA260 `0x45` |
-| | logic | bidir | I²C | GODIY hub | — |
-| | `M1` / `M2` / `M3` | out | motor drive | Motors LR / LM / LF | red + / white − |
-| **FeatherWing** `0x61` | `VIN` | pwr in | +12V via F2 and SW-M | +12V bus | INA260 `0x45` |
+| **FeatherWing** `0x60` **RIGHT** | `VIN` | pwr in | +12V via F2 and SW-M | +12V bus | INA260 `0x45` |
 | | logic | bidir | I²C | GODIY hub | — |
 | | `M1` / `M2` / `M3` | out | motor drive | Motors RR / RM / RF | red + / white − |
+| **FeatherWing** `0x61` **LEFT** | `VIN` | pwr in | +12V via F2 and SW-M | +12V bus | INA260 `0x45` |
+| | logic | bidir | I²C | GODIY hub | — |
+| | `M1` / `M2` / `M3` | out | motor drive | Motors LR / LM / LF | red + / white − |
 | | `M4` | — | spare | — | — |
 | **PCA9685** `0x42` | `V+` | pwr in | 5V (R2) | DROK-5V | output |
 | | logic | bidir | I²C, `A1` bridged | GODIY hub | — |
@@ -2437,11 +2541,13 @@ Match the actual JST-PH style in hand when sourcing replacements.
 
 | Addr | Row | VIN | Logic | Motor terminals |
 |---|---|---|---|---|
-| 0x60 | 11 | +12V via F2 and SW-M (no current monitor since 2026-08-28) | VCC/GND/SDA/SCL row 11 | M1 = LR, M2 = LM, M3 = LF, M4 spare |
-| 0x61 | 12 | same | row 12 | M1 = RR, M2 = RM, M3 = RF, M4 spare |
+| 0x60 | 11 | +12V via F2 and SW-M, monitored by INA260 `0x45` | VCC/GND/SDA/SCL row 11 | **RIGHT side** — M1 = RR, M2 = RM, M3 = RF, M4 spare |
+| 0x61 | 12 | same | row 12 | **LEFT side** — M1 = LR, M2 = LM, M3 = LF, M4 spare |
 
 Port order matches §7.2 and `config.MOTOR_PORT` — **rear on M1, front on M3.**
-See the §7.2 warning: the rear-middle-front order itself is not bench-verified.
+Side assignment matches `config.py:29` (`MOTORKIT_LEFT_ADDR=0x61`,
+`MOTORKIT_RIGHT_ADDR=0x60`), measured by M-1. See the §7.2 warning: the
+rear-middle-front order itself is not bench-verified.
 
 Standalone — no Feather host board. Direction and PWM are internal, so there
 are no direction GPIOs and no STBY pin.
