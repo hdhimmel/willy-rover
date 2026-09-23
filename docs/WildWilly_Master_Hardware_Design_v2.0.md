@@ -176,6 +176,13 @@ converters, all three INA260s, and the main distribution and ground block.
 dimensions in mm, **origin lower-left**. Every coordinate below is that board's
 lower-left corner.
 
+The drawing is generated, not hand-drawn:
+`docs/drawings/gen_control_level_layout.py` holds the placement as data and
+validates it against the deck outline, the harness notch and the four M3
+keep-outs before it writes anything. **Edit the script and re-run it** — a bad
+placement fails loudly instead of producing a drawing that looks fine and cannot
+be built.
+
 ⚠ **This layout is drawn for the §4.7 configuration** — both Pico 2 W boards
 placed, no MCP23017. The expander has no position on this deck.
 
@@ -194,22 +201,70 @@ all three INA260s, and the main distribution and ground block. The EPLZON power
 stack on *this* deck is the tap and fan-out between the two levels, not the
 conversion itself.
 
+#### Zones
+
+The notch is the **single harness exit**, on the right edge at y 0–60. Four
+zones, arranged so that the two things that must not meet — millivolt analog and
+switched motor current — sit at opposite ends of the deck.
+
+| Zone | Where | Holds |
+|---|---|---|
+| **QUIET** | top-left | Signal board, ADS1115, Pico B |
+| **LOGIC** | top-centre and right | I²C hub, LTC4311, BNO085 |
+| **DRIVE** | bottom band | FeatherWings, both PCA9685s, Pico A |
+| **POWER** | right, against the notch | EPLZON power stack, fuse block |
+
 #### Placement
 
 | Board | Position | Footprint | Height | Mounting holes |
 |---|---|---|---|---|
-| **Pico A** — 6 × quadrature encoders, VSYS from R5 3V3 | (4, 4) | 21 × 51 | ≈9.5 | 47.0 × 11.4, Ø2.1 |
-| **Pico B** — 3 × HC-SR04 + BNO085 RST, VSYS from Pi 5V | (27, 4) | 21 × 51 | ≈9.5 | 47.0 × 11.4, Ø2.1 |
-| **PCA9685 `0x42`** — steering CH0–5, V+ = 5V (R2), 1000µF on C2 | (60, 4) | 62.5 × 25.4 | ≈20 | 55.9 × 19.0, Ø2.5 |
-| **PCA9685 `0x43`** — arm, V+ = 6V (R3), 2200µF Rubycon on C2 | (60, 32) | 62.5 × 25.4 | ≈26 | 55.9 × 19.0, Ø2.5 |
-| **FeatherWing ×2** — `0x60` RIGHT, `0x61` LEFT | (60, 60) | 50.8 × 22.9, **×2 stacked** | ≈32 | 45.72 × 17.78, Ø2.5 |
-| **Fuse block** — 50 mm edge faces the notch | (142, 14) | 38 × 50 | ≈35 | own mounts |
-| **EPLZON power stack** — **×2 stacked** | (145, 68) | 50 × 40 | ≈30 | same board, same holes |
-| **ADS1115 `0x48`** — A0 battery ÷, A1 FSR | (60, 85) | 25.4 × 17.78 | ≈9 | **MEASURE** |
-| **BNO085 `0x4A`** — X/Y axes parallel to chassis | (88, 85) | 25.4 × 22.86 | ≈4.6 | 20.32 × 17.78 |
-| **LTC4311** — inline on the trunk | (116, 85) | 25.4 × 17.78 | ≈9 | **MEASURE** |
 | **EPLZON signal board rev 15.1** — 3 × ECHO ÷, battery ÷, FSR ÷, P1 1×17 | (4, 86) | 50 × 40 | ≈14 | same as power boards |
-| **I²C hub** — GODIYMODULES, 10 ports + 1 input | (60, 110) | 60 × 25 | ≈12 | **UNKNOWN — MEASURE** |
+| **Pico B** — 3 × HC-SR04 + BNO085 RST, VSYS from Pi 5V | (4, 31) | 21 × 51 | ≈9.5 | 47.0 × 11.4, Ø2.1 |
+| **ADS1115 `0x48`** — A0 battery ÷, A1 FSR, A2 spare for R5 sense | (58, 86) | 25.4 × 17.78 | ≈9 | **MEASURE** |
+| **I²C hub** — GODIYMODULES, 10 ports + 1 input | (58, 108) | 60 × 25 | ≈12 | **UNKNOWN — MEASURE** |
+| **LTC4311** — inline on the trunk | (120, 108) | 25.4 × 17.78 | ≈9 | **MEASURE** |
+| **BNO085 `0x4A`** — X/Y axes parallel to chassis | (150, 85) | 25.4 × 22.86 | ≈4.6 | 20.32 × 17.78 |
+| **FeatherWing ×2** — `0x60` RIGHT, `0x61` LEFT | (60, 4) | 50.8 × 22.9, **×2 stacked** | ≈32 | 45.72 × 17.78, Ø2.5 |
+| **PCA9685 `0x42`** — steering CH0–5, V+ = 5V (R2), 1000µF on C2 | (58, 30) | 62.5 × 25.4 | ≈20 | 55.9 × 19.0, Ø2.5 |
+| **PCA9685 `0x43`** — arm, V+ = 6V (R3), 2200µF Rubycon on C2 | (122, 14) | 62.5 × 25.4 | ≈26 | 55.9 × 19.0, Ø2.5 |
+| **Pico A** — 6 × quadrature encoders, VSYS from R5 3V3 | (26, 4) | 21 × 51 | ≈9.5 | 47.0 × 11.4, Ø2.1 |
+| **EPLZON power stack** — **×2 stacked** | (128, 42) | 50 × 40 | ≈30 | same board, same holes |
+| **Fuse block** — F2–F5 branch fuses | (88, 56) | 38 × 50 | ≈35 | own mounts |
+
+57% fill against 27,100 mm² of usable deck.
+
+#### Why each board is where it is
+
+- **The analog corner is the thing being protected.** The ADS1115 reads the
+  battery divider and the FSR — the two quietest nets on the rover, and the ones
+  the shutdown ladder depends on. It sits **30.6 mm** from the nearest drive
+  board, with the signal board beside it at 4 mm so the A0/A1 runs never leave
+  the corner.
+- **H-bridges lowest.** The FeatherWings switch 12V at motor current and are the
+  loudest things on the deck, so they occupy the bottom edge, furthest from the
+  analog corner. The PCA9685s sit above them — they are PWM drivers whose
+  current leaves immediately down the servo harness.
+- **LTC4311 is 2.0 mm from the hub.** §16.4 requires the shortest leads of any
+  device on the bus; on a drop cable it adds capacitance at the wrong point and
+  mis-triggers.
+- **Pico A beside the FeatherWings.** Each motor's six wires are one harness —
+  red/white to the motor terminals, yellow/green to the encoder reader — so the
+  bundle terminates in one place.
+- **Pico B beneath the signal board**, 4 mm away, so all six sonar lines stay
+  within the quiet corner.
+- **Power against the notch.** The battery enters there, so the EPLZON power
+  stack — which carries the entry and Q1 — has the shortest possible run to it.
+- **BNO085 is 41.8 mm from the drive block**, the largest separation any board
+  gets. It is the one device whose signal degrades with both electrical noise and
+  vibration, and it must be rigidly mounted.
+
+> **On hub placement.** An earlier version of this reasoning put the hub as close
+> to the notch as possible, to shorten the I²C trunk to the Pi. That is wrong at
+> this scale: loose wiring runs roughly 50–100 pF/m, so 80 mm versus 150 mm of
+> trunk is a few pF against a budget of 300–400 pF (§3.2). **Drop count and
+> routing away from the drive block dominate; trunk length on a 200 mm deck does
+> not.** The hub therefore sits high and clear of the motor drivers, not near the
+> notch.
 
 #### The EPLZON power stack
 
@@ -234,7 +289,7 @@ second board above on standoffs.
 |---|---|---|
 | FeatherWing ×2 | PCA9685 ×2 | Different rails (5V vs 6V), and `0x43` carries the 2200µF can |
 | EPLZON power ×2 | ADS1115, LTC4311 | Different outlines — they don't share a pattern |
-| | Pico A, Pico B | Patterns match, but stacking them would run the encoder and sonar harnesses together. Kept apart deliberately |
+| | Pico A, Pico B | Patterns match, but they sit in different zones: Pico A with the motor harness, Pico B in the quiet corner. Stacking them would route the encoder and sonar bundles together |
 
 #### One hub, not two
 
