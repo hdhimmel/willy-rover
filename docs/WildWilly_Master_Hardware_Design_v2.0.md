@@ -965,7 +965,7 @@ device sits on the other end of P1's TRIG and ECHO pins.
 |---|---|---|
 | Role | 6 × quadrature encoders (12 lines) | 3 × HC-SR04 (6 lines) + BNO085 RST |
 | Power | **VSYS from R5** (DROK-4 3.3V) | **VSYS from Pi 5V header, fused** |
-| Link | **`uart4-pi5` — Pi GP12/GP13** | **`uart2-pi5` — Pi GP4/GP5** |
+| Link | **`uart4-pi5` — Pi GP12/GP13** | **`uart2-pi5` — Pi GP4/GP5**. Both Picos use their own GP12/GP13 |
 | Ground | R5 return for supply; header GND as signal reference | Pi ground, in the same harness |
 | Radio | **unused — do not initialise** (§12) | **unused — do not initialise** (§12) |
 
@@ -1073,24 +1073,36 @@ is built.
 
 | Pico GP | Phys | Signal | Other end |
 |---|---:|---|---|
-| GP0 | 1 | UART0 TX | **Pi GP5, phys 29** — `uart2-pi5` RXD |
-| GP1 | 2 | UART0 RX | **Pi GP4, phys 7** — `uart2-pi5` TXD |
-| GP2 | 4 | TRIG-F out | **P1-1** → P1-2 → FRONT sonar TRIG |
-| GP3 | 5 | ECHO-F in | **P1-4** — divider output, 3.33V |
-| GP6 | 9 | TRIG-L out | **P1-5** → P1-6 → LEFT sonar TRIG |
-| GP7 | 10 | ECHO-L in | **P1-8** |
-| GP8 | 11 | TRIG-R out | **P1-9** → P1-10 → RIGHT sonar TRIG |
-| GP9 | 12 | ECHO-R in | **P1-12** |
-| GP10 | 14 | BNO085 RST | BNO085 RST, **open-drain**, 10k pull-up to Pi 3V3 |
+| GP0 | 1 | TRIG-F out | **P1-1** → P1-2 → FRONT sonar TRIG |
+| GP1 | 2 | ECHO-F in | **P1-4** — divider output, 3.33V |
+| GP2 | 4 | TRIG-L out | **P1-5** → P1-6 → LEFT sonar TRIG |
+| GP3 | 5 | ECHO-L in | **P1-8** |
+| GP4 | 6 | TRIG-R out | **P1-9** → P1-10 → RIGHT sonar TRIG |
+| GP5 | 7 | ECHO-R in | **P1-12** |
+| GP12 | 16 | **UART0 TX** | **Pi GP5, phys 29** — `uart2-pi5` RXD |
+| GP13 | 17 | **UART0 RX** | **Pi GP4, phys 7** — `uart2-pi5` TXD |
 | GP14 | 19 | Status LED | LED + 330Ω → GND |
+| GP15 | 20 | BNO085 RST | BNO085 RST, **open-drain**, 10k pull-up to Pi 3V3 |
 | VSYS | 39 | **5V — from the breakout terminal**, not a header pin | via 500mA fuse **and series Schottky**. Same net as pins 2/4; the display's tap already has one of them (§0) |
 | VBUS | 40 | — | **leave unconnected** |
 | GND | 38 | — | Pi GND, phys 6 or 9, same harness |
 
-**GP4 and GP5 are left unused on Pico B on purpose.** In this build "GP4/GP5"
-should mean the Pi-side link and nothing else; a Pico pin with the same number in
-the same harness is the kind of ambiguity that produced the `uart3`/`uart3-pi5`
-session and the two left/right transpositions.
+**Pico-side pins changed on 2026-09-24, forced by the shared carrier board.** An
+earlier revision put B's UART on GP0/GP1 and its RST on GP10, and left GP4/GP5
+unused so that "GP4/GP5" would only ever mean the Pi-side link. One carrier layout
+built twice makes both of those impossible:
+
+- **Both Picos now run UART0 on GP12/GP13**, pins 16/17. A single J2 footprint
+  cannot land on pins 1/2 and 16/17 at once. Side benefit: Pico A's link pins and
+  the Pi's link pins for A are now the same numbers.
+- **RST moves from GP10 to GP15**, pin 20. GP10 is **LR Phase A** on Pico A, so with
+  one 12-way J3 fitted to both boards, way 11 would sit on B's reset net — a live
+  stub on an active-low reset, and a dead short onto it the first time a 12-way
+  housing went into the wrong board.
+- **B's sonar therefore occupies GP0–GP5**, J3 ways 1–6 contiguously, and the
+  GP4/GP5 naming rule is retired. The ambiguity it guarded against is real but
+  abstract; a non-contiguous six-way crimp is a concrete way to make a mistake, and
+  this rover's failures have been crimps, not nomenclature.
 
 **RST is open-drain, not push-pull.** A push-pull output sitting at 0V while
 Pico B is unpowered and the Pi runs on Witty Pi would hold an active-low reset on
@@ -2763,7 +2775,7 @@ subsections below is a leftover and should be read as "this device's drop".
 
 > ⚠ **Rows that change under §4.7 — pin-level replacements are tabulated there,
 > not here.** The MCP23017 block disappears entirely; its twelve encoder lines
-> move to Pico A GP0–GP11, and `GPB4` → BNO085 `RST` moves to Pico B GP10. Every
+> move to Pico A GP0–GP11, and `GPB4` → BNO085 `RST` moves to Pico B GP15. Every
 > Pi ↔ signal board sonar row re-points at Pico B, and the Pi gains two UART
 > pairs, GP4/GP5 and GP12/GP13. The *service port* row stays unused — it is
 > reserved for the console, not spent on Pico A. Nothing else in this table moves.
