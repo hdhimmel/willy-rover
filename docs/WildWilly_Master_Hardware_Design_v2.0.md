@@ -960,7 +960,7 @@ has been metered on the rover.
 | | UID | MicroPython | Verified so far |
 |---|---|---|---|
 | **Pico A** | `643f69a756a232ea` | **v1.29.0**, 2026-08-24, `RPI_PICO2_W` | PIO encoder counter counts correctly on six state machines at once; every code path in `firmware/pico_a.py` runs |
-| **Pico B** | *not yet identified* | — | nothing |
+| **Pico B** | `ad25bbf0f1e1f160` | **v1.29.0**, 2026-08-24, `RPI_PICO2_W` | open-drain reset behaves; disconnected sonars report `-1`, never a distance; every code path in `firmware/pico_b.py` runs |
 
 Record each board's UID against its role and write it on the board — they are
 physically identical, and after wiring the only thing that distinguishes them is

@@ -5,15 +5,18 @@ Written 2026-09-24, the day the boards arrived.
 
 | Board | UID | MicroPython | State |
 |---|---|---|---|
-| **A** | `643f69a756a232ea` | v1.29.0, 2026-08-24 | PIO counter **verified**; nothing wired |
-| **B** | *not yet identified* | — | not run |
+| **A** | `643f69a756a232ea` | v1.29.0, 2026-08-24 | PIO counter **verified**; all code paths run |
+| **B** | `ad25bbf0f1e1f160` | v1.29.0, 2026-08-24 | all code paths run; open-drain reset **verified** |
 
-**Nothing is wired.** What has been proven on board A is the PIO encoder counter
-and that every code path in `pico_a.py` runs: six state machines claim GP0–GP11,
-the drain loop turns over 6,500 times a second, UART0 opens on GP12/GP13, the ADC
-path reads, GP14 toggles. What has **not** been proven is anything that needs a
-wire — the link to the Pi, the LED, the R5 divider, and the frame rate under real
-edge load.
+**Nothing is wired.** Proven on **A**: the PIO encoder counter, and that every
+code path runs — six state machines claim GP0–GP11, the drain loop turns over
+6,500 times a second, UART0 opens on GP12/GP13, the ADC path reads, GP14 toggles.
+Proven on **B**: the open-drain reset behaves (idle 1 → asserted 0 → released 1
+against an emulated pull-up), three disconnected sonars report `-1` and never a
+distance, UART0 opens, GP14 toggles.
+
+Not proven on either: anything needing a wire — the link to the Pi, the LEDs, the
+R5 divider, real echoes, and the frame rate under real load.
 
 | File | Board | Link | Job |
 |---|---|---|---|
@@ -49,7 +52,7 @@ rover has lost a session to was one nobody could read at a terminal.
 ```
 $I,<board>,<uid>,<ver>*XX                                  on boot, and on ID
 $E,<seq>,<ms>,<rf>,<rm>,<lf>,<lm>,<rr>,<lr>,<r5mv>,<flags>*XX     50 Hz, Pico A
-$S,<seq>,<ms>,<f_mm>,<f_age>,<l_mm>,<l_age>,<r_mm>,<r_age>,<flags>*XX  ~33 Hz, Pico B
+$S,<seq>,<ms>,<f_mm>,<f_age>,<l_mm>,<l_age>,<r_mm>,<r_age>,<flags>*XX  13-33 Hz, Pico B
 $P,<seq>*XX            reply to PING
 $R,ok,<count>*XX       reply to RST
 $Z,ok*XX               reply to ZERO
@@ -95,6 +98,28 @@ ECHO idles low *before* triggering and flags a stuck line separately — that is
 the signature of the two sonars killed on 2026-09-17 (§16.12), and a stuck line
 never lets a measurement start, so without the check it would read invalid
 forever with no clue why.
+
+**No internal pull on the ECHO pins, deliberately.** The ECHO divider's lower
+2 k leg holds the Pico's input low whenever the sensor is not driving — that *is*
+the pull-down, in hardware. It also sidesteps RP2350 erratum **E9**, where an
+input with the internal pull-down enabled can latch around 2.2 V and read high.
+An internal pull-down on an ECHO line would be both redundant and exposed to E9.
+
+**A no-echo costs the full timeout, and that sets the frame rate.** Measured on
+board B with nothing connected: **40 pings/s**, i.e. 25 ms each — the whole
+`ECHO_TIMEOUT_US`. This is not only the fault case: any channel pointing at open
+space beyond range times out in normal operation. So the round-robin is **90 ms
+when all three see something and ~75 ms of pure blocking when none do**, and the
+frame rate is 33 Hz at best, ~13 Hz at worst, with per-sensor updates dropping
+from 11 Hz to about 4 Hz.
+
+> **Worth a decision:** `ECHO_TIMEOUT_US = 25000` matches `config.SONAR_TIMEOUT`
+> and covers 4.3 m, but every reflex threshold is inside 60 cm
+> (`DIST_STOP=20`, `DIST_SLOW=40`, `DIST_CLEAR=60`). Cutting it to **12000 µs
+> (≈ 2.05 m, still 3.4× the largest threshold)** halves the worst case and lifts
+> the floor to ~28 Hz frames. Not changed here, because shortening a sensor's
+> range is a design call, not a tuning one — and the Pi-side `SONAR_TIMEOUT`
+> would want to move with it.
 
 **RST is `Pin.OPEN_DRAIN` with `value=1`.** Hi-Z idle, pull-up holds it high. A
 push-pull pin at 0 V while Pico B is unpowered and the Pi runs on Witty Pi would
