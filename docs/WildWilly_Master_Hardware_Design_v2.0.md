@@ -951,9 +951,22 @@ calibration constant** (§6.2, §14).
 
 ### 4.7 Pending redesign — sonar and encoders move to two Pico 2 W
 
-⚠ **DESIGN, NOT AS-BUILT. Nothing is fitted.** Recorded 2026-09-20; pin-level
-assignment added 2026-09-24, the day the boards arrived. Both boards are in hand
-and unflashed. Nothing below has been metered on the rover.
+⚠ **DESIGN, NOT AS-BUILT. Nothing is fitted or wired.** Recorded 2026-09-20;
+pin-level assignment added 2026-09-24, the day the boards arrived. Nothing below
+has been metered on the rover.
+
+**Boards in hand, 2026-09-24:**
+
+| | UID | MicroPython | Verified so far |
+|---|---|---|---|
+| **Pico A** | `643f69a756a232ea` | **v1.29.0**, 2026-08-24, `RPI_PICO2_W` | PIO encoder counter counts correctly on six state machines at once; every code path in `firmware/pico_a.py` runs |
+| **Pico B** | *not yet identified* | — | nothing |
+
+Record each board's UID against its role and write it on the board — they are
+physically identical, and after wiring the only thing that distinguishes them is
+what they are plugged into, which is how the two left/right transpositions of
+2026-09-18 happened. Firmware lives in `firmware/`; its README carries the wire
+protocol and the two silent PIO bugs found while proving the counter.
 
 The MCP23017 encoder expander is to be replaced by **two Pico 2 W
 microcontrollers, both UART devices to the Pi.** The signal conditioning board
