@@ -1105,7 +1105,8 @@ conditions:
 -   **FR-200-001 (voltage/current/power).** Reported pack voltage tracks a
     meter reading within 0.05V across the 10.2--12.6V range, after the divider
     scale factor in `config.py` is set. Rail currents are read from the three
-    INA260s at **0x40 (R2, 5V — steering servos, sonar, screen), 0x44 (R3, 6V arm
+    INA260s at **0x40 (R2, 5V — steering servos and sonar; **not** the display, which
+    is on the Pi header — corrected 2026-09-24), 0x44 (R3, 6V arm
     servo rail) and 0x45 (+12V bus → both FeatherWing VIN)**. R1's 9V has no INA260;
     the Witty Pi HAT monitors its own VIN. **Measured live 2026-09-15 with the pack
     at 11.36V: 0x40 = 4.986V, 0x44 = 6.043V, 0x45 = 11.174V.** Earlier confirmations

@@ -71,7 +71,7 @@ that was **not** built.
 | Rail | Volts | Source | Feeds | Monitor |
 |------|-------|--------|-------|---------|
 | R1 | **9V** | DROK-Pi | Witty Pi 5 VIN → Pi | **Witty Pi HAT** (no INA260) |
-| R2 | 5V | DROK-5V | Steering servos, sonar VCC, Pi screen | INA260 `0x40` |
+| R2 | 5V | DROK-5V | Steering servos, sonar VCC | INA260 `0x40` |
 | R3 | 6V | DROK-6V | Arm servo distribution | — |
 | R5 | **3.3V** | DROK-4 | **Motor Hall encoders ONLY** | — |
 | — | +12V | Battery via F1/KCD4/Q1 | Both FeatherWing VIN, all DROK inputs | INA260 `0x45` |
@@ -91,6 +91,25 @@ feeds **the encoders only**. Two consequences, both material:
 
 **R5 = 3.3V settles the "3V or 5V — voltage TBD" question open in §2.2 since
 2026-08-28.**
+
+⚠ **The display is NOT on R2 — corrected 2026-09-24 (owner-stated).** Every rails
+table in this document listed "Pi screen" against R2 until today. The display takes
+its power from the **Pi's own 40-pin header** via the 3-pin tap (§5.4, §16.15). Three
+consequences:
+
+1. **R2's consumers are steering servos and sonar VCC, and nothing else.** That makes
+   §16.12's short-detection arithmetic fully attributable: healthy R2 with one sonar
+   ≈ 0.10A, each further healthy sensor ≈ +15mA, any step of ~250mA is a shorted
+   HC-SR04. No screen current hiding in that baseline.
+2. **The Pi's 5V header has a real load, and now a second one.** This is the same
+   mistake §0 made about header pin 1, which was called an unused pin until
+   2026-09-14 while it fed the entire device bus. Witty Pi's 5V output now feeds the
+   Pi, the display, and — under §4.7 — Pico B. **Measure what the display draws**
+   before assuming headroom.
+3. ⚠ **Which header pins the tap occupies is still unrecorded** (§16.15). There are
+   only two 5V pins, 2 and 4, and they are the same net. Take Pico B's feed from the
+   **breakout's 5V terminal** (§5.3 item 10) rather than a header pin, and the
+   contention question does not arise.
 
 **The single point of failure for device logic is Pi header pin 1**, and that is the
 budget worth writing down: eleven devices' logic plus the bus pull-ups plus the
@@ -435,7 +454,7 @@ graph TD
 | ID | Rail | Source | Feeds | Monitor |
 |----|------|--------|-------|---------|
 | R1 | **9V** | **DROK-Pi** buck | Witty Pi 5 VIN (KF350-2P) → Witty Pi → Pi 5 | **Witty Pi HAT monitors its own VIN — no INA260** |
-| R2 | 5V | **DROK-5V** buck | Steering servo distribution, sonar VCC, Pi screen | INA260 **0x40** |
+| R2 | 5V | **DROK-5V** buck | Steering servo distribution, sonar VCC | INA260 **0x40** |
 | R3 | 6V | **DROK-6V** buck | Arm servo distribution | INA260 **0x44** |
 | R5 | **3.3V** | **DROK-4** buck | **Motor Hall encoders (JGA25-370B) ONLY**; I²C device logic runs from the Pi's own 3.3V | — |
 | **R4** | **3V3** | **Pi header pin 1** | **All I²C device logic** (owner-stated 2026-09-14), plus the SEN0628. A live rail with a real load and a real budget — the Pi 5's 3V3 pin is good for a few hundred mA, which eleven devices' logic plus pull-ups sits inside, but it *is* a budget | — |
@@ -958,6 +977,10 @@ reported fault instead of a multi-day mystery.
 
 **Why Pico B sits on Pi 5V.** Shared ground removes common-mode offset from the
 UART and lets one 4-wire harness carry power and link on a single connector.
+**Not R2**, even though the sonars themselves run on it: R2 dies with the base 12V,
+and a Pico B that dies with its own sensors is silent rather than diagnosable. It
+would also add ~40mA to the rail whose current is the short-detector for the sonars
+(§16.12) — blurring a 15mA-per-sensor signal to no purpose.
 More importantly the sonars stay on R2, which dies with the base 12V — so with
 the base off, Pico B is still alive and can say *my sensor rail is down* rather
 than going silent. That distinction is what makes the reflex layer diagnosable.
@@ -1060,7 +1083,7 @@ is built.
 | GP9 | 12 | ECHO-R in | **P1-12** |
 | GP10 | 14 | BNO085 RST | BNO085 RST, **open-drain**, 10k pull-up to Pi 3V3 |
 | GP14 | 19 | Status LED | LED + 330Ω → GND |
-| VSYS | 39 | **Pi 5V, phys 2 or 4** | via 500mA fuse **and series Schottky** |
+| VSYS | 39 | **5V — from the breakout terminal**, not a header pin | via 500mA fuse **and series Schottky**. Same net as pins 2/4; the display's tap already has one of them (§0) |
 | VBUS | 40 | — | **leave unconnected** |
 | GND | 38 | — | Pi GND, phys 6 or 9, same harness |
 
@@ -2108,7 +2131,7 @@ The table above is what is wired today. This block is deliberately *not* numbere
 | 29 | GP5 | **`uart2-pi5` RXD ← Pico B TX** (was sonar FRONT TRIG) |
 | 32 | GP12 | **`uart4-pi5` TXD → Pico A RX** (was free — ex-motor-direction) |
 | 33 | GP13 | **`uart4-pi5` RXD ← Pico A TX** (was sonar LEFT TRIG) |
-| 2 or 4 | 5V | **Pico B VSYS, via 500mA fuse and series Schottky** |
+| 2 or 4 | 5V | **Pico B VSYS** — take it at the breakout's 5V terminal, not the header pin: the display's 3-pin tap already occupies one of these two and which one is unrecorded (§0, §16.15). Fuse + series Schottky |
 | 8 | GP14 | **unused, permanently** — see the hazard note below |
 | 37 | GP26 | **unused** (was sonar FRONT ECHO) |
 | 40 | GP21 | **unused** (was sonar RIGHT ECHO) |
@@ -2571,7 +2594,7 @@ Current components only.
 | 3S LiPo 8000mAh | Two packs, hard-paralleled | 2 | Installed |
 | 3S BMS 40–60A with balance | One per pack | 2 | Installed |
 | **DROK-Pi** adjustable buck | 12V → **9V** for Witty Pi VIN (R1) | 1 | **Installed** — live rail (§0) |
-| **DROK-5V** adjustable buck | 12V → 5.0V for steering servos, sonar VCC, screen (R2, INA260 0x40) | 1 | **Installed** — live rail (§0) |
+| **DROK-5V** adjustable buck | 12V → 5.0V for steering servos, sonar VCC (R2, INA260 0x40) | 1 | **Installed** — live rail (§0) |
 | **DROK-6V** adjustable buck | 12V → 6.0V for arm servos (R3) | 1 | **Installed** — live rail (§0) |
 | **DROK-4** adjustable buck | R5 — **3.3V**, **Hall encoders only**. I²C device logic is on the Pi's own 3.3V | 1 | **Installed** — live rail |
 | — | — | — | — |
@@ -2671,7 +2694,7 @@ connector (§4.2).
 | | `A0` | in | battery divider | Signal board | `P1-14` |
 | | `A1` | in | gripper force | Signal board | `P1-16` |
 | | `A2`, `A3`, `ALRT` | — | unconnected | — | — |
-| **INA260** `0x40` | `VIN+` / `VIN−` | pwr thru | **inline** in R2 5V | DROK-5V out → servo/sonar/screen | — |
+| **INA260** `0x40` | `VIN+` / `VIN−` | pwr thru | **inline** in R2 5V | DROK-5V out → servo/sonar | — |
 | | `SDA` / `SCL` / `VCC` / `GND` | bidir | I²C | GODIY hub | — |
 | **INA260** `0x44` | `VIN+` / `VIN−` | pwr thru | **inline** in R3 6V | DROK-6V out → arm servo distribution | — |
 | | `SDA` / `SCL` / `VCC` / `GND` | bidir | I²C | GODIY hub | — |
@@ -2792,7 +2815,7 @@ left to right:
 |---|---|---|---|
 | **Left** | 0x45 | **12V** | **+12V bus → both FeatherWing VIN (motors)** |
 | **Middle** | 0x44 | **6V** | **DROK-6V → arm servo distribution** |
-| **Right** | 0x40 | 5V | **5V DROK** → servos, sonar VCC, Pi screen |
+| **Right** | 0x40 | 5V | **5V DROK** → servos, sonar VCC |
 
 ⚠ **The POSITIONS are not verified against the current wiring.** Voltages and rails
 are live-measured, but the address→position mapping predates the relocation that moved
