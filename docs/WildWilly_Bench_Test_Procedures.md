@@ -13,8 +13,9 @@ rock-solid before expanding autonomy."*
 
 This is an operational checklist, not a design document. It does not count against the
 three-document rule (Master Hardware Design, Software Design, Functional Requirements) and
-follows the existing convention of `WildWilly_ADS1115_Bringup_Checklist.md` and
-`WildWilly_PCA9685_Arrival_Punchlist.md`.
+follows the existing convention of `archive/WildWilly_ADS1115_Bringup_Checklist.md`
+and `archive/WildWilly_PCA9685_Arrival_Punchlist.md` (both archived 2026-09-24 — the
+convention stands, the checklists are closed).
 
 ---
 

@@ -1198,7 +1198,18 @@ wants it.
     request correctly but labelling it with a synonym, at confidence 0.8–1.0. A
     confidence floor cannot help with that. `ENABLE_HAILO_LLM` stays off until
     it is addressed.
-7. **`sensors.py` cannot tell a broken sensor from a real zero.**
+7. **`ADC.is_charging` is hardcoded `False`, and one of its two callers is a
+   safety stop.** *Recorded 2026-09-24, carried from
+   `docs/archive/WildWilly_ADS1115_Bringup_Checklist.md` as it was archived.* `sensors.py:260`
+   returns `False` unconditionally because the charge-sense divider was never
+   wired. `brain.py:708` uses it for DOCK-state logic — fine, conservative. But
+   `brain.py:1121` is `if self.adc.is_charging: self.safety.stop(); return`, **a
+   stop that can never execute.** Either wire the divider (Master Hardware Design
+   §14 item 17 — note the free ADS1115 channel is A2 or A3, not the A1 the old
+   checklist names) or make the unreachable branch explicit, so nobody reads it as
+   live protection.
+
+8. **`sensors.py` cannot tell a broken sensor from a real zero.**
     **The hardware fault is FIXED as of 2026-09-14** — the divider is fed, in spec,
     and reading real pack voltage. **This software gap is not.** It was found because
     Master Hardware Design §0 recorded ADS1115 A0 at 0.0146V while the divider was

@@ -2527,7 +2527,23 @@ measurement work rather than wiring.
     if not, and record the gauge.** Nothing monitors R5 either — no INA260 — and
     the encoders have already been lost once to an unmonitored 3.3V rail.
 
-17. ⚠ **Motor swap to 170 RPM variants — on order, not fitted** (owner-stated
+17. ⚠ **Charge sense is not wired, and two safety paths depend on it.** Carried
+    here 2026-09-24 from `archive/WildWilly_ADS1115_Bringup_Checklist.md` as that document
+    was archived — it was the only record. `sensors.py:260` returns
+    `is_charging = False` unconditionally, and `brain.py` reads it twice:
+    the DOCK-state logic at `:708`, and **a `safety.stop()` at `:1121` that can
+    therefore never fire.** A hardcoded False is the safe default, not a bug, but
+    a stop that is unreachable should be recorded as such rather than left to be
+    discovered.
+
+    ⚠ **The archived checklist names the wrong channel.** It says AIN1, which was
+    true when it was written; **A1 is now the FSR** (§4.2, P1-16) and A0 is the
+    battery divider. **A2 is earmarked for R5 sense** (§1.1) — though §4.7 puts
+    that on Pico A's ADC instead, which would free it again. So charge sense needs
+    **A2 or A3**, and which one depends on where R5 sense actually lands. Decide
+    that before wiring anything to the ADS1115.
+
+18. ⚠ **Motor swap to 170 RPM variants — on order, not fitted** (owner-stated
     2026-09-24; §7.1, *Motor change pending*). **The gearbox ratio is not recorded**
     — capture the vendor part number on arrival; it is what sets
     `ENCODER_COUNTS_PER_REV` = 11 × 4 × ratio, and this document has already been
@@ -3202,6 +3218,14 @@ None of these touch the 40-pin header except the display's power tap.
 | Functional Requirements | **3.3** | What the rover must do, and how each requirement is proven |
 | Software Design | **1.2** | Module architecture, control layering, FSM, safety gate |
 | Master Engineering Package | rev 6.2.0 | **Historical record only** — incident narrative, superseded designs, revision lineage. Retain; do not treat as current. |
+| Bench Test Procedures | — | **Live.** Procedures with blank result fields; results are written into it |
+| User Guide | — | For the household, not the workbench |
+| Fix Implementation Plan | — | Work complete, but **kept in `docs/`**: ~26 source and test files cite it by path. Reference material, not an outdated doc |
+| `firmware/README.md` | — | Pico 2 W firmware and the wire protocol (§4.7) |
+
+⚠ **Nine documents were archived on 2026-09-24** — see `docs/archive/README.md`,
+which records what moved and why, and the one live open item that had to be
+rescued from a checklist before it was filed.
 
 ### 17.2 Reference-integrity defect in `CLAUDE.md` — CLOSED 2026-08-18
 
