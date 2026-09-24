@@ -6,19 +6,19 @@ Version 3.1**
   -----------------------------------------------------------------------
   Field                   Value
   ----------------------- -----------------------------------------------
-  Revision                3.2
+  Revision                3.3
 
-  Date                    2026-09-13
+  Date                    2026-09-24
 
   Owner                   Howard Himmel
 
   Status                  Hardware build complete; live verification in
                           progress
 
-  Companion documents     WildWilly Master Hardware Design rev 2.2 --- current
+  Companion documents     WildWilly Master Hardware Design rev 2.3 --- current
                           hardware configuration. Section references of the
                           form §n refer to it unless stated otherwise.
-                          WildWilly Software Design rev 1.1 --- module
+                          WildWilly Software Design rev 1.2 --- module
                           architecture and control layering.
 
   -----------------------------------------------------------------------
@@ -84,10 +84,17 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   Criteria and G-1.
 
   FR-400 Drive            Not live-verified       Motor crimps unverified
-                                                  on five of six units
+                                                  on five of six units; 170
+                                                  RPM motors on order will
+                                                  re-open M-1 and the speed
+                                                  tuning
 
-  FR-500 Encoders         Not live-verified       Requires manual rotation
-                                                  test
+  FR-500 Encoders         Not live-verified       Requires under-power drive
+                                                  test (E-1); hand-turning
+                                                  produces no counts.
+                                                  Counts-per-rev BLOCKED
+                                                  until the 170 RPM motors
+                                                  are fitted
 
   FR-600 Steering         Not live-verified       Servo V+ current path
                                                   unconfirmed
@@ -282,8 +289,13 @@ RECOMPUTED 2026-09-13.**
 With the measured values:
 
 -   `ENCODER_COUNTS_PER_REV` = **752**, not 3292 --- 11 PPR × 4 quadrature × **17.1:1**
-    reduction (`config.py:119`; Master Hardware Design rev 2.2 §7.1). The 823.1 PPR /
-    74.8:1 figures were never real.
+    reduction (`config.py:119`; Master Hardware Design §7.1). The 823.1 PPR /
+    74.8:1 figures were never real **for the motors fitted today.** ⚠ **They do not
+    become real for the 170 RPM replacements either** — 74.8:1 on a ~10,600 RPM bare
+    motor is ~142 RPM output, not 170, so 3292 goes from 4.4× wrong to ~1.2× wrong.
+    That is the more dangerous error, because a 20% odometry discrepancy reads as
+    wheel slip. Neither number is right for them; see Master Hardware Design §7.1,
+    *Motor change pending*.
 -   **620 RPM is the OUTPUT speed**, which the old text treated as unresolved.
     `config.py:123` settles it --- 620 RPM from a ~10.6k RPM bare motor through 17.1:1
     --- and it is corroborated by the ~3.3 m/s theoretical top speed on 101.6 mm wheels.
@@ -296,19 +308,33 @@ So at full speed:
 **Expect under-sampling at speed and plan for it.** The per-channel rate is close
 to 8.5 kHz, not the few hundred Hz a lower counts-per-rev figure would imply.
 
-**Resolution:** bench test, not more arithmetic --- mark one wheel, jog it a
-known number of turns, read the counts. This settles counts/rev and the
-gearbox ratio together, and is the same bench session already needed to
-confirm `WHEEL_DIAMETER_M` (see the encoder/odometry open item elsewhere in
-this register). Do this before deciding whether under-sampling is a real
-problem at all.
+⚠ **The 170 RPM motors do not relieve this, and it is worth being explicit about
+why.** The 11 PPR encoder sits on the **motor shaft**, ahead of the gearbox, so the
+edge rate is `bare RPM / 60 × 44` and **the ratio cancels out entirely** --- a higher
+reduction raises counts-per-rev by exactly the factor by which it lowers output RPM.
+~7.8 kHz per channel at 620 RPM output, ~7.8 kHz at 170. **A slower rover is not a
+slower encoder.** Master Hardware Design §4.7's PIO decode on Pico A is the thing
+that resolves it.
+
+**Resolution:** bench test, not more arithmetic --- drive one wheel a known number of
+turns **under power** and read the counts. ⚠ **Not by jogging or hand-turning:** the
+encoder is behind the 17.1:1 gearbox and does not back-drive (30s by hand gave one
+distinct pin state on 2026-08-25; 3s of driving gave seven), and
+`scripts/encoder_calibration.py` is built on hand-turning and is therefore invalid
+here. This settles counts/rev and the gearbox ratio together, and is the same bench
+session already needed to confirm `WHEEL_DIAMETER_M`. ⚠ **Wait for the 170 RPM
+motors** (owner, 2026-09-24) --- calibrating the 17.1:1 motors measures hardware that
+is being removed. `WHEEL_DIAMETER_M` and `TRACK_WIDTH_M` are independent of the swap
+and can be settled now.
 
 **If polling does turn out to be too slow: raise the I²C bus speed, not
 interrupt-driven decode.** `dtparam=i2c_arm_baudrate=400000` (~4x the
 current rate) is a software-only fix with no wiring, and the bus already
 carries an LTC4311 specifically to make higher speeds viable across this
 bus's capacitance. Test it against a full **eleven**-device roll-call first, given
-this session's history of real I²C fragility on this bus.
+this session's history of real I²C fragility on this bus. (**Ten** once the
+MCP23017 leaves under Master Hardware Design §4.7 — and at that point this whole
+question is moot for encoders, which no longer sit on I²C at all.)
 
 **Interrupt-driven decode (decided 2026-08-18) --- retracted 2026-08-23, do
 not implement as designed.** Three independent problems, not one:
@@ -961,6 +987,11 @@ signal conditioning board (Master Hardware Design §4.5). Pass conditions:
     `ENABLE_WITTY_PI` is True, which it is, so the gate has expected eleven since the
     HAT was fitted.)*
 
+    ⚠ **This becomes ten under Master Hardware Design §4.7.** `0x27` leaves the bus
+    when encoder decode moves to Pico A over `uart4-pi5`. `_EXPECTED_I2C` in
+    `brain.py` and this criterion both have to drop it in the same change, or the
+    gate fails on a correctly built rover.
+
 -   **FR-100-002, 0x70 is not a device.** A scan will also show 0x70. Per
     Master Engineering Package §5.2 this is the PCA9685 All-Call broadcast
     address, present whenever either PCA9685 is alive, and the LTC4311 has no
@@ -983,9 +1014,27 @@ signal conditioning board (Master Hardware Design §4.5). Pass conditions:
 
 -   **FR-100-003 (startup self-test).** The self-test additionally confirms the
     BNO085 interrupt is live on GP15 and that all six wheels' encoder channels
-    (twelve A/B lines, per FR-500) on the
-    MCP23017 change count under manual wheel rotation. Address enumeration
-    alone is not sufficient --- a device can ACK and still be miswired.
+    (twelve A/B lines, per FR-500) are **reporting** --- `Encoders.is_healthy`,
+    which is the check `brain.py:_self_test()` performs. Address enumeration
+    alone is not sufficient --- a device can ACK and still be miswired, which is
+    what FR-500-001 exists to catch on the bench.
+
+    **Corrected 2026-09-24.** This criterion previously required all six channels
+    to "change count under manual wheel rotation". That was unachievable twice
+    over. **First**, the encoder is behind the 17.1:1 gearbox and does not
+    back-drive (Master Hardware Design §2.2, §7.1): 30s of hand-turning produced
+    one distinct pin state on 2026-08-25 while 3s of driving produced seven.
+    **Second, and more fundamental, a boot self-test cannot drive the wheels** ---
+    it is the gate that authorises motion under FR-100-004, so requiring motion to
+    pass it is circular. Channel attribution moves to FR-500-001 as a bench test;
+    the boot gate checks liveness only. This is a correction to the *wording* of
+    what the gate proves, not a relaxation: nothing that was actually being
+    verified has stopped being verified.
+
+    ⚠ **Under §4.7 the encoder half of this check stops being an I²C read.** It
+    becomes a query to Pico A over `uart4-pi5`, which can additionally report R5
+    from its own ADC --- the rail that killed the encoders on 2026-08-25 and that
+    nothing observes today.
 
 -   **FR-100-004 (motion inhibit).** Motion stays inhibited unless the two
     preceding checks both pass. This is Directive 2 in FR-000; a release of
@@ -1286,16 +1335,42 @@ left side (LF, LM, LR) and 0x61 the right (RF, RM, RR).
 
 Encoders are read through the MCP23017 at 0x27, two channels per motor.
 
--   **FR-500-001 (read encoders).** All six channels change count under manual
-    wheel rotation, and each maps to the correct wheel. Quadrature direction
+⚠ **Under Master Hardware Design §4.7 they are read by Pico A over `uart4-pi5`
+instead**, twelve lines on Pico GP0–GP11 in the same order as MCP23017
+GPA0→GPB3 so the harness lands 1:1. Nothing below changes in substance; the
+transport does. Note also that **Phase B (green) reads dead on all six channels
+today** (`config.py:222`), so FR-500-001's direction requirement cannot pass until
+those wires are metered — one wiring pattern, not six faults.
+
+-   **FR-500-001 (read encoders).** All six channels change count **under power,
+    one wheel driven at a time with the rover on blocks and the wheels free**, and
+    each maps to the correct wheel. Quadrature direction
     must be correct: forward rotation increments, reverse decrements. A
     channel counting backwards indicates the A and B lines are swapped for
     that motor.
+
+    **Under power, not by hand** --- corrected 2026-09-24, previously "under manual
+    wheel rotation". The encoder is on the motor shaft behind the 17.1:1 gearbox
+    and does not back-drive: 30s of hand-turning produced one distinct pin state on
+    2026-08-25 while 3s of driving produced seven. `scripts/encoder_map_check.py`
+    is the tool for this and reads the expander registers directly, deliberately
+    bypassing `sensors.Encoders` whose decode assumes the very mapping under test.
+    ⚠ **`scripts/encoder_calibration.py` is built on hand-turning and is invalid
+    here**, notwithstanding E-1 step 3, which its own "still open" note already
+    flags.
 
 -   **FR-500-002 (speed and distance).** Counts convert to distance using the
     measured wheel circumference and the encoder resolution. Verified by
     driving a measured straight line --- a fixed offset means the constant is
     wrong; a proportional error that grows with distance means slip.
+
+    ⚠ **Blocked until the 170 RPM motors are fitted** (owner, 2026-09-24).
+    `ENCODER_COUNTS_PER_REV` is 11 × 4 × the gearbox ratio, so it becomes unknown
+    again at the swap, and the "fixed offset versus proportional error" diagnosis
+    above only works once the constant is right. **Re-run this after the swap, not
+    before.** Note the failure mode the swap creates: 3292 would be only ~20% wrong
+    for these motors, and a 20% fixed offset is readable as slip — the one thing this
+    criterion is meant to distinguish it from.
 
 -   **FR-500-003 (stall detection).** A commanded motor showing no count
     change within the stall window triggers stop-and-report, not increased
@@ -1310,7 +1385,9 @@ Encoders are read through the MCP23017 at 0x27, two channels per motor.
     filtering. If spurious counts appear under motor load, the correct
     responses are firmware debounce or small-value filtering sized to the
     measured pulse rate --- not arbitrary capacitance, which at these rates
-    would destroy the count.
+    would destroy the count. Under §4.7 they land directly on Pico A GPIO with
+    the internal pull-ups enabled --- Hall drive type is still unknown (§14 item
+    7) and the pull-up costs nothing if the outputs turn out to be push-pull.
 
 # FR-600 Steering Control
 
@@ -1481,7 +1558,10 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     orientation. Heading holds steady with the rover stationary and tracks
     correctly through a known rotation. Because the sensor's reset line runs
     through the MCP23017, the expander must be initialised first --- an
-    ordering dependency, not a wiring choice. If initialisation succeeds but
+    ordering dependency, not a wiring choice. ⚠ **Under §4.7 the dependency moves
+    but does not disappear:** RST lands on Pico B GP10, driven open-drain against
+    a pull-up to Pi 3V3, so the ordering dependency becomes "Pico B link up and
+    acknowledged" instead of "expander initialised". If initialisation succeeds but
     reads fail intermittently, the cause is I²C clock stretching rather than
     wiring.
 
@@ -1493,7 +1573,14 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     **Unchanged by the 2026-09-13 SEN0628 decision:** that sensor's UART is planned
     for GP8/GP9, not GP14/GP15, so it does not reintroduce this conflict. The warning
     stands as written and the serial console must remain disabled — see Master
-    Hardware Design rev 2.2 §5.3 and §6.5.
+    Hardware Design rev 2.3 §5.3 and §6.5.
+
+    ⚠ **§4.7 retires this failure signature permanently.** With sonar on Pico B
+    (`uart2-pi5`, GP4/GP5) and encoders on Pico A (`uart4-pi5`, GP12/GP13),
+    **nothing lands on GP14 at all** and no echo line can be driven by a console.
+    Neither Pico may be placed on `uart0`, which would resurrect it. The new
+    equivalent failure is a *stale* frame over UART, which is why the 999cm
+    sentinel has to go before sonar sits behind a serial link.
 
 -   **FR-800-003 (tilt detection).** Excessive tilt is detected from IMU
     output and halts motion. Verify the threshold against the rover's actual
@@ -1721,6 +1808,7 @@ separately under FR-1200.
 
 -   **Roll-call note.** The expected count is **eleven** devices as of
     2026-09-08 — the ten on the device bus plus the Witty Pi 5 HAT+ at `0x51`.
+    **Ten under §4.7**, when `0x27` leaves the bus.
     Verified across 20 consecutive scans with zero bus errors. The All-Call
     broadcast address also answers whenever either servo controller is alive
     and must not be counted toward the total --- doing so lets a scan pass

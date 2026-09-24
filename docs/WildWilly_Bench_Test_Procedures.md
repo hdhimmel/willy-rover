@@ -152,6 +152,22 @@ trials which pins change.
 itself invalid — `scripts/encoder_calibration.py` is built on hand-turning, which produces
 nothing on this rover (§2.2: the encoder is behind the 17.1:1 gearbox and does not
 back-drive).
+
+⚠ **STEP 3 IS ALSO BLOCKED ON HARDWARE, owner-stated 2026-09-24: the drive motors are
+being replaced with 170 RPM variants.** `ENCODER_COUNTS_PER_REV` is 11 × 4 × the gearbox
+ratio, so calibrating it against the 17.1:1 motors measures hardware that is about to come
+out. **Do step 1 and step 2 now; leave step 3 until the new motors are fitted.**
+
+Two things to carry into that session:
+
+- **Step 2 has to be re-run after the swap regardless.** Both left/right transpositions
+  found on 2026-09-18 — `MOTOR_PORT` and `ENCODER_PINS` — came from landing motors and
+  their encoders in a single pass. Six new motors is that same pass. M-1 and E-1 step 2
+  both re-open, and wire colours differ between batches of this family.
+- **Do not let 3292 back in.** It implies 74.8:1 ≈ 142 RPM output, not 170, so it is
+  roughly 20% wrong for the new motors rather than 4.4× wrong — and a 20% fixed offset
+  reads as wheel slip, which is exactly what FR-500-002 is supposed to distinguish it
+  from. Measure the value; do not adopt either recorded figure.
 | Channels responding per wheel | | |
 | Observed counts/rev vs 752 | | |
 | Counts plausible at speed, or systematically low? | | bears on FRD G-2 |

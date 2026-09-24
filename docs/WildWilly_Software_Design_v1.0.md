@@ -2,7 +2,7 @@
 
 ## Software Design — As-Built
 
-**Revision 1.1 · Current Implementation · 2026-09-14**
+**Revision 1.2 · Current Implementation · 2026-09-24**
 
 ---
 
@@ -12,11 +12,11 @@
 |-------|-------|
 | Project | WildWilly Autonomous Rover |
 | Document | Software Design — as-built implementation |
-| Revision | 1.1 |
+| Revision | 1.2 |
 | Date | 2026-09-14 |
 | Owner | Howard Himmel |
 | Status | Implemented and off-hardware tested; partially live-verified. **Filename retains `v1.0` deliberately** — renaming breaks cross-references in the Master Hardware Design, the FRD and `CLAUDE.md`. The Revision field is authoritative. |
-| Companions | Master Hardware Design **rev 2.2**; Functional Requirements v3.1 |
+| Companions | Master Hardware Design **rev 2.3**; Functional Requirements v3.3 |
 
 **Scope of this document.** This describes the software as it is currently
 written, in the repository `hdhimmel/willy-rover`. It describes structure and
@@ -333,7 +333,8 @@ legitimately needs one where passive observation does not.
      §0 roll-call); what remains unverified is whether this heartbeat protocol actually
      satisfies the watchdog.
    - `config.ENABLE_WITTY_PI` is **`True`** (`config.py:227`), so `brain.py:71` adds 0x51 to
-     `_EXPECTED_I2C` and the self-test expects eleven devices (§4.1 step 3). The flag exists
+     `_EXPECTED_I2C` and the self-test expects eleven devices (§4.1 step 3) — **ten
+     under Master Hardware Design §4.7, when 0x27 leaves the bus.** The flag exists
      precisely so the address is only expected once the hardware is present — enabling it
      before installation would make the self-test report a real device as missing every run.
      It was flipped when the HAT went in.
@@ -361,6 +362,26 @@ legitimately needs one where passive observation does not.
    ten plus 0x51, conditional on `ENABLE_WITTY_PI`, which is now True,
    0x70 deliberately excluded), plus `config.validate()` and
    `storage.check_storage()`.
+
+   > ⚠ **Ten under Master Hardware Design §4.7.** When encoder decode moves to
+   > Pico A, `0x27` leaves the bus and `_EXPECTED_I2C` must drop it in the same
+   > change — otherwise the self-test fails on a correctly built rover and
+   > `_motion_enabled` stays false. The encoder half of the self-test also stops
+   > being an I²C read: it becomes a handshake with Pico A over `uart4-pi5`.
+   **What the gate proves about the encoders, and what it cannot.** `_self_test()`
+   checks `self.encoders.is_healthy` — liveness, classified safety-critical and
+   never overrideable (`brain.py:_self_test()`). It does **not** verify that each
+   channel belongs to the wheel `ENCODER_PINS` says it does. It cannot: attribution
+   needs one wheel driven at a time, and this is the gate that authorises motion, so
+   requiring motion to pass it is circular. **Corrected 2026-09-24** — Master
+   Hardware Design §11.2 and FRD FR-100-003 both previously required all six
+   channels to "change count under manual rotation", which was doubly impossible:
+   circular as above, and hand-turning yields nothing anyway because the encoder
+   sits behind the 17.1:1 gearbox and does not back-drive (30s by hand gave one
+   distinct pin state on 2026-08-25; 3s of driving gave seven). Attribution is
+   FRD FR-500-001, a bench test run with `scripts/encoder_map_check.py`.
+   ⚠ **`scripts/encoder_calibration.py` is built on hand-turning and is invalid on
+   this hardware**, whatever its name suggests.
 4. `_motion_enabled` is set from the self-test result. It gates every call into
    `approve_motion()`. This is FR-100-004.
 5. On pass: `READY=1` to systemd, state to `IDLE`. On fail: motion stays
@@ -569,6 +590,14 @@ addition that improves obstacle detection without weakening that separation.
 own RP2040 resetting means `distances()` returns sonar alone and logs it —
 it must not raise, and must not route through `SENSOR_FAULT`. The rover's
 availability floor stays exactly where it is today; the ToF only ever adds.
+
+⚠ **This rule is specific to the ToF and must not be generalised to Pico B.** It
+holds only because the ToF is purely additive — losing it falls back to a sonar
+that is still there. Under Master Hardware Design §4.7 the *sonar itself* sits
+behind a UART, and losing that link removes the floor rather than an addition. For
+Pico B, therefore, **stale must mean stop**: a sequence number, a staleness
+deadline, and no fallback value. Reading this paragraph as covering both links is
+the mistake that would turn §4.7 into a fail-open.
 
 ---
 
@@ -842,7 +871,7 @@ gate E-stop once the sense pin exists; this is not a placeholder built ahead
 of the hardware, it's a real behavior change for the three faults that
 already fire today. `tests/test_brain_reset_gate.py` covers the brain.py-side
 logic off-hardware; the touchscreen's own tap detection needs the physical
-5" DSI panel (Master Hardware Design rev 2.2 §15.3) to verify.
+5" DSI panel (Master Hardware Design rev 2.3 §15.3) to verify.
 
 **S-2 — Encoder polling under-samples at speed. RECOMPUTED 2026-09-13, and the
 answer got worse.**
@@ -863,6 +892,15 @@ So the per-channel edge rate at full speed is:
 
 **~7.8 kHz against a ~1 kHz poll ceiling — roughly 8× oversubscribed.**
 
+> ⚠ **The 170 RPM motors on order do not fix this** (Master Hardware Design §7.1,
+> *Motor change pending*). The 11 PPR encoder is on the **motor shaft**, ahead of the
+> gearbox, so the edge rate is `bare RPM / 60 × 44` and the ratio cancels out: a
+> higher reduction raises counts-per-rev by exactly the factor it lowers output RPM.
+> ~7.8 kHz per channel at 620 RPM output, ~7.8 kHz at 170. **A slower rover is not a
+> slower encoder.** §4.7's PIO decode on Pico A is what actually solves it.
+> The *numbers above* do change with the swap — `ENCODER_COUNTS_PER_REV` is
+> 11 × 4 × the new ratio — but the conclusion does not.
+
 This does not change what to do — a bench test still settles it, and arithmetic is not
 a substitute for one. It changes the expectation you should carry into that test: plan
 for the poll rate to be inadequate rather than hoping it is fine. Note also that this
@@ -880,7 +918,8 @@ carries an LTC4311 for exactly this), tested against a full roll-call first
 >
 > ⚠ **The whole question is moot under Master Hardware Design §4.7:** the
 > MCP23017 is to be replaced by a Pico 2 W doing quadrature decode in PIO, over
-> UART. There is no expander left to interrupt.
+> UART. There is no expander left to interrupt. Pin-level assignment recorded
+> 2026-09-24 (§4.7); boards in hand, nothing fitted. See S-10.
 
 given this session's I²C fragility history.
 
@@ -902,6 +941,13 @@ mechanism, and GP7 stays free.
 **S-3 — Odometry rests on two unmeasured constants.** `WHEEL_DIAMETER_M` and
 `TRACK_WIDTH_M` are both marked UNCONFIRMED placeholders in `config.py`. Every
 pose estimate inherits their error.
+
+**Make that three, as of 2026-09-24.** `ENCODER_COUNTS_PER_REV` becomes unknown
+again when the **170 RPM motors** land: it is 11 × 4 × the new gearbox ratio, and the
+ratio is not yet recorded (Master Hardware Design §7.1). **Neither 752 nor 3292 is
+right for them** — 3292 lands within ~20% of a ~62:1 box, which is worse than being
+obviously wrong, because a 20% odometry error reads as wheel slip rather than as a
+bad constant. `odometry.py` divides by this value directly.
 
 **S-4 — No inverse kinematics for the arm.** No per-joint calibration exists,
 so there is no reach-envelope model to plan against. Grasp is a fixed primitive
@@ -955,6 +1001,32 @@ Home Assistant is the backend; the `discover`/`send_command` interface is
 written so the backend can be swapped without touching callers. Still
 disabled (`ENABLE_SMART_HOME=False`) pending Willie's own Google account
 credentials — unrelated to this decision.
+
+**S-9 — The sonar failure value is "clear path", which does not survive moving to
+a UART.** *Recorded 2026-09-24, on the arrival of the Pico 2 W boards.*
+`sensors.py:43,46` return `999.0` on timeout and `safety.py:22,38` default to it, so
+the value that means *I did not get a reading* is also the value that means *nothing
+is in front of me*. Today that is survivable: the timeout is a local pin read, so
+the sentinel and the truth are usually close. Behind Master Hardware Design §4.7's
+`uart2-pi5` link it stops being survivable — a dropped or stale frame becomes a
+positive assertion of clear path, at the one layer that is supposed to be the
+availability floor. **Three things are needed before sonar goes behind a serial
+link:** a sequence number per frame, a staleness deadline in `SonarArray`, and
+`stale → stop` rather than `stale → 999`. This is the software half of §4.7 and it
+gates the hardware change, not the other way round. See also §6.5's warning that
+the ToF's "unavailability is not a fault" rule does **not** extend to Pico B.
+
+**S-10 — The encoder transport changes and `Encoders` has no seam for it.**
+*Recorded 2026-09-24.* `sensors.py::Encoders` polls the MCP23017 directly; under
+§4.7 it reads framed counts from Pico A over `uart4-pi5`, with the twelve lines on
+Pico GP0–GP11 in the same order as MCP23017 GPA0→GPB3 (`config.py:235`) so the
+harness lands 1:1. Two consequences worth recording now: **S-2's under-sampling
+problem disappears entirely** — decode moves to PIO on the Pico, so the ~7.7kHz
+edge rate stops being an I²C polling-rate question; and **Pico A can report R5 from
+its own ADC**, which closes the unmonitored-rail gap that killed the encoders on
+2026-08-25 and which no INA260 observes (Master Hardware Design §2.1, P8). Note
+that **Phase B reads dead on all six channels today** (`config.py:222`), so direction-
+aware decode cannot be validated on either transport until those wires are metered.
 
 ---
 
@@ -1107,7 +1179,13 @@ wants it.
    given a caller 2026-08-18 (see S-7), not yet live-verified; the overcurrent
    half has no trip threshold defined.
 4. **Bench-confirm `ENCODER_COUNTS_PER_REV`, `WHEEL_DIAMETER_M`,
-   `TRACK_WIDTH_M` (S-2, S-3).**
+   `TRACK_WIDTH_M` (S-2, S-3).** ⚠ **The counts-per-rev half is blocked until the
+   170 RPM motors are fitted** (owner, 2026-09-24) — calibrating it against the
+   17.1:1 motors would measure hardware that is being removed. The wheel and track
+   constants are independent of the swap and can be settled now. The channel-to-wheel
+   attribution (`scripts/encoder_map_check.py`) has to be re-run **after** the swap
+   regardless: both left/right transpositions found on 2026-09-18 came from landing
+   motors and encoders in one pass, and a six-motor swap is that pass again.
 5. **Steering kinematics (crab/point-turn/arc turning).** Owner decision
    2026-08-18: deliberately deferred until basic drive is live-verified.
    Skid-steer stays the only turning mechanism — not an open question

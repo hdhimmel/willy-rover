@@ -2,7 +2,7 @@
 
 ## Master Hardware Design — As-Built
 
-**Revision 2.2 · Current Configuration · 2026-09-20**
+**Revision 2.3 · Current Configuration · 2026-09-24**
 
 ---
 
@@ -12,11 +12,11 @@
 |-------|-------|
 | Project | WildWilly Autonomous Rover |
 | Document | Master Hardware Design — as-built, current configuration only |
-| Revision | 2.2 |
-| Date | 2026-09-20 |
+| Revision | 2.3 |
+| Date | 2026-09-24 |
 | Owner | Howard Himmel |
 | Status | Build complete; AI accelerator bonded; live verification in progress. **Filename retains `v2.0` deliberately** — renaming would break every cross-reference in Software Design, the FRD and `CLAUDE.md`. The revision field above is authoritative. |
-| Companions | Functional Requirements v3.1; Software Design v1.0 |
+| Companions | Functional Requirements rev 3.3; Software Design rev 1.2 |
 | Historical record | Master Engineering Package rev 6.2.0 retains all incident history, superseded designs, and revision lineage. Retain it. |
 
 **Scope of this document.** This describes the rover as it is currently built.
@@ -690,6 +690,9 @@ ten below plus the Witty Pi 5 HAT+ at `0x51`, which sits on the Pi header
 rather than this bus. Verified 2026-09-08 across 20 consecutive scans with
 zero bus errors. Expect eleven, not twelve: `0x70` is All-Call, not a device.
 
+> ⚠ **This becomes ten under §4.7.** `0x27` leaves the bus when encoder decode
+> moves to Pico A over UART. Nothing else on this list changes.
+
 | Address | Device | Function |
 |---------|--------|----------|
 | 0x27 | MCP23017 | Encoder GPIO expander, 6 channels |
@@ -929,7 +932,9 @@ calibration constant** (§6.2, §14).
 
 ### 4.7 Pending redesign — sonar and encoders move to two Pico 2 W
 
-⚠ **DESIGN, NOT AS-BUILT. None of this is fitted.** Recorded 2026-09-20.
+⚠ **DESIGN, NOT AS-BUILT. Nothing is fitted.** Recorded 2026-09-20; pin-level
+assignment added 2026-09-24, the day the boards arrived. Both boards are in hand
+and unflashed. Nothing below has been metered on the rover.
 
 The MCP23017 encoder expander is to be replaced by **two Pico 2 W
 microcontrollers, both UART devices to the Pi.** The signal conditioning board
@@ -941,8 +946,8 @@ device sits on the other end of P1's TRIG and ECHO pins.
 |---|---|---|
 | Role | 6 × quadrature encoders (12 lines) | 3 × HC-SR04 (6 lines) + BNO085 RST |
 | Power | **VSYS from R5** (DROK-4 3.3V) | **VSYS from Pi 5V header, fused** |
-| Link | **Pi 5 service port** (3-pin JST-SH) | **uart2 on GP4/GP5** |
-| Ground | own wire to star point | Pi ground, in the same harness |
+| Link | **`uart4-pi5` — Pi GP12/GP13** | **`uart2-pi5` — Pi GP4/GP5** |
+| Ground | R5 return for supply; header GND as signal reference | Pi ground, in the same harness |
 | Radio | **unused — do not initialise** (§12) | **unused — do not initialise** (§12) |
 
 **Why Pico A sits on R5.** Encoders and their reader share a rail and therefore
@@ -957,17 +962,36 @@ More importantly the sonars stay on R2, which dies with the base 12V — so with
 the base off, Pico B is still alive and can say *my sensor rail is down* rather
 than going silent. That distinction is what makes the reflex layer diagnosable.
 
-**Why uart2 and not UART0.** GP4/GP5 are freed by the sonars leaving the
-header, and using them leaves **nothing on GP14** — which permanently retires
-the UART0/serial-console hazard in §9 and §4.6.
+**Why both links are on the 40-pin header.** An earlier version of this section
+put Pico A on the Pi 5 **service port** (the 3-pin JST-SH). That is withdrawn.
+Removing the six sonar lines from the header frees GP13, GP14, GP21 and GP26, and
+GP12 is one of the twelve ex-motor-direction pins — so two spare UARTs exist on
+the header and neither Pico needs the service port. Three reasons the header wins:
 
-⚠ **The overlay is `uart2-pi5`, NOT `uart2`.** §6.5 records this the hard way: on
-a Pi 5 `dtoverlay -h uart3` reports *"GPIOs 4-7, BCM2711 only"* while `uart3-pi5`
-reports *"GPIOs 8-9, Pi 5 only"*, and the wrong one **does not error** — it boots
-clean and puts the UART on pins nothing is wired to, so the device reads as dead
-hardware. That cost a full session on the SEN0628. The `-pi5` suffix maps
-`uart2-pi5` → GP4/GP5; confirm with `dtoverlay -h uart2-pi5` on the running image
-before wiring. GP8/GP9 (`uart3-pi5`) are already the SEN0628's.
+1. **The service port is the only console you have when the Pi will not boot.**
+   Spending it on a rover subsystem spends the debug channel, and it is the one
+   channel whose value is highest exactly when everything else is unavailable.
+2. **The breakout gets simpler, not busier.** Six sonar lines leave and only one
+   new terminal (GP12) arrives, taking §5.3 from thirteen lines to **eleven**
+   (twelve with the optional ToF TX) — on a board chosen because the head
+   assembly is tight enough to reject a full-size HAT.
+3. **One mechanism, not two.** Both links become ordinary `/dev/ttyAMA*` devices
+   configured by the same `config.txt` pattern already proven on the SEN0628, so
+   there is no JST-SH crimp and no second class of serial device to reason about.
+
+**Why uart2 and uart4, and not UART0.** GP4/GP5 are freed by the sonars leaving
+the header, and GP12/GP13 are free for the same reason. Using them leaves
+**nothing on GP14** — which permanently retires the UART0/serial-console hazard
+in §9 and §4.6. Putting either Pico on `uart0` would resurrect precisely the
+hazard this redesign exists to kill, and GP15 is the BNO085 INT in any case.
+
+⚠ **The overlays carry the `-pi5` suffix: `uart2-pi5` and `uart4-pi5`, NOT
+`uart2`/`uart4`.** §6.5 records this the hard way: on a Pi 5 `dtoverlay -h uart3`
+reports *"GPIOs 4-7, BCM2711 only"* while `uart3-pi5` reports *"GPIOs 8-9, Pi 5
+only"*, and the wrong one **does not error** — it boots clean and puts the UART on
+pins nothing is wired to, so the device reads as dead hardware. That cost a full
+session on the SEN0628. Confirm both mappings on the running image before wiring.
+GP8/GP9 (`uart3-pi5`) are already the SEN0628's.
 
 **The SEN0628 ToF stays on the Pi** (§6.5). It is a packetized smart sensor with
 no microsecond timing to offload and no level shifting to do, so routing it
@@ -975,6 +999,109 @@ through Pico B would add a hop, a second serialization and a new failure mode
 for nothing. Revisit only as part of a deliberate decision to make Pico B the
 reflex controller — owning sonar, ToF *and* the stop — which is a larger change
 than this one.
+
+#### Pico A pinout — encoders
+
+Pin numbers are **Pico 2 W physical**; the Pi column is **Pi physical**.
+
+| Pico GP | Phys | Signal | Other end |
+|---|---:|---|---|
+| GP0 | 1 | RF Phase A | RF motor **yellow** |
+| GP1 | 2 | RF Phase B | RF motor **green** |
+| GP2 | 4 | RM Phase A | RM yellow |
+| GP3 | 5 | RM Phase B | RM green |
+| GP4 | 6 | LF Phase A | LF yellow |
+| GP5 | 7 | LF Phase B | LF green |
+| GP6 | 9 | LM Phase A | LM yellow |
+| GP7 | 10 | LM Phase B | LM green |
+| GP8 | 11 | RR Phase A | RR yellow |
+| GP9 | 12 | RR Phase B | RR green |
+| GP10 | 14 | LR Phase A | LR yellow |
+| GP11 | 15 | LR Phase B | LR green |
+| GP12 | 16 | UART0 TX | **Pi GP13, phys 33** — `uart4-pi5` RXD |
+| GP13 | 17 | UART0 RX | **Pi GP12, phys 32** — `uart4-pi5` TXD |
+| GP14 | 19 | Status LED | LED + 330Ω → GND |
+| GP28 | 34 | ADC2 — R5 sense | 10k/10k divider off R5 |
+| 3V3_EN | 37 | — | leave open |
+| VSYS | 39 | **R5 3.3V** | DROK-4, via 500mA fuse **and series Schottky** |
+| VBUS | 40 | — | **leave unconnected** |
+| GND | 38 | supply return | R5 return → star |
+| GND | 3 or 13 | signal reference | breakout GND |
+
+**The pair order is deliberately identical to MCP23017 GPA0→GPB3**
+(`config.py:235`: `rf` A0/A1, `rm` A2/A3, `lf` A4/A5, `lm` A6/A7, `rr` B0/B1,
+`lr` B2/B3). The existing twelve-way harness therefore lands 1:1 in the same
+sequence — no re-crimp, and no opportunity to introduce a third left/right
+transposition after the two found on 2026-09-18. Yellow to the even GP, green to
+the odd, the same convention §16.6 uses.
+
+**Enable the internal pull-up on all twelve encoder lines.** §14 item 7 — Hall
+push-pull versus open-collector — is still open, and the pull-up is free if they
+turn out to be push-pull.
+
+**R5 sense on ADC2 closes the unmonitored-rail gap** left by P8 having no INA260
+(§2.1). The 10k/10k divider is not strictly needed at 3.3V, but it keeps the
+input in range if R5 is ever raised to 5V (§14), and ADC_VREF is derived from the
+Pico's own regulated 3V3 rather than from R5, so the measurement stays valid as
+R5 sags. ADS1115 A2 is the alternative route (§1.1) and is not needed if this one
+is built.
+
+#### Pico B pinout — sonar and IMU reset
+
+| Pico GP | Phys | Signal | Other end |
+|---|---:|---|---|
+| GP0 | 1 | UART0 TX | **Pi GP5, phys 29** — `uart2-pi5` RXD |
+| GP1 | 2 | UART0 RX | **Pi GP4, phys 7** — `uart2-pi5` TXD |
+| GP2 | 4 | TRIG-F out | **P1-1** → P1-2 → FRONT sonar TRIG |
+| GP3 | 5 | ECHO-F in | **P1-4** — divider output, 3.33V |
+| GP6 | 9 | TRIG-L out | **P1-5** → P1-6 → LEFT sonar TRIG |
+| GP7 | 10 | ECHO-L in | **P1-8** |
+| GP8 | 11 | TRIG-R out | **P1-9** → P1-10 → RIGHT sonar TRIG |
+| GP9 | 12 | ECHO-R in | **P1-12** |
+| GP10 | 14 | BNO085 RST | BNO085 RST, **open-drain**, 10k pull-up to Pi 3V3 |
+| GP14 | 19 | Status LED | LED + 330Ω → GND |
+| VSYS | 39 | **Pi 5V, phys 2 or 4** | via 500mA fuse **and series Schottky** |
+| VBUS | 40 | — | **leave unconnected** |
+| GND | 38 | — | Pi GND, phys 6 or 9, same harness |
+
+**GP4 and GP5 are left unused on Pico B on purpose.** In this build "GP4/GP5"
+should mean the Pi-side link and nothing else; a Pico pin with the same number in
+the same harness is the kind of ambiguity that produced the `uart3`/`uart3-pi5`
+session and the two left/right transpositions.
+
+**RST is open-drain, not push-pull.** A push-pull output sitting at 0V while
+Pico B is unpowered and the Pi runs on Witty Pi would hold an active-low reset on
+a live IMU. Hi-Z idle against a pull-up cannot do that, which is what makes
+consequence 1 below satisfiable rather than merely careful.
+
+#### Pi-side net change
+
+| | Before | After |
+|---|---|---|
+| GP4, GP5 | sonar RIGHT TRIG, FRONT TRIG | **`uart2-pi5` to Pico B** |
+| GP12, GP13 | free / sonar LEFT TRIG | **`uart4-pi5` to Pico A** |
+| GP14, GP21, GP26 | sonar LEFT ECHO, RIGHT ECHO, FRONT ECHO | **unused** — GP14 stays unused permanently |
+| GP2, GP3, GP8, GP9, GP15, pin 1 | I²C, ToF UART, BNO085 INT, 3V3 | unchanged |
+| Service port | *(was: Pico A)* | **left free for the console** |
+| I²C devices | eleven | **ten** — 0x27 retires |
+
+`config.txt` gains `dtoverlay=uart2-pi5` and `dtoverlay=uart4-pi5` alongside the
+existing `uart3-pi5`, and the serial console must remain disabled (§9).
+
+#### Verify before you crimp
+
+1. **`dtoverlay -h uart2-pi5` reports GPIOs 4–5, and `uart4-pi5` reports GPIOs
+   12–13.** If either reports a different pair or names BCM2711, stop: the wrong
+   overlay boots clean and the Pico reads as dead hardware. If `uart4-pi5` is not
+   GP12/GP13, the next candidate is `uart5-pi5` on GP16/GP17, also free.
+2. **Meter all six green wires before landing them.** Phase B reads dead on all
+   six today (`config.py:222`) — one wiring pattern, not six faults — and the
+   2026-09-18 reverse-polarity event may have taken those output stages. Settle
+   that on the bench, not through a new UART.
+3. **ECHO junctions at 3.2–3.4V under servo load, not idle** (§16.10). Mandatory
+   now, not advisory — see consequence 3.
+4. **Pico VSYS fuse and Schottky fitted on both boards** before either is powered
+   from the rover — see consequences 7 and 8.
 
 **Consequences to carry:**
 
@@ -1002,6 +1129,9 @@ than this one.
 8. **USB back-feed.** Reflashing a rover-powered Pico over USB pushes 5V onto
    the Pi rail through the VBUS→VSYS Schottky — two sources on one rail, §12.
    Series Schottky in the feed, or unplug the rover feed first.
+9. **§5.3's line count drops to eleven** (twelve with the optional ToF TX) and
+   three of its terminals change function. Relabel them — §5.3's own warning
+   about SPI-named terminals carrying a UART now applies to GP12/GP13 as well.
 
 ---
 
@@ -1078,6 +1208,27 @@ was chosen.
 times: eleven as first written on 2026-09-09, twelve when the ToF UART was added on
 2026-09-13, thirteen when 3V3 was restored on 2026-09-14. **Count from this table, not
 from any prose figure elsewhere in the repo.**
+
+> ⚠ **Under §4.7 this list gets shorter, not longer — 11 lines, 12 with the
+> optional ToF TX.** Six sonar lines leave the header entirely. GP4, GP5 and GP13
+> are already terminals and change function rather than count; the only new
+> terminal is **GP12**. GP14, GP21 and GP26 come off and stay off.
+>
+> | # | Line | Pi pin |
+> |---|------|--------|
+> | 1–2 | I²C SDA / SCL | GP2 / GP3 |
+> | 3–4 | **Pico B link — `uart2-pi5`** | GP4 TX / GP5 RX |
+> | 5–6 | **Pico A link — `uart4-pi5`** | GP12 TX / GP13 RX |
+> | 7 | BNO085 INT | GP15 |
+> | 8 | SEN0628 ToF RX | GP9 (`MISO`) |
+> | 9 | 5V — **Pico B VSYS**, fused | pins 2/4 |
+> | 10 | GND | pins 6/9 |
+> | 11 | 3V3 — device logic, ToF, BNO085 RST pull-up | pin 1 |
+> | *12* | *SEN0628 ToF TX, optional* | *GP8 (`CE0`)* |
+>
+> **Relabel the terminals that change function.** The warning below about SPI-named
+> terminals carrying a UART now applies to GP12/GP13 too, and GP4/GP5/GP13 will
+> still be labelled as sonar TRIG lines from this build.
 
 ⚠ **A 3V3 line IS required here.** The I²C device logic is fed from the Pi's own
 3.3V (owner-stated); R5/DROK-4 feeds the **motor encoders only**. That line carries
@@ -1532,9 +1683,15 @@ software still does not read it, so the FRD's statement remains true of the
 2026-08-25), quadrature encoders at 11 PPR on the motor shaft. One 6-pin JST-PH
 per motor.
 
+⚠ **These are being replaced by 170 RPM variants** — on order as of 2026-09-24, not
+fitted. Everything in this section describes the 620 RPM motors in the rover today;
+see **Motor change pending** below for what moves when they land.
+
 These are **12V motors on a 12V rail, running at their rated voltage** — they are
 not being over-driven by the 11.4V bus. The 100–200 RPM variants of this family are
-a different gearbox; do not reason about torque or counts from their figures.
+a different gearbox; do not reason about torque or counts from their figures — which
+now cuts both ways, since **the 170 RPM motors on order are one of those variants.**
+Nothing in this section's arithmetic transfers to them.
 
 **620 RPM is a low-reduction, speed-optimised gearbox, and that is the reason
 drive torque is low.** Torque scales with gear reduction, so the 100–200 RPM
@@ -1557,8 +1714,65 @@ duty, and no software change can recover what the gearbox gives away.
 
 **If more torque is wanted, it is a motor change, not a tuning change.** A 12V
 ~130 RPM JGA25-370 shares the body, mount and 6-pin encoder, gives roughly 4.8×
-the torque and still tops out near 0.7 m/s. The only downstream change is
-ENCODER_COUNTS_PER_REV, already flagged unconfirmed in config.py.
+the torque and still tops out near 0.7 m/s.
+
+#### Motor change pending — lower-RPM variants on order
+
+⚠ **Owner-stated 2026-09-24: the replacement motors are the 12V — 170 RPM —
+variants of this family. Not yet fitted.** The gearbox **ratio is not owner-stated
+and must not be inferred** — capture the vendor part number on arrival (§7.1 already
+asks for this, because JGA25-370 covers many ratios and wire colours differ between
+batches).
+
+**What 170 RPM output implies, and how much of it is derived.** Against the same
+~10,600 RPM bare motor that 620 RPM at 17.1:1 implies, 170 RPM output needs roughly
+**62:1**, giving `ENCODER_COUNTS_PER_REV` ≈ 11 × 4 × 62 = **~2,730**. ⚠ **Treat that
+as an order-of-magnitude placeholder, not a value to configure.** It is derived from
+an assumed bare speed, which is precisely how 3292 got into the config in the first
+place — a ratio inferred from another inferred figure. The real number comes from the
+part number, or from measurement.
+
+**Encoder calibration stays OPEN until they land.** Calibrating counts-per-rev
+against the 17.1:1 motors now would measure hardware that is about to be removed.
+E-1's counts-per-rev step should wait; its channel-attribution step will have to be
+re-run regardless — see the connector warning below.
+
+An earlier line here said "the only downstream change is ENCODER_COUNTS_PER_REV".
+**That is wrong.** What actually moves:
+
+| Quantity | How it changes at 170 RPM |
+|---|---|
+| `ENCODER_COUNTS_PER_REV` | **11 PPR × 4 × real ratio.** ~2,730 if the ratio is ~62:1 — placeholder only, **measure it** |
+| Top speed | 170/60 × π × 0.1016 = **0.90 m/s**, against 3.3 m/s today. **3.6× slower** |
+| Torque at the wheel | up by the same ~3.6× the reduction rises. This is the point of the swap |
+| Breakaway duty | **should fall well below the ~0.5 measured 2026-08-24.** That figure was a torque shortfall and more reduction is exactly what fixes it. `SPEED_SLOW` was raised 0.35→0.55 that day to spend headroom; **re-measure breakaway and consider putting it back** |
+| `SPEED_*`, `SPEED_RAMP_PER_S` | the same duty now buys ~1/3.6 of the ground speed. Re-tune against the measured top speed; do not scale the old values |
+| `STALL_GRACE_S` | counts-per-second at a given duty scale with the ratio; re-check the window still clears `SPEED_RAMP_PER_S`'s worst-case ramp |
+| Odometry | inherits `ENCODER_COUNTS_PER_REV` directly (`odometry.py`) |
+| **FRD G-2 under-sampling** | **does NOT improve** — see below |
+| Stair stretch goal | 0.90 m/s with 3.6× tractive force is a strictly better starting point than 3.3 m/s with none |
+
+**3292 gets closer but stays wrong — do not let it back in.** This document records
+3292 ("823.1 PPR ×4") as wrong, and it *was*: it implies 74.8:1, which at a ~10,600
+RPM bare motor is ~142 RPM output, not 170. So after the swap 3292 is wrong by
+roughly 1.2× instead of 4.4× — **which makes it more dangerous, not less.** A 20%
+odometry error does not announce itself the way a 4× error does; it looks like wheel
+slip. Neither 752 nor 3292 is the value for these motors.
+
+⚠ **G-2's polling shortfall is not fixed by slower motors.** The 11 PPR encoder is
+on the **motor shaft**, ahead of the gearbox, so the edge rate is `bare RPM / 60 × 44`
+and **the gearbox cancels out of it entirely** — a higher ratio raises counts-per-rev
+by exactly the factor it lowers output RPM. At ~10,600 RPM bare that is ~7.8 kHz per
+channel whether the output is 620 RPM or 170 RPM, against `sensors.py`'s ~1 kHz
+ceiling. **A slower rover is not a slower encoder.** Only §4.7's move to PIO decode on
+Pico A solves this.
+
+⚠ **The swap re-opens M-1 and E-1's channel attribution, not just calibration.**
+Both left/right transpositions found on 2026-09-18 — `MOTOR_PORT` and `ENCODER_PINS`
+— happened because the motors and their encoders were landed in the same pass. A
+six-motor swap is that same pass again. **Re-run `scripts/encoder_map_check.py` and
+the M-1 per-wheel drive check after the swap, before trusting any per-wheel claim**,
+and meter every crimp: wire colours differ between batches of this family (§7.2).
 
 **Reduction ratio is 17.1:1**, owner-supplied 2026-08-25 and consistent with
 620 RPM from a ~10,600 RPM bare motor. The vendor part number is still NOT
@@ -1574,11 +1788,13 @@ encoder side alone; combined with the wheel-diameter error fixed the same day
 **6.8×** before 2026-08-25.
 
 The 11 PPR figure comes from the same vendor section, so **752 is derived, not
-measured.** `scripts/encoder_calibration.py`
-confirms it by driving a wheel a known number of revolutions **under power** — not by
-hand, which produces no counts at all (§2.2: the encoder is behind the 17.1:1 gearbox
-and does not back-drive) — and settles
-the unverified A/B channel column in §7.2 in the same pass.
+measured.** Any measurement must be taken **under power**: hand-turning produces no
+counts at all (§2.2 — the encoder is behind the 17.1:1 gearbox and does not
+back-drive). `scripts/encoder_map_check.py` is the tool that drives one wheel at a
+time, and it settles the unverified A/B channel column in §7.2 in the same pass.
+⚠ **`scripts/encoder_calibration.py` is built on hand-turning and is invalid on this
+hardware** — its own docstring says "by hand-turning a wheel". An earlier revision of
+this paragraph described it as driving under power. It does not. Corrected 2026-09-24.
 
 | Wire | Function | Lands on |
 |------|----------|----------|
@@ -1882,6 +2098,33 @@ quadrature decode, decided 2026-08-18 — **retracted 2026-08-23**: that wire
 would not actually have reduced I²C transaction count. See FRD v3.1
 G-2 and Software Design v1.0 S-2 for the full reasoning. GP7 is free again.)
 
+**Under §4.7 — the header after both Picos land.** ⚠ **DESIGN, NOT AS-BUILT.**
+The table above is what is wired today. This block is deliberately *not* numbered
+§9.1 — see §17.3.
+
+| Pin | BCM | Connects to |
+|-----|-----|-------------|
+| 7 | GP4 | **`uart2-pi5` TXD → Pico B RX** (was sonar RIGHT TRIG) |
+| 29 | GP5 | **`uart2-pi5` RXD ← Pico B TX** (was sonar FRONT TRIG) |
+| 32 | GP12 | **`uart4-pi5` TXD → Pico A RX** (was free — ex-motor-direction) |
+| 33 | GP13 | **`uart4-pi5` RXD ← Pico A TX** (was sonar LEFT TRIG) |
+| 2 or 4 | 5V | **Pico B VSYS, via 500mA fuse and series Schottky** |
+| 8 | GP14 | **unused, permanently** — see the hazard note below |
+| 37 | GP26 | **unused** (was sonar FRONT ECHO) |
+| 40 | GP21 | **unused** (was sonar RIGHT ECHO) |
+
+Everything else is unchanged: GP2/GP3 I²C, GP8/GP9 the SEN0628 ToF, GP15 the
+BNO085 INT, pin 1 3V3 feeding all device logic. **Pico A takes no power from the
+header** — its VSYS is R5, which is the whole point of §4.7's split; only its
+signal ground references the header.
+
+Still free afterwards: **GP7, GP10, GP11**, GP14/GP21/GP26 once the sonars leave,
+and the rest of the twelve ex-motor-direction pins less GP12/GP13. `uart5-pi5` on
+GP16/GP17 is the fallback if `uart4-pi5` does not map to GP12/GP13 — confirm
+before wiring (§4.7). ⚠ **Which header pins the display's 3-pin power tap occupies
+is not recorded anywhere in this document** (§16.15) — check the tap physically
+before claiming any pin near it is free.
+
 **GP14 and GP15 are UART0 TXD/RXD.** The serial console must remain disabled
 or the kernel claims both pins — and drives GP14 as an output onto the left
 sonar's divider node. Disable via `raspi-config` → Interface Options → Serial
@@ -1925,8 +2168,26 @@ An obstacle stop must never depend on a detection frame arriving.
 
 Enumerate all eleven I²C devices (ten plus the Witty Pi 5 at 0x51 — see §0's
 roll-call), confirm the BNO085 interrupt is live on GP15,
-and confirm all six encoder channels change count under manual rotation.
+and confirm **all six encoder channels are reporting** — `Encoders.is_healthy`, the
+check `brain.py:_self_test()` actually performs.
 Motion stays inhibited unless every check passes.
+
+**Channel-to-wheel attribution is a bench test, not a boot test** — FR-500-001, run
+under power with `scripts/encoder_map_check.py`, one wheel at a time, rover on blocks.
+
+> ⚠ **The count becomes ten under §4.7** — nine plus the Witty Pi — when `0x27`
+> leaves the bus, and the encoder check stops being an I²C read at all: it becomes
+> a query to Pico A over `uart4-pi5`, which can also report R5 from its own ADC.
+
+⚠ **Corrected 2026-09-24.** This step previously read "confirm all six encoder
+channels change count under manual rotation", which was unachievable twice over.
+**First**, the encoder sits behind the 17.1:1 gearbox and does not back-drive (§2.2,
+§7.1): 30s of hand-turning produced one distinct pin state on 2026-08-25 while 3s of
+driving produced seven. **Second, and more fundamental, a boot self-test cannot drive
+the wheels** — it is the gate that authorises motion, so requiring motion to pass it
+is circular. Channel attribution therefore belongs on the bench (FR-500-001,
+`scripts/encoder_map_check.py`), and the boot gate checks only that the encoders are
+reporting. Independent of §4.7, which changes the transport and not this reasoning.
 
 ⚠ **This distinction no longer works as written (2026-09-14).** It said the self-test
 must tell "base unpowered" from "bus fault" because a blank scan on USB-C-only power
@@ -2063,7 +2324,7 @@ Status as of **2026-09-11**.
 | AI accelerator PCIe bond | PASS | `/dev/hailo0`; firmware 5.1.1, HAILO10H |
 | Pi-rail INA260 address | **PASS — 0x45** | `config.py:212` `INA260_PI_ADDR=0x45` ("VERIFIED 9.068V"); `config.py:210` `INA260_MOTOR_ADDR=0x44` is the +12V bus. |
 | Sonars connected | ✅ **ALL THREE RANGE-TESTED AND WORKING, 2026-09-17** — first time since the build | Front 49.7cm, left 91.1cm, right 30.9cm, each stable to ±0.4cm over 8 samples and each reading its own direction (three distinct distances, so no cross-talk). **All three ECHO lines idle LOW and go low against a pull-down** — the healthy signature on every channel. Rail 4.990V @ **0.026A**, against 0.101A with one sensor and the 0.348A that flagged a short earlier the same day: no sensor is drawing fault current. Getting here took finding a reversed crimp pin that had not clicked home, a ground fault on the GeeekPi breakout (§5.3), and replacing two sensors destroyed by reverse polarity (§16.12) |
-| Encoder counts on all six channels | Not tested | — . ⚠ To be superseded: the MCP23017 path is replaced by Pico A (§4.7), and the bus drops to ten devices when 0x27 leaves |
+| Encoder counts on all six channels | Not tested | ⚠ **Blocked twice over.** Counts-per-rev waits for the 170 RPM motors (§7.1, §14 item 17); the MCP23017 path is then replaced by Pico A (§4.7) and the bus drops to ten devices when 0x27 leaves. Channel attribution must be re-run **after** the motor swap either way |
 | BNO085 interrupt and fusion output | Not tested | INT on GP15 is unused by the driver; library polls over I²C |
 | Battery divider calibration | **RE-TRIMMED 2026-09-17** | `BATTERY_DIVIDER_SCALE` 0.2386 → **0.3237**, from AIN0 = 3.7229V (raw 29783) against a bench supply metered at 11.5V. The old value belonged to the pre-2026-09-02 divider and was reporting **15.60V from an 11.5V input** — impossible for a 3S pack, and it passed every guard because the guards only catch readings that are too LOW. **Two open items:** the implied ratio (~10k/4.7k) does not match the 10k/3.197k described in §16, so meter the fitted parts; and at PGA ±4.096V this scale saturates at **12.65V**, ~50mV above a rested 3S pack, so full-charge readings are untrustworthy without moving to PGA ±6.144V |
 | Steering servo sweep | Not tested | — |
@@ -2205,14 +2466,33 @@ measurement work rather than wiring.
     2026-09-16; the three ECHO junctions and the battery divider have not been
     verified under injection. This is the same check that yields item 14's
     constant, so they close together.
-15. **Pico 2 W redesign not built** (§4.7). Design recorded, nothing fitted. The
-    blocking unknowns are `dtoverlay=uart2` on the running image, and the UART
-    framing contract that has to replace the 999cm sentinel before sonar can sit
-    behind a serial link at all.
+15. **Pico 2 W redesign not built** (§4.7). Boards in hand 2026-09-24, unflashed;
+    pin-level assignment now recorded, nothing fitted or metered. The blocking
+    unknowns are (a) that `dtoverlay -h uart2-pi5` and `uart4-pi5` really report
+    GPIOs 4–5 and 12–13 on the running image — the `-pi5` suffix trap of §6.5,
+    where the wrong overlay boots clean and the device reads as dead hardware;
+    (b) whether the six encoder Phase B (green) lines are intact at all, still
+    dead as of `config.py:222`; and (c) the UART framing contract that has to
+    replace the 999cm sentinel before sonar can sit behind a serial link.
 16. ⚠ **P8 has no recorded fuse and no recorded gauge** (§2.1). Every other +12V
     branch takes a numbered fuse, F2–F5. **Confirm whether a fuse exists, fit one
     if not, and record the gauge.** Nothing monitors R5 either — no INA260 — and
     the encoders have already been lost once to an unmonitored 3.3V rail.
+
+17. ⚠ **Motor swap to 170 RPM variants — on order, not fitted** (owner-stated
+    2026-09-24; §7.1, *Motor change pending*). **The gearbox ratio is not recorded**
+    — capture the vendor part number on arrival; it is what sets
+    `ENCODER_COUNTS_PER_REV` = 11 × 4 × ratio, and this document has already been
+    wrong once about that constant by inferring a ratio from another inference.
+    **Encoder counts-per-rev calibration is blocked until they land** — calibrating
+    the 17.1:1 motors measures hardware that is being removed. `WHEEL_DIAMETER_M`
+    and `TRACK_WIDTH_M` are independent and can be settled now. After the swap,
+    re-run **both** the M-1 per-wheel drive check and
+    `scripts/encoder_map_check.py`: the two left/right transpositions found on
+    2026-09-18 came from landing motors and encoders in one pass, and six new
+    motors is that pass again. Re-measure breakaway duty before keeping
+    `SPEED_SLOW=0.55`, which was raised to spend headroom the old gearbox did not
+    have.
 
 ---
 
@@ -2241,7 +2521,8 @@ Current components only.
 
 | Component | Role | Qty | Status |
 |-----------|------|-----|--------|
-| JGA25-370B gearmotor + encoder | Drive wheels | 6 | Installed |
+| JGA25-370B gearmotor + encoder, **620 RPM** | Drive wheels | 6 | Installed — **being replaced** |
+| JGA25-370 gearmotor + encoder, **170 RPM** | Drive wheels — torque over speed (§7.1) | 6 | **On order 2026-09-24.** Ratio not recorded — capture the part number on arrival |
 | Adafruit FeatherWing #2927 | I²C motor driver — **0x61 left, 0x60 right** (§7.2) | 2 | Installed |
 | GDW DS041MG servo | Corner steering — PCA9685 0x42 | 6 | Installed |
 
@@ -2362,7 +2643,7 @@ connector (§4.2).
 | | DSI | out | display + 3-pin power tap | Display | ribbon + GPIO |
 | | PCIe | bidir | accelerator | AI HAT+ 2 | FFC |
 | | USB | in | rear camera | Rear camera | USB |
-| | *service port* | *bidir* | *3-pin JST-SH debug UART* | *unused today — Pico A under §4.7* | — |
+| | *service port* | *bidir* | *3-pin JST-SH debug UART* | *unused — **reserved for the console**, deliberately not spent on a rover subsystem (§4.7)* | — |
 | **Witty Pi 5** | `VIN` (KF350-2P) | pwr in | 9V (R1) | DROK-Pi | output |
 | | 5V out | pwr out | ~5.4V | Raspberry Pi 5 | header 5V |
 | | I²C | bidir | `0x51` | GODIY hub | SDA/SCL |
@@ -2457,10 +2738,12 @@ connector (§4.2).
 drop is identified by its device and its hub port. Any "row N" reference in the
 subsections below is a leftover and should be read as "this device's drop".
 
-> ⚠ **Rows that change under §4.7.** The MCP23017 block disappears entirely; its
-> twelve encoder lines move to Pico A, and `GPB4` → BNO085 `RST` moves to Pico
-> B. Every Pi ↔ signal board sonar row re-points at Pico B. Nothing else in this
-> table moves.
+> ⚠ **Rows that change under §4.7 — pin-level replacements are tabulated there,
+> not here.** The MCP23017 block disappears entirely; its twelve encoder lines
+> move to Pico A GP0–GP11, and `GPB4` → BNO085 `RST` moves to Pico B GP10. Every
+> Pi ↔ signal board sonar row re-points at Pico B, and the Pi gains two UART
+> pairs, GP4/GP5 and GP12/GP13. The *service port* row stays unused — it is
+> reserved for the console, not spent on Pico A. Nothing else in this table moves.
 
 ### 16.2 ADS1115 — 0x48, rows 3–4
 
@@ -2799,7 +3082,8 @@ systemctl is-enabled serial-getty@ttyAMA0.service
 ```
 
 **§4.7 retires this hazard permanently** by moving the sonars to Pico B on
-uart2 (GP4/GP5) and leaving nothing at all on GP14.
+`uart2-pi5` (GP4/GP5) and the encoders to Pico A on `uart4-pi5` (GP12/GP13),
+leaving nothing at all on GP14. Neither Pico may be put on `uart0`.
 
 *Optional — 220Ω series TRIG protection.* There is no room for it on the rev
 15.1 board: the TRIG jumpers (`c1b–c2b`, `c5b–c6b`, `c9b–c10b`) are what make
@@ -2856,7 +3140,7 @@ None of these touch the 40-pin header except the display's power tap.
 
 ---
 
-**End of Master Hardware Design rev 2.2**
+**End of Master Hardware Design rev 2.3**
 
 ---
 
@@ -2866,9 +3150,9 @@ None of these touch the 40-pin header except the display's power tap.
 
 | Document | Revision | Covers |
 |----------|----------|--------|
-| Master Hardware Design (this document) | **2.1** | As-built hardware, BOM, pin-to-pin schedule |
-| Functional Requirements | 3.1 | What the rover must do, and how each requirement is proven |
-| Software Design | **1.1** | Module architecture, control layering, FSM, safety gate |
+| Master Hardware Design (this document) | **2.3** | As-built hardware, BOM, pin-to-pin schedule |
+| Functional Requirements | **3.3** | What the rover must do, and how each requirement is proven |
+| Software Design | **1.2** | Module architecture, control layering, FSM, safety gate |
 | Master Engineering Package | rev 6.2.0 | **Historical record only** — incident narrative, superseded designs, revision lineage. Retain; do not treat as current. |
 
 ### 17.2 Reference-integrity defect in `CLAUDE.md` — CLOSED 2026-08-18
@@ -2901,6 +3185,19 @@ ADS1115.
 the same ground with current content — and remove the "rev 6.0.7 authoritative"
 line. If the historical record is wanted in-repo, commit rev 6.2.0 alongside
 rather than in place of this set.
+
+### 17.3 `config.py` cites a §9.1 that does not exist in this document — OPEN
+
+`config.py:125` and `config.py:207` both cite **§9.1** for the MCP23017 / encoder
+expander. This document's §9 has no subsections, so those citations resolve to
+nothing here — they belong to the superseded Master Engineering Package numbering.
+Recorded 2026-09-24 while adding the §4.7 pin-level design, which is why the
+header's after-state block in §9 is left unnumbered rather than becoming a §9.1
+that would silently capture two stale pointers and make them look correct.
+
+**Fix by editing the citations, not by minting the section.** The MCP23017 is
+being removed under §4.7 and both comments will be rewritten then; the encoder
+pin map's real home is §16.6 today and §4.7 afterwards.
 
 ---
 
