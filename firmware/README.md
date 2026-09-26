@@ -94,11 +94,15 @@ moved** — turning that open question into telemetry instead of a bench session
 When the green wires are fixed, replace `count_edges()` with a jump-table
 quadrature decoder; the wire protocol does not change.
 
-**PIO is not optional.** 3,885 edges/s per channel × 12 = ~46,600/s, against a
-MicroPython IRQ overhead of 5–15 µs. And the 170 RPM motors do not help: the
-encoder sits on the **motor** shaft, ahead of the gearbox, so the rate is
-`bare RPM / 60 × 44` regardless of reduction (§7.1). A slower rover is not a
-slower encoder.
+**PIO is not optional.** 7,773 counts/s per wheel across twelve channels, against a
+MicroPython IRQ overhead of 5–15 µs.
+
+⚠ **Corrected 2026-09-26.** This said the 170 RPM motors would not help, on the
+reasoning that the encoder sits on the **motor** shaft so the gearbox cancels. The
+reasoning is right; the assumption that the bare motor is unchanged was not. 1:35 at
+170 RPM implies **5,950 RPM bare** against ~10,600 today, so the rate falls from
+7,773 to **4,363 counts/s per wheel**. Still ~4× the I²C poll ceiling and far beyond
+an interrupt — PIO stays — but the margin is better than advertised.
 
 **ECHO stuck high is a destroyed sensor, not a timeout.** `pico_b.py` checks
 ECHO idles low *before* triggering and flags a stuck line separately — that is

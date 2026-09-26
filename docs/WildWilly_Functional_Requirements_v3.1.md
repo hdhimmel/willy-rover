@@ -308,13 +308,9 @@ So at full speed:
 **Expect under-sampling at speed and plan for it.** The per-channel rate is close
 to 8.5 kHz, not the few hundred Hz a lower counts-per-rev figure would imply.
 
-⚠ **The 170 RPM motors do not relieve this, and it is worth being explicit about
-why.** The 11 PPR encoder sits on the **motor shaft**, ahead of the gearbox, so the
-edge rate is `bare RPM / 60 × 44` and **the ratio cancels out entirely** --- a higher
-reduction raises counts-per-rev by exactly the factor by which it lowers output RPM.
-~7.8 kHz per channel at 620 RPM output, ~7.8 kHz at 170. **A slower rover is not a
-slower encoder.** Master Hardware Design §4.7's PIO decode on Pico A is the thing
-that resolves it.
+⚠ **Corrected 2026-09-26 — the swap DOES reduce the rate, by 1.78×.** The gearbox-cancels reasoning is sound, but it assumes the same bare motor and this is a different winding: **1:35 at 170 RPM implies 5,950 RPM bare**, against the ~10,600 the fitted 17.1:1 motors imply. Counts per second per wheel therefore fall from **7,773 to 4,363** (3,337 at the rated 130 RPM). Still ~4× over the ~1 kHz poll ceiling and far beyond a MicroPython interrupt, so PIO decode is still required — the conclusion holds, the margin is merely less desperate.
+
+**`ENCODER_COUNTS_PER_REV` becomes 1540** (11 × 4 × 35), not 752 and not 3292.
 
 **Resolution:** bench test, not more arithmetic --- drive one wheel a known number of
 turns **under power** and read the counts. ⚠ **Not by jogging or hand-turning:** the
@@ -322,9 +318,10 @@ encoder is behind the 17.1:1 gearbox and does not back-drive (30s by hand gave o
 distinct pin state on 2026-08-25; 3s of driving gave seven), and
 `scripts/encoder_calibration.py` is built on hand-turning and is therefore invalid
 here. This settles counts/rev and the gearbox ratio together, and is the same bench
-session already needed to confirm `WHEEL_DIAMETER_M`. ⚠ **Wait for the 170 RPM
-motors** (owner, 2026-09-24) --- calibrating the 17.1:1 motors measures hardware that
-is being removed. `WHEEL_DIAMETER_M` and `TRACK_WIDTH_M` are independent of the swap
+session already needed to confirm `WHEEL_DIAMETER_M`. ⚠ **Wait for the 170 RPM motors**, delivered 2026-09-26 — calibrating the 17.1:1
+motors measures hardware that is being removed. The ratio is **1:35**, so the target
+is **1540 counts/rev**; the only open question is whether it is 35 or 35.5, a 1.4%
+difference this run settles. `WHEEL_DIAMETER_M` and `TRACK_WIDTH_M` are independent of the swap
 and can be settled now.
 
 **If polling does turn out to be too slow: raise the I²C bus speed, not

@@ -892,14 +892,9 @@ So the per-channel edge rate at full speed is:
 
 **~7.8 kHz against a ~1 kHz poll ceiling — roughly 8× oversubscribed.**
 
-> ⚠ **The 170 RPM motors on order do not fix this** (Master Hardware Design §7.1,
-> *Motor change pending*). The 11 PPR encoder is on the **motor shaft**, ahead of the
-> gearbox, so the edge rate is `bare RPM / 60 × 44` and the ratio cancels out: a
-> higher reduction raises counts-per-rev by exactly the factor it lowers output RPM.
-> ~7.8 kHz per channel at 620 RPM output, ~7.8 kHz at 170. **A slower rover is not a
-> slower encoder.** §4.7's PIO decode on Pico A is what actually solves it.
-> The *numbers above* do change with the swap — `ENCODER_COUNTS_PER_REV` is
-> 11 × 4 × the new ratio — but the conclusion does not.
+> ⚠ **Corrected 2026-09-26 — the swap DOES reduce the rate, by 1.78×.** The gearbox-cancels reasoning is sound, but it assumes the same bare motor and this is a different winding: **1:35 at 170 RPM implies 5,950 RPM bare**, against the ~10,600 the fitted 17.1:1 motors imply. Counts per second per wheel therefore fall from **7,773 to 4,363** (3,337 at the rated 130 RPM). Still ~4× over the ~1 kHz poll ceiling and far beyond a MicroPython interrupt, so PIO decode is still required — the conclusion holds, the margin is merely less desperate.
+>
+> `ENCODER_COUNTS_PER_REV` becomes **1540** (11 × 4 × 35).
 
 This does not change what to do — a bench test still settles it, and arithmetic is not
 a substitute for one. It changes the expectation you should carry into that test: plan
@@ -942,12 +937,12 @@ mechanism, and GP7 stays free.
 `TRACK_WIDTH_M` are both marked UNCONFIRMED placeholders in `config.py`. Every
 pose estimate inherits their error.
 
-**Make that three, as of 2026-09-24.** `ENCODER_COUNTS_PER_REV` becomes unknown
-again when the **170 RPM motors** land: it is 11 × 4 × the new gearbox ratio, and the
-ratio is not yet recorded (Master Hardware Design §7.1). **Neither 752 nor 3292 is
-right for them** — 3292 lands within ~20% of a ~62:1 box, which is worse than being
-obviously wrong, because a 20% odometry error reads as wheel slip rather than as a
-bad constant. `odometry.py` divides by this value directly.
+**Make that three, as of 2026-09-24 — now resolved to a number, 2026-09-26.**
+`ENCODER_COUNTS_PER_REV` changes when the **170 RPM motors** are fitted. The ratio is
+**1:35**, so the value is **1540** (1562 if the vendor's alternative 1:35.5 is the
+real one). **Neither 752 nor 3292 is right:** 752 is 2.0× low and 3292 is 2.1× high.
+`odometry.py` divides by this directly, so it must change in the same session the
+motors go in, not after.
 
 **S-4 — No inverse kinematics for the arm.** No per-joint calibration exists,
 so there is no reach-envelope model to plan against. Grasp is a fixed primitive

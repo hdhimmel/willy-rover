@@ -234,6 +234,13 @@ ENCODER_ADDR=0x27
 # previous day, on connectors reassembled during the same rebuild.
 ENCODER_PINS={'lf':('A',4,5),'lm':('A',6,7),'lr':('B',2,3),
               'rf':('A',0,1),'rm':('A',2,3),'rr':('B',0,1)}
+# READY FOR THE MOTOR SWAP, 2026-09-26. The 12V 170 RPM replacements are 1:35
+# (vendor also quotes 1:35.5), so this becomes 11 x 4 x 35 = 1540, or 1562 at
+# 35.5. DO NOT set it until the motors are actually fitted -- 752 is correct for
+# the 17.1:1 motors in the rover right now, and odometry.py divides by it.
+# Change it in the same session the motors go in, not after. Master Hardware
+# Design 7.1 and 14 item 18.
+ENCODER_COUNTS_PER_REV_170RPM=1540   # not active; see above
 ENCODER_COUNTS_PER_REV=752   # 11 PPR (motor shaft) x4 quadrature x 17.1:1 reduction.
                              # WAS 3292, derived as "823.1 PPR x4". 823.1/11 implies a 74.8:1
                              # gearbox -- the ratio matching the STALE "6V, 100-200 RPM" motor

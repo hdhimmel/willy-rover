@@ -8,14 +8,19 @@ board carrying UID 643f69a756a232ea -- Pico A, MicroPython v1.29.0 (2026-08-24).
 NOTHING IS WIRED YET, so the UART link, the LED, the R5 divider and the frame
 rate under real edge load are all unproven.
 
-WHY PIO AND NOT INTERRUPTS. At 620 RPM output the edge rate is 3,885 Hz per
-channel (752 counts/rev / 2 channels x 10.33 rev/s), so twelve channels is
-~46,600 edges/s. MicroPython's IRQ overhead is 5-15us per handler, i.e. 20-70%
-of a 21us budget before any work is done -- it would starve the reporting loop
-and still miss edges. The gearbox does not save us either: the encoder is on the
-MOTOR shaft, ahead of the reduction, so the 170 RPM motors on order give the
-same ~7.8 kHz per wheel (section 7.1). PIO counts in hardware and is the only
-thing that actually solves this.
+WHY PIO AND NOT INTERRUPTS. At 620 RPM output that is 7,773 counts/s per wheel
+(752 counts/rev x 10.33 rev/s), ~3,900 edges/s on each of twelve channels.
+MicroPython's IRQ overhead is 5-15us per handler -- a large fraction of the
+budget before any work is done, so it would starve the reporting loop and still
+miss edges.
+
+CORRECTED 2026-09-26: an earlier version of this note claimed the 170 RPM motors
+would not change this, because the encoder is on the MOTOR shaft and the gearbox
+cancels. The gearbox does cancel -- but the bare motor is not the same one.
+1:35 at 170 RPM implies 5,950 RPM bare against ~10,600 today, so the rate falls
+to 4,363 counts/s per wheel. Still about 4x the I2C poll ceiling, so PIO remains
+the answer; the margin is simply wider than advertised. Counts per rev goes
+752 -> 1540 at the same time (section 7.1).
 
 WHY EDGE COUNTING AND NOT QUADRATURE, FOR NOW. Phase B (green) reads dead on
 all six channels (config.py:222) and may have been destroyed by the reversed
