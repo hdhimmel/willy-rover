@@ -10,7 +10,8 @@ Written 2026-09-24, the day the boards arrived.
 
 **Nothing is wired.** Proven on **A**: the PIO encoder counter, and that every
 code path runs — six state machines claim GP0–GP11, the drain loop turns over
-6,500 times a second, UART0 opens on GP12/GP13, the ADC path reads, GP14 toggles.
+6,500 times a second, UART0 opens on GP12/GP13, the ADC path reads, GP14 toggled
+(that test predates the move to the onboard LED, which is **not** yet run).
 Proven on **B**: the open-drain reset behaves (idle 1 → asserted 0 → released 1
 against an emulated pull-up), three disconnected sonars report `-1` and never a
 distance, UART0 opens, GP14 toggles.
@@ -23,9 +24,15 @@ R5 divider, real echoes, and the frame rate under real load.
 | `pico_a.py` | **A** | `uart4-pi5`, Pi GP12/GP13 | six wheel encoders, R5 rail sense |
 | `pico_b.py` | **B** | `uart2-pi5`, Pi GP4/GP5 | three HC-SR04, BNO085 reset |
 
-Both use **UART0 on their own GP12/GP13** at **115200**, an external status LED
-on **GP14**, and leave the radio uninitialised (§12 item 17). Do not
-`import network`.
+Both use **UART0 on their own GP12/GP13** at **115200** and the **onboard status
+LED** (`Pin("LED")` on the CYW43439). **GP14 is free.**
+
+⚠ **The onboard LED needs the wireless chip up.** Driving it loads CYW43439
+firmware over SPI — it joins no network and transmits nothing, and §12 item 17 was
+amended 2026-09-26 to permit that and nothing more. Still do not `import network`.
+An earlier revision of these files fitted an external LED on GP14 on the mistaken
+belief that the onboard one was unusable; dropping it also removed a bare GP14
+lead that crossed the GP15 reset net on the carrier board.
 
 ## Installing
 

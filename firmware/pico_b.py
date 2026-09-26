@@ -45,7 +45,14 @@ UART_TX = 12          # -> Pi GP5, phys 29
 UART_RX = 13          # <- Pi GP4, phys 7
 BAUD = 115200
 
-LED_PIN = 14
+# Status LED: the Pico 2 W has one ONBOARD, on the CYW43439, exposed by
+# MicroPython as Pin("LED"). An earlier revision of this file fitted an external
+# LED on GP14 in the belief that the onboard one was unusable without the radio.
+# That was wrong: driving it brings up the wireless CHIP and loads its firmware
+# over SPI, but joins no network and transmits nothing. Section 12 item 17 was
+# amended 2026-09-26 to permit exactly that and nothing more. Do NOT import
+# `network`. NOT YET RUN: the boards were unplugged when this was written.
+LED_PIN = "LED"       # GP14 is free
 RST_PIN = 15          # BNO085 RST, open-drain against a 10k pull-up to Pi 3V3
 
 # 4 m of air is 23.3 ms there and back; 25 ms gives margin without stalling the
@@ -127,7 +134,8 @@ def send(uart, body):
 
 
 def main():
-    led = Pin(LED_PIN, Pin.OUT, value=0)
+    led = Pin(LED_PIN, Pin.OUT)
+    led.value(0)
     uart = UART(UART_ID, baudrate=BAUD,
                 tx=Pin(UART_TX), rx=Pin(UART_RX),
                 timeout=0, timeout_char=0)

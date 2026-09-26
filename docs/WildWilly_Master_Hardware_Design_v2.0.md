@@ -1056,7 +1056,7 @@ Pin numbers are **Pico 2 W physical**; the Pi column is **Pi physical**.
 | GP11 | 15 | LR Phase B | LR green |
 | GP12 | 16 | UART0 TX | **Pi GP13, phys 33** — `uart4-pi5` RXD |
 | GP13 | 17 | UART0 RX | **Pi GP12, phys 32** — `uart4-pi5` TXD |
-| GP14 | 19 | Status LED | LED + 330Ω → GND |
+| GP14 | 19 | — | **free** — the status LED is onboard, see consequence 6 |
 | GP28 | 34 | ADC2 — R5 sense | 10k/10k divider off R5 |
 | 3V3_EN | 37 | — | leave open |
 | VSYS | 39 | **R5 3.3V** | DROK-4, via 500mA fuse **and series Schottky** |
@@ -1094,7 +1094,7 @@ is built.
 | GP5 | 7 | ECHO-R in | **P1-12** |
 | GP12 | 16 | **UART0 TX** | **Pi GP5, phys 29** — `uart2-pi5` RXD |
 | GP13 | 17 | **UART0 RX** | **Pi GP4, phys 7** — `uart2-pi5` TXD |
-| GP14 | 19 | Status LED | LED + 330Ω → GND |
+| GP14 | 19 | — | **free** — the status LED is onboard, see consequence 6 |
 | GP15 | 20 | BNO085 RST | BNO085 RST, **open-drain**, 10k pull-up to Pi 3V3 |
 | VSYS | 39 | **5V — from the breakout terminal**, not a header pin | via 500mA fuse **and series Schottky**. Same net as pins 2/4; the display's tap already has one of them (§0) |
 | VBUS | 40 | — | **leave unconnected** |
@@ -1170,8 +1170,16 @@ existing `uart3-pi5`, and the serial console must remain disabled (§9).
    twelve-line shifting job moves, it does not disappear.
 5. **The bus drops to ten devices**, retiring 0x27 from §0, §3.3, §13 and the
    §11.2 startup self-test count.
-6. **Status LED on a free GPIO, both boards.** With the radio unused there is no
-   onboard LED on a Pico 2 W — the LED is on the CYW43439, not GP25.
+6. **Status LED: use the onboard one.** ⚠ **This item said the opposite until
+   2026-09-26 and was wrong.** The LED is indeed not on GP25 — that is the non-W
+   Pico — but it *is* present, on the CYW43439, and MicroPython drives it as
+   `Pin("LED")`. Driving it brings up the wireless **chip** and loads its firmware
+   over SPI; it joins no network and transmits nothing. **§12 item 17 is amended
+   to permit that and nothing more.** The external LED and its 330Ω are dropped
+   from both boards, GP14 is free, and the carrier loses a bare GP14 lead that
+   crossed the GP15 reset net. The trade accepted knowingly: an indicator that
+   depends on the CYW43 dies with it, so a board that will not bring that chip up
+   has no light — use the UART to tell the difference.
 7. **Fuse the Pico B 5V feed.** Pi 5 header 5V is unfused and sits directly
    across Witty Pi's output; a short there takes the whole Pi down.
 8. **USB back-feed.** Reflashing a rover-powered Pico over USB pushes 5V onto
@@ -2317,7 +2325,11 @@ not obvious from the schematic.
 
 **Microcontrollers** — applies to the two Pico 2 W boards in §4.7 once fitted.
 
-17. **The radios are deliberately unused. Do not initialise them.** Both Picos
+17. **The radios are deliberately unused. Do not initialise them** — **amended
+    2026-09-26: driving the onboard LED via `Pin("LED")` is permitted.** That
+    powers the CYW43439 and loads its firmware over SPI, which is the minimum to
+    light the LED; it joins no network, opens no socket and transmits nothing. Do
+    not `import network`. See §4.7 consequence 6. Both Picos
     sit on the reflex layer; bringing WiFi up adds a second control path into
     obstacle sensing and encoder counting for no benefit the design asks for.
     If a bench-only telemetry mode is ever wanted, gate it behind a physical
