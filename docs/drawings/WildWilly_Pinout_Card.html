@@ -1,0 +1,491 @@
+<title>WildWilly Harness Card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#f5f7f8;
+  --card:#ffffff;
+  --ink:#141c24;
+  --ink-2:#4f5b67;
+  --ink-3:#7d8892;
+  --rule:#d5dade;
+  --rule-2:#e7eaed;
+  --accent:#9a5b2e;
+  --accent-soft:#f0e3d8;
+  --stop:#a3282d;
+  --stop-soft:#f6e0e0;
+  --live:#1d5c73;
+  --live-soft:#dcebf0;
+  --wire-stroke:#8b949c;
+  --shadow:0 1px 0 rgba(20,28,36,.06);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#10151a;
+    --card:#171e25;
+    --ink:#e4e9ed;
+    --ink-2:#a3aeb8;
+    --ink-3:#77838d;
+    --rule:#2b343d;
+    --rule-2:#222a32;
+    --accent:#d5905c;
+    --accent-soft:#3a2a1d;
+    --stop:#e08b8b;
+    --stop-soft:#3a2224;
+    --live:#7cc0d8;
+    --live-soft:#1b2f38;
+    --wire-stroke:#5d686f;
+    --shadow:0 1px 0 rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#10151a;
+  --card:#171e25;
+  --ink:#e4e9ed;
+  --ink-2:#a3aeb8;
+  --ink-3:#77838d;
+  --rule:#2b343d;
+  --rule-2:#222a32;
+  --accent:#d5905c;
+  --accent-soft:#3a2a1d;
+  --stop:#e08b8b;
+  --stop-soft:#3a2224;
+  --live:#7cc0d8;
+  --live-soft:#1b2f38;
+  --wire-stroke:#5d686f;
+  --shadow:0 1px 0 rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  font-size:15px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:20px;padding-block:32px 64px}
+
+/* ---------- masthead ---------- */
+.mast{border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:28px}
+.eyebrow{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 6px;
+}
+h1{
+  font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;
+  font-weight:700;font-size:clamp(28px,5vw,42px);line-height:1.05;
+  margin:0;text-wrap:balance;letter-spacing:-.01em;
+}
+.sub{color:var(--ink-2);margin:8px 0 0;max-width:62ch}
+.mast-foot{
+  display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:14px;
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;
+  color:var(--ink-3);
+}
+.mast-foot b{color:var(--ink-2);font-weight:500}
+
+/* ---------- status banner ---------- */
+.banner{
+  border:1px solid var(--stop);background:var(--stop-soft);
+  color:var(--ink);border-radius:2px;padding:12px 14px;margin-bottom:30px;
+  display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;
+}
+.banner .tag{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--stop);font-weight:600;
+  border:1px solid var(--stop);padding:2px 6px;border-radius:2px;white-space:nowrap;
+}
+.banner p{margin:0;font-size:13.5px;line-height:1.5}
+
+/* ---------- print control ---------- */
+.tools{display:flex;gap:10px;align-items:center;margin-bottom:26px;flex-wrap:wrap}
+button.print{
+  font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:600;font-size:14px;
+  letter-spacing:.02em;color:var(--card);background:var(--ink);
+  border:1px solid var(--ink);border-radius:2px;padding:7px 16px;cursor:pointer;
+}
+button.print:hover{background:var(--accent);border-color:var(--accent)}
+button.print:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tools span{font-size:12.5px;color:var(--ink-3);font-family:"IBM Plex Mono",monospace}
+
+/* ---------- board section ---------- */
+.board{margin-bottom:46px}
+.board-head{
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;
+  border-bottom:1px solid var(--rule);padding-bottom:8px;margin-bottom:6px;
+}
+.board-head h2{
+  font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;
+  font-size:22px;margin:0;letter-spacing:-.005em;
+}
+.board-head .meta{
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-2);
+}
+.board-note{font-size:13px;color:var(--ink-2);margin:0 0 16px;max-width:70ch}
+
+/* ---------- header map ---------- */
+.hdr{
+  display:grid;grid-template-columns:1fr 26px 1fr;
+  background:var(--card);border:1px solid var(--rule);border-radius:2px;
+  box-shadow:var(--shadow);overflow:hidden;
+}
+.spine{
+  background:repeating-linear-gradient(to bottom,var(--rule) 0 1px,transparent 1px 12px);
+  border-inline:1px solid var(--rule-2);
+}
+ol.side{list-style:none;margin:0;padding:0}
+.pin{
+  display:grid;align-items:center;gap:8px;
+  padding:3px 8px;border-bottom:1px solid var(--rule-2);
+  font-size:12.5px;line-height:1.35;min-height:30px;
+}
+.side.left .pin{grid-template-columns:1fr auto auto}
+.side.right .pin{grid-template-columns:auto auto 1fr}
+.side.left .pin{text-align:right}
+ol.side .pin:last-child{border-bottom:0}
+
+.num{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:500;
+  color:var(--ink-3);min-width:2ch;text-align:center;font-variant-numeric:tabular-nums;
+}
+.gp{
+  font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:12px;
+  white-space:nowrap;
+}
+.fn{color:var(--ink-2);min-width:0;overflow-wrap:anywhere}
+.fn .alt{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-3);
+  letter-spacing:.02em;
+}
+.fn .was{display:block;font-size:10.5px;color:var(--ink-3);font-style:italic}
+
+/* role encoding — a stripe on the spine side of each row */
+.side.left .pin{border-right:3px solid transparent}
+.side.right .pin{border-left:3px solid transparent}
+.r-link{border-color:var(--accent)!important;background:var(--accent-soft)}
+.r-link .gp{color:var(--accent)}
+.r-pwr{border-color:var(--stop)!important}
+.r-pwr .gp{color:var(--stop)}
+.r-gnd{border-color:var(--ink-3)!important}
+.r-bus{border-color:var(--live)!important;background:var(--live-soft)}
+.r-bus .gp{color:var(--live)}
+.r-stop{background:var(--stop-soft)}
+.r-stop .gp{color:var(--stop)}
+.r-free .gp,.r-free .fn{color:var(--ink-3);font-weight:400}
+
+/* wire colour chips */
+.w{
+  display:inline-block;width:9px;height:9px;border-radius:50%;
+  border:1px solid var(--wire-stroke);vertical-align:-1px;margin-inline:1px;
+}
+.w-y{background:#e8c033}.w-g{background:#3f8f52}.w-gy{background:#9aa3ab}
+.w-pu{background:#7a5ba6}.w-r{background:#c0392b}.w-w{background:#f2f2f2}
+.w-b{background:#2f6fb5}.w-k{background:#22282e}
+
+/* ---------- legend ---------- */
+.legend{
+  display:flex;flex-wrap:wrap;gap:6px 16px;margin:14px 0 0;
+  font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-2);
+}
+.legend i{
+  display:inline-block;width:14px;height:3px;vertical-align:2px;margin-right:5px;
+}
+
+/* ---------- checklist ---------- */
+.check{
+  background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--accent);
+  border-radius:2px;padding:18px 20px;margin-top:8px;
+}
+.check h2{
+  font-family:"IBM Plex Sans Condensed",sans-serif;font-size:19px;margin:0 0 4px;font-weight:700;
+}
+.check p.lede{margin:0 0 14px;color:var(--ink-2);font-size:13.5px}
+.check ol{margin:0;padding-left:20px;display:grid;gap:11px}
+.check li{font-size:13.5px;line-height:1.5}
+.check strong{font-weight:600}
+code{
+  font-family:"IBM Plex Mono",monospace;font-size:.92em;
+  background:var(--rule-2);padding:1px 4px;border-radius:2px;
+}
+
+.colophon{
+  margin-top:40px;padding-top:14px;border-top:1px solid var(--rule);
+  font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-3);
+  display:flex;flex-wrap:wrap;gap:6px 20px;
+}
+
+/* ---------- narrow ---------- */
+@media (max-width:620px){
+  .hdr{grid-template-columns:1fr;}
+  .spine{display:none}
+  .side.left .pin{grid-template-columns:auto auto 1fr;text-align:left;
+    border-right:0;border-left:3px solid transparent}
+  .side.left .pin .num{order:-1}
+}
+
+/* ---------- print ---------- */
+@page{margin:14mm 12mm}
+@media print{
+  :root{
+    --paper:#fff;--card:#fff;--ink:#000;--ink-2:#333;--ink-3:#666;
+    --rule:#999;--rule-2:#ccc;--accent:#000;--accent-soft:#eee;
+    --stop:#000;--stop-soft:#e6e6e6;--live:#000;--live-soft:#eee;--shadow:none;
+  }
+  body{font-size:10.5pt;background:#fff}
+  .wrap{max-width:none;padding:0}
+  .tools{display:none}
+  .board{break-before:page;margin-bottom:22px}
+  .board:first-of-type{break-before:auto}
+  .pin{min-height:0;padding:1.5px 6px;font-size:8.5pt}
+  .hdr{box-shadow:none}
+  .pin,.check li,.banner{break-inside:avoid}
+  .check{break-before:page}
+  h1{font-size:22pt}
+  a{text-decoration:none;color:#000}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <p class="eyebrow">Bench card · Master Hardware Design §4.7</p>
+    <h1>WildWilly Harness Card</h1>
+    <p class="sub">Pin-for-pin wiring for the Raspberry&nbsp;Pi&nbsp;5 header and both Pico&nbsp;2&nbsp;W boards, drawn in physical pin order so each column matches the board in your hand.</p>
+    <div class="mast-foot">
+      <span><b>Rev</b> 2.3 · 2026-09-24</span>
+      <span><b>Pico A</b> encoders · <code>uart4-pi5</code> · GP12/13 · GP14 free</span>
+      <span><b>Pico B</b> sonar + IMU RST · <code>uart2-pi5</code> · GP12/13</span>
+      <span><b>Bus</b> ten I²C devices after 0x27 leaves</span>
+    </div>
+  </header>
+
+  <div class="banner">
+    <span class="tag">Not as-built</span>
+    <p><strong>Nothing here is fitted or metered.</strong> Boards in hand and unflashed as of 2026-09-24. Rows marked <em>was:</em> show what that pin carries on the rover today — six sonar lines still land on the Pi header and the MCP23017 still decodes the encoders. Work the four checks at the foot of this card before you crimp anything.</p>
+  </div>
+
+  <div class="tools">
+    <button class="print" id="printbtn" type="button">Print this card</button>
+    <span id="printhint">3 pages · one board per sheet</span>
+  </div>
+
+  <!-- ==================== PI 5 ==================== -->
+  <section class="board">
+    <div class="board-head">
+      <h2>Raspberry Pi 5 — 40-pin header</h2>
+      <span class="meta">odd pins left · even pins right · pin 1 at top</span>
+    </div>
+    <p class="board-note">Freeing the six sonar lines leaves two spare UARTs, so both Picos land here and the 3-pin service port stays free for the console — the one channel worth having when the Pi will not boot.</p>
+
+    <div class="hdr">
+      <ol class="side left">
+        <li class="pin r-pwr"><span class="fn">All I²C device logic + SEN0628 ToF<span class="was">a real rail with a real load</span></span><span class="gp">3V3</span><span class="num">1</span></li>
+        <li class="pin r-bus"><span class="fn">I²C trunk → GODIY hub <span class="alt">SDA1</span></span><span class="gp">GP2</span><span class="num">3</span></li>
+        <li class="pin r-bus"><span class="fn">I²C trunk → GODIY hub <span class="alt">SCL1</span></span><span class="gp">GP3</span><span class="num">5</span></li>
+        <li class="pin r-link"><span class="fn">→ Pico B RX <span class="alt">TXD2</span><span class="was">was: sonar RIGHT TRIG</span></span><span class="gp">GP4</span><span class="num">7</span></li>
+        <li class="pin r-gnd"><span class="fn">Star ground · Pico B return</span><span class="gp">GND</span><span class="num">9</span></li>
+        <li class="pin r-free"><span class="fn">free — ex-motor-direction</span><span class="gp">GP17</span><span class="num">11</span></li>
+        <li class="pin r-free"><span class="fn">free</span><span class="gp">GP27</span><span class="num">13</span></li>
+        <li class="pin r-free"><span class="fn">free</span><span class="gp">GP22</span><span class="num">15</span></li>
+        <li class="pin r-free"><span class="fn">free</span><span class="gp">3V3</span><span class="num">17</span></li>
+        <li class="pin r-free"><span class="fn">free <span class="alt">MOSI</span></span><span class="gp">GP10</span><span class="num">19</span></li>
+        <li class="pin r-bus"><span class="fn">SEN0628 ToF TX → Pi RX <span class="alt">MISO · RXD3</span><span class="was">terminal silkscreened MISO</span></span><span class="gp">GP9</span><span class="num">21</span></li>
+        <li class="pin r-free"><span class="fn">free <span class="alt">SCLK</span></span><span class="gp">GP11</span><span class="num">23</span></li>
+        <li class="pin r-gnd"><span class="fn">Star ground</span><span class="gp">GND</span><span class="num">25</span></li>
+        <li class="pin r-stop"><span class="fn">⛔ AI HAT+ 2 EEPROM <span class="alt">ID_SD</span></span><span class="gp">GP0</span><span class="num">27</span></li>
+        <li class="pin r-link"><span class="fn">← Pico B TX <span class="alt">RXD2</span><span class="was">was: sonar FRONT TRIG</span></span><span class="gp">GP5</span><span class="num">29</span></li>
+        <li class="pin r-free"><span class="fn">free</span><span class="gp">GP6</span><span class="num">31</span></li>
+        <li class="pin r-link"><span class="fn">← Pico A TX <span class="alt">PWM1 · RXD4</span><span class="was">was: sonar LEFT TRIG</span></span><span class="gp">GP13</span><span class="num">33</span></li>
+        <li class="pin r-free"><span class="fn">free <span class="alt">PCM_FS</span></span><span class="gp">GP19</span><span class="num">35</span></li>
+        <li class="pin r-free"><span class="fn">unused <span class="was">was: sonar FRONT ECHO ÷</span></span><span class="gp">GP26</span><span class="num">37</span></li>
+        <li class="pin r-gnd"><span class="fn">Star ground</span><span class="gp">GND</span><span class="num">39</span></li>
+      </ol>
+      <div class="spine" aria-hidden="true"></div>
+      <ol class="side right">
+        <li class="pin r-pwr"><span class="num">2</span><span class="gp">5V</span><span class="fn">Display 3-pin tap — one of 2/4, which is unrecorded</span></li>
+        <li class="pin r-pwr"><span class="num">4</span><span class="gp">5V</span><span class="fn">Pico B VSYS — <strong>take it at the breakout terminal</strong>, same net, no contention. Fuse + Schottky</span></li>
+        <li class="pin r-gnd"><span class="num">6</span><span class="gp">GND</span><span class="fn">Star ground · Pico B return</span></li>
+        <li class="pin r-stop"><span class="num">8</span><span class="gp">GP14</span><span class="fn">⛔ unused, permanently <span class="alt">TXD0</span><span class="was">was: sonar LEFT ECHO ÷ — the console hazard</span></span></li>
+        <li class="pin r-bus"><span class="num">10</span><span class="gp">GP15</span><span class="fn">BNO085 INT <span class="alt">RXD0</span><span class="was">wired; driver polls over I²C</span></span></li>
+        <li class="pin r-free"><span class="num">12</span><span class="gp">GP18</span><span class="fn">free <span class="alt">PCM_CLK</span></span></li>
+        <li class="pin r-gnd"><span class="num">14</span><span class="gp">GND</span><span class="fn">Star ground</span></li>
+        <li class="pin r-free"><span class="num">16</span><span class="gp">GP23</span><span class="fn">free</span></li>
+        <li class="pin r-free"><span class="num">18</span><span class="gp">GP24</span><span class="fn">free</span></li>
+        <li class="pin r-gnd"><span class="num">20</span><span class="gp">GND</span><span class="fn">Star ground</span></li>
+        <li class="pin r-free"><span class="num">22</span><span class="gp">GP25</span><span class="fn">free</span></li>
+        <li class="pin r-bus"><span class="num">24</span><span class="gp">GP8</span><span class="fn">Pi TX → SEN0628 RX, optional <span class="alt">CE0 · TXD3</span></span></li>
+        <li class="pin r-free"><span class="num">26</span><span class="gp">GP7</span><span class="fn">free <span class="alt">CE1</span></span></li>
+        <li class="pin r-stop"><span class="num">28</span><span class="gp">GP1</span><span class="fn">⛔ AI HAT+ 2 EEPROM <span class="alt">ID_SC</span></span></li>
+        <li class="pin r-gnd"><span class="num">30</span><span class="gp">GND</span><span class="fn">Star ground</span></li>
+        <li class="pin r-link"><span class="num">32</span><span class="gp">GP12</span><span class="fn">→ Pico A RX <span class="alt">PWM0 · TXD4</span><span class="was">was: free, ex-motor-direction</span></span></li>
+        <li class="pin r-gnd"><span class="num">34</span><span class="gp">GND</span><span class="fn">Star ground</span></li>
+        <li class="pin r-free"><span class="num">36</span><span class="gp">GP16</span><span class="fn">fallback Pico A TX <span class="alt">TXD5</span></span></li>
+        <li class="pin r-free"><span class="num">38</span><span class="gp">GP20</span><span class="fn">free <span class="alt">PCM_DIN</span></span></li>
+        <li class="pin r-free"><span class="num">40</span><span class="gp">GP21</span><span class="fn">unused <span class="was">was: sonar RIGHT ECHO ÷</span></span></li>
+      </ol>
+    </div>
+
+    <p class="legend">
+      <span><i style="background:var(--accent)"></i>Pico link</span>
+      <span><i style="background:var(--live)"></i>I²C / sensor</span>
+      <span><i style="background:var(--stop)"></i>Power &amp; reserved</span>
+      <span><i style="background:var(--ink-3)"></i>Ground</span>
+      <span>Service port J14: 1 TX · 2 RX · 3 GND — left free</span>
+    </p>
+    <p class="board-note" style="margin-top:10px">⚠ <strong>The display is on the Pi header 5 V</strong>, not R2 — owner-confirmed 2026-09-24, and every rails table said otherwise until then. <strong>Which</strong> of pins 2/4 its 3-pin tap occupies is still unrecorded, so take Pico B's feed at the breakout's 5 V terminal instead. Check the tap physically before using anything marked <em>free</em>.</p>
+  </section>
+
+  <!-- ==================== PICO A ==================== -->
+  <section class="board">
+    <div class="board-head">
+      <h2>Pico A — six wheel encoders</h2>
+      <span class="meta">VSYS from R5 3.3 V · pins 1–20 left, 40–21 right</span>
+    </div>
+    <p class="board-note">Pairs land in MCP23017 <code>GPA0→GPB3</code> order, so the existing twelve-way harness transfers 1:1 — no re-crimp, and no third chance to repeat the 2026-09-18 left/right transposition. Yellow <span class="w w-y"></span> to the even GP, green <span class="w w-g"></span> to the odd. Internal pull-up on all twelve.</p>
+
+    <div class="hdr">
+      <ol class="side left">
+        <li class="pin"><span class="fn">RF Phase A <span class="w w-y"></span></span><span class="gp">GP0</span><span class="num">1</span></li>
+        <li class="pin"><span class="fn">RF Phase B <span class="w w-g"></span></span><span class="gp">GP1</span><span class="num">2</span></li>
+        <li class="pin r-gnd"><span class="fn">ground</span><span class="gp">GND</span><span class="num">3</span></li>
+        <li class="pin"><span class="fn">RM Phase A <span class="w w-y"></span></span><span class="gp">GP2</span><span class="num">4</span></li>
+        <li class="pin"><span class="fn">RM Phase B <span class="w w-g"></span></span><span class="gp">GP3</span><span class="num">5</span></li>
+        <li class="pin"><span class="fn">LF Phase A <span class="w w-y"></span></span><span class="gp">GP4</span><span class="num">6</span></li>
+        <li class="pin"><span class="fn">LF Phase B <span class="w w-g"></span></span><span class="gp">GP5</span><span class="num">7</span></li>
+        <li class="pin r-gnd"><span class="fn">ground</span><span class="gp">GND</span><span class="num">8</span></li>
+        <li class="pin"><span class="fn">LM Phase A <span class="w w-y"></span></span><span class="gp">GP6</span><span class="num">9</span></li>
+        <li class="pin"><span class="fn">LM Phase B <span class="w w-g"></span></span><span class="gp">GP7</span><span class="num">10</span></li>
+        <li class="pin"><span class="fn">RR Phase A <span class="w w-y"></span></span><span class="gp">GP8</span><span class="num">11</span></li>
+        <li class="pin"><span class="fn">RR Phase B <span class="w w-g"></span></span><span class="gp">GP9</span><span class="num">12</span></li>
+        <li class="pin r-gnd"><span class="fn">ground</span><span class="gp">GND</span><span class="num">13</span></li>
+        <li class="pin"><span class="fn">LR Phase A <span class="w w-y"></span></span><span class="gp">GP10</span><span class="num">14</span></li>
+        <li class="pin"><span class="fn">LR Phase B <span class="w w-g"></span></span><span class="gp">GP11</span><span class="num">15</span></li>
+        <li class="pin r-link"><span class="fn">→ Pi GP13, phys 33 <span class="alt">UART0 TX</span></span><span class="gp">GP12</span><span class="num">16</span></li>
+        <li class="pin r-link"><span class="fn">← Pi GP12, phys 32 <span class="alt">UART0 RX</span></span><span class="gp">GP13</span><span class="num">17</span></li>
+        <li class="pin r-gnd"><span class="fn">ground</span><span class="gp">GND</span><span class="num">18</span></li>
+        <li class="pin r-free"><span class="fn">free <span class="was">status LED is onboard</span></span><span class="gp">GP14</span><span class="num">19</span></li>
+        <li class="pin r-free"><span class="fn">free</span><span class="gp">GP15</span><span class="num">20</span></li>
+      </ol>
+      <div class="spine" aria-hidden="true"></div>
+      <ol class="side right">
+        <li class="pin r-stop"><span class="num">40</span><span class="gp">VBUS</span><span class="fn">⛔ leave unconnected — USB back-feed</span></li>
+        <li class="pin r-pwr"><span class="num">39</span><span class="gp">VSYS</span><span class="fn">R5 3.3 V — 500 mA fuse + series Schottky</span></li>
+        <li class="pin r-gnd"><span class="num">38</span><span class="gp">GND</span><span class="fn">R5 return → star point</span></li>
+        <li class="pin r-free"><span class="num">37</span><span class="gp">3V3_EN</span><span class="fn">leave open</span></li>
+        <li class="pin r-free"><span class="num">36</span><span class="gp">3V3 OUT</span><span class="fn">do not feed</span></li>
+        <li class="pin r-free"><span class="num">35</span><span class="gp">ADC_VREF</span><span class="fn">leave as fitted</span></li>
+        <li class="pin r-bus"><span class="num">34</span><span class="gp">GP28</span><span class="fn">R5 sense — 10k/10k divider <span class="alt">ADC2</span></span></li>
+        <li class="pin r-gnd"><span class="num">33</span><span class="gp">AGND</span><span class="fn">divider ground</span></li>
+        <li class="pin r-free"><span class="num">32</span><span class="gp">GP27</span><span class="fn">free <span class="alt">ADC1</span></span></li>
+        <li class="pin r-free"><span class="num">31</span><span class="gp">GP26</span><span class="fn">free <span class="alt">ADC0</span></span></li>
+        <li class="pin r-free"><span class="num">30</span><span class="gp">RUN</span><span class="fn">reset — leave open</span></li>
+        <li class="pin r-free"><span class="num">29</span><span class="gp">GP22</span><span class="fn">free</span></li>
+        <li class="pin r-gnd"><span class="num">28</span><span class="gp">GND</span><span class="fn">ground</span></li>
+        <li class="pin r-free"><span class="num">27</span><span class="gp">GP21</span><span class="fn">free</span></li>
+        <li class="pin r-free"><span class="num">26</span><span class="gp">GP20</span><span class="fn">free</span></li>
+        <li class="pin r-free"><span class="num">25</span><span class="gp">GP19</span><span class="fn">free</span></li>
+        <li class="pin r-free"><span class="num">24</span><span class="gp">GP18</span><span class="fn">free</span></li>
+        <li class="pin r-gnd"><span class="num">23</span><span class="gp">GND</span><span class="fn">ground</span></li>
+        <li class="pin r-free"><span class="num">22</span><span class="gp">GP17</span><span class="fn">free</span></li>
+        <li class="pin r-free"><span class="num">21</span><span class="gp">GP16</span><span class="fn">free</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ==================== PICO B ==================== -->
+  <section class="board">
+    <div class="board-head">
+      <h2>Pico B — sonar and IMU reset</h2>
+      <span class="meta">VSYS from Pi 5 V · pins 1–20 left, 40–21 right</span>
+    </div>
+    <p class="board-note">Sonar harness: white VCC <span class="w w-w"></span>, blue GND <span class="w w-b"></span>, grey TRIG <span class="w w-gy"></span>, purple ECHO <span class="w w-pu"></span>. ECHO reaches this board already divided to 3.33 V on the signal conditioning board — the divider never moves downstream of the Pico. <strong>Pins revised 2026-09-24:</strong> the link moved to GP12/GP13 and RST to GP15 so that one carrier layout serves both boards — GP10 is LR Phase A on Pico A, and a shared 12-way J3 would have stubbed way 11 onto B's reset net.</p>
+
+    <div class="hdr">
+      <ol class="side left">
+        <li class="pin"><span class="fn">TRIG-F out → P1-1 <span class="w w-gy"></span></span><span class="gp">GP0</span><span class="num">1</span></li>
+        <li class="pin"><span class="fn">ECHO-F in ← P1-4 <span class="w w-pu"></span></span><span class="gp">GP1</span><span class="num">2</span></li>
+        <li class="pin r-gnd"><span class="fn">ground</span><span class="gp">GND</span><span class="num">3</span></li>
+        <li class="pin"><span class="fn">TRIG-L out → P1-5 <span class="w w-gy"></span></span><span class="gp">GP2</span><span class="num">4</span></li>
+        <li class="pin"><span class="fn">ECHO-L in ← P1-8 <span class="w w-pu"></span></span><span class="gp">GP3</span><span class="num">5</span></li>
+        <li class="pin"><span class="fn">TRIG-R out → P1-9 <span class="w w-gy"></span></span><span class="gp">GP4</span><span class="num">6</span></li>
+        <li class="pin"><span class="fn">ECHO-R in ← P1-12 <span class="w w-pu"></span></span><span class="gp">GP5</span><span class="num">7</span></li>
+        <li class="pin r-gnd"><span class="fn">ground</span><span class="gp">GND</span><span class="num">8</span></li>
+        <li class="pin r-free"><span class="fn">free</span><span class="gp">GP6</span><span class="num">9</span></li>
+        <li class="pin r-free"><span class="fn">free</span><span class="gp">GP7</span><span class="num">10</span></li>
+        <li class="pin r-free"><span class="fn">free</span><span class="gp">GP8</span><span class="num">11</span></li>
+        <li class="pin r-free"><span class="fn">free</span><span class="gp">GP9</span><span class="num">12</span></li>
+        <li class="pin r-gnd"><span class="fn">ground</span><span class="gp">GND</span><span class="num">13</span></li>
+        <li class="pin r-free"><span class="fn">free</span><span class="gp">GP10</span><span class="num">14</span></li>
+        <li class="pin r-free"><span class="fn">free</span><span class="gp">GP11</span><span class="num">15</span></li>
+        <li class="pin r-link"><span class="fn">→ Pi GP5, phys 29 <span class="alt">UART0 TX</span></span><span class="gp">GP12</span><span class="num">16</span></li>
+        <li class="pin r-link"><span class="fn">← Pi GP4, phys 7 <span class="alt">UART0 RX</span></span><span class="gp">GP13</span><span class="num">17</span></li>
+        <li class="pin r-gnd"><span class="fn">ground</span><span class="gp">GND</span><span class="num">18</span></li>
+        <li class="pin r-free"><span class="fn">free <span class="was">status LED is onboard</span></span><span class="gp">GP14</span><span class="num">19</span></li>
+        <li class="pin r-bus"><span class="fn">BNO085 RST — open-drain, 10k pull-up to Pi 3V3</span><span class="gp">GP15</span><span class="num">20</span></li>
+      </ol>
+      <div class="spine" aria-hidden="true"></div>
+      <ol class="side right">
+        <li class="pin r-stop"><span class="num">40</span><span class="gp">VBUS</span><span class="fn">⛔ leave unconnected — USB back-feed</span></li>
+        <li class="pin r-pwr"><span class="num">39</span><span class="gp">VSYS</span><span class="fn">5 V at the breakout terminal — 500 mA fuse + series Schottky. Not R2</span></li>
+        <li class="pin r-gnd"><span class="num">38</span><span class="gp">GND</span><span class="fn">Pi GND, phys 6 or 9 — same harness</span></li>
+        <li class="pin r-free"><span class="num">37</span><span class="gp">3V3_EN</span><span class="fn">leave open</span></li>
+        <li class="pin r-free"><span class="num">36</span><span class="gp">3V3 OUT</span><span class="fn">do not feed</span></li>
+        <li class="pin r-free"><span class="num">35</span><span class="gp">ADC_VREF</span><span class="fn">leave as fitted</span></li>
+        <li class="pin r-free"><span class="num">34</span><span class="gp">GP28</span><span class="fn">free <span class="alt">ADC2</span></span></li>
+        <li class="pin r-gnd"><span class="num">33</span><span class="gp">AGND</span><span class="fn">analog ground</span></li>
+        <li class="pin r-free"><span class="num">32</span><span class="gp">GP27</span><span class="fn">free <span class="alt">ADC1</span></span></li>
+        <li class="pin r-free"><span class="num">31</span><span class="gp">GP26</span><span class="fn">free <span class="alt">ADC0</span></span></li>
+        <li class="pin r-free"><span class="num">30</span><span class="gp">RUN</span><span class="fn">reset — leave open</span></li>
+        <li class="pin r-free"><span class="num">29</span><span class="gp">GP22</span><span class="fn">free</span></li>
+        <li class="pin r-gnd"><span class="num">28</span><span class="gp">GND</span><span class="fn">ground</span></li>
+        <li class="pin r-free"><span class="num">27</span><span class="gp">GP21</span><span class="fn">free</span></li>
+        <li class="pin r-free"><span class="num">26</span><span class="gp">GP20</span><span class="fn">free</span></li>
+        <li class="pin r-free"><span class="num">25</span><span class="gp">GP19</span><span class="fn">free</span></li>
+        <li class="pin r-free"><span class="num">24</span><span class="gp">GP18</span><span class="fn">free</span></li>
+        <li class="pin r-gnd"><span class="num">23</span><span class="gp">GND</span><span class="fn">ground</span></li>
+        <li class="pin r-free"><span class="num">22</span><span class="gp">GP17</span><span class="fn">free</span></li>
+        <li class="pin r-free"><span class="num">21</span><span class="gp">GP16</span><span class="fn">free</span></li>
+      </ol>
+    </div>
+    <p class="legend" style="margin-top:12px">
+      <span>GP23 / GP24 / GP25 / GP29 are not on the header — they belong to the CYW43439</span>
+      <span>Onboard LED IS usable: <code>Pin("LED")</code> on the CYW43439 — §12 item 17 amended 2026-09-26 to permit it. <strong>No external LED; GP14 free.</strong></span>
+      <span>SWD is the separate 3-pin edge connector: SWCLK · GND · SWDIO</span>
+    </p>
+  </section>
+
+  <!-- ==================== CHECKS ==================== -->
+  <section class="check">
+    <h2>Verify before you crimp</h2>
+    <p class="lede">Four checks, each of which has already cost a session on this rover.</p>
+    <ol>
+      <li><strong>Confirm the overlay mapping.</strong> <code>dtoverlay -h uart2-pi5</code> must report GPIOs 4–5, and <code>uart4-pi5</code> must report 12–13. The wrong overlay <em>does not error</em> — it boots clean and puts the UART on pins nothing is wired to, so the device reads as dead hardware. That cost a full session on the SEN0628. If <code>uart4-pi5</code> is not GP12/GP13, the next candidate is <code>uart5-pi5</code> on GP16/GP17.</li>
+      <li><strong>Meter all six green wires first.</strong> Phase B reads dead on all six channels today. Six wheels failing on exactly the odd pin is one wiring pattern, not six faults — and the reverse-polarity event of 2026-09-18 may have taken those output stages. Settle it on the bench, not through a new UART.</li>
+      <li><strong>ECHO junctions at 3.2–3.4 V under servo load, not idle.</strong> Mandatory now rather than advisory: ECHO crosses from the sonar rail's reference to the Pi's once Pico B owns it.</li>
+      <li><strong>Fuse and Schottky fitted on both VSYS feeds</strong> before either board sees rover power. Pi header 5 V is unfused and sits across Witty Pi's output; and reflashing a rover-powered Pico over USB pushes 5 V back onto that rail through the VBUS→VSYS diode.</li>
+    </ol>
+  </section>
+
+  <p class="colophon">
+    <span>Design, not as-built · §4.7</span>
+    <span>Master Hardware Design rev 2.3</span>
+    <span>FRD 3.3 · Software Design 1.2</span>
+    <span>Check pin seating and polarity against the front channel before energising any sonar</span>
+  </p>
+</div>
+
+<script>
+(function(){
+  var btn=document.getElementById('printbtn'),hint=document.getElementById('printhint');
+  btn.addEventListener('click',function(){
+    try{ window.print(); }
+    catch(e){ hint.textContent='Printing is blocked here — use Ctrl-P / ⌘P'; }
+  });
+})();
+</script>

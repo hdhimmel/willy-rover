@@ -1,0 +1,769 @@
+<title>Pico Carrier Schematic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#f5f7f8; --card:#ffffff; --ink:#141c24; --ink-2:#4f5b67; --ink-3:#7d8892;
+  --rule:#d5dade; --rule-2:#e7eaed; --accent:#9a5b2e; --accent-soft:#f0e3d8;
+  --stop:#a3282d; --stop-soft:#f6e0e0; --live:#1d5c73; --live-soft:#dcebf0;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#10151a; --card:#171e25; --ink:#e4e9ed; --ink-2:#a3aeb8; --ink-3:#77838d;
+    --rule:#2b343d; --rule-2:#222a32; --accent:#d5905c; --accent-soft:#3a2a1d;
+    --stop:#e08b8b; --stop-soft:#3a2224; --live:#7cc0d8; --live-soft:#1b2f38;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#10151a; --card:#171e25; --ink:#e4e9ed; --ink-2:#a3aeb8; --ink-3:#77838d;
+  --rule:#2b343d; --rule-2:#222a32; --accent:#d5905c; --accent-soft:#3a2a1d;
+  --stop:#e08b8b; --stop-soft:#3a2224; --live:#7cc0d8; --live-soft:#1b2f38;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;font-size:15px;line-height:1.55}
+.wrap{max-width:1000px;margin:0 auto;padding-inline:20px;padding-block:32px 64px}
+
+.mast{border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:24px}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 6px}
+h1{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;
+  font-size:clamp(28px,5vw,40px);line-height:1.05;margin:0;text-wrap:balance}
+.sub{color:var(--ink-2);margin:8px 0 0;max-width:64ch}
+.mast-foot{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:12px;
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-3)}
+.mast-foot b{color:var(--ink-2);font-weight:500}
+
+.tools{display:flex;gap:10px;align-items:center;margin-bottom:26px;flex-wrap:wrap}
+button.print{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:600;font-size:14px;
+  color:var(--card);background:var(--ink);border:1px solid var(--ink);border-radius:2px;
+  padding:7px 16px;cursor:pointer}
+button.print:hover{background:var(--accent);border-color:var(--accent)}
+button.print:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tools span{font-size:12.5px;color:var(--ink-3);font-family:"IBM Plex Mono",monospace}
+
+h2{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:21px;
+  margin:38px 0 4px;border-bottom:1px solid var(--rule);padding-bottom:7px}
+h2:first-of-type{margin-top:0}
+p.note{color:var(--ink-2);font-size:13.5px;margin:0 0 16px;max-width:72ch}
+h3.boardhead{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;
+  font-size:17px;margin:26px 0 8px;color:var(--accent);letter-spacing:.01em}
+
+figure{margin:0 0 10px;background:var(--card);border:1px solid var(--rule);
+  border-radius:2px;padding:18px 16px 10px;overflow-x:auto}
+figure svg{display:block;width:100%;min-width:640px;max-width:100%;height:auto;color:var(--ink)}
+figcaption{font-size:12.5px;color:var(--ink-2);margin-top:12px;
+  border-top:1px solid var(--rule-2);padding-top:9px;max-width:78ch}
+.variant{color:var(--accent)}
+.wire{stroke:currentColor;stroke-width:2;fill:none}
+.body{stroke:currentColor;stroke-width:2;fill:none}
+.dash{stroke:currentColor;stroke-width:1.4;fill:none;stroke-dasharray:6 4}
+.jn{fill:currentColor}
+svg text{font-family:"IBM Plex Mono",ui-monospace,monospace;fill:currentColor}
+.t{font-size:12px}
+.tsm{font-size:11px}
+.tbig{font-size:13px;font-weight:600}
+.dest{font-size:24px;font-weight:700;fill:#c62828;font-family:"IBM Plex Sans Condensed",sans-serif;letter-spacing:.01em}
+
+table{width:100%;border-collapse:collapse;margin:0 0 6px;font-size:13px}
+th,td{text-align:left;padding:6px 9px;border-bottom:1px solid var(--rule-2);vertical-align:top}
+th{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:12px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--ink-2);border-bottom:1px solid var(--rule)}
+td:first-child{font-family:"IBM Plex Mono",monospace;font-weight:500;white-space:nowrap}
+.tw{overflow-x:auto}
+code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--rule-2);
+  padding:1px 4px;border-radius:2px}
+.pill{font-family:"IBM Plex Mono",monospace;font-size:10.5px;padding:1px 6px;border-radius:2px;
+  border:1px solid var(--accent);color:var(--accent);white-space:nowrap}
+
+ol.build{padding-left:20px;display:grid;gap:10px;margin:0}
+ol.build li{font-size:13.5px}
+.warn{border:1px solid var(--stop);background:var(--stop-soft);border-radius:2px;
+  padding:12px 14px;margin:16px 0 0;font-size:13.5px}
+.warn b{color:var(--stop)}
+
+.colophon{margin-top:38px;padding-top:14px;border-top:1px solid var(--rule);
+  font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-3);
+  display:flex;flex-wrap:wrap;gap:6px 20px}
+
+@page{margin:14mm 12mm}
+@media print{
+  :root{--paper:#fff;--card:#fff;--ink:#000;--ink-2:#333;--ink-3:#666;--rule:#999;
+    --rule-2:#ccc;--accent:#000;--accent-soft:#eee;--stop:#000;--stop-soft:#e8e8e8;}
+  body{font-size:10.5pt;background:#fff}
+  .wrap{max-width:none;padding:0}
+  .tools{display:none}
+  figure{break-inside:avoid;border-color:#666}
+  h3.boardhead{break-before:page}
+  figure svg{min-width:0}
+  h2{break-after:avoid}
+  tr,li,.warn{break-inside:avoid}
+  h1{font-size:22pt}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">WildWilly · §4.7 · one board, built twice</p>
+  <h1>Pico Carrier Schematic</h1>
+  <p class="sub">A single carrier design for both Pico 2 W boards. Same layout, same footprints, stuffed differently: the divider is fitted on A, the reset pull-up on B. Everything else is common, so a dead Pico is a swap rather than a rewire.</p>
+  <div class="mast-foot">
+    <span><b>Rev</b> L · 2026-09-26</span>
+    <span><b>Qty</b> 2 identical</span>
+    <span><b>Feed A</b> R5 3.3 V</span>
+    <span><b>Feed B</b> Pi 5 V, breakout</span>
+    <span><b>Status</b> ⚠ rev A–F boards were built to a WRONG Pico orientation — rebuild on fresh board</span>
+  </div>
+</header>
+
+<div class="tools">
+  <button class="print" id="printbtn" type="button">Print this schematic</button>
+  <span id="printhint">5 pages · schematic, nets, landings, a board each</span>
+</div>
+
+<h2>Schematic</h2>
+<p class="note">Only the parts with real topology are drawn. The twelve encoder lines and the six sonar lines are straight connector-to-pin pass-throughs with nothing in circuit, so they live in the net table below where they read faster.</p>
+
+<figure>
+<svg viewBox="0 0 1000 545" role="img" aria-label="Carrier board schematic: power in through a 0.5 amp PTC and a 1N5819 Schottky to the Pico VSYS pin; a 10k over 10k divider tapped upstream of the fuse feeding GP28 with its lower leg on AGND; and on the B variant only, a 10k pull-up from external 3V3 to GP15, which also leaves the board as the IMU reset line. There is no external status LED: the Pico has one on its CYW43439.">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+    </marker>
+  </defs>
+
+  <!-- ===== J1 POWER ===== -->
+  <text class="t tbig" x="40" y="52">J1 POWER</text>
+  <text class="tsm" x="40" y="66">A: R5 3.3V · B: Pi 5V (breakout)</text>
+  <rect class="body" x="40" y="76" width="52" height="56" rx="2"/>
+  <text class="tsm" x="52" y="98">1 V+</text>
+  <text class="tsm" x="52" y="122">2 GND</text>
+  <line class="wire" x1="92" y1="90" x2="150" y2="90"/>
+  <line class="wire" x1="92" y1="118" x2="106" y2="118"/>
+  <line class="wire" x1="106" y1="118" x2="106" y2="470"/>
+
+  <!-- tap junction -->
+  <circle class="jn" cx="150" cy="90" r="4"/>
+  <text class="tsm" x="150" y="76" text-anchor="middle">tap</text>
+
+  <!-- F1 PTC -->
+  <line class="wire" x1="150" y1="90" x2="192" y2="90"/>
+  <rect class="body" x="192" y="76" width="62" height="28"/>
+  <line class="body" x1="200" y1="100" x2="246" y2="80"/>
+  <text class="t" x="223" y="66" text-anchor="middle">F1</text>
+  <text class="tsm" x="223" y="120" text-anchor="middle">PTC 0.5A hold</text>
+
+  <!-- D1 Schottky -->
+  <line class="wire" x1="254" y1="90" x2="300" y2="90"/>
+  <polygon class="body" points="300,76 300,104 338,90"/>
+  <line class="body" x1="340" y1="72" x2="340" y2="108"/>
+  <line class="body" x1="340" y1="72" x2="332" y2="72"/>
+  <line class="body" x1="340" y1="108" x2="348" y2="108"/>
+  <text class="t" x="320" y="62" text-anchor="middle">D1</text>
+  <text class="tsm" x="320" y="124" text-anchor="middle">1N5819</text>
+
+  <!-- TP1 -->
+  <line class="wire" x1="340" y1="90" x2="520" y2="90"/>
+  <circle class="body" cx="410" cy="90" r="5"/>
+  <text class="tsm" x="410" y="76" text-anchor="middle">TP1</text>
+
+  <!-- ===== DIVIDER (A only) ===== -->
+  <g class="variant">
+    <rect class="dash" x="126" y="150" width="140" height="240" rx="4"/>
+    <text class="t" x="196" y="144" text-anchor="middle">FIT ON PICO A ONLY</text>
+    <line class="wire" x1="150" y1="90" x2="150" y2="186"/>
+    <rect class="body" x="136" y="186" width="28" height="46"/>
+    <text class="tsm" x="176" y="206">R2</text>
+    <text class="tsm" x="176" y="220">10k 1%</text>
+    <line class="wire" x1="150" y1="232" x2="150" y2="300"/>
+    <circle class="jn" cx="150" cy="260" r="4"/>
+    <circle class="body" cx="300" cy="260" r="5"/>
+    <text class="tsm" x="300" y="246" text-anchor="middle">TP2</text>
+    <rect class="body" x="136" y="300" width="28" height="46"/>
+    <text class="tsm" x="176" y="320">R3</text>
+    <text class="tsm" x="176" y="334">10k 1%</text>
+    <line class="wire" x1="150" y1="346" x2="150" y2="372"/>
+    <line class="wire" x1="150" y1="372" x2="520" y2="372"/>
+    <line class="wire" x1="150" y1="260" x2="520" y2="260"/>
+  </g>
+
+  <!-- ===== PICO ===== -->
+  <rect class="body" x="520" y="40" width="230" height="420" rx="3"/>
+  <text class="t tbig" x="635" y="66" text-anchor="middle">Pico 2 W</text>
+  <text class="tsm" x="635" y="82" text-anchor="middle">in 2×20 female sockets</text>
+  <line class="body" x1="520" y1="96" x2="750" y2="96"/>
+
+  <text class="tsm" x="530" y="136">39  VSYS</text>
+  <line class="wire" x1="505" y1="90" x2="520" y2="90"/>
+  <text class="tsm" x="530" y="264">34  GP28 / ADC2</text>
+  <text class="tsm" x="530" y="376">33  AGND</text>
+  <text class="tsm" x="530" y="434">38  GND</text>
+  <line class="wire" x1="520" y1="430" x2="490" y2="430"/>
+  <line class="wire" x1="490" y1="430" x2="490" y2="470"/>
+
+  <text class="tsm" x="740" y="228" text-anchor="end">→ J2 LINK</text>
+  <text class="tsm" x="740" y="243" text-anchor="end">GP12/13 — both boards</text>
+  <text class="tsm" x="740" y="306" text-anchor="end">→ J3 SIGNAL</text>
+  <text class="tsm" x="740" y="321" text-anchor="end">12-way (A) · 6-way (B)</text>
+  <text class="tsm" x="740" y="376" text-anchor="end">GP15  20</text>
+
+  <line class="wire" x1="750" y1="234" x2="782" y2="234" marker-end="url(#ar)"/>
+  <line class="wire" x1="750" y1="312" x2="782" y2="312" marker-end="url(#ar)"/>
+
+  <!-- ===== status LED: onboard, nothing to draw ===== -->
+  <text class="tsm" x="790" y="142">status LED is ONBOARD</text>
+  <text class="tsm" x="790" y="158">Pin("LED") on the CYW43439</text>
+  <text class="tsm" x="790" y="174">— no external part, GP14 free</text>
+
+  <!-- ===== RST pull-up (B only) ===== -->
+  <g class="variant">
+    <rect class="dash" x="768" y="334" width="212" height="102" rx="4"/>
+    <text class="t" x="874" y="326" text-anchor="middle">FIT ON PICO B ONLY</text>
+    <line class="wire" x1="750" y1="370" x2="800" y2="370"/>
+    <circle class="jn" cx="800" cy="370" r="4"/>
+    <rect class="body" x="826" y="356" width="56" height="28"/>
+    <line class="wire" x1="800" y1="370" x2="826" y2="370"/>
+    <line class="wire" x1="882" y1="370" x2="912" y2="370"/>
+    <text class="tsm" x="854" y="348" text-anchor="middle">R4 10k</text>
+    <line class="wire" x1="800" y1="370" x2="800" y2="406"/>
+    <line class="wire" x1="800" y1="406" x2="912" y2="406"/>
+    <rect class="body" x="912" y="356" width="56" height="62" rx="2"/>
+    <text class="tsm" x="922" y="375">1 3V3</text>
+    <text class="tsm" x="922" y="400">2 RST</text>
+    <text class="t" x="940" y="432" text-anchor="middle">J4</text>
+  </g>
+
+  <!-- ===== GROUND RAIL ===== -->
+  <line class="wire" x1="106" y1="470" x2="800" y2="470"/>
+  <line class="wire" x1="330" y1="470" x2="330" y2="488"/>
+  <line class="body" x1="308" y1="488" x2="352" y2="488"/>
+  <line class="body" x1="316" y1="497" x2="344" y2="497"/>
+  <line class="body" x1="324" y1="506" x2="336" y2="506"/>
+  <text class="tsm" x="330" y="526" text-anchor="middle">both − rails → star point</text>
+</svg>
+<figcaption><b>The feed is the whole point of this board.</b> Everything between the input and VSYS exists so one Pico cannot take the rover down and USB cannot back-feed the rail. <b>On the physical layout F1 and D1 need no jumpers at all</b> — F1 stands in the + rail and D1 spans straight onto pin 39; this diagram shows the circuit, the board pages show where it sits. Note where the divider taps: <b>upstream of F1</b>, on the rail side. Downstream it would read R5 minus the fuse and diode drops, both of which vary with current — a sagging rail and a warming PTC would look identical on ADC2.</figcaption>
+</figure>
+
+<h2>What goes on each board</h2>
+<p class="note"><b>No external status LED — dropped 2026-09-26.</b> The Pico 2 W has one on the CYW43439, driven as <code>Pin(&quot;LED&quot;)</code> in MicroPython. Earlier revisions here claimed there was no usable onboard LED; that was wrong. The cost is that driving it powers up the wireless chip and loads its firmware over SPI — no network, no transmission, but <b>§12 item 17, &quot;do not initialise the radios&quot;, needs amending to permit it.</b> Dropping R1 and LED1 also frees GP14 and removes the one hazard that could not be designed out: a bare GP14 lead crossing the GP15 reset net on Board B.</p>
+<div class="tw">
+<table>
+  <thead><tr><th>Ref</th><th>Part</th><th>Pico A</th><th>Pico B</th></tr></thead>
+  <tbody>
+    <tr><td>—</td><td>2 × 1×20 female socket, 2.54mm</td><td>fit</td><td>fit</td></tr>
+    <tr><td>F1</td><td>PTC 0.5A hold / 1.0A trip</td><td>fit</td><td>fit</td></tr>
+    <tr><td>D1</td><td>1N5819, DO-41 — band toward Pico</td><td>fit</td><td>fit</td></tr>
+    <tr><td>J1</td><td>JST-PH 2-way — power in</td><td>R5 3.3V, at the encoder 3V3 distribution</td><td>5V at the breakout terminal — <b>not R2</b></td></tr>
+    <tr><td>J2</td><td>JST-PH 3-way — UART link</td><td>fit</td><td>fit</td></tr>
+    <tr><td>J3</td><td>JST-PH 12-way — signal</td><td>all 12</td><td>ways 1–6 only</td></tr>
+    <tr><td>—</td><td>Board: 30-column solderable breadboard, bus rails both edges</td><td><b>new</b></td><td><b>new</b></td></tr>
+    <tr><td>R2, R3</td><td>10k 1% metal film</td><td><span class="pill">FIT</span></td><td>leave empty</td></tr>
+    <tr><td>TP2</td><td>test point, divider node</td><td><span class="pill">FIT</span></td><td>leave empty</td></tr>
+    <tr><td>R4</td><td>10k</td><td>leave empty</td><td><span class="pill">FIT</span></td></tr>
+    <tr><td>J4</td><td>JST-PH 2-way — 3V3 in, RST out on GP15 / pin 20</td><td>leave empty</td><td><span class="pill">FIT</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Nets — J2 and J3</h2>
+<p class="note"><b>Every way lands on the same Pico pin on both boards.</b> That is a requirement, not a coincidence — one carrier layout means one net per connector way, so B's sonar and A's encoders have to share pins way for way. Two assignments changed from the §4.7 sketch to make it hold; see build note 5.</p>
+
+<div class="tw">
+<table>
+  <thead><tr><th>Way</th><th>Pico A — encoders</th><th>Pico pin</th><th>Pico B — sonar</th><th>Pico pin</th></tr></thead>
+  <tbody>
+    <tr><td>J2-1</td><td>TX → Pi GP13, phys 33</td><td>16 (GP12)</td><td>TX → Pi GP5, phys 29</td><td>16 (GP12)</td></tr>
+    <tr><td>J2-2</td><td>RX ← Pi GP12, phys 32</td><td>17 (GP13)</td><td>RX ← Pi GP4, phys 7</td><td>17 (GP13)</td></tr>
+    <tr><td>J2-3</td><td>signal GND &#8212; column 28</td><td>18 GND</td><td>signal GND &#8212; <b>the &#8722; rail</b>, not column 28</td><td>plane</td></tr>
+    <tr><td>J3-1</td><td>RF Phase A — yellow</td><td>1 (GP0)</td><td>TRIG-F → P1-1</td><td>1 (GP0)</td></tr>
+    <tr><td>J3-2</td><td>RF Phase B — green</td><td>2 (GP1)</td><td>ECHO-F ← P1-4</td><td>2 (GP1)</td></tr>
+    <tr><td>J3-3</td><td>RM Phase A</td><td>4 (GP2)</td><td>TRIG-L → P1-5</td><td>4 (GP2)</td></tr>
+    <tr><td>J3-4</td><td>RM Phase B</td><td>5 (GP3)</td><td>ECHO-L ← P1-8</td><td>5 (GP3)</td></tr>
+    <tr><td>J3-5</td><td>LF Phase A</td><td>6 (GP4)</td><td>TRIG-R → P1-9</td><td>6 (GP4)</td></tr>
+    <tr><td>J3-6</td><td>LF Phase B</td><td>7 (GP5)</td><td>ECHO-R ← P1-12</td><td>7 (GP5)</td></tr>
+    <tr><td>J3-7</td><td>LM Phase A</td><td>9 (GP6)</td><td>not fitted</td><td>—</td></tr>
+    <tr><td>J3-8</td><td>LM Phase B</td><td>10 (GP7)</td><td>not fitted</td><td>—</td></tr>
+    <tr><td>J3-9</td><td>RR Phase A</td><td>11 (GP8)</td><td>not fitted</td><td>—</td></tr>
+    <tr><td>J3-10</td><td>RR Phase B</td><td>12 (GP9)</td><td>not fitted</td><td>—</td></tr>
+    <tr><td>J3-11</td><td>LR Phase A</td><td>14 (GP10)</td><td>not fitted</td><td>—</td></tr>
+    <tr><td>J3-12</td><td>LR Phase B</td><td>15 (GP11)</td><td>not fitted</td><td>—</td></tr>
+    <tr><td>J4-1</td><td>—</td><td>—</td><td>3V3 from Pi header pin 1</td><td>via R4</td></tr>
+    <tr><td>J4-2</td><td>—</td><td>—</td><td>RST → BNO085</td><td>20 (GP15)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Stuffing the 30-column board</h2>
+
+<div class="warn"><b>⛔ REV A–F HAD THE PICO THE WRONG WAY ROUND. Owner-caught 2026-09-26; boards built to those revisions cannot be rescued by re-seating the Pico.</b> The pins point <b>down</b> and the board is seen from <b>above</b>, so laying it with the USB at the left puts <b>pins 21–40 along the TOP row and pins 1–20 along the BOTTOM</b> — the top-left pin is <b>pin 40, VBUS</b>. Earlier revisions had it inverted, which put every signal on the power side and every power connection on the signal side. <b>No rotation fixes it:</b> a 180° turn maps the top row to pin 21−column, not column, so no orientation makes the old holes right. <b>Every part is reusable</b> — F1, D1, R2, R3, R4 and the sockets desolder and go straight onto the new board. You need two fresh 30-column boards.</div>
+<p class="note"><b>30 columns and bus rails changes the design, and simplifies it.</b> The Pico needs 20 columns, so it sits <em>on</em> the board instead of beside it — no separate mounting, and nothing on these drawings needs a wire between board and Pico. The bus rails carry the feed and the ground, so most of the jumpers disappear too. Rows <code>A</code>–<code>E</code> and <code>F</code>–<code>J</code> are 5-hole tie-strips split by the centre channel; each bus line runs the length of the board.</p>
+
+<p class="note"><b>The Pico sits on columns 11–30, not 1–20 — owner-directed 2026-09-26.</b> Shifting it right frees the ten columns to its left for F1 and D1, which puts the protection chain immediately beside the pin it protects: <b>and then the jumpers go away entirely</b> (owner, same day): F1 stands from the <b>+ rail straight into column 9</b>, and <b>D1 spans column 9 to column 12</b> — which <em>is</em> pin 39, VSYS. The 24-column link across the board and the jumper that fed it are both gone; the parts do the connecting. <b>The USB plug reaches back over columns 5–10 at rows D–G</b> — mid-height, so it passes under nothing: F1 and D1 live in rows A and B, above it. Keep the cable from draping on them.</p>
+
+<p class="note"><b>Put the Pico's pins in rows C and H.</b> Its rows are 17.78 mm / 0.700″ apart, which is exactly C to H — and that leaves rows <b>A, B</b> reachable for <b>pins 21–40</b> and rows <b>I, J</b> reachable for <b>pins 1–20</b>. Land it in A and F instead and the body covers B through E, taking every access hole on that side with it. Pin 1 and pin 40 share <b>column 11</b> — both are at the <b>USB end</b>. ⚠ <b>Whether it clears the board edge depends on your board's margin, which I cannot know.</b> The plug now sits <em>over</em> the board by design, reaching back about five columns at mid-height. Check it clears F1 and D1 in rows A/B, and that the Pico's far end at column 30 does not overhang your right margin awkwardly. Column <var>c</var> then holds pin <b>51−<var>c</var></b> on the row-C side (top) and pin <b><var>c</var>−10</b> on the row-H side (bottom) — so <b>every power connection is in the top section and every signal in the bottom</b>.</p>
+
+<p class="note"><b>Rail order, corrected twice by the owner.</b> The top pair is <b>reversed</b> relative to the bottom, so reading down the board the four rails are <b>− + … + −</b> — both <b>+</b> rails are the <b>inner</b> ones. That is a gift for this layout: <b>F1 and R2 stand from the + rail straight into row A without crossing anything</b>, which is what makes the jumperless chain safe.</p>
+
+<p class="note"><b>Bus assignment.</b> <b>Upper + (inner)</b> = raw V+ in — F1 stands directly in it, and on A so does R2. <b>Upper − (outer)</b> = ground: the rover's GND lands here and pin 38 returns to it. <b>Lower + (inner)</b> = 3V3 in, used on B only for R4; unused on A. <b>Lower − (outer)</b> is <b>spare</b> — nothing on either board lands on it, so the bus tie is gone as well. Tie the two − rails only if you later want a ground down there. ⚠ Rails on many of these boards are <b>split at the midpoint</b> — check yours is continuous, or bridge the break, or the right-hand half is dead.</p>
+
+<div class="warn"><b>⚠ Two clearances, and that is the whole list.</b> <b>Column 11, rows A/B:</b> that strip is <b>pin 40, VBUS</b>, and D1’s body floats over it. It is empty by rule anyway, which is exactly what makes the span safe — but never put anything there. <b>The pin-38 ground wire passes the upper + rail at column 13</b> on its way out to −, which is why it is drawn with a jog; that + rail hole at column 13 must stay empty. Reversing the top pair removed the other two clearances this layout used to need.</div>
+
+<h2>Where the device wires land</h2>
+<p class="note"><b>Every device wire lands in row I.</b> That is forced, not chosen: the Pico body covers rows D–G of columns 1–20, so the only holes sharing a strip with a pin are <b>A, B</b> (row-C side, <b>pins 21–40</b> — power) and <b>I, J</b> (row-H side, <b>pins 1–20</b> — every GPIO this design uses). Land the wire in <b>row I</b> and keep row J as the spare for metering.</p>
+
+<p class="note">⚠ <b>This is also the trap.</b> Every column <b>11–30</b> has a Pico pin on <em>both</em> sides, so a hole that looks free may not be. Before landing anything in <b>rows A/B</b>, work out <b>51 − column</b> and check what that pin is. Two on that side bite hardest: <b>column 15 is pin 36, 3V3 OUT</b> — landing the raw feed there would tie the unregulated rail to the Pico's own regulator output, which an earlier revision of this sheet did — and <b>column 11 is pin 40, VBUS: leave it empty.</b></p>
+
+<div class="tw">
+<table>
+  <thead><tr><th>Col</th><th>Pico A — row I</th><th>Pin</th><th>Pico B — row I</th><th>Pin</th></tr></thead>
+  <tbody>
+    <tr><td>11</td><td>RF Phase A — yellow</td><td>1 GP0</td><td>TRIG-F → P1-1</td><td>1 GP0</td></tr>
+    <tr><td>12</td><td>RF Phase B — green</td><td>2 GP1</td><td>ECHO-F ← P1-4</td><td>2 GP1</td></tr>
+    <tr><td>13</td><td colspan="4"><i>pin 3 is GND — spare ground landing</i></td></tr>
+    <tr><td>14</td><td>RM Phase A</td><td>4 GP2</td><td>TRIG-L → P1-5</td><td>4 GP2</td></tr>
+    <tr><td>15</td><td>RM Phase B</td><td>5 GP3</td><td>ECHO-L ← P1-8</td><td>5 GP3</td></tr>
+    <tr><td>16</td><td>LF Phase A</td><td>6 GP4</td><td>TRIG-R → P1-9</td><td>6 GP4</td></tr>
+    <tr><td>17</td><td>LF Phase B</td><td>7 GP5</td><td>ECHO-R ← P1-12</td><td>7 GP5</td></tr>
+    <tr><td>18</td><td colspan="4"><i>pin 8 is GND — spare ground landing</i></td></tr>
+    <tr><td>19</td><td>LM Phase A</td><td>9 GP6</td><td>—</td><td>9 GP6</td></tr>
+    <tr><td>20</td><td>LM Phase B</td><td>10 GP7</td><td>—</td><td>10 GP7</td></tr>
+    <tr><td>21</td><td>RR Phase A</td><td>11 GP8</td><td>—</td><td>11 GP8</td></tr>
+    <tr><td>22</td><td>RR Phase B</td><td>12 GP9</td><td>—</td><td>12 GP9</td></tr>
+    <tr><td>23</td><td colspan="4"><i>pin 13 is GND — spare ground landing</i></td></tr>
+    <tr><td>24</td><td>LR Phase A</td><td>14 GP10</td><td>—</td><td>14 GP10</td></tr>
+    <tr><td>25</td><td>LR Phase B</td><td>15 GP11</td><td>—</td><td>15 GP11</td></tr>
+    <tr><td>26</td><td><b>UART TX → Pi GP13 phys 33</b></td><td>16 GP12</td><td><b>UART TX → Pi GP5 phys 29</b></td><td>16 GP12</td></tr>
+    <tr><td>27</td><td><b>UART RX ← Pi GP12 phys 32</b></td><td>17 GP13</td><td><b>UART RX ← Pi GP4 phys 7</b></td><td>17 GP13</td></tr>
+    <tr><td>28</td><td>signal GND &#8594; Pi pin 6/9 &#8212; A&#8217;s <i>only</i> ground to the Pi</td><td>18 GND</td><td><b>EMPTY on B.</b> Its ground is the &#8722; rail; a second wire to the same Pi GND is a loop</td><td>&#8212;</td></tr>
+    <tr><td>29</td><td colspan="4"><i>pin 19 GP14 — free, no external LED</i></td></tr>
+    <tr><td>30</td><td>—</td><td>20 GP15</td><td><b>RST → BNO085</b></td><td>20 GP15</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="note"><b>Rows A/B carry no device wires at all</b> — only the power chain: column 12 is VSYS in, column 13 is ground out to the upper − rail, and on A columns 17 and 18 are the divider. F1 stands in column 9 and D1 spans 9–12, both outside the Pico altogether. Everything else on that side is an unused Pico pin, and <b>VBUS at column 1 must stay empty.</b></p>
+
+<p class="note"><b>Three wires leave from the rails, not from a column:</b> V+ in and GND in on the <b>top</b> pair, and on B the 3V3 in on the <b>lower +</b>. Land those anywhere convenient along their rail — that is what a bus is for.</p>
+
+<h3 class="boardhead">Board A — encoders</h3>
+<figure>
+<svg viewBox="-330 0 1500 512" role="img" aria-label="Board A hole layout. The Pico sits over columns 11 to 30 with pin rows in C and H, USB at the column-11 end. Row C carries pins 21 to 40, row H carries pins 1 to 20. The power chain occupies the ten free columns to the left: F1 stands from the upper plus rail into column 9 row A, and D1 spans column 9 to column 12 in row B with its band at column 12, landing VSYS directly on pin 39. There are no jumpers. Ground leaves column 13 for the upper minus rail. R2 drops from the upper plus rail into column 17 row A and R3 runs column 17 to column 18 in row B, landing the divider on GP28 and AGND. The twelve encoder wires land in row I of columns 11 to 25. Dashed squares mark the spare GPIOs: nine on the top side in row A and two on the bottom.">
+  <defs>
+    <pattern id="hBusA" width="24" height="24" patternUnits="userSpaceOnUse" x="48" y="48">
+      <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.75"/>
+    </pattern>
+    <pattern id="hGridA" width="24" height="24" patternUnits="userSpaceOnUse" x="48" y="108">
+      <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.75"/>
+    </pattern>
+    <pattern id="sTopA" width="24" height="120" patternUnits="userSpaceOnUse" x="48" y="108">
+      <rect x="6" y="4" width="12" height="112" rx="6" fill="currentColor" opacity="0.10"/>
+    </pattern>
+    <pattern id="sBotA" width="24" height="120" patternUnits="userSpaceOnUse" x="48" y="252">
+      <rect x="6" y="4" width="12" height="112" rx="6" fill="currentColor" opacity="0.10"/>
+    </pattern>
+  </defs>
+  <rect x="30" y="40" width="756" height="400" rx="4" fill="none" stroke="currentColor" stroke-width="2"/>
+  <rect x="48" y="48" width="720" height="48" fill="url(#hBusA)"/>
+  <rect x="48" y="384" width="720" height="48" fill="url(#hBusA)"/>
+  <rect x="48" y="108" width="720" height="120" fill="url(#sTopA)"/>
+  <rect x="48" y="252" width="720" height="120" fill="url(#sBotA)"/>
+  <rect x="48" y="108" width="720" height="120" fill="url(#hGridA)"/>
+  <rect x="48" y="252" width="720" height="120" fill="url(#hGridA)"/>
+  <line x1="48" y1="84" x2="768" y2="84" stroke="var(--stop)" stroke-width="2.2" opacity="0.5"/>
+  <line x1="48" y1="60" x2="768" y2="60" stroke="currentColor" stroke-width="2.2" opacity="0.4"/>
+  <line x1="48" y1="396" x2="768" y2="396" stroke="var(--stop)" stroke-width="2.2" opacity="0.5"/>
+  <line x1="48" y1="420" x2="768" y2="420" stroke="currentColor" stroke-width="2.2" opacity="0.4"/>
+  <text class="tsm" x="22" y="88" text-anchor="end">+</text>
+  <text class="tsm" x="22" y="64" text-anchor="end">−</text>
+  <text class="tsm" x="22" y="124" text-anchor="end">A</text>
+  <text class="tsm" x="22" y="148" text-anchor="end">B</text>
+  <text class="tsm" x="22" y="172" text-anchor="end">C</text>
+  <text class="tsm" x="22" y="196" text-anchor="end">D</text>
+  <text class="tsm" x="22" y="220" text-anchor="end">E</text>
+  <text class="tsm" x="22" y="268" text-anchor="end">F</text>
+  <text class="tsm" x="22" y="292" text-anchor="end">G</text>
+  <text class="tsm" x="22" y="316" text-anchor="end">H</text>
+  <text class="tsm" x="22" y="340" text-anchor="end">I</text>
+  <text class="tsm" x="22" y="364" text-anchor="end">J</text>
+  <text class="tsm" x="22" y="400" text-anchor="end">+</text>
+  <text class="tsm" x="22" y="424" text-anchor="end">−</text>
+  <text class="tsm" x="60" y="104" text-anchor="middle">1</text>
+  <text class="tsm" x="108" y="104" text-anchor="middle">3</text>
+  <text class="tsm" x="156" y="104" text-anchor="middle">5</text>
+  <text class="tsm" x="204" y="104" text-anchor="middle">7</text>
+  <text class="tsm" x="252" y="104" text-anchor="middle">9</text>
+  <text class="tsm" x="300" y="104" text-anchor="middle">11</text>
+  <text class="tsm" x="348" y="104" text-anchor="middle">13</text>
+  <text class="tsm" x="396" y="104" text-anchor="middle">15</text>
+  <text class="tsm" x="444" y="104" text-anchor="middle">17</text>
+  <text class="tsm" x="492" y="104" text-anchor="middle">19</text>
+  <text class="tsm" x="540" y="104" text-anchor="middle">21</text>
+  <text class="tsm" x="588" y="104" text-anchor="middle">23</text>
+  <text class="tsm" x="636" y="104" text-anchor="middle">25</text>
+  <text class="tsm" x="684" y="104" text-anchor="middle">27</text>
+  <text class="tsm" x="732" y="104" text-anchor="middle">29</text>
+  <rect x="290" y="158" width="476" height="164" rx="3" fill="currentColor" opacity="0.07"/>
+  <rect x="290" y="158" width="476" height="164" rx="3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="6 4"/>
+  <rect x="264" y="205" width="26" height="70" rx="2" fill="var(--card)" stroke="currentColor" stroke-width="2"/>
+  <line x1="271" y1="214" x2="271" y2="266" stroke="currentColor" stroke-width="1.3" opacity="0.65"/>
+  <line x1="278" y1="214" x2="278" y2="266" stroke="currentColor" stroke-width="1.3" opacity="0.4"/>
+  <text class="tsm" x="258" y="236" text-anchor="end">micro-USB</text>
+  <text class="tsm" x="258" y="250" text-anchor="end">plug reaches back</text>
+  <text class="tsm" x="258" y="264" text-anchor="end">over cols 5–10, rows D–G</text>
+  <text class="t tbig" x="516" y="234" text-anchor="middle">PICO 2 W &#8212; columns 11&#8211;30, pins in rows C and H</text>
+  <text class="tsm" x="516" y="252" text-anchor="middle">USB at the column-11 end &#183; pins point DOWN, board seen from above</text>
+  <text class="tsm" x="516" y="270" text-anchor="middle">row C = pins 21&#8211;40, pin = 51 &#8722; column   |   row H = pins 1&#8211;20, pin = column &#8722; 10</text>
+  <text class="tsm" x="516" y="288" text-anchor="middle">TOP: col 11 = 40 VBUS &#9888; leave empty &#183; col 12 = 39 VSYS &#183; col 13 = 38 GND &#183; col 17 = 34 GP28 &#183; col 18 = 33 AGND</text>
+  <text class="tsm" x="516" y="306" text-anchor="middle">BOTTOM: cols 11&#8211;25 = encoders &#183; 26 = TX &#183; 27 = RX &#183; 28 = GND &#183; 29, 30 free</text>
+  <line class="wire" x1="252" y1="84" x2="252" y2="120" stroke-width="2"/>
+  <rect x="241" y="99" width="22" height="30" rx="2" fill="var(--card)" stroke="currentColor" stroke-width="2"/>
+  <line x1="246" y1="122" x2="258" y2="106" stroke="currentColor" stroke-width="1.6"/>
+  <text class="t" x="268" y="114">F1 &#183; + rail &#8594; c9a</text>
+  <line class="wire" x1="252" y1="144" x2="324" y2="144" stroke-width="2"/>
+  <rect x="268" y="134" width="40" height="20" rx="1" fill="var(--card)" stroke="currentColor" stroke-width="2"/>
+  <line x1="302" y1="134" x2="302" y2="154" stroke="currentColor" stroke-width="4"/>
+  <text class="t" x="236" y="148" text-anchor="end">D1 &#183; c9b &#8594; c12b, band at c12 &#183; VSYS, pin 39</text>
+  <polyline class="wire" points="348,120 358,108 358,72 348,60" stroke-width="3"/>
+  <text class="tsm" x="364" y="104">GND &#183; pin 38 &#183; the only wire on the board</text>
+  <g class="variant">
+    <line class="wire" x1="444" y1="84" x2="444" y2="120" stroke-width="2"/>
+    <rect x="433" y="100" width="22" height="28" rx="1" fill="var(--card)" stroke="currentColor" stroke-width="2"/>
+    <line class="wire" x1="444" y1="144" x2="468" y2="144" stroke-width="2"/>
+    <rect x="445" y="135" width="22" height="18" rx="1" fill="var(--card)" stroke="currentColor" stroke-width="2"/>
+    <text class="t" x="460" y="118">R2 10k 1%  + rail &#8594; c17a</text>
+    <text class="t" x="482" y="148">R3 10k 1%  c17b &#8211; c18b &#8594; pin 33 AGND</text>
+  </g>
+  <text class="t" x="36" y="436">Holes a device wire lands in &#8212; row I (row J is the spare)</text>
+  <rect x="293.5" y="329.5" width="13" height="13" rx="1.5" fill="#e8c033" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="300" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="317.5" y="329.5" width="13" height="13" rx="1.5" fill="#3f8f52" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="324" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="365.5" y="329.5" width="13" height="13" rx="1.5" fill="#e8c033" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="372" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="389.5" y="329.5" width="13" height="13" rx="1.5" fill="#3f8f52" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="396" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="413.5" y="329.5" width="13" height="13" rx="1.5" fill="#e8c033" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="420" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="437.5" y="329.5" width="13" height="13" rx="1.5" fill="#3f8f52" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="444" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="485.5" y="329.5" width="13" height="13" rx="1.5" fill="#e8c033" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="492" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="509.5" y="329.5" width="13" height="13" rx="1.5" fill="#3f8f52" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="516" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="533.5" y="329.5" width="13" height="13" rx="1.5" fill="#e8c033" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="540" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="557.5" y="329.5" width="13" height="13" rx="1.5" fill="#3f8f52" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="564" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="605.5" y="329.5" width="13" height="13" rx="1.5" fill="#e8c033" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="612" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="629.5" y="329.5" width="13" height="13" rx="1.5" fill="#3f8f52" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="636" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="653.5" y="329.5" width="13" height="13" rx="1.5" fill="#2f6fb5" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="660" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="677.5" y="329.5" width="13" height="13" rx="1.5" fill="#2f6fb5" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="684" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="701.5" y="329.5" width="13" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="708" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <polyline points="768,60 782,60 782,50 795,50" fill="none" stroke="#c62828" stroke-width="2"/>
+  <text class="dest" x="800" y="56" text-anchor="start">R5 GND</text>
+  <text class="tsm" x="800" y="71" text-anchor="start">&#8594; single-point star (&#167;10)</text>
+  <polyline points="768,84 782,84 782,92 795,92" fill="none" stroke="#c62828" stroke-width="2"/>
+  <text class="dest" x="800" y="98" text-anchor="start">R5 3.3 V</text>
+  <text class="tsm" x="800" y="113" text-anchor="start">DROK-4 &#8212; NOT the Pi &#183; via F1 + D1</text>
+  <polyline points="48,396 34,396 34,386 20,386" fill="none" stroke="#c62828" stroke-width="2"/>
+  <text class="dest" x="14" y="392" text-anchor="end">UNUSED ON A</text>
+  <text class="tsm" x="14" y="407" text-anchor="end">nothing lands on the lower + rail</text>
+  <polyline points="48,420 34,420 34,430 20,430" fill="none" stroke="#c62828" stroke-width="2"/>
+  <text class="dest" x="14" y="436" text-anchor="end">GND</text>
+  <text class="tsm" x="14" y="451" text-anchor="end">both &#8722; rails tied at column 30</text>
+  <polyline points="649,336 20,336" fill="none" stroke="#c62828" stroke-width="2"/>
+  <text class="dest" x="14" y="326" text-anchor="end">ENCODERS &#215; 6</text>
+  <text class="tsm" x="14" y="341" text-anchor="end">12 wires &#183; yellow = Phase A, green = Phase B</text>
+  <polyline points="721,336 795,336" fill="none" stroke="#c62828" stroke-width="2"/>
+  <text class="dest" x="800" y="342" text-anchor="start">PI 5</text>
+  <text class="tsm" x="800" y="357" text-anchor="start">c26 &#8594; pin 33 GP13 &#183; c27 &#8594; pin 32 GP12 &#183; c28 &#8594; pin 6/9 GND</text>
+  <text class="tsm" x="800" y="372" fill="#c62828">the only three wires between Board A and the Pi</text>
+  <rect x="485.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="492" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="509.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="516" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="557.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="564" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="605.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="612" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="629.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="636" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="653.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="660" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="677.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="684" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="725.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="732" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="749.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="756" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="725.5" y="329.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="732" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="749.5" y="329.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="756" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="36" y="445" width="12" height="12" rx="1.5" fill="#e8c033" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <text class="tsm" x="53" y="454">Phase A &#183; yellow</text>
+  <rect x="213" y="445" width="12" height="12" rx="1.5" fill="#3f8f52" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <text class="tsm" x="230" y="454">Phase B &#183; green</text>
+  <rect x="384" y="445" width="12" height="12" rx="1.5" fill="#2f6fb5" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <text class="tsm" x="401" y="454">UART to the Pi</text>
+  <rect x="515" y="445" width="12" height="12" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+  <text class="tsm" x="532" y="454">signal GND</text>
+  <text class="tsm" x="36" y="476"><tspan fill="var(--accent)">SPARE</tspan>  top side, row A: c19=GP27  c20=GP26  c22=GP22  c24=GP21  c25=GP20  c26=GP19  c27=GP18  c29=GP17  c30=GP16</text>
+  <text class="tsm" x="36" y="494"><tspan fill="var(--accent)">SPARE</tspan>  bottom side, row I: c29=GP14  c30=GP15</text>
+</svg>
+<figcaption><b>The divider lands straight on the Pico's own pins.</b> R2 comes off the raw-feed bus into column 7, which <em>is</em> pin 34 / GP28; R3 goes from column 7 to column 8, which <em>is</em> pin 33 / AGND. No node wire, no floating junction. <b>Column 8's strip goes nowhere else</b> — deliberately not linked to the ground bus, so AGND single-points at the Pico and the divider's return never shares copper with the LED. R3 spans one column: stand it on end with the upper lead bent over.<br><br>⚠ <b>Column 7 does two unrelated jobs on this board.</b> Its row-C side is pin 7 / GP5 — LF Phase B, a green encoder wire in row A or B. Its row-H side is pin 34 / GP28 — the divider node. Separate tie-strips with no connection between them, but it is the one column carrying both a signal and the ADC, so check it twice before power.<br><br><b>The near-miss worth remembering.</b> An earlier revision landed the raw feed on the strip that is <b>pin 36, 3V3 OUT</b> — which would have tied the unregulated rail to the Pico's own regulator output. Under this layout that trap sits at <b>column 15, rows A/B</b>. R2 now stands in the + rail instead, so there is no feed jumper to misplace.</figcaption>
+</figure>
+
+<h3 class="boardhead">Board B — sonar and IMU reset</h3>
+<figure>
+<svg viewBox="-330 0 1500 512" role="img" aria-label="Board B hole layout, same geometry as board A and the same jumperless power chain: F1 from the plus rail into column 9, D1 from column 9 to column 12. Instead of the divider, R4 rises straight from the lower plus rail into column 30 row J, pulling pin 20 GP15 up to 3V3 with no jumper at all. The six sonar wires land in row I of columns 11, 12, 14, 15, 16 and 17, and the reset wire to the IMU in row I of column 30. Dashed squares mark the spare GPIOs: ten on the top side in row A, including the free ADC at column 17, and seven on the bottom.">
+  <defs>
+    <pattern id="hBusB" width="24" height="24" patternUnits="userSpaceOnUse" x="48" y="48">
+      <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.75"/>
+    </pattern>
+    <pattern id="hGridB" width="24" height="24" patternUnits="userSpaceOnUse" x="48" y="108">
+      <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.75"/>
+    </pattern>
+    <pattern id="sTopB" width="24" height="120" patternUnits="userSpaceOnUse" x="48" y="108">
+      <rect x="6" y="4" width="12" height="112" rx="6" fill="currentColor" opacity="0.10"/>
+    </pattern>
+    <pattern id="sBotB" width="24" height="120" patternUnits="userSpaceOnUse" x="48" y="252">
+      <rect x="6" y="4" width="12" height="112" rx="6" fill="currentColor" opacity="0.10"/>
+    </pattern>
+  </defs>
+  <rect x="30" y="40" width="756" height="400" rx="4" fill="none" stroke="currentColor" stroke-width="2"/>
+  <rect x="48" y="48" width="720" height="48" fill="url(#hBusB)"/>
+  <rect x="48" y="384" width="720" height="48" fill="url(#hBusB)"/>
+  <rect x="48" y="108" width="720" height="120" fill="url(#sTopB)"/>
+  <rect x="48" y="252" width="720" height="120" fill="url(#sBotB)"/>
+  <rect x="48" y="108" width="720" height="120" fill="url(#hGridB)"/>
+  <rect x="48" y="252" width="720" height="120" fill="url(#hGridB)"/>
+  <line x1="48" y1="84" x2="768" y2="84" stroke="var(--stop)" stroke-width="2.2" opacity="0.5"/>
+  <line x1="48" y1="60" x2="768" y2="60" stroke="currentColor" stroke-width="2.2" opacity="0.4"/>
+  <line x1="48" y1="396" x2="768" y2="396" stroke="var(--stop)" stroke-width="2.2" opacity="0.5"/>
+  <line x1="48" y1="420" x2="768" y2="420" stroke="currentColor" stroke-width="2.2" opacity="0.4"/>
+  <text class="tsm" x="22" y="88" text-anchor="end">+</text>
+  <text class="tsm" x="22" y="64" text-anchor="end">−</text>
+  <text class="tsm" x="22" y="124" text-anchor="end">A</text>
+  <text class="tsm" x="22" y="148" text-anchor="end">B</text>
+  <text class="tsm" x="22" y="172" text-anchor="end">C</text>
+  <text class="tsm" x="22" y="196" text-anchor="end">D</text>
+  <text class="tsm" x="22" y="220" text-anchor="end">E</text>
+  <text class="tsm" x="22" y="268" text-anchor="end">F</text>
+  <text class="tsm" x="22" y="292" text-anchor="end">G</text>
+  <text class="tsm" x="22" y="316" text-anchor="end">H</text>
+  <text class="tsm" x="22" y="340" text-anchor="end">I</text>
+  <text class="tsm" x="22" y="364" text-anchor="end">J</text>
+  <text class="tsm" x="22" y="400" text-anchor="end">+</text>
+  <text class="tsm" x="22" y="424" text-anchor="end">−</text>
+  <text class="tsm" x="60" y="104" text-anchor="middle">1</text>
+  <text class="tsm" x="108" y="104" text-anchor="middle">3</text>
+  <text class="tsm" x="156" y="104" text-anchor="middle">5</text>
+  <text class="tsm" x="204" y="104" text-anchor="middle">7</text>
+  <text class="tsm" x="252" y="104" text-anchor="middle">9</text>
+  <text class="tsm" x="300" y="104" text-anchor="middle">11</text>
+  <text class="tsm" x="348" y="104" text-anchor="middle">13</text>
+  <text class="tsm" x="396" y="104" text-anchor="middle">15</text>
+  <text class="tsm" x="444" y="104" text-anchor="middle">17</text>
+  <text class="tsm" x="492" y="104" text-anchor="middle">19</text>
+  <text class="tsm" x="540" y="104" text-anchor="middle">21</text>
+  <text class="tsm" x="588" y="104" text-anchor="middle">23</text>
+  <text class="tsm" x="636" y="104" text-anchor="middle">25</text>
+  <text class="tsm" x="684" y="104" text-anchor="middle">27</text>
+  <text class="tsm" x="732" y="104" text-anchor="middle">29</text>
+  <rect x="290" y="158" width="476" height="164" rx="3" fill="currentColor" opacity="0.07"/>
+  <rect x="290" y="158" width="476" height="164" rx="3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="6 4"/>
+  <rect x="264" y="205" width="26" height="70" rx="2" fill="var(--card)" stroke="currentColor" stroke-width="2"/>
+  <line x1="271" y1="214" x2="271" y2="266" stroke="currentColor" stroke-width="1.3" opacity="0.65"/>
+  <line x1="278" y1="214" x2="278" y2="266" stroke="currentColor" stroke-width="1.3" opacity="0.4"/>
+  <text class="tsm" x="258" y="236" text-anchor="end">micro-USB</text>
+  <text class="tsm" x="258" y="250" text-anchor="end">plug reaches back</text>
+  <text class="tsm" x="258" y="264" text-anchor="end">over cols 5–10, rows D–G</text>
+  <text class="t tbig" x="516" y="234" text-anchor="middle">PICO 2 W &#8212; columns 11&#8211;30, pins in rows C and H</text>
+  <text class="tsm" x="516" y="252" text-anchor="middle">USB at the column-11 end &#183; pins point DOWN, board seen from above</text>
+  <text class="tsm" x="516" y="270" text-anchor="middle">row C = pins 21&#8211;40, pin = 51 &#8722; column   |   row H = pins 1&#8211;20, pin = column &#8722; 10</text>
+  <text class="tsm" x="516" y="288" text-anchor="middle">TOP: col 11 = 40 VBUS &#9888; leave empty &#183; col 12 = 39 VSYS &#183; col 13 = 38 GND &#183; col 17 = 34 GP28 &#183; col 18 = 33 AGND</text>
+  <text class="tsm" x="516" y="306" text-anchor="middle">BOTTOM: cols 11,12,14,15,16,17 = sonar &#183; 26 = TX &#183; 27 = RX &#183; 28 = EMPTY, no second ground &#183; 30 = GP15 RST</text>
+  <line class="wire" x1="252" y1="84" x2="252" y2="120" stroke-width="2"/>
+  <rect x="241" y="99" width="22" height="30" rx="2" fill="var(--card)" stroke="currentColor" stroke-width="2"/>
+  <line x1="246" y1="122" x2="258" y2="106" stroke="currentColor" stroke-width="1.6"/>
+  <text class="t" x="268" y="114">F1 &#183; + rail &#8594; c9a</text>
+  <line class="wire" x1="252" y1="144" x2="324" y2="144" stroke-width="2"/>
+  <rect x="268" y="134" width="40" height="20" rx="1" fill="var(--card)" stroke="currentColor" stroke-width="2"/>
+  <line x1="302" y1="134" x2="302" y2="154" stroke="currentColor" stroke-width="4"/>
+  <text class="t" x="236" y="148" text-anchor="end">D1 &#183; c9b &#8594; c12b, band at c12 &#183; VSYS, pin 39</text>
+  <polyline class="wire" points="348,120 358,108 358,72 348,60" stroke-width="3"/>
+  <text class="tsm" x="364" y="104">GND &#183; pin 38 &#183; the only wire on the board</text>
+  <g class="variant">
+    <line class="wire" x1="756" y1="396" x2="756" y2="360" stroke-width="2"/>
+    <rect x="745" y="369" width="22" height="26" rx="1" fill="var(--card)" stroke="currentColor" stroke-width="2"/>
+    <text class="t" x="740" y="390" text-anchor="end">R4 10k  + rail &#8594; c30j &#8594; pin 20 GP15</text>
+  </g>
+  <text class="tsm" x="498" y="174" text-anchor="middle">c18 = pin 33 AGND, unused on B</text>
+  <text class="t" x="36" y="436">Holes a device wire lands in &#8212; row I (row J is the spare)</text>
+  <rect x="293.5" y="329.5" width="13" height="13" rx="1.5" fill="#9aa3ab" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="300" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="317.5" y="329.5" width="13" height="13" rx="1.5" fill="#7a5ba6" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="324" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="365.5" y="329.5" width="13" height="13" rx="1.5" fill="#9aa3ab" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="372" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="389.5" y="329.5" width="13" height="13" rx="1.5" fill="#7a5ba6" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="396" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="413.5" y="329.5" width="13" height="13" rx="1.5" fill="#9aa3ab" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="420" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="437.5" y="329.5" width="13" height="13" rx="1.5" fill="#7a5ba6" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="444" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="653.5" y="329.5" width="13" height="13" rx="1.5" fill="#2f6fb5" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="660" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="677.5" y="329.5" width="13" height="13" rx="1.5" fill="#2f6fb5" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="684" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="749.5" y="329.5" width="13" height="13" rx="1.5" fill="#d98324" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <circle cx="756" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <polyline points="768,60 782,60 782,50 795,50" fill="none" stroke="#c62828" stroke-width="2"/>
+  <text class="dest" x="800" y="56" text-anchor="start">PI 5  GND</text>
+  <text class="tsm" x="800" y="71" text-anchor="start">pin 6 or 9 &#8212; the ONLY ground wire on B</text>
+  <polyline points="768,84 782,84 782,92 795,92" fill="none" stroke="#c62828" stroke-width="2"/>
+  <text class="dest" x="800" y="98" text-anchor="start">PI 5  5 V</text>
+  <text class="tsm" x="800" y="113" text-anchor="start">breakout 5 V TERMINAL, not a header pin &#183; via F1 + D1</text>
+  <polyline points="48,396 34,396 34,386 20,386" fill="none" stroke="#c62828" stroke-width="2"/>
+  <text class="dest" x="14" y="392" text-anchor="end">PI 5  3V3</text>
+  <text class="tsm" x="14" y="407" text-anchor="end">header pin 1 &#8594; R4, the RST pull-up</text>
+  <polyline points="48,420 34,420 34,430 20,430" fill="none" stroke="#c62828" stroke-width="2"/>
+  <text class="dest" x="14" y="436" text-anchor="end">GND</text>
+  <text class="tsm" x="14" y="451" text-anchor="end">tied to the upper &#8722; rail at column 30</text>
+  <polyline points="457,336 20,336" fill="none" stroke="#c62828" stroke-width="2"/>
+  <text class="dest" x="14" y="326" text-anchor="end">SONAR &#215; 3</text>
+  <text class="tsm" x="14" y="341" text-anchor="end">HC-SR04 &#183; grey = TRIG, purple = ECHO</text>
+  <polyline points="769,336 795,336" fill="none" stroke="#c62828" stroke-width="2"/>
+  <text class="dest" x="800" y="342" text-anchor="start">BNO085  RST</text>
+  <text class="tsm" x="800" y="357" text-anchor="start">open-drain on GP15, held up by R4</text>
+  <polyline points="697,336 697,376 795,376" fill="none" stroke="#c62828" stroke-width="2"/>
+  <text class="dest" x="800" y="390" text-anchor="start">PI 5</text>
+  <text class="tsm" x="800" y="405" text-anchor="start">c26 &#8594; pin 29 GP5 &#183; c27 &#8594; pin 7 GP4 &#183; ground rides the &#8722; rail</text>
+  <rect x="437.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="444" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="485.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="492" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="509.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="516" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="557.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="564" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="605.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="612" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="629.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="636" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="653.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="660" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="677.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="684" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="725.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="732" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="749.5" y="113.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="756" cy="120" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="485.5" y="329.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="492" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="509.5" y="329.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="516" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="533.5" y="329.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="540" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="557.5" y="329.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="564" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="605.5" y="329.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="612" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="629.5" y="329.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="636" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="725.5" y="329.5" width="13" height="13" rx="1.5" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="3 2"/>
+  <circle cx="732" cy="336" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.85"/>
+  <rect x="36" y="445" width="12" height="12" rx="1.5" fill="#9aa3ab" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <text class="tsm" x="53" y="454">TRIG &#183; grey</text>
+  <rect x="180" y="445" width="12" height="12" rx="1.5" fill="#7a5ba6" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <text class="tsm" x="197" y="454">ECHO &#183; purple</text>
+  <rect x="337" y="445" width="12" height="12" rx="1.5" fill="#2f6fb5" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <text class="tsm" x="354" y="454">UART</text>
+  <rect x="402" y="445" width="12" height="12" rx="1.5" fill="#d98324" fill-opacity="0.9" stroke="currentColor" stroke-width="1.2"/>
+  <text class="tsm" x="419" y="454">RST to the IMU</text>
+  <text class="tsm" x="36" y="476"><tspan fill="var(--accent)">SPARE</tspan>  top side, row A: c17=GP28  c19=GP27  c20=GP26  c22=GP22  c24=GP21  c25=GP20  c26=GP19  c27=GP18  c29=GP17  c30=GP16</text>
+  <text class="tsm" x="36" y="494"><tspan fill="var(--accent)">SPARE</tspan>  bottom side, row I: c19=GP6  c20=GP7  c21=GP8  c22=GP9  c24=GP10  c25=GP11  c29=GP14</text>
+</svg>
+<figcaption><b>Column 20 is the reset node</b> — R4 pulls it up to 3V3, and the wire to the BNO085 leaves from <code>c20b</code>. Pin 20 is only reachable from rows A and B, which is why R4 sits in row A rather than beside R1. <b>Its body floats over column 21</b> without touching it, and the 3V3 jumper dog-legs to <code>c22d</code> to stay clear of R1's body in row B — seat both flat and nothing collides. ⚠ <b>R1's lead does pass over <code>c20b</code></b> on its way from column 19, and that is the reset net — GP14 crossing GP15. The RST wire's insulation reaches the hole so it is not a short as built, but keep the lead clear of it and do not let a bare lead rest there. The six sonar lines land in rows A and B of <b>columns 1, 2, 4, 5, 6 and 7</b> — not 1–6. Column 3 is pin 3, a ground, so the run skips it; the coloured squares are authoritative where any caption disagrees.</figcaption>
+</figure>
+
+<h2>Spare pins, and where to put an expansion header</h2>
+<p class="note"><b>The top section from column 14 rightwards is nearly empty, and that is where the spare GPIOs are.</b> Pins 21–40 land on that side, and everything this design needs from it sits in columns 12, 13 and — on A — 17 and 18. So columns 19–30 of rows A/B are free on both boards, and they carry <b>GP16–GP22, GP26 and GP27</b>: both SPI0 sets, both I²C sets, and two more ADC channels. A 1×8 or 2×6 header across rows A/B of columns 19–30 picks up most of it without disturbing anything.</p>
+<div class="tw">
+<table>
+  <thead><tr><th>GP</th><th>Pin</th><th>Col</th><th>Side</th><th>Alt function</th><th>Board A</th><th>Board B</th></tr></thead>
+  <tbody>
+    <tr><td>GP6–GP11</td><td>9,10,11,12,14,15</td><td>19,20,21,22,24,25</td><td>bottom</td><td>—</td><td>encoders</td><td><b>free</b> — 6 pins</td></tr>
+    <tr><td>GP14</td><td>19</td><td>29</td><td>bottom</td><td>—</td><td><b>free</b></td><td><b>free</b></td></tr>
+    <tr><td>GP15</td><td>20</td><td>30</td><td>bottom</td><td>—</td><td><b>free</b></td><td>BNO085 RST</td></tr>
+    <tr><td>GP16</td><td>21</td><td>30</td><td>top</td><td>SPI0 RX</td><td><b>free</b></td><td><b>free</b></td></tr>
+    <tr><td>GP17</td><td>22</td><td>29</td><td>top</td><td>SPI0 CSn</td><td><b>free</b></td><td><b>free</b></td></tr>
+    <tr><td>GP18</td><td>24</td><td>27</td><td>top</td><td>SPI0 SCK</td><td><b>free</b></td><td><b>free</b></td></tr>
+    <tr><td>GP19</td><td>25</td><td>26</td><td>top</td><td>SPI0 TX</td><td><b>free</b></td><td><b>free</b></td></tr>
+    <tr><td>GP20</td><td>26</td><td>25</td><td>top</td><td><b>I²C0 SDA</b></td><td><b>free</b></td><td><b>free</b></td></tr>
+    <tr><td>GP21</td><td>27</td><td>24</td><td>top</td><td><b>I²C0 SCL</b></td><td><b>free</b></td><td><b>free</b></td></tr>
+    <tr><td>GP22</td><td>29</td><td>22</td><td>top</td><td>—</td><td><b>free</b></td><td><b>free</b></td></tr>
+    <tr><td>GP26</td><td>31</td><td>20</td><td>top</td><td><b>ADC0</b> / I²C1 SDA</td><td><b>free</b></td><td><b>free</b></td></tr>
+    <tr><td>GP27</td><td>32</td><td>19</td><td>top</td><td><b>ADC1</b> / I²C1 SCL</td><td><b>free</b></td><td><b>free</b></td></tr>
+    <tr><td>GP28</td><td>34</td><td>17</td><td>top</td><td><b>ADC2</b></td><td>R5 sense</td><td><b>free</b></td></tr>
+  </tbody>
+</table>
+</div>
+<p class="note"><b>So: eleven spare GPIOs on A, sixteen on B</b> — and on both, a full SPI0, a full I²C0, and two or three free ADC channels. Ground is right there: pins 23 and 28 are GND on the top side, at <b>columns 28 and 23</b>, and 3V3 OUT is <b>column 15</b> if a small device needs powering from the Pico rather than the rail.</p>
+<p class="note">⚠ <b>Four holes on the top side are not spare GPIOs, whatever the grid suggests.</b> <b>Column 11 = pin 40 VBUS</b> — leave empty. <b>Column 14 = pin 37 3V3_EN</b>: pull it low and the Pico's regulator shuts down. <b>Column 16 = pin 35 ADC_VREF</b> — leave as fitted; it is the reference the R5 divider is measured against. <b>Column 21 = pin 30 RUN</b> — pulling it low resets the chip. And on A, <b>columns 12, 13, 17, 18</b> are the power chain and the divider.</p>
+<p class="note"><b>One caution before you load these up.</b> The 170 RPM motor swap and §4.7 both still have open items, and every pin you commit now is one the reflex layer cannot have later. GP26/GP27 in particular are the only spare <b>ADC</b> inputs, and §14 item 17 wants an ADS1115 channel or a Pico ADC for charge sense.</p>
+
+<h2>Build notes</h2>
+<ol class="build">
+  <li><b>One wire on the whole board:</b> pin 38 to ground — column 13, top section, jogged past the + rail on its way out to −. <b>Board A only:</b> its Pi signal ground lands separately at pin 18, column 28, because A's supply return goes to <b>R5</b> — a different source, and each source needs its own return. Every GND pin on the Pico is internally common, so those two are enough. <b>Board B has no column-28 landing:</b> both of its supplies come from the same Pi, so one ground wire does both jobs and a second would close a loop through the Pico. <b>AGND, pin 33 at column 18, is tied to neither rail:</b> R3's far end is its only connection, which single-points the divider's return at the Pico.</li>
+  <li><b>No bulk capacitor on VSYS, deliberately.</b> The Pico carries its own, and adding more raises inrush through F1 — the one thing that would make a healthy rover nuisance-trip a fuse and hand you a silently dead board.</li>
+  <li><b>Check the orientation before the sockets go down.</b> USB at the column-11 end, and the top-left Pico pin — column 11, row C — must read <b>VBUS</b>. If it reads GP0 the board is round the wrong way and every hole on this sheet is wrong — that is exactly what happened to the first pair. Then build both in one sitting and mark them before stuffing: they are identical until R2/R3 or R4 go in. Write A or B on the copper, not on tape.</li>
+  <li><b>Keep the Pico’s short edge clear — nothing overhangs the micro-USB port.</b>
+    Programming is USB only: BOOTSEL, cable, drag the <code>.uf2</code>. None of J1–J4 is
+    involved and the REPL runs over USB CDC, not over J2. Flash both boards bare before
+    they go in the sockets; afterwards they can be reflashed in place, and <b>D1 is what
+    makes that safe</b> — USB 5 V reaches VSYS through the Pico’s internal Schottky but
+    cannot get back out onto the rover rail. §12 item 19 predates that diode, so unplugging
+    the rover feed first is now belt-and-braces rather than the only protection. BOOTSEL
+    faces up in the sockets and needs no cutout.</li>
+  <li><b>Populate J1 last.</b> Every check below is done with no power connected; fitting the input connector last makes that hard to get wrong.</li>
+  <li><b>Two pin assignments moved off the §4.7 sketch, because one shared layout forbids them.</b>
+    <b>(a) Both Picos now run UART0 on GP12/GP13</b>, pins 16/17. The sketch had B on GP0/GP1, which cannot work here — J2 would have to land on pins 1/2 and 16/17 at once.
+    <b>(b) B’s BNO085 RST moves from GP10 to GP15</b>, pin 20. GP10 is LR Phase A on board A, so with one J3 footprint fitted to both boards, way 11 would have sat on B’s reset net — a live stub on an active-low reset, and a dead short onto it the first time anything was plugged into a 12-way housing on the wrong board.
+    The payoff beyond avoiding those: B’s sonar now occupies J3 ways 1–6 contiguously, so the sonar harness is a plain 6-way into the first six positions.</li>
+  <li><b>B’s feed is the Pi’s 5 V, taken at the breakout terminal — never R2.</b> R2 dies with the base 12 V, so a Pico B on it goes dark exactly when it should be reporting that its sensor rail is down; and ~40 mA on R2 blurs the 15 mA-per-sonar signal that INA260 <code>0x40</code> uses to catch a shorted HC-SR04. The display already has one of header pins 2/4 and which one is unrecorded, so the breakout terminal avoids the question. <b>A’s feed is the encoder 3V3 distribution</b> — meter its polarity first, it was found reversed on 2026-09-18.</li>
+</ol>
+
+<div class="warn">
+  <b>Four meter checks before a Pico ever sits in the sockets.</b>
+  <b>1.</b> J1-1 to VSYS socket pin: forward a few hundred mV through D1, open the other way. Backwards diode is the fault that only shows up as "board won't boot".
+  <b>2.</b> J1-1 to J1-2: open. Any reading is a short across the rover rail.
+  <b>3.</b> F1 cold resistance: under ~0.5Ω. Several ohms and it will eat Pico A's 3.3 V feed.
+  <b>4.</b> On A only — R2 + R3 end to end ≈ 20k, and the TP2 node ≈ half of it to each end. That ratio is what ADC2 reports as the rail voltage.
+</div>
+
+<p class="colophon">
+  <span>Design, not as-built</span>
+  <span>Master Hardware Design §4.7 rev 2.3</span>
+  <span>Feed order: rail → F1 → D1 → VSYS 39</span>
+  <span>Divider taps upstream of F1</span>
+</p>
+</div>
+
+<script>
+(function(){
+  var b=document.getElementById('printbtn'),h=document.getElementById('printhint');
+  b.addEventListener('click',function(){
+    try{ window.print(); }catch(e){ h.textContent='Printing blocked here — use Ctrl-P / ⌘P'; }
+  });
+})();
+</script>

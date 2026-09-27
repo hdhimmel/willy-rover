@@ -1,0 +1,334 @@
+<title>WildWilly Hardware Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#f5f7f8; --card:#ffffff; --ink:#141c24; --ink-2:#4f5b67; --ink-3:#7d8892;
+  --rule:#d5dade; --rule-2:#e7eaed; --accent:#9a5b2e; --accent-soft:#f0e3d8;
+  --stop:#a3282d; --stop-soft:#f6e0e0; --live:#1d5c73; --live-soft:#dcebf0;
+  --pico:#2f6fb5; --pico-soft:#e2ecf7; --act:#3f8f52; --act-soft:#e4f1e8;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#10151a; --card:#171e25; --ink:#e4e9ed; --ink-2:#a3aeb8; --ink-3:#77838d;
+  --rule:#2b343d; --rule-2:#222a32; --accent:#d5905c; --accent-soft:#3a2a1d;
+  --stop:#e08b8b; --stop-soft:#3a2224; --live:#7cc0d8; --live-soft:#1b2f38;
+  --pico:#7fb0e0; --pico-soft:#1c2a39; --act:#7ec894; --act-soft:#1b2f22;}}
+:root[data-theme="dark"]{
+  --paper:#10151a; --card:#171e25; --ink:#e4e9ed; --ink-2:#a3aeb8; --ink-3:#77838d;
+  --rule:#2b343d; --rule-2:#222a32; --accent:#d5905c; --accent-soft:#3a2a1d;
+  --stop:#e08b8b; --stop-soft:#3a2224; --live:#7cc0d8; --live-soft:#1b2f38;
+  --pico:#7fb0e0; --pico-soft:#1c2a39; --act:#7ec894; --act-soft:#1b2f22;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;font-size:15px;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:32px 64px}
+.mast{border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:22px}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 6px}
+h1{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;
+  font-size:clamp(28px,5vw,42px);line-height:1.05;margin:0;text-wrap:balance}
+.sub{color:var(--ink-2);margin:8px 0 0;max-width:66ch}
+.mast-foot{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:12px;
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-3)}
+.mast-foot b{color:var(--ink-2);font-weight:500}
+.tools{display:flex;gap:10px;align-items:center;margin-bottom:22px;flex-wrap:wrap}
+button.print{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:600;font-size:14px;
+  color:var(--card);background:var(--ink);border:1px solid var(--ink);border-radius:2px;
+  padding:7px 16px;cursor:pointer}
+button.print:hover{background:var(--accent);border-color:var(--accent)}
+button.print:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tools span{font-size:12.5px;color:var(--ink-3);font-family:"IBM Plex Mono",monospace}
+.warn{border:1px solid var(--stop);background:var(--stop-soft);border-radius:2px;
+  padding:12px 14px;margin:0 0 22px;font-size:13.5px}
+h2{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:21px;
+  margin:34px 0 4px;border-bottom:1px solid var(--rule);padding-bottom:7px}
+p.note{color:var(--ink-2);font-size:13.5px;margin:0 0 14px;max-width:74ch}
+figure{margin:0 0 10px;background:var(--card);border:1px solid var(--rule);
+  border-radius:2px;padding:16px;overflow-x:auto}
+figure svg{display:block;width:100%;min-width:900px;max-width:100%;height:auto;color:var(--ink)}
+figcaption{font-size:12.5px;color:var(--ink-2);margin-top:12px;
+  border-top:1px solid var(--rule-2);padding-top:9px;max-width:80ch}
+svg text{font-family:"IBM Plex Sans","Segoe UI",sans-serif;fill:currentColor}
+.bx{fill:var(--card);stroke:currentColor;stroke-width:1.6}
+.bt{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:14px}
+.bl{font-size:11.5px;fill:var(--ink-2)}
+.tag{font-family:"IBM Plex Mono",monospace;font-size:10px;fill:var(--ink-3)}
+.band{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;fill:var(--ink-3)}
+.lbl{font-family:"IBM Plex Mono",monospace;font-size:10.5px;fill:var(--ink-2)}
+.foot{font-size:11px;fill:var(--ink-2)}
+.ln{stroke:currentColor;stroke-width:1.8;fill:none}
+.ln.thin{stroke-width:1.2;opacity:.65}
+.ln.dash{stroke-dasharray:6 4}
+.pi .bx{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2.4}
+.pi .bt{fill:var(--accent)}
+.pico .bx{fill:var(--pico-soft);stroke:var(--pico);stroke-width:2.2}
+.pico .bt{fill:var(--pico)}
+.bus .bx{fill:var(--live-soft);stroke:var(--live);stroke-width:2}
+.bus .bt{fill:var(--live)}
+.act .bx{fill:var(--act-soft);stroke:var(--act);stroke-width:2}
+.act .bt{fill:var(--act)}
+.dev .bx{stroke:var(--live);stroke-width:1.4}
+.sens .bx{stroke-dasharray:0}
+table{width:100%;border-collapse:collapse;margin:0 0 8px;font-size:13px}
+th,td{text-align:left;padding:6px 9px;border-bottom:1px solid var(--rule-2);vertical-align:top}
+th{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:12px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--ink-2);border-bottom:1px solid var(--rule)}
+td:first-child{font-family:"IBM Plex Mono",monospace;font-weight:500;white-space:nowrap}
+.tw{overflow-x:auto}
+code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--rule-2);
+  padding:1px 4px;border-radius:2px}
+.colophon{margin-top:34px;padding-top:14px;border-top:1px solid var(--rule);
+  font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-3);
+  display:flex;flex-wrap:wrap;gap:6px 20px}
+@page{margin:12mm 10mm}
+@media print{
+  :root{--paper:#fff;--card:#fff;--ink:#000;--ink-2:#333;--ink-3:#555;--rule:#999;--rule-2:#ccc;
+    --accent:#000;--accent-soft:#eee;--stop:#000;--stop-soft:#e8e8e8;--live:#000;--live-soft:#f0f0f0;
+    --pico:#000;--pico-soft:#eee;--act:#000;--act-soft:#f0f0f0;}
+  body{font-size:10pt;background:#fff}.wrap{max-width:none;padding:0}.tools{display:none}
+  figure{break-inside:avoid;border-color:#666}figure svg{min-width:0}
+  h2{break-after:avoid}tr,.warn{break-inside:avoid}h1{font-size:20pt}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+<header class="mast">
+  <p class="eyebrow">WildWilly · one map, everything on it</p>
+  <h1>WildWilly Hardware Map</h1>
+  <p class="sub">What each processor owns, what hangs off each bus, and which rail feeds it. Drawn for the §4.7 architecture — the Pi keeps the thinking, and the two things that need microsecond timing move to their own microcontrollers.</p>
+  <div class="mast-foot">
+    <span><b>Drawn</b> 2026-09-27</span>
+    <span><b>Sources</b> Master Hardware Design rev 2.3, FRD 3.3, Software Design 1.2</span>
+    <span><b>Bus</b> ten I²C devices after 0x27 leaves</span>
+  </div>
+</header>
+
+<div class="tools">
+  <button class="print" id="printbtn" type="button">Print this map</button>
+  <span id="printhint">1 page landscape, or 2 portrait</span>
+</div>
+
+<div class="warn"><b>⚠ This is the §4.7 target, not the rover on the bench tonight.</b> The two Pico links, the encoders leaving I²C and the sonars leaving the Pi header are all <b>design, nothing fitted</b>. <b>As built today:</b> an MCP23017 at <code>0x27</code> reads the encoders over I²C, the three sonars land directly on the Pi header (GP4/5/13/14/21/26), the drive motors are the 620 RPM 17.1:1 set, and the bus carries eleven devices. Where this map and that differ, the difference <em>is</em> §4.7.</div>
+
+<figure>
+<svg viewBox="0 0 1320 980" role="img" aria-label="WildWilly hardware map. A Raspberry Pi 5 runs AI, navigation, vision, voice and high-level control. It offloads two real-time jobs to Pico 2 W boards over separate UARTs: Pico A reads six quadrature encoders and senses the R5 rail, Pico B times three HC-SR04 sonars and owns the IMU reset line. A single I2C segment carries two FeatherWing motor drivers for the six drive motors, two PCA9685 servo drivers for six steering and seven arm servos, three INA260 rail monitors, an ADS1115 for battery voltage and the gripper force sensor, the BNO085 IMU and the Witty Pi power HAT. A SEN0628 time-of-flight sensor and the AI accelerator connect directly to the Pi.">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <text class="band" x="20" y="32">PERIPHERALS</text>
+  <text class="band" x="20" y="232">REAL-TIME OFFLOAD  ·  §4.7</text>
+  <text class="band" x="20" y="700">ACTUATORS</text>
+  <g class="periph">
+    <rect x="40" y="44" width="330" height="150" rx="4" class="bx"/>
+    <text class="bt" x="52" y="66">Vision, display, audio</text>
+    <text class="bl" x="52" y="86">Front camera — CSI, 15° down</text>
+    <text class="bl" x="52" y="101">Rear camera — USB</text>
+    <text class="bl" x="52" y="116">5″ touchscreen — DSI + 3-pin tap</text>
+    <text class="bl" x="52" y="131">Speaker 0c76:1203 — USB</text>
+    <text class="bl" x="52" y="146">Microphone 08bb:2902 — USB</text>
+  </g>
+  <g class="pi">
+    <rect x="430" y="40" width="440" height="158" rx="4" class="bx"/>
+    <text class="bt" x="442" y="62">Raspberry Pi 5  (8GB)</text>
+    <text class="tag" x="858" y="62" text-anchor="end">high-level control</text>
+    <text class="bl" x="442" y="82">AI reasoning · intent parsing</text>
+    <text class="bl" x="442" y="97">Navigation · world model · mapping</text>
+    <text class="bl" x="442" y="112">Vision · voice · the FSM and safety gate</text>
+    <text class="bl" x="442" y="127">Enforces the staleness deadline on both links</text>
+  </g>
+  <g class="periph">
+    <rect x="940" y="44" width="340" height="76" rx="4" class="bx"/>
+    <text class="bt" x="952" y="66">AI HAT+ 2  ·  Hailo-10H</text>
+    <text class="tag" x="1268" y="66" text-anchor="end">PCIe</text>
+    <text class="bl" x="952" y="86">Bonded, not in the safety path</text>
+  </g>
+  <g class="periph">
+    <rect x="940" y="136" width="340" height="74" rx="4" class="bx"/>
+    <text class="bt" x="952" y="158">SEN0628 multi-zone ToF</text>
+    <text class="tag" x="1268" y="158" text-anchor="end">uart3-pi5 · GP8/9</text>
+    <text class="bl" x="952" y="178">Front obstacle fusion (§6.5)</text>
+  </g>
+  <line class="ln" x1="370" y1="120" x2="428" y2="120" marker-end="url(#ar)"/>
+  <line class="ln" x1="872" y1="82" x2="938" y2="82" marker-end="url(#ar)"/>
+  <text class="lbl" x="905" y="76" text-anchor="middle">PCIe</text>
+  <line class="ln" x1="872" y1="150" x2="938" y2="168" marker-end="url(#ar)"/>
+  <text class="lbl" x="905" y="146" text-anchor="middle">GP8/GP9</text>
+  <polyline class="ln" points="560,198 560,237 205,237 205,276" marker-end="url(#ar)"/>
+  <text class="lbl" x="330" y="224" text-anchor="middle">uart4-pi5 · Pi GP12/GP13</text>
+  <polyline class="ln" points="740,198 740,237 1110,237 1110,276" marker-end="url(#ar)"/>
+  <text class="lbl" x="980" y="224" text-anchor="middle">uart2-pi5 · Pi GP4/GP5</text>
+  <line class="ln" x1="650" y1="198" x2="650" y2="274" marker-end="url(#ar)"/>
+  <text class="lbl" x="712" y="228" text-anchor="start">I²C · GP2/GP3</text>
+  <g class="pico">
+    <rect x="40" y="278" width="330" height="150" rx="4" class="bx"/>
+    <text class="bt" x="52" y="300">Pico 2 W — A</text>
+    <text class="tag" x="358" y="300" text-anchor="end">643f69a7…</text>
+    <text class="bl" x="52" y="320">6 × quadrature encoders, 12 lines</text>
+    <text class="bl" x="52" y="335">PIO decode, GP0–GP11</text>
+    <text class="bl" x="52" y="350">R5 rail sense on ADC2 — the only</text>
+    <text class="bl" x="52" y="365">monitor that rail has</text>
+    <text class="bl" x="52" y="380">VSYS from R5 3.3 V</text>
+  </g>
+  <g class="pico">
+    <rect x="950" y="278" width="330" height="150" rx="4" class="bx"/>
+    <text class="bt" x="962" y="300">Pico 2 W — B</text>
+    <text class="tag" x="1268" y="300" text-anchor="end">ad25bbf0…</text>
+    <text class="bl" x="962" y="320">3 × HC-SR04 timing, GP0–GP5</text>
+    <text class="bl" x="962" y="335">BNO085 RST, GP15, open-drain</text>
+    <text class="bl" x="962" y="350">Stale frame → STOP, never 999</text>
+    <text class="bl" x="962" y="365">VSYS from Pi 5 V, fused</text>
+    <text class="bl" x="962" y="380">Alive when the base 12 V is not</text>
+  </g>
+  <g class="bus">
+    <rect x="470" y="276" width="380" height="56" rx="4" class="bx"/>
+    <text class="bt" x="482" y="298">GODIY I²C hub  +  LTC4311 accelerator</text>
+    <text class="bl" x="482" y="318">One passive segment · ten devices</text>
+  </g>
+  <g class="dev">
+    <rect x="470" y="356" width="170" height="52" rx="4" class="bx"/>
+    <text class="bt" x="482" y="378">FeatherWing  0x61</text>
+    <text class="bl" x="482" y="398">LEFT · 12 V</text>
+  </g>
+  <g class="dev">
+    <rect x="680" y="356" width="170" height="52" rx="4" class="bx"/>
+    <text class="bt" x="692" y="378">FeatherWing  0x60</text>
+    <text class="bl" x="692" y="398">RIGHT · 12 V</text>
+  </g>
+  <g class="dev">
+    <rect x="470" y="424" width="170" height="52" rx="4" class="bx"/>
+    <text class="bt" x="482" y="446">PCA9685  0x42</text>
+    <text class="bl" x="482" y="466">steering · 5 V</text>
+  </g>
+  <g class="dev">
+    <rect x="680" y="424" width="170" height="52" rx="4" class="bx"/>
+    <text class="bt" x="692" y="446">PCA9685  0x43</text>
+    <text class="bl" x="692" y="466">arm · 6 V</text>
+  </g>
+  <g class="dev">
+    <rect x="470" y="492" width="170" height="52" rx="4" class="bx"/>
+    <text class="bt" x="482" y="514">ADS1115  0x48</text>
+    <text class="bl" x="482" y="534">battery · FSR</text>
+  </g>
+  <g class="dev">
+    <rect x="680" y="492" width="170" height="52" rx="4" class="bx"/>
+    <text class="bt" x="692" y="514">BNO085  0x4A</text>
+    <text class="bl" x="692" y="534">IMU</text>
+  </g>
+  <g class="dev">
+    <rect x="470" y="560" width="170" height="52" rx="4" class="bx"/>
+    <text class="bt" x="482" y="582">INA260 ×3</text>
+    <text class="bl" x="482" y="602">0x40 · 0x44 · 0x45</text>
+  </g>
+  <g class="dev">
+    <rect x="680" y="560" width="170" height="52" rx="4" class="bx"/>
+    <text class="bt" x="692" y="582">Witty Pi 5  0x51</text>
+    <text class="bl" x="692" y="602">power HAT</text>
+  </g>
+  <line class="ln" x1="660" y1="332" x2="660" y2="350"/>
+  <line class="ln thin" x1="555" y1="332" x2="555" y2="350"/>
+  <line class="ln thin" x1="555" y1="400" x2="555" y2="418"/>
+  <line class="ln thin" x1="555" y1="468" x2="555" y2="486"/>
+  <line class="ln thin" x1="555" y1="536" x2="555" y2="554"/>
+  <line class="ln thin" x1="765" y1="332" x2="765" y2="350"/>
+  <line class="ln thin" x1="765" y1="400" x2="765" y2="418"/>
+  <line class="ln thin" x1="765" y1="468" x2="765" y2="486"/>
+  <line class="ln thin" x1="765" y1="536" x2="765" y2="554"/>
+  <line class="ln thin" x1="555" y1="338" x2="765" y2="338"/>
+  <g class="sens">
+    <rect x="40" y="470" width="330" height="68" rx="4" class="bx"/>
+    <text class="bt" x="52" y="492">Six wheel encoders</text>
+    <text class="bl" x="52" y="512">Hall, 11 PPR on the motor shaft</text>
+  </g>
+  <line class="ln" x1="205" y1="428" x2="205" y2="468" marker-end="url(#ar)"/>
+  <g class="sens">
+    <rect x="950" y="470" width="330" height="68" rx="4" class="bx"/>
+    <text class="bt" x="962" y="492">Three HC-SR04 sonars</text>
+    <text class="bl" x="962" y="512">ECHO divided to 3.33 V on the signal board</text>
+  </g>
+  <line class="ln" x1="1115" y1="428" x2="1115" y2="468" marker-end="url(#ar)"/>
+  <polyline class="ln dash" points="950,504 900,504 900,518 866,518" marker-end="url(#ar)"/>
+  <text class="lbl" x="898" y="538" text-anchor="middle">RST</text>
+  <g class="act">
+    <rect x="40" y="712" width="330" height="96" rx="4" class="bx"/>
+    <text class="bt" x="52" y="734">Six drive motors</text>
+    <text class="bl" x="52" y="754">JGA25-370 · 12 V · 170 RPM · 1:35</text>
+    <text class="bl" x="52" y="769">1540 counts/rev · stall 1.3 A each</text>
+  </g>
+  <g class="act">
+    <rect x="430" y="712" width="330" height="96" rx="4" class="bx"/>
+    <text class="bt" x="442" y="734">Six steering servos</text>
+    <text class="bl" x="442" y="754">GDW DS041MG · corner steering</text>
+    <text class="bl" x="442" y="769">PCA9685 0x42 CH0–CH5</text>
+  </g>
+  <g class="act">
+    <rect x="820" y="712" width="330" height="96" rx="4" class="bx"/>
+    <text class="bt" x="832" y="734">Seven arm servos</text>
+    <text class="bl" x="832" y="754">PCA9685 0x43 CH0–CH6</text>
+    <text class="bl" x="832" y="769">6 V rail (R3)</text>
+  </g>
+  <polyline class="ln" points="555,608 555,659 300,659 300,710" marker-end="url(#ar)"/>
+  <text class="lbl" x="420" y="660" text-anchor="middle">drive</text>
+  <polyline class="ln" points="555,476 555,593 520,593 520,710" marker-end="url(#ar)"/>
+  <text class="lbl" x="470" y="660" text-anchor="middle">PWM</text>
+  <polyline class="ln" points="765,476 765,593 960,593 960,710" marker-end="url(#ar)"/>
+  <text class="lbl" x="880" y="660" text-anchor="middle">PWM</text>
+  <polyline class="ln dash" points="205,538 205,660 120,660 120,710" marker-end="url(#ar)"/>
+  <text class="lbl" x="150" y="652" text-anchor="middle">feedback</text>
+  <text class="foot" x="20" y="938">Solid = signal or drive. Dashed = feedback and reset. The two Pico links and everything they carry are §4.7 — DESIGN, NOT AS-BUILT: today the encoders run through an MCP23017 at 0x27 and the sonars land on the Pi header.</text>
+  <text class="foot" x="20" y="960">Rails: +12 V bus → both FeatherWings · R1 9 V → Witty Pi → Pi · R2 5 V → steering servos and sonar VCC · R3 6 V → arm · R5 3.3 V → encoders and Pico A · Pi 3V3 → all I²C device logic, ToF, and Pico B’s pull-up.</text>
+</svg>
+<figcaption><b>Read it as three layers.</b> The Pi decides, the Picos measure, and I²C actuates. The only things crossing from the Pi into real time are two UARTs, and each carries a sequence number and a per-channel age so the Pi can tell a slow link from a stopped one — <b>stale means stop</b>, which is why there is no 999 cm anywhere on this diagram.</figcaption>
+</figure>
+
+<h2>Who owns what, and why it sits there</h2>
+<div class="tw">
+<table>
+  <thead><tr><th>Owner</th><th>Job</th><th>Why not somewhere else</th></tr></thead>
+  <tbody>
+    <tr><td>Pi 5</td><td>AI, navigation, vision, voice, the FSM and the safety gate</td><td>Everything with variable latency lives here. Nothing in the reflex path may depend on it finishing on time</td></tr>
+    <tr><td>Pico A</td><td>Six quadrature encoders, PIO decode; R5 rail sense on ADC2</td><td>4,363 counts/s per wheel is far past what I²C polling or a MicroPython interrupt can follow. <b>It shares R5 with the encoders on purpose</b> — when that rail sags the encoders go static and A stays alive to say so</td></tr>
+    <tr><td>Pico B</td><td>Three HC-SR04 timings; the BNO085 reset line</td><td>Echo timing is microseconds. <b>Fed from Pi 5 V, not the sonar rail</b> — R2 dies with the base 12 V, so a B on R2 would go silent exactly when it should be reporting that its sensors lost power</td></tr>
+    <tr><td>FeatherWings</td><td>Six drive motors, 12 V straight from the bus</td><td>0x61 is LEFT, 0x60 is RIGHT — measured, and the reverse of what the docs said until M-1</td></tr>
+    <tr><td>PCA9685 ×2</td><td>Six steering servos (5 V), seven arm servos (6 V)</td><td>Separate boards because the rails differ, and 0x43 carries the 2200 µF the arm needs</td></tr>
+    <tr><td>INA260 ×3</td><td>R2 5 V, R3 6 V arm, +12 V bus</td><td>0x40 on R2 is also the sonar short-detector: ~15 mA per healthy sensor, a ~250 mA step is a dead one</td></tr>
+    <tr><td>ADS1115</td><td>A0 battery divider, A1 gripper FSR, A2 spare</td><td>The shutdown ladder reads A0, so it sits in the quiet corner 30 mm from the nearest motor driver</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Rails</h2>
+<div class="tw">
+<table>
+  <thead><tr><th>Rail</th><th>Volts</th><th>Feeds</th><th>Monitored by</th></tr></thead>
+  <tbody>
+    <tr><td>+12 V bus</td><td>12.6 max</td><td>Both FeatherWing VIN, every DROK input</td><td>INA260 <code>0x45</code></td></tr>
+    <tr><td>R1</td><td>9 V</td><td>Witty Pi 5 VIN → the Pi</td><td>Witty Pi HAT</td></tr>
+    <tr><td>R2</td><td>5 V</td><td>Steering servos, sonar VCC</td><td>INA260 <code>0x40</code></td></tr>
+    <tr><td>R3</td><td>6 V</td><td>Arm servo distribution</td><td>INA260 <code>0x44</code></td></tr>
+    <tr><td>R5</td><td>3.3 V</td><td>Motor Hall encoders, and Pico A under §4.7</td><td><b>nothing</b> — which is what Pico A's ADC2 is for</td></tr>
+    <tr><td>Pi 3V3</td><td>3.3 V</td><td>All I²C device logic, the ToF, Pico B's RST pull-up</td><td>—</td></tr>
+    <tr><td>Pi 5 V</td><td>5 V</td><td>The display's 3-pin tap, and Pico B's VSYS</td><td>— <b>draw not measured</b></td></tr>
+  </tbody>
+</table>
+</div>
+<p class="note"><b>R5 is the rail with no monitor and a history.</b> Its branch P8 has no recorded fuse and no recorded gauge, and the encoders have already been lost once to an unmonitored 3.3 V supply. That is the entire argument for putting Pico A on it.</p>
+
+<p class="colophon">
+  <span>§4.7 target · design, not as-built</span>
+  <span>Master Hardware Design rev 2.3</span>
+  <span>Solid = signal or drive · dashed = feedback and reset</span>
+</p>
+</div>
+
+<script>
+(function(){
+  var b=document.getElementById('printbtn'),h=document.getElementById('printhint');
+  b.addEventListener('click',function(){
+    try{ window.print(); }catch(e){ h.textContent='Printing blocked here \u2014 use Ctrl-P'; }
+  });
+})();
+</script>

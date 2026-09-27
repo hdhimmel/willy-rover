@@ -53,3 +53,4 @@ logs/
 
 # Worktrees (subagent-driven-development isolated workspaces)
 .worktrees/
+docs/drawings/__pycache__/
