@@ -1,4 +1,4 @@
-import imaplib,smtplib,email,json,os,time,threading,queue,uuid
+import imaplib,smtplib,email,json,os,re,time,threading,queue,uuid
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
@@ -75,6 +75,19 @@ class EmailClient:
     def _sender_allowed(self,sender_email):
         sender_email=sender_email.lower()
         return sender_email==config.OWNER_EMAIL.lower() or sender_email in self._inbound_allowlist()
+
+    # --- inbound authentication (FR-2000-013) ---
+    # _sender_allowed() above is a string match on the From header, which any remote SMTP client
+    # can set to anything -- it is a routing check, not authentication. FR-2000-013 requires a
+    # message to also show a passing DKIM result before being treated as legitimate, "regardless
+    # of its From header". The Authentication-Results header is stamped by the receiving mail
+    # server itself (Gmail, for this account) as it accepts the message, not by the sender, so a
+    # remote party cannot make their own spoofed From line carry a passing DKIM verdict.
+    _DKIM_PASS_RE=re.compile(r'\bdkim=pass\b',re.IGNORECASE)
+
+    @classmethod
+    def _dkim_authenticated(cls,msg):
+        return any(cls._DKIM_PASS_RE.search(v) for v in msg.get_all('Authentication-Results',[]))
 
     # --- outbound (FR-2000-004/009) ---
     def queue_outbound(self,to,subject,body):
@@ -178,6 +191,12 @@ class EmailClient:
                 if not self._sender_allowed(sender):
                     # FR-2000-010: existence noted, body never read.
                     log.info(f'Ignored email from non-allowlisted sender: {sender} ("{subject}")')
+                    continue
+                if not self._dkim_authenticated(msg):
+                    # FR-2000-013: a From header claiming an allowlisted sender is not proof of
+                    # origin -- refuse regardless of what it says, same as a non-allowlisted sender.
+                    log.warning(f'Ignored email claiming to be from {sender} ("{subject}") -- '
+                                f'failed DKIM authentication (FR-2000-013).')
                     continue
                 body=_extract_body(msg)
                 self._inbox_summaries.put({'from':sender,'subject':subject,'body':body,'ts':time.time()})

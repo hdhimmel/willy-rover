@@ -2712,6 +2712,19 @@ expand who\'s trusted enough to be read.
                     regardless of its From header                     
   -------------------------------------------------------------------------------------
 
+**FR-2000-013 --- DKIM gate implemented.** `email_client.py::EmailClient._dkim_authenticated()`
+parses the `Authentication-Results` header Gmail stamps on inbound mail as it is accepted, and
+`_check_inbox()` now refuses any message that does not show a passing DKIM verdict there,
+independently of `_sender_allowed()`'s From-header match --- closing the gap CLAUDE.md's email
+section already called out ("a bug, not a simplification" if missing). 6 tests,
+`tests/test_email_dkim.py`. **This closes only FR-2000-013 itself.** FR-2000-012 (actually
+parsing and executing a command from an authenticated owner email, including motion) has no
+implementation anywhere in this codebase as of this note --- `brain.py`/`email_client.py` only
+ever surface inbound mail as a summary (FR-2000-003); nothing puts an email-derived intent onto
+`pending_commands` or drains one at Directive 6. `config.py` has no `ENABLE_EMAIL_COMMANDS` or
+`EMAIL_COMMAND_MAX_AGE_S` either. Do not read this DKIM fix as "email can now drive the robot" ---
+it authenticates a channel that, as built, still only ever talks.
+
 # Acceptance Criteria
 
 -   ⚠ **Superseded in part by FR-2000-012 (2026-09-11).** This criterion read
