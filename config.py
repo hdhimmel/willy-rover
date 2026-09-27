@@ -880,9 +880,13 @@ STUCK_TIMEOUT=3.0; BACK_UP_TIME=0.8; TURN_TIME_90=1.2; IDLE_TIMEOUT=30.0
 # failure mode (wandering into what sonar can't see, repeated STALL_FAULTs, once 5 of 6 wheels
 # at a time) can recur unattended. Three items were open at the moment of the flip, all of
 # which bear on unprompted driving:
-#   1. MOTOR_PORT is unverified since 2026-09-04 — it replaced a bench-measured mapping with an
-#      assumed one, so per-wheel stall attribution and odometry may name the wrong wheel.
-#      See CLAUDE.md's motor-port pitfall and Master Hardware Design v2.0 §7.2.
+#   1. ~~MOTOR_PORT is unverified since 2026-09-04 — it replaced a bench-measured mapping with
+#      an assumed one, so per-wheel stall attribution and odometry may name the wrong wheel.~~
+#      CLOSED 2026-09-18 by M-1: each port driven alone by raw address, owner naming the wheel
+#      that turned. LEFT AND RIGHT WERE TRANSPOSED; corrected above (0x61=left, 0x60=right).
+#      This note went stale the day it was measured and was still saying "unverified" on
+#      2026-09-27 — nine days. ⚠ It RE-OPENS when the 170 RPM motors are fitted: six motors
+#      re-landed in one pass is exactly how the transposition happened. Re-run M-1 then.
 #   2. The STUCK-state on-device reasoning that ROAM depends on is FRD v3.1 G-6. ~~The Hailo
 #      LLM scored 0% on the 32-case intent batch and has not been re-benchmarked.~~ Root cause
 #      found 2026-09-14: the prompt was sent without ChatML role framing, so the model echoed

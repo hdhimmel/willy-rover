@@ -1281,8 +1281,17 @@ decision rather than by implementation.
 
 # Acceptance Criteria
 
-Wheel and driver assignment is fixed by the as-built wiring: 0x60 drives the
-left side (LF, LM, LR) and 0x61 the right (RF, RM, RR).
+Wheel and driver assignment is fixed by the as-built wiring: **0x61 drives the
+LEFT side (LF, LM, LR) and 0x60 the RIGHT (RF, RM, RR).**
+
+⚠ **Corrected 2026-09-27.** This paragraph said the opposite — 0x60 left, 0x61
+right — and said it as settled as-built fact. It was measured the other way round by
+**M-1 on 2026-09-18**, driving each port alone by raw address and having the owner
+name the wheel that actually turned. `config.py`'s `MOTOR_PORT` and `motors.py` were
+corrected that day; this criterion was missed, so the FRD has been contradicting the
+code for nine days. The same left/right transposition was found in the encoder
+landings on the same day, and **both re-open when the 170 RPM motors are fitted** —
+see Master Hardware Design §14 item 18.
 
 -   **FR-400-001 (independent control).** Each of the six motors can be
     commanded individually and the correct wheel responds. Verified one motor
