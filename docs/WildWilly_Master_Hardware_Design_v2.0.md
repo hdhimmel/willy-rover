@@ -2,7 +2,7 @@
 
 ## Master Hardware Design — As-Built
 
-**Revision 2.3 · Current Configuration · 2026-09-24**
+**Revision 2.4 · Current Configuration · 2026-09-27**
 
 ---
 
@@ -12,11 +12,11 @@
 |-------|-------|
 | Project | WildWilly Autonomous Rover |
 | Document | Master Hardware Design — as-built, current configuration only |
-| Revision | 2.3 |
+| Revision | 2.4 |
 | Date | 2026-09-24 |
 | Owner | Howard Himmel |
 | Status | Build complete; AI accelerator bonded; live verification in progress. **Filename retains `v2.0` deliberately** — renaming would break every cross-reference in Software Design, the FRD and `CLAUDE.md`. The revision field above is authoritative. |
-| Companions | Functional Requirements rev 3.3; Software Design rev 1.2 |
+| Companions | Functional Requirements rev 3.4; Software Design rev 1.3 |
 | Historical record | Master Engineering Package rev 6.2.0 retains all incident history, superseded designs, and revision lineage. Retain it. |
 
 **Scope of this document.** This describes the rover as it is currently built.
@@ -949,13 +949,19 @@ calibration constant** (§6.2, §14).
 | A1 noisy/jittery | Ripple on the excitation rail, or FSR mounted on a compliant surface |
 | GP14 sonar erratic only after a reboot | Serial console re-enabled (§9) |
 
-### 4.7 Pending redesign — sonar and encoders move to two Pico 2 W
+### 4.7 Sonar and encoders on two Pico 2 W
 
-⚠ **DESIGN, NOT AS-BUILT. Nothing is fitted or wired.** Recorded 2026-09-20;
-pin-level assignment added 2026-09-24, the day the boards arrived. Nothing below
-has been metered on the rover.
+✅ **BUILT AND INSTALLED 2026-09-27** (owner-stated). Recorded as a design
+2026-09-20, pin-level assignment added 2026-09-24 when the boards arrived, carriers
+soldered and fitted 2026-09-27. This section is now as-built.
 
-**Boards in hand, 2026-09-24:**
+⚠ **What that does NOT yet claim.** The hardware is in; **C-1 Phase 3 (software)
+and Phase 5 (re-verification) are separate and unclaimed here** — `sensors.py` still
+reads encoders over I²C and times sonar locally, `brain.py`'s `_EXPECTED_I2C` still
+expects eleven devices, and M-1 / E-1 have not been re-run since the motors and
+connectors were disturbed. See Bench Test Procedures C-1.
+
+**Board identities:**
 
 | | UID | MicroPython | Verified so far |
 |---|---|---|---|
@@ -2624,21 +2630,35 @@ measurement work rather than wiring.
     `config.py` records the battery-tier ladder as the primary safety mechanism.
     **Run §4.5's powered divider check, record the 12V-in / pin-14-out pair, and
     set the constant from it before `willy-rover.service` is enabled.**
-13. **FSR402 uncalibrated** (§6.6). Fitted, no curve fit, no contact-force
-    mapping. Response is logarithmic — a linear scale will read plausibly and be
-    wrong. Calibrate with whatever actually contacts the pad in service.
+13. ⚠ **FSR402 — the gripper touch sensor. THE LAST OUTSTANDING BUILD ITEM**
+    (owner, 2026-09-27) (§6.6). Fitted and wired to **ADS1115 A1**; three things
+    stand between that and a working touch sense:
+    1. **Never read under power.** A1 has no recorded reading at any force. Do this
+       first — it is the check that says whether the divider and the pad's two leads
+       are actually connected. §4.5's powered injection check (item 14) covers the
+       same board and should run in the same session.
+    2. **No curve fit.** Response is logarithmic — a linear scale reads plausibly
+       and is wrong. Calibrate against whatever actually contacts the pad in
+       service, not a fingertip.
+    3. **Nothing in software reads A1.** `sensors.py` reads A0 (battery) only;
+       `retrieval_task.py:178` still releases hand-off on a timeout and logs that
+       there is no tactile confirmation. The sensor exists, the behaviour does not
+       — which is why FRD/`retrieval_task.py:18`/Software Design **S-5** all stay
+       true until a reader is added.
 14. **Signal board powered check outstanding** (§4.5). Resistance matrix passed
     2026-09-16; the three ECHO junctions and the battery divider have not been
     verified under injection. This is the same check that yields item 14's
     constant, so they close together.
-15. **Pico 2 W redesign not built** (§4.7). Boards in hand 2026-09-24, unflashed;
-    pin-level assignment now recorded, nothing fitted or metered. The blocking
-    unknowns are (a) that `dtoverlay -h uart2-pi5` and `uart4-pi5` really report
-    GPIOs 4–5 and 12–13 on the running image — the `-pi5` suffix trap of §6.5,
-    where the wrong overlay boots clean and the device reads as dead hardware;
-    (b) whether the six encoder Phase B (green) lines are intact at all, still
-    dead as of `config.py:222`; and (c) the UART framing contract that has to
-    replace the 999cm sentinel before sonar can sit behind a serial link.
+15. **Pico 2 W carriers BUILT AND INSTALLED 2026-09-27** (§4.7) — the hardware half
+    of this item is closed. What is still open is everything downstream of it:
+    (a) `dtoverlay -h uart2-pi5` and `uart4-pi5` really reporting GPIOs 4–5 and
+    12–13 on the running image — the `-pi5` suffix trap of §6.5, where the wrong
+    overlay boots clean and the device reads as dead hardware; (b) whether the six
+    encoder Phase B (green) lines are intact, still dead as of `config.py:222`;
+    (c) the UART framing contract that replaces the 999cm sentinel (Software Design
+    S-9); and (d) C-1 Phase 3, the `sensors.py` / `brain.py` / `config.py` swap —
+    until that runs, the Picos are fitted and unread, and `_EXPECTED_I2C` still
+    expects the MCP23017.
 16. ⚠ **P8 has no recorded fuse and no recorded gauge** (§2.1). Every other +12V
     branch takes a numbered fuse, F2–F5. **Confirm whether a fuse exists, fit one
     if not, and record the gauge.** Nothing monitors R5 either — no INA260 — and
@@ -3323,7 +3343,7 @@ None of these touch the 40-pin header except the display's power tap.
 
 ---
 
-**End of Master Hardware Design rev 2.3**
+**End of Master Hardware Design rev 2.4**
 
 ---
 

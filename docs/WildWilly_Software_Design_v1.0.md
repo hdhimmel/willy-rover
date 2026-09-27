@@ -2,7 +2,7 @@
 
 ## Software Design — As-Built
 
-**Revision 1.2 · Current Implementation · 2026-09-24**
+**Revision 1.3 · Current Implementation · 2026-09-27**
 
 ---
 
@@ -12,11 +12,11 @@
 |-------|-------|
 | Project | WildWilly Autonomous Rover |
 | Document | Software Design — as-built implementation |
-| Revision | 1.2 |
+| Revision | 1.3 |
 | Date | 2026-09-14 |
 | Owner | Howard Himmel |
 | Status | Implemented and off-hardware tested; partially live-verified. **Filename retains `v1.0` deliberately** — renaming breaks cross-references in the Master Hardware Design, the FRD and `CLAUDE.md`. The Revision field is authoritative. |
-| Companions | Master Hardware Design **rev 2.3**; Functional Requirements v3.3 |
+| Companions | Master Hardware Design **rev 2.4**; Functional Requirements v3.4 |
 
 **Scope of this document.** This describes the software as it is currently
 written, in the repository `hdhimmel/willy-rover`. It describes structure and
@@ -871,7 +871,7 @@ gate E-stop once the sense pin exists; this is not a placeholder built ahead
 of the hardware, it's a real behavior change for the three faults that
 already fire today. `tests/test_brain_reset_gate.py` covers the brain.py-side
 logic off-hardware; the touchscreen's own tap detection needs the physical
-5" DSI panel (Master Hardware Design rev 2.3 §15.3) to verify.
+5" DSI panel (Master Hardware Design rev 2.4 §15.3) to verify.
 
 **S-2 — Encoder polling under-samples at speed. RECOMPUTED 2026-09-13, and the
 answer got worse.**
@@ -914,7 +914,7 @@ carries an LTC4311 for exactly this), tested against a full roll-call first
 > ⚠ **The whole question is moot under Master Hardware Design §4.7:** the
 > MCP23017 is to be replaced by a Pico 2 W doing quadrature decode in PIO, over
 > UART. There is no expander left to interrupt. Pin-level assignment recorded
-> 2026-09-24 (§4.7); boards in hand, nothing fitted. See S-10.
+> 2026-09-24 (§4.7); **both carriers built and installed 2026-09-27**. See S-10.
 
 given this session's I²C fragility history.
 
@@ -949,8 +949,14 @@ it becomes **1562** (11 × 4 × 35.5, part number `JGA25-370-35.5K`).
 so there is no reach-envelope model to plan against. Grasp is a fixed primitive
 sequence. `arm_jog.py` is the tool that closes this.
 
-**S-5 — Hand-off confirmation is timed, not sensed.** No tactile or force
-sensor on the gripper.
+**S-5 — Hand-off confirmation is timed, not sensed.** ⚠ **Restated 2026-09-27:
+this said “no tactile or force sensor on the gripper”, which is no longer true.** An
+**FSR402 is fitted and wired to ADS1115 A1** (Master Hardware Design §6.6, §16.14).
+The gap is now purely in software: `sensors.py` reads **A0 only**, so nothing in the
+codebase has ever read A1, and `retrieval_task.py:178` still releases on a timeout.
+Two things close it — a logarithmic curve fit (a linear scale reads plausibly and is
+wrong) and a reader that `_process_handoff` consults. Master Hardware Design §14
+item 13, the last outstanding build item as of 2026-09-27.
 
 **S-6 — Watchdog and overrun thresholds are inconsistent.** *Partially
 addressed 2026-08-18.* `willy-rover.service` sets `WatchdogSec=500ms`,
@@ -1013,7 +1019,8 @@ gates the hardware change, not the other way round. See also §6.5's warning tha
 the ToF's "unavailability is not a fault" rule does **not** extend to Pico B.
 
 **S-10 — The encoder transport changes and `Encoders` has no seam for it.**
-*Recorded 2026-09-24.* `sensors.py::Encoders` polls the MCP23017 directly; under
+*Recorded 2026-09-24; ⛔ **now the live blocker, 2026-09-27** — the Picos are fitted,
+so `sensors.py` is polling an expander that the harness has left. This is C-1 Phase 3.* `sensors.py::Encoders` polls the MCP23017 directly; under
 §4.7 it reads framed counts from Pico A over `uart4-pi5`, with the twelve lines on
 Pico GP0–GP11 in the same order as MCP23017 GPA0→GPB3 (`config.py:235`) so the
 harness lands 1:1. Two consequences worth recording now: **S-2's under-sampling

@@ -6,7 +6,7 @@ Version 3.1**
   -----------------------------------------------------------------------
   Field                   Value
   ----------------------- -----------------------------------------------
-  Revision                3.3
+  Revision                3.4
 
   Date                    2026-09-24
 
@@ -15,10 +15,10 @@ Version 3.1**
   Status                  Hardware build complete; live verification in
                           progress
 
-  Companion documents     WildWilly Master Hardware Design rev 2.3 --- current
+  Companion documents     WildWilly Master Hardware Design rev 2.4 --- current
                           hardware configuration. Section references of the
                           form §n refer to it unless stated otherwise.
-                          WildWilly Software Design rev 1.2 --- module
+                          WildWilly Software Design rev 1.3 --- module
                           architecture and control layering.
 
   -----------------------------------------------------------------------
@@ -372,7 +372,7 @@ actually taken the object.
 
 ⚠ **The hardware half of this gap is now closed. The software half is not.**
 An **FSR402 force sensor is fitted to the gripper** and read as ADS1115 **A1**
-(Master Hardware Design §6.6, §16.13), built into the signal conditioning board
+(Master Hardware Design §6.6, §16.14), built into the signal conditioning board
 2026-09-16. It is **uncalibrated** and nothing in the codebase reads A1 —
 `retrieval_task.py:18` still records the hand-off as time-based, correctly.
 This item stays open until the sensor is calibrated (its response is
@@ -1580,7 +1580,7 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     **Unchanged by the 2026-09-13 SEN0628 decision:** that sensor's UART is planned
     for GP8/GP9, not GP14/GP15, so it does not reintroduce this conflict. The warning
     stands as written and the serial console must remain disabled — see Master
-    Hardware Design rev 2.3 §5.3 and §6.5.
+    Hardware Design rev 2.4 §5.3 and §6.5.
 
     ⚠ **§4.7 retires this failure signature permanently.** With sonar on Pico B
     (`uart2-pi5`, GP4/GP5) and encoders on Pico A (`uart4-pi5`, GP12/GP13),
