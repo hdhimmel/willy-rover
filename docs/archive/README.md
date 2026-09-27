@@ -38,7 +38,7 @@ comments.
 | `WildWilly_Baseline_Programming_Pass_2026-08.md` | Companion to **FRD v1.1**, itself archived |
 | `WildWilly_v2.2_Programming_Pass.md` | Companion to **FRD v2.2** and **Master Engineering Package rev 6.0.7**, both archived |
 | `WildWilly_Claude_Fix_Gap_Analysis.md` | A read-only audit of commit `516d1ec` on 2026-08-07. Superseded by Software Design §8 (gaps) and §12 (open actions) |
-| `WildWilly_Subsystem_Status.md` | A per-module snapshot dated 2026-08-08, last touched 2026-08-18. Superseded by Software Design and FRD §V |
+| `WildWilly_Subsystem_Status.md` | A per-module snapshot dated 2026-08-08, last touched 2026-08-18. Superseded by Software Design §8/§12 and FRD §V. ⚠ **Tidied 2026-09-27:** it had been edited on 2026-09-17 without moving its snapshot date, so it read as two architectures at once and contradicted itself on the BNO085 crash-loop. The September text is now bracketed outside the table and the three claims that have since reversed are indexed at the top |
 | `WildWilly_AsBuilt_Design_v1.0.md` | pre-existing |
 | `WildWilly_Functional_Requirements_Document_v1.1 / v2.2 / v3.0` | pre-existing — superseded by FRD rev 3.3 |
 | `WildWilly_Master_Engineering_Package_rev6.0.md`, `rev6.0.7.md/.docx` | pre-existing. **Retain**: rev 6.2.0 holds the incident history, but is not committed. Note rev 6.0.7 contains no §5.7 and no §17.4/§17.5 — see Master Hardware Design §17.2 |

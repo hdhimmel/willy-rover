@@ -6,8 +6,54 @@ This is the software-architecture companion to `WildWilly_Claude_Fix_Gap_Analysi
 tracks status against the fix plan's own section numbers) — this doc instead organizes by actual
 Python module, for someone asking "what can this specific piece of code do today."
 
-**Snapshot date: 2026-08-08, last updated 2026-08-18.** Update this table whenever a subsystem's
-status actually changes — stale tags here are worse than no tags.
+> ⛔ **FROZEN ARCHIVE — a snapshot of 2026-08-18, nothing more. Do not read any tag
+> here as current.** Current per-module status lives in **Software Design §8 (known
+> gaps)** and **§12 (open actions)**; current requirement-verification status lives in
+> **FRD §V**; current hardware verification lives in **Master Hardware Design §13**.
+>
+> **Why this warning exists.** This was an August document that someone edited on
+> **2026-09-17** without moving the snapshot date, so it read as a mixture of two
+> different architectures — and contradicted itself: the `sensors.py` row declared the
+> BNO085 crash-loop "STALE", while the standing note at the foot of the same document
+> still presented it as open and undiagnosed. The September text has been lifted out of
+> the table into *Added after this snapshot* below, so the table is once again one
+> coherent August state. **Tidied 2026-09-27; no August content was removed.**
+
+**Snapshot date: 2026-08-08, last updated 2026-08-18.** The table below describes that
+date and no other.
+
+## What reversed after this snapshot
+
+Three claims in this document are now known to be wrong. They are listed here rather
+than edited out, because the reasoning that produced them is part of the record.
+
+| This document says | Current position |
+|---|---|
+| `Encoders` uses **interrupt-driven quadrature decode** (2026-08-18), pending an MCP23017 INTA→GP7 wire | **Retracted 2026-08-23.** Interrupt-driven decode was never adopted: `INTCON`/`GPINTEN`/`add_event_detect()` must **not** be used, polling is the mechanism, and GP7 stays free. See FRD G-2, Software Design S-2, Master Hardware Design §9. Under §4.7 the whole question is moot — decode moves to PIO on a Pico 2 W |
+| `BATTERY_DIVIDER_SCALE` re-trimmed to **0.3237**, problem closed | **0.3237 does not describe the fitted divider.** It was measured against the *old* bus node board; the rev 15.1 board is 10k/3.2k, nominal 0.242, and at PGA ±4.096V the stored scale saturates ~50 mV above a rested 3S pack. Open in §0 and §6.2 |
+| The BNO085 crash-loop of 2026-08-16 is unresolved (foot of this document) | **Closed.** A full roll-call on 2026-09-17 found all eleven devices including 0x4A, after the 0x45 INA260 was rebuilt |
+
+Everything the September edit added is recorded more fully in the live set — the sonar
+range test in §13 and the Bench Test Procedures, the divider re-trim in §0, §6.2 and
+§13 — so nothing was lost in moving it out of the table.
+
+## Added after this snapshot (2026-09-17), moved out of the table
+
+The `sensors.py` row was overwritten on this date, which also broke the row into four
+cells. Its added text, verbatim, with the corrections above applied by reference:
+
+> ✅ **Sonar: all three channels range-tested and working** (front 49.7cm / left 91.1cm
+> / right 30.9cm, ±0.4cm over 8 samples, R2 clean at 0.026A). Two sensors were destroyed
+> by reverse polarity and replaced along the way — see Master Hardware Design **§16.12**
+> for the diagnosis table *(the September text cited §16.13, which is the battery
+> divider)*. ✅ **Battery ADC re-trimmed** (`BATTERY_DIVIDER_SCALE` 0.2386 → 0.3237)
+> *(since found not to describe the fitted divider — see above)*; the old value was
+> reporting 15.60V from an 11.5V supply. ✅ **BNO085 answers at 0x4a** — a full I²C
+> roll-call on 2026-09-17 found all eleven devices present, 0x4a included, after the
+> 0x45 INA260 was rebuilt.
+
+The status tag that cell carried before 2026-09-17 was overwritten and is not
+recoverable from this file; it is marked as lost in the table rather than guessed at.
 
 ## Capability caution (§22's own instruction)
 
@@ -34,7 +80,7 @@ modules below sound adjacent to them:
 | `brain.py` (core FSM) | **PARTIALLY IMPLEMENTED** | Phase 1 safety rewrite + all subsequent phases are code-complete and off-hardware tested, but not live-verified — see standing note below. Stall detection (`STALL_FAULT`, FR-500-003/Directive 5) and a touchscreen-gated fault-recovery step (FR-300-003, applied to all faults) both added 2026-08-18 — see FRD v3.1 §V.2/S-7 and S-1. |
 | `safety.py` (SafetyController) | **IMPLEMENTED** | Sole motion gate, unchanged since Phase 1. 25 tests (`test_safety.py`+`test_safety_controller.py`). Not live-verified. |
 | `motors.py`/`steering.py`-equiv (`motors.py`) | **PARTIALLY IMPLEMENTED** | Ran successfully during the 2026-08-02 baseline pass; not re-verified against this session's Phase 1+ rewrite on real hardware. |
-| `sensors.py` (Sonar/ADC/Encoders/CurrentMonitor) | **SONAR AND ADC VERIFIED ON HARDWARE 2026-09-17; encoders still unverified** | ✅ **Sonar: all three channels range-tested and working** (front 49.7cm / left 91.1cm / right 30.9cm, ±0.4cm over 8 samples, R2 clean at 0.026A). Two sensors were destroyed by reverse polarity and replaced along the way — see Master Hardware Design §16.13 for the diagnosis table. ✅ **Battery ADC re-trimmed** (`BATTERY_DIVIDER_SCALE` 0.2386 → 0.3237); the old value was reporting 15.60V from an 11.5V supply. ✅ **BNO085 answers at 0x4a** — the crash-loop note below is STALE: a full I²C roll-call on 2026-09-17 found all eleven devices present, 0x4a included, after the 0x45 INA260 was rebuilt. Historical detail follows. | IMU reset-timing bug root-caused and fixed live 2026-08-14 (see below), verified via standalone construction and through the real `IMU`/`SonarArray`/`ADC` classes. **Since 2026-08-16, a different, undiagnosed fault has `willy-rover.service` crash-looping again**: BNO085 doesn't ack at all at 0x4a (vs. the 08-14 bug, which acked but NACK'd the first write) — the 08-14 patch is confirmed still present and unmodified, so this is a new fault, not a regression of that fix. Not yet diagnosed as of the last commit touching this doc; see the standing note at the bottom. Sonar/ADC portions unaffected by this fault. `Encoders` switched to interrupt-driven quadrature decode 2026-08-18 (FRD v3.1 G-2) — code-complete, checked off-hardware only; the MCP23017 INTA→GP7 wire it depends on isn't physically run yet, so it currently falls back to the same best-effort polling as before. |
+| `sensors.py` (Sonar/ADC/Encoders/CurrentMonitor) | *[status tag lost — overwritten 2026-09-17, see above]* | IMU reset-timing bug root-caused and fixed live 2026-08-14 (see below), verified via standalone construction and through the real `IMU`/`SonarArray`/`ADC` classes. **Since 2026-08-16, a different, undiagnosed fault has `willy-rover.service` crash-looping again**: BNO085 doesn't ack at all at 0x4a (vs. the 08-14 bug, which acked but NACK'd the first write) — the 08-14 patch is confirmed still present and unmodified, so this is a new fault, not a regression of that fix. Not yet diagnosed as of the last commit touching this doc; see the standing note at the bottom. Sonar/ADC portions unaffected by this fault. `Encoders` switched to interrupt-driven quadrature decode 2026-08-18 (FRD v3.1 G-2) — code-complete, checked off-hardware only; the MCP23017 INTA→GP7 wire it depends on isn't physically run yet, so it currently falls back to the same best-effort polling as before. |
 | `arm.py` | **HARDWARE REQUIRED, not re-verified this session** | Resolved 2026-08-08 (arm PCA9685 VCC had been disconnected — power issue, not bus/software); `willy-rover.service` reached `active (running)` that day for the first time since Phase 1. Not touched again 2026-08-14 — session paused before restarting the service, pending battery charge (see standing note). |
 | `odometry.py` | **PARTIALLY IMPLEMENTED** | Dead-reckoning math is solid and unit-tested; `WHEEL_DIAMETER_M`/`TRACK_WIDTH_M` are unconfirmed placeholder measurements (flagged in `config.py`) — do not trust absolute distances. |
 | `world_model.py` | **PARTIALLY IMPLEMENTED** | Milestone 1 — see Capability caution above. 8 tests, fully off-hardware. |
