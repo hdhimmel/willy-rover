@@ -454,6 +454,10 @@ a deliberately failed self-test produces a degraded-but-running rover rather tha
 Each stage assumes the one before it. Doing them out of order produces measurements that
 have to be retaken.
 
+⛔ **C-0 comes before all of these, and before the motors are touched.** It measures
+counts-per-rev on the fitted motors, and once they are out it can never be run. The
+170 RPM replacements arrived 2026-09-26.
+
 1. **M-1** motor mapping — everything per-wheel depends on knowing which wheel is which.
 2. **E-1** encoders — needs M-1 to attribute channels to wheels correctly.
 3. **B-1** battery divider — cheap, independent, and it underpins every "is the rail sagging"
@@ -465,8 +469,132 @@ have to be retaken.
    question first or skip it.
 7. **T-1** ToF — last, because it is the only one that needs new code written against
    observed bytes.
+8. **C-1** the Pico and motor cutover — a session of its own, not a step in another
+   one. It re-lands six motors and twelve encoder wires, which is how the left/right
+   transposition happened twice before.
 
 ---
+
+## C-0 — counts-per-rev on the FITTED motors ⛔ DO THIS BEFORE ANYTHING ELSE
+
+**Why:** the vendor parameter table (2026-09-27) makes the fitted motors
+`JGA25-370-9.6K`, i.e. **9.6:1**, which puts `ENCODER_COUNTS_PER_REV` at **422** rather
+than the **752** in `config.py`. If that is right, `odometry.py` is under-reporting
+every distance by **1.78×** and has been all along. The recorded 17.1:1 was
+owner-supplied, and the ~10,600 RPM bare speed was *derived from it* — then each was
+cited as corroborating the other. Neither was measured.
+
+**This is unrepeatable once the motors are out.** Everything else in C-1 can be redone;
+this cannot.
+
+**Procedure:**
+
+1. Read the part number off a fitted motor body and write it here. `-9.6K` confirms the
+   table; anything else rewrites this whole item.
+2. Rover on blocks, wheels free, service stopped. Drive **one** wheel a known number of
+   full revolutions **under power** — never by hand, the gearbox does not back-drive.
+3. counts ÷ revolutions = counts/rev. Expect **422** if the table is right, **752** if
+   the document is.
+4. Record it, then set `ENCODER_COUNTS_PER_REV` to the measured value regardless of
+   which it matches.
+
+| measurement | value | notes |
+|---|---|---|
+| Part number on the motor body | | `-9.6K` expected |
+| Revolutions driven | | |
+| Counts observed | | |
+| **counts/rev measured** | | 422 vs 752 |
+
+---
+
+## C-1 — Pico and motor cutover
+
+**Everything below happens in one session.** The two changes are independent in
+principle and entangled in practice: both re-land six motors' worth of connectors, and
+that is exactly how the left/right transposition happened on 2026-09-18 — twice, on the
+motor ports and on the encoder channels.
+
+**Standing convention:** removed hardware is **DELETED** from the documents, not struck
+(owner-directed 2026-09-20). The MCP23017 does not become a historical note; it goes.
+
+### Phase 1 — bench, before the rover is opened
+
+- [ ] Two carrier boards built to the schematic, **four meter checks passed** — diode
+      orientation, no short across the input, PTC cold resistance under ~0.5Ω, divider
+      ratio at TP2. Nothing plugged in.
+- [ ] Both Picos flashed, `os.uname()` and `machine.unique_id()` recorded against A and
+      B, and the IDs written **on the boards**. A is `643f69a756a232ea`, B is
+      `ad25bbf0f1e1f160` — confirm rather than assume.
+- [ ] `Pin("LED")` verified on at least one board. It has never been run.
+- [ ] On the Pi: `dtoverlay -h uart2-pi5` reports GPIOs 4–5 and `uart4-pi5` reports
+      12–13. **A wrong overlay boots clean and the Pico reads as dead hardware** — that
+      cost a full session on the SEN0628.
+- [ ] `dtoverlay=uart2-pi5` and `dtoverlay=uart4-pi5` added, rebooted, `/dev/ttyAMA*`
+      present, serial console still disabled.
+
+### Phase 2 — hardware
+
+- [ ] **Meter the encoder supply polarity at the connector before anything is powered.**
+      It was found reversed on 2026-09-18; blue-to-black read −3.3 V and a swapped pair
+      of probes made it look right.
+- [ ] Six motors out, six in. **Record which physical wheel each harness goes to as you
+      go** — do not rely on the old labelling.
+- [ ] Twelve encoder wires onto Pico A's J3, **yellow to the even GP, green to the odd**,
+      in the order the net table gives.
+- [ ] MCP23017 off the bus entirely. The bus becomes **ten devices**.
+- [ ] Six sonar lines off the Pi header onto Pico B. GP4, GP5, GP13, GP14, GP21 and GP26
+      are then free on the Pi, and **GP14 stays free permanently** — that is what retires
+      the UART0 console hazard.
+- [ ] BNO085 RST from the MCP23017's GPB4 to Pico B, **open-drain against the 10k**.
+- [ ] Both carriers' feeds fused and diode'd: A from R5 at the encoder 3V3 distribution,
+      B from 5 V at the breakout terminal. **Not R2.**
+
+### Phase 3 — software
+
+- [ ] `config.py`: `ENCODER_COUNTS_PER_REV` → **1562**; `ENCODER_ADDR` and `ENCODER_PINS`
+      retire; re-measure `MOTOR_PORT` before trusting it (see Phase 5).
+- [ ] `config.py`: re-measure breakaway duty before keeping `SPEED_SLOW=0.55`. It was
+      raised 0.35→0.55 on 2026-08-24 to spend headroom the old gearbox did not have;
+      with **3.45× the rated torque** it probably does not need it.
+- [ ] `config.py`: `STALL_GRACE_S` is now a **hardware protection parameter**. Stall is
+      1.8 A against the TB6612's 1.2 A continuous — 150% — so the window must be short
+      enough to matter thermally, not merely short enough to feel responsive.
+- [ ] `brain.py`: `_EXPECTED_I2C` drops `0x27`. The self-test expects **ten**. Miss this
+      and a correctly built rover fails its own gate and `_motion_enabled` stays false.
+- [ ] `sensors.py::Encoders`: I²C register reads → framed counts from Pico A.
+- [ ] `sensors.py::SonarArray`: local pin timing → frames from Pico B, **with the
+      staleness deadline**. The 999 cm sentinel goes; `-1` means unmeasurable and stale
+      means **stop**. Software Design S-9.
+
+### Phase 4 — documents, same session
+
+Counts as of 2026-09-27, so you can tell when you are done:
+
+| File | `MCP23017` / `0x27` / `ENCODER_ADDR` | `620 RPM` / `17.1` |
+|---|---|---|
+| Master Hardware Design | **42** — includes all of §16.6, which is deleted whole | **22** |
+| FRD | **8** | **9** |
+| Software Design | **5** | **7** |
+| Bench Test Procedures | **2** | — |
+| `config.py` | **7** | **5** |
+| `sensors.py` | **14** | — |
+| `brain.py` | **1** | — |
+
+§4.7 stops being "design, not as-built" and becomes the description. §0's topology, §3.3's
+roll-call, §11.2's self-test count, §13 and FRD FR-100-002 all move from eleven devices to
+ten.
+
+### Phase 5 — re-verify, in this order
+
+- [ ] **M-1**: drive each port alone by raw address, owner names the wheel that turns.
+      `0x61` is LEFT, `0x60` is RIGHT — confirm it survived the swap.
+- [ ] **E-1 step 2**: `scripts/encoder_map_check.py`, channel-to-wheel attribution.
+- [ ] **Green wires**: Phase B has read dead on all six since 2026-09-18. Meter them
+      during the re-land — the connectors are open anyway, and it is the cheapest this
+      check will ever be.
+- [ ] **Counts/rev on the new motors**: expect **1562**. If it comes out otherwise, the
+      11 PPR figure is wrong, since the ratio is fixed by the part number.
+- [ ] Only then: rails under load, and a drive test.
 
 ## Recording results
 

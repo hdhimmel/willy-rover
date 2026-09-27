@@ -1893,9 +1893,8 @@ document traceable to an inferred bare-motor speed.
 own rule is that a ratio inferred from a table is no better than a ratio inferred from
 a speed — *"measure it instead of deriving it from another assumed gear ratio, which
 is exactly how the wrong number got there in the first place"*. If 422 is right,
-`odometry.py` is **under-reporting distance by 1.78×** today. **E-1's counts-per-rev
-step settles it in one run and should be done before the motors are swapped out**, not
-after — it is the last chance to measure the fitted hardware.
+`odometry.py` is **under-reporting distance by 1.78×** today. **Bench Test Procedures **C-0** exists for exactly this** — it is the first thing in
+the cutover and the only step that cannot be redone afterwards.
 
 The vendor part number should still be read off the motor body and recorded here.
 
