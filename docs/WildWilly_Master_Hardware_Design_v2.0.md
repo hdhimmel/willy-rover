@@ -989,7 +989,45 @@ while the Pico stays alive to report it. The 2026-08-25 failure becomes a
 reported fault instead of a multi-day mystery.
 
 **Why Pico B sits on Pi 5V.** Shared ground removes common-mode offset from the
-UART and lets one 4-wire harness carry power and link on a single connector.
+UART, and every wire Pico B needs then comes from one place.
+
+⚠ **It is six wires, not the “one 4-wire harness” this paragraph claimed until
+2026-09-27.** That was written before the reset pull-up needed **Pi 3V3**, and
+before the UART’s signal ground was given its own landing at pin 18 rather than
+sharing the power return.
+
+| # | Wire | Pi end | Pico B end |
+|---|---|---|---|
+| 1 | 5V | header 5V, taken at the breakout terminal | upper **+** rail → F1 |
+| 2 | GND, power return | Pi GND | upper **−** rail |
+| 3 | 3V3 | header **pin 1** | lower **+** rail → R4, the RST pull-up |
+| 4 | UART TX | GP5, phys 29 | GP12, pin 16 |
+| 5 | UART RX | GP4, phys 7 | GP13, pin 17 |
+| 6 | signal GND | Pi GND | pin 18 |
+
+All six land on the GeeekPi breakout, which already carries every one of those
+lines (§5.3). Build them as **two 3-way cables** — link (TX/RX/GND) and power
+(5V/GND/3V3) — rather than one awkward six-way.
+
+**Five would also work.** Wires 2 and 6 are the same net, meeting through the
+Pico’s internal ground; at 115200 over a short run, referencing the UART to the
+power return costs nothing. Six is kept because a UART wants its return beside its
+pair, and because it splits into two tidy cables.
+
+⚠ **There is only ONE ground here, and no second return for the 3V3.** Both
+supplies come from the same Pi, so their grounds are already common at source. R4
+is a pull-up, not a load — it draws 3.3V / 10k = **0.33 mA**, and only while reset is
+asserted, returning through the Pico’s ground pins. **Do not run a separate ground
+for it**: two grounds from the same Pi ground to the same board ground is a loop.
+
+⚠ **On the bare carrier, signal ground reads OPEN to the − rail. That is correct.**
+Pin 18 reaches the rail only *through the Pico* — internally to pin 38, which lands
+at column 13. It goes closed when the Pico is seated. Do not chase it as a missed
+joint.
+
+The RST wire is a seventh wire on the board but is **not** in this count: it goes to
+the BNO085, not the Pi.
+
 **Not R2**, even though the sonars themselves run on it: R2 dies with the base 12V,
 and a Pico B that dies with its own sensors is silent rather than diagnosable. It
 would also add ~40mA to the rail whose current is the short-detector for the sonars
