@@ -892,9 +892,9 @@ So the per-channel edge rate at full speed is:
 
 **~7.8 kHz against a ~1 kHz poll ceiling — roughly 8× oversubscribed.**
 
-> ⚠ **Corrected 2026-09-26 — the swap DOES reduce the rate, by 1.78×.** The gearbox-cancels reasoning is sound, but it assumes the same bare motor and this is a different winding: **1:35 at 170 RPM implies 5,950 RPM bare**, against the ~10,600 the fitted 17.1:1 motors imply. Counts per second per wheel therefore fall from **7,773 to 4,363** (3,337 at the rated 130 RPM). Still ~4× over the ~1 kHz poll ceiling and far beyond a MicroPython interrupt, so PIO decode is still required — the conclusion holds, the margin is merely less desperate.
+> ⚠ **Reverted 2026-09-27 — this note flipped twice; here is the arithmetic.** The JGA25-370 family runs **one ~6,000 RPM motor** behind every gearbox (multiply any row's no-load speed by its ratio and you get ~6,000 every time), so the bare speed does not change across the swap. Fitted: **9.6:1, 422 counts/rev, 620 RPM → 4,365 counts/s per wheel.** On order: **35.5:1, 1562 counts/rev, 170 RPM → 4,426.** Within 1.5%. Yesterday's "it falls 1.78×" was computed from an assumed 10,600 RPM bare motor — the same inference that produced the wrong 17.1:1 ratio. **The original claim was right: a slower rover is not a slower encoder.** Still ~4× the ~1 kHz poll ceiling, so PIO decode is required either way.
 >
-> `ENCODER_COUNTS_PER_REV` becomes **1540** (11 × 4 × 35).
+> ⛔ **And 752 is wrong for the motors fitted right now** — the table makes them 9.6:1, so it should be **422**, and `odometry.py` is under-reporting every distance by 1.78× today. Measure it with E-1 **before** those motors come out. After the swap: **1562**.
 
 This does not change what to do — a bench test still settles it, and arithmetic is not
 a substitute for one. It changes the expectation you should carry into that test: plan
@@ -937,12 +937,13 @@ mechanism, and GP7 stays free.
 `TRACK_WIDTH_M` are both marked UNCONFIRMED placeholders in `config.py`. Every
 pose estimate inherits their error.
 
-**Make that three, as of 2026-09-24 — now resolved to a number, 2026-09-26.**
-`ENCODER_COUNTS_PER_REV` changes when the **170 RPM motors** are fitted. The ratio is
-**1:35**, so the value is **1540** (1562 if the vendor's alternative 1:35.5 is the
-real one). **Neither 752 nor 3292 is right:** 752 is 2.0× low and 3292 is 2.1× high.
-`odometry.py` divides by this directly, so it must change in the same session the
-motors go in, not after.
+**Make that three — and the third is wrong TODAY, not only after the swap.** The vendor
+parameter table (2026-09-27) makes the fitted motors **9.6:1**, so
+`ENCODER_COUNTS_PER_REV` should be **422**, not the 752 in `config.py`. If that holds,
+`odometry.py` is **under-reporting every distance by 1.78× right now**. It has not been
+changed on the strength of a table alone — measure it with E-1 **before the motors are
+swapped out**, which is the last opportunity to test the fitted hardware. After the swap
+it becomes **1562** (11 × 4 × 35.5, part number `JGA25-370-35.5K`).
 
 **S-4 — No inverse kinematics for the arm.** No per-joint calibration exists,
 so there is no reach-envelope model to plan against. Grasp is a fixed primitive

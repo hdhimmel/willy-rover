@@ -14,13 +14,15 @@ MicroPython's IRQ overhead is 5-15us per handler -- a large fraction of the
 budget before any work is done, so it would starve the reporting loop and still
 miss edges.
 
-CORRECTED 2026-09-26: an earlier version of this note claimed the 170 RPM motors
-would not change this, because the encoder is on the MOTOR shaft and the gearbox
-cancels. The gearbox does cancel -- but the bare motor is not the same one.
-1:35 at 170 RPM implies 5,950 RPM bare against ~10,600 today, so the rate falls
-to 4,363 counts/s per wheel. Still about 4x the I2C poll ceiling, so PIO remains
-the answer; the margin is simply wider than advertised. Counts per rev goes
-752 -> 1540 at the same time (section 7.1).
+REVERTED 2026-09-27. Yesterday this said the swap would cut the rate 1.78x. The
+vendor parameter table shows the JGA25-370 family runs ONE ~6,000 RPM motor behind
+every gearbox, so the bare speed does not change: 4,365 counts/s per wheel fitted
+(9.6:1, 422 counts/rev, 620 RPM) against 4,426 after (35.5:1, 1562, 170 RPM) --
+within 1.5%. PIO is required either way.
+
+NOTE the fitted-motor figures there: the table makes them 9.6:1 and 422 counts/rev
+where config.py records 17.1:1 and 752. Unresolved -- section 7.1 -- and it wants
+measuring before those motors come out.
 
 WHY EDGE COUNTING AND NOT QUADRATURE, FOR NOW. Phase B (green) reads dead on
 all six channels (config.py:222) and may have been destroyed by the reversed

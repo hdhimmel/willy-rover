@@ -97,12 +97,12 @@ quadrature decoder; the wire protocol does not change.
 **PIO is not optional.** 7,773 counts/s per wheel across twelve channels, against a
 MicroPython IRQ overhead of 5–15 µs.
 
-⚠ **Corrected 2026-09-26.** This said the 170 RPM motors would not help, on the
-reasoning that the encoder sits on the **motor** shaft so the gearbox cancels. The
-reasoning is right; the assumption that the bare motor is unchanged was not. 1:35 at
-170 RPM implies **5,950 RPM bare** against ~10,600 today, so the rate falls from
-7,773 to **4,363 counts/s per wheel**. Still ~4× the I²C poll ceiling and far beyond
-an interrupt — PIO stays — but the margin is better than advertised.
+⚠ **Reverted 2026-09-27.** Yesterday this was "corrected" to say the swap would cut
+the rate 1.78×. The vendor parameter table shows the family runs one ~6,000 RPM motor
+behind every gearbox, so the bare speed is unchanged: **4,365 counts/s per wheel
+fitted** (9.6:1, 422 c/rev, 620 RPM) against **4,426 after** (35.5:1, 1562 c/rev,
+170 RPM) — within 1.5%. The original wording was right. Both are ~4× the I²C poll
+ceiling, so PIO is required regardless.
 
 **ECHO stuck high is a destroyed sensor, not a timeout.** `pico_b.py` checks
 ECHO idles low *before* triggering and flags a stuck line separately — that is

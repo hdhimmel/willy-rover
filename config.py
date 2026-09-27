@@ -234,13 +234,21 @@ ENCODER_ADDR=0x27
 # previous day, on connectors reassembled during the same rebuild.
 ENCODER_PINS={'lf':('A',4,5),'lm':('A',6,7),'lr':('B',2,3),
               'rf':('A',0,1),'rm':('A',2,3),'rr':('B',0,1)}
-# READY FOR THE MOTOR SWAP, 2026-09-26. The 12V 170 RPM replacements are 1:35
-# (vendor also quotes 1:35.5), so this becomes 11 x 4 x 35 = 1540, or 1562 at
-# 35.5. DO NOT set it until the motors are actually fitted -- 752 is correct for
-# the 17.1:1 motors in the rover right now, and odometry.py divides by it.
-# Change it in the same session the motors go in, not after. Master Hardware
-# Design 7.1 and 14 item 18.
-ENCODER_COUNTS_PER_REV_170RPM=1540   # not active; see above
+# !! 752 IS PROBABLY WRONG FOR THE MOTORS FITTED RIGHT NOW. The vendor parameter
+# table (2026-09-27) lists the JGA25-370 family by part suffix, and the suffix IS the
+# reduction ratio -- every row's no-load speed times its suffix gives the same ~6,000
+# RPM bare motor. The 12V 620 RPM row is the -9.6K, i.e. 9.6:1, so counts/rev should
+# be 11 x 4 x 9.6 = 422. There is no 17.1 anywhere in the family. If that is right,
+# odometry.py is UNDER-REPORTING every distance by 752/422 = 1.78x today.
+#
+# NOT CHANGED on the strength of a table: this file's own history is a chain of
+# ratios inferred from other inferences. Measure it with E-1's counts-per-rev step
+# BEFORE the motors are swapped out -- that is the last chance to test the fitted
+# hardware. Master Hardware Design 7.1.
+#
+# AFTER THE SWAP: the replacements are JGA25-370-35.5K, so 11 x 4 x 35.5 = 1562.
+# Set it in the same session the motors go in, not after.
+ENCODER_COUNTS_PER_REV_170RPM=1562   # not active; see above
 ENCODER_COUNTS_PER_REV=752   # 11 PPR (motor shaft) x4 quadrature x 17.1:1 reduction.
                              # WAS 3292, derived as "823.1 PPR x4". 823.1/11 implies a 74.8:1
                              # gearbox -- the ratio matching the STALE "6V, 100-200 RPM" motor

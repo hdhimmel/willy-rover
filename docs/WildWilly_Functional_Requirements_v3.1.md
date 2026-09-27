@@ -308,9 +308,9 @@ So at full speed:
 **Expect under-sampling at speed and plan for it.** The per-channel rate is close
 to 8.5 kHz, not the few hundred Hz a lower counts-per-rev figure would imply.
 
-⚠ **Corrected 2026-09-26 — the swap DOES reduce the rate, by 1.78×.** The gearbox-cancels reasoning is sound, but it assumes the same bare motor and this is a different winding: **1:35 at 170 RPM implies 5,950 RPM bare**, against the ~10,600 the fitted 17.1:1 motors imply. Counts per second per wheel therefore fall from **7,773 to 4,363** (3,337 at the rated 130 RPM). Still ~4× over the ~1 kHz poll ceiling and far beyond a MicroPython interrupt, so PIO decode is still required — the conclusion holds, the margin is merely less desperate.
+⚠ **Reverted 2026-09-27 — this note flipped twice; here is the arithmetic.** The JGA25-370 family runs **one ~6,000 RPM motor** behind every gearbox (multiply any row's no-load speed by its ratio and you get ~6,000 every time), so the bare speed does not change across the swap. Fitted: **9.6:1, 422 counts/rev, 620 RPM → 4,365 counts/s per wheel.** On order: **35.5:1, 1562 counts/rev, 170 RPM → 4,426.** Within 1.5%. Yesterday's "it falls 1.78×" was computed from an assumed 10,600 RPM bare motor — the same inference that produced the wrong 17.1:1 ratio. **The original claim was right: a slower rover is not a slower encoder.** Still ~4× the ~1 kHz poll ceiling, so PIO decode is required either way.
 
-**`ENCODER_COUNTS_PER_REV` becomes 1540** (11 × 4 × 35), not 752 and not 3292.
+⛔ **And 752 is wrong for the motors fitted right now** — the table makes them 9.6:1, so it should be **422**, and `odometry.py` is under-reporting distance by 1.78×. See Master Hardware Design §7.1.
 
 **Resolution:** bench test, not more arithmetic --- drive one wheel a known number of
 turns **under power** and read the counts. ⚠ **Not by jogging or hand-turning:** the
@@ -319,9 +319,9 @@ distinct pin state on 2026-08-25; 3s of driving gave seven), and
 `scripts/encoder_calibration.py` is built on hand-turning and is therefore invalid
 here. This settles counts/rev and the gearbox ratio together, and is the same bench
 session already needed to confirm `WHEEL_DIAMETER_M`. ⚠ **Wait for the 170 RPM motors**, delivered 2026-09-26 — calibrating the 17.1:1
-motors measures hardware that is being removed. The ratio is **1:35**, so the target
-is **1540 counts/rev**; the only open question is whether it is 35 or 35.5, a 1.4%
-difference this run settles. `WHEEL_DIAMETER_M` and `TRACK_WIDTH_M` are independent of the swap
+motors measures hardware that is being removed. The part number `JGA25-370-35.5K` gives **35.5:1**, so the target is **1562
+counts/rev**. ⛔ **Run the counts-per-rev step on the FITTED motors first** — it is the
+only chance to test whether they really are 422 rather than the recorded 752. `WHEEL_DIAMETER_M` and `TRACK_WIDTH_M` are independent of the swap
 and can be settled now.
 
 **If polling does turn out to be too slow: raise the I²C bus speed, not

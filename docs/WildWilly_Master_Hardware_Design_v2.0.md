@@ -1777,25 +1777,28 @@ the torque and still tops out near 0.7 m/s.
 ⚠ **Owner-stated: the replacement motors are the 12V 170 RPM variant. Not yet
 fitted.** Specifications supplied 2026-09-26:
 
-| | Value |
-|---|---|
-| Gear ratio | **1:35** (vendor also quotes 1:35.5) |
-| No-load speed | **170 RPM** |
-| Rated load speed | **130 RPM** |
-| Rated load torque | **0.82 kg·cm** = 0.080 N·m |
-| Stall torque | **2.8 kg·cm** = 0.275 N·m |
-| No-load current | **60 mA** |
-| Stall current | **1.3 A** |
+| | Value | *(owner, 09-26)* |
+|---|---|---|
+| Part number | **JGA25-370-35.5K**, 12 V | — |
+| Gear ratio | **35.5:1** — settled by the part number | *1:35 or 1:35.5* |
+| No-load speed | **170 RPM** | *170* |
+| Rated load speed | **131 RPM** | *130* |
+| Rated load torque | **0.69 kg·cm** = 0.068 N·m | *0.82* |
+| Stall torque | **3.3 kg·cm** = 0.324 N·m | *2.8* |
+| No-load current | **70 mA** | *60 mA* |
+| **Stall current** | **1.8 A** | *1.3 A* |
+| Weight / body length | 88 g / 21 mm | — |
 
-**`ENCODER_COUNTS_PER_REV` = 11 × 4 × 35 = 1540** (1562 at 35.5). **Neither figure in
-this repo is close:** 752 is 2.0× low, and 3292 is 2.1× high. The 1:35 / 1:35.5
-ambiguity is only 1.4%, which a calibration run settles — but 1.4% of odometry over
-a room is real, so settle it rather than shrug.
+The right-hand column is what was supplied verbally on 2026-09-26 and is superseded by
+the table. **The stall-current difference is the one that matters** — see below.
 
-**The bare motor is NOT the same as the fitted one.** 170 × 35 = **5,950 RPM** bare,
-against the ~10,600 RPM that 620 RPM at 17.1:1 implies. This is a different winding,
-not merely a different gearbox, and it is the fact that changes several conclusions
-below.
+**`ENCODER_COUNTS_PER_REV` = 11 × 4 × 35.5 = 1562.** The part number settles the
+ratio, so there is no ambiguity left to calibrate away — only the 11 PPR figure, which
+is still vendor-stated rather than measured.
+
+**The bare motor is the SAME one.** 170 × 35.5 = **6,035 RPM**, and the fitted 620 RPM
+at 9.6:1 is **5,952 RPM**. One motor, two gearboxes — which is the whole design of this
+family and the reason several conclusions below revert to what they were.
 
 **Encoder calibration stays OPEN until they land.** Calibrating counts-per-rev
 against the 17.1:1 motors now would measure hardware that is about to be removed.
@@ -1807,10 +1810,10 @@ An earlier line here said "the only downstream change is ENCODER_COUNTS_PER_REV"
 
 | Quantity | How it changes at 170 RPM |
 |---|---|
-| `ENCODER_COUNTS_PER_REV` | **1540** (11 × 4 × 35). 1562 if the ratio is 35.5 |
-| Top speed | **0.90 m/s** no-load, **0.69 m/s at rated load**, against 3.3 m/s today |
-| Torque at the wheel | reduction goes 17.1 → 35, i.e. **2.05×** — **not** the 3–5× this section speculates below. Rated 1.58 N per wheel, 9.5 N over six; stall 5.4 N per wheel, 32 N over six |
-| **Stall current** | **1.3 A per motor**, 7.8 A if all six stall — see the warning below |
+| `ENCODER_COUNTS_PER_REV` | **1562** (11 × 4 × 35.5), from 422 today |
+| Top speed | **0.90 m/s** no-load, **0.70 m/s** rated, against 3.30 / 2.54 m/s today |
+| Torque at the wheel | reduction goes 9.6 → 35.5, i.e. **3.70×**; measured rated torque rises **3.45×** (0.20 → 0.69 kg·cm). The 3–5× this section speculated was **right** — it was yesterday's 2.05× that was wrong. Rated **1.33 N per wheel, 8.0 N over six**, against 0.39 N and 2.3 N today |
+| **Stall current** | **1.8 A per motor**, 10.8 A if all six stall — see the warning below |
 | Breakaway duty | **should fall well below the ~0.5 measured 2026-08-24.** That figure was a torque shortfall and more reduction is exactly what fixes it. `SPEED_SLOW` was raised 0.35→0.55 that day to spend headroom; **re-measure breakaway and consider putting it back** |
 | `SPEED_*`, `SPEED_RAMP_PER_S` | the same duty now buys ~1/3.6 of the ground speed. Re-tune against the measured top speed; do not scale the old values |
 | `STALL_GRACE_S` | counts-per-second at a given duty scale with the ratio; re-check the window still clears `SPEED_RAMP_PER_S`'s worst-case ramp |
@@ -1825,28 +1828,38 @@ roughly 1.2× instead of 4.4× — **which makes it more dangerous, not less.** 
 odometry error does not announce itself the way a 4× error does; it looks like wheel
 slip. Neither 752 nor 3292 is the value for these motors.
 
-⚠ **G-2's polling shortfall improves, but nowhere near enough — corrected
-2026-09-26.** The reasoning stands: the 11 PPR encoder is on the **motor shaft**,
-ahead of the gearbox, so the rate is `bare RPM / 60 × 44` and the ratio cancels out.
-**What does not cancel is the bare motor**, and this is a different one: 5,950 RPM
-against ~10,600. So counts per second per wheel fall from **7,773 to 4,363**, a
-factor of 1.78, and at rated load 130 RPM it is 3,337.
+⚠ **G-2's polling shortfall is not changed by the swap — and this note has now
+flipped twice, so here is the arithmetic rather than the conclusion.** The 11 PPR
+encoder is on the **motor shaft**, ahead of the gearbox, so the rate is
+`bare RPM / 60 × 44` and the ratio cancels out. The family runs one ~6,000 RPM motor
+behind every gearbox, so the bare speed does not change either:
 
-This document, the FRD and the firmware all previously said the swap would change
-*nothing* here. That was right about the gearbox and wrong about the motor. It is
-still **4× over `sensors.py`'s ~1 kHz ceiling** and far beyond a MicroPython
-interrupt, so §4.7's PIO decode is still required — the conclusion survives, the
-margin is simply less desperate.
+| | ratio | counts/rev | no-load | counts/s per wheel |
+|---|---|---|---|---|
+| Fitted | 9.6:1 | 422 | 620 RPM | **4,365** |
+| On order | 35.5:1 | 1562 | 170 RPM | **4,426** |
 
-⚠ **A stalled wheel exceeds the motor driver's continuous rating.** Stall current
-is **1.3 A per motor**; the TB6612 on the FeatherWing #2927 is rated **1.2 A per
-channel continuous** (~3.2 A peak). So a single stalled wheel sits just over the
-driver's continuous limit, and this becomes a thermal question as well as a
-mechanical one — which is exactly what the vendor's own manual warns about
-("operating near the stall torque limit may cause internal damage"). It raises the
-stakes on `STALL_GRACE_S` and Directive 5: a stall must stop and report, never drive
-harder. **All six stalled is 7.8 A** on the +12V branch — check F2's rating covers
-it, or that the stall detector trips long before the fuse does.
+**Within 1.5% — the swap changes nothing here.** On 2026-09-26 this was "corrected"
+to say the rate would fall 1.78×; that was computed from an assumed 10,600 RPM bare
+motor, the same inference that produced the wrong 17.1:1 ratio. The original claim was
+right: **a slower rover is not a slower encoder.** Still ~4× `sensors.py`'s ~1 kHz
+ceiling either way, so §4.7's PIO decode is required regardless.
+
+⛔ **A stalled wheel draws 1.5× the motor driver's continuous rating.** The table
+gives stall as **1.8 A per motor**, not the 1.3 A quoted verbally; the TB6612 on the
+FeatherWing #2927 is rated **1.2 A per channel continuous** (~3.2 A peak). So a
+stalled wheel is at **150% of continuous** — inside the peak rating, so it will not
+fail instantly, but it is a thermal countdown, which is precisely what the vendor
+manual means by *"operating near the stall torque limit may cause internal damage"*.
+
+This makes `STALL_GRACE_S` a **hardware protection parameter, not a tuning
+preference**, and Directive 5 non-negotiable: a stall must stop and report, never
+drive harder. **All six stalled is 10.8 A** on the +12V branch — check F2 covers it,
+and that the stall detector trips far sooner than the fuse.
+
+For contrast, normal driving is **0.3 A per motor, 1.8 A for all six** — so the
+stalled case is six times the working current, and the detector has a wide margin to
+work in.
 
 ⚠ **The swap re-opens M-1 and E-1's channel attribution, not just calibration.**
 Both left/right transpositions found on 2026-09-18 — `MOTOR_PORT` and `ENCODER_PINS`
@@ -1855,10 +1868,36 @@ six-motor swap is that same pass again. **Re-run `scripts/encoder_map_check.py` 
 the M-1 per-wheel drive check after the swap, before trusting any per-wheel claim**,
 and meter every crimp: wire colours differ between batches of this family (§7.2).
 
-**Reduction ratio is 17.1:1**, owner-supplied 2026-08-25 and consistent with
-620 RPM from a ~10,600 RPM bare motor. The vendor part number is still NOT
-recorded — capture it before ordering replacements, since JGA25-370 is a family
-covering many ratios and wire colours differ between batches (§7.2).
+⛔ **THE 17.1:1 RATIO IS ALMOST CERTAINLY WRONG. The vendor parameter table,
+supplied 2026-09-27, says these are 9.6:1 — and that makes
+`ENCODER_COUNTS_PER_REV` 422, not 752.**
+
+The table lists the whole JGA25-370 family by part suffix, and **the suffix is the
+reduction ratio**. Multiply each row's no-load speed by its suffix and the bare motor
+comes out the same every time — 5,984, 5,952, 5,964, 6,035, 6,084 RPM — so the family
+runs on one ~6,000 RPM motor with different gearboxes. **The 12 V 620 RPM row is the
+`JGA25-370-9.6K`.** There is no 17.1 anywhere in the family.
+
+| | recorded here | vendor table |
+|---|---|---|
+| Ratio | 17.1:1 | **9.6:1** |
+| Implied bare motor | ~10,600 RPM | **~5,950 RPM** |
+| `ENCODER_COUNTS_PER_REV` | 752 | **422** |
+
+**Why this survived so long: the two wrong numbers propped each other up.** 17.1 was
+owner-supplied, ~10,600 was then *derived* from it, and each was cited as
+corroborating the other. Neither was ever measured. This is the third error in this
+document traceable to an inferred bare-motor speed.
+
+⚠ **`config.py` still has 752 and it has NOT been changed**, because this document's
+own rule is that a ratio inferred from a table is no better than a ratio inferred from
+a speed — *"measure it instead of deriving it from another assumed gear ratio, which
+is exactly how the wrong number got there in the first place"*. If 422 is right,
+`odometry.py` is **under-reporting distance by 1.78×** today. **E-1's counts-per-rev
+step settles it in one run and should be done before the motors are swapped out**, not
+after — it is the last chance to measure the fitted hardware.
+
+The vendor part number should still be read off the motor body and recorded here.
 
 That ratio sets `config.ENCODER_COUNTS_PER_REV` = 11 PPR × 4 × 17.1 = **752**.
 A figure of 3292 ("823.1 PPR ×4") implies a 74.8:1 gearbox, which belongs to the
@@ -2581,10 +2620,10 @@ measurement work rather than wiring.
     that before wiring anything to the ADS1115.
 
 18. ⚠ **Motor swap to the 12V 170 RPM variant — delivered 2026-09-26, not fitted**
-    (§7.1, *Motor change pending*). **Ratio is 1:35**, vendor also quoting 1:35.5, so
-    `ENCODER_COUNTS_PER_REV` = **1540** (1562 at 35.5) against 752 today. The 1.4%
-    ambiguity between the two ratios is the only thing left to settle and a
-    calibration run does it. Note the supplied PDF is a generic *DC Motor User
+    (§7.1, *Motor change pending*). **Part number is `JGA25-370-35.5K`**, so the ratio is
+    **35.5:1** and `ENCODER_COUNTS_PER_REV` = **1562**. ⛔ **The same table says the
+    FITTED motors are 9.6:1, not 17.1:1 — so today's 752 should be 422 and odometry
+    is under-reporting by 1.78×. Measure it with E-1 BEFORE the motors come out.** Note the supplied PDF is a generic *DC Motor User
     Manual* — precautions and a choking warning, no part number, no ratio, no
     torque; the figures above came from the owner, not that document.
     **Encoder counts-per-rev calibration is blocked until they land** — calibrating
