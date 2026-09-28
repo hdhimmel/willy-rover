@@ -16,7 +16,7 @@
 | Date | 2026-09-14 |
 | Owner | Howard Himmel |
 | Status | Implemented and off-hardware tested; partially live-verified. **Filename retains `v1.0` deliberately** — renaming breaks cross-references in the Master Hardware Design, the FRD and `CLAUDE.md`. The Revision field is authoritative. |
-| Companions | Master Hardware Design **rev 2.4**; Functional Requirements v3.4 |
+| Companions | Master Hardware Design **rev 2.5**; Functional Requirements v3.4 |
 
 **Scope of this document.** This describes the software as it is currently
 written, in the repository `hdhimmel/willy-rover`. It describes structure and
@@ -871,7 +871,7 @@ gate E-stop once the sense pin exists; this is not a placeholder built ahead
 of the hardware, it's a real behavior change for the three faults that
 already fire today. `tests/test_brain_reset_gate.py` covers the brain.py-side
 logic off-hardware; the touchscreen's own tap detection needs the physical
-5" DSI panel (Master Hardware Design rev 2.4 §15.3) to verify.
+5" DSI panel (Master Hardware Design rev 2.5 §15.3) to verify.
 
 **S-2 — Encoder polling under-samples at speed. RECOMPUTED 2026-09-13, and the
 answer got worse.**

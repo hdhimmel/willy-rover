@@ -15,7 +15,7 @@ Version 3.1**
   Status                  Hardware build complete; live verification in
                           progress
 
-  Companion documents     WildWilly Master Hardware Design rev 2.4 --- current
+  Companion documents     WildWilly Master Hardware Design rev 2.5 --- current
                           hardware configuration. Section references of the
                           form §n refer to it unless stated otherwise.
                           WildWilly Software Design rev 1.3 --- module
@@ -1580,7 +1580,7 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     **Unchanged by the 2026-09-13 SEN0628 decision:** that sensor's UART is planned
     for GP8/GP9, not GP14/GP15, so it does not reintroduce this conflict. The warning
     stands as written and the serial console must remain disabled — see Master
-    Hardware Design rev 2.4 §5.3 and §6.5.
+    Hardware Design rev 2.5 §5.3 and §6.5.
 
     ⚠ **§4.7 retires this failure signature permanently.** With sonar on Pico B
     (`uart2-pi5`, GP4/GP5) and encoders on Pico A (`uart4-pi5`, GP12/GP13),

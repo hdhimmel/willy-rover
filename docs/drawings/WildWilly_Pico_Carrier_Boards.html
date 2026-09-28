@@ -111,11 +111,11 @@ ol.build li{font-size:13.5px}
   <h1>Pico Carrier Schematic</h1>
   <p class="sub">A single carrier design for both Pico 2 W boards. Same layout, same footprints, stuffed differently: the divider is fitted on A, the reset pull-up on B. Everything else is common, so a dead Pico is a swap rather than a rewire.</p>
   <div class="mast-foot">
-    <span><b>Rev</b> L · 2026-09-26</span>
+    <span><b>Rev</b> M · 2026-09-28</span>
     <span><b>Qty</b> 2 identical</span>
     <span><b>Feed A</b> R5 3.3 V</span>
     <span><b>Feed B</b> Pi 5 V, breakout</span>
-    <span><b>Status</b> ⚠ rev A–F boards were built to a WRONG Pico orientation — rebuild on fresh board</span>
+    <span><b>Status</b> ⚠ BOTH BOARDS BUILT AND INSTALLED 2026-09-27. Rev A–F boards had the Pico the wrong way round and were scrapped — kept on record below so the mistake is not repeated.</span>
   </div>
 </header>
 
@@ -307,12 +307,12 @@ ol.build li{font-size:13.5px}
 
 <p class="note"><b>Rail order, corrected twice by the owner.</b> The top pair is <b>reversed</b> relative to the bottom, so reading down the board the four rails are <b>− + … + −</b> — both <b>+</b> rails are the <b>inner</b> ones. That is a gift for this layout: <b>F1 and R2 stand from the + rail straight into row A without crossing anything</b>, which is what makes the jumperless chain safe.</p>
 
-<p class="note"><b>Bus assignment.</b> <b>Upper + (inner)</b> = raw V+ in — F1 stands directly in it, and on A so does R2. <b>Upper − (outer)</b> = ground: the rover's GND lands here and pin 38 returns to it. <b>Lower + (inner)</b> = 3V3 in, used on B only for R4; unused on A. <b>Lower − (outer)</b> is <b>spare</b> — nothing on either board lands on it, so the bus tie is gone as well. Tie the two − rails only if you later want a ground down there. ⚠ Rails on many of these boards are <b>split at the midpoint</b> — check yours is continuous, or bridge the break, or the right-hand half is dead.</p>
+<p class="note"><b>Bus assignment.</b> <b>Upper + (inner)</b> = raw V+ in — F1 stands directly in it, and on A so does R2. <b>Upper − (outer)</b> = ground: the rover's GND lands here and pin 38 returns to it. <b>Lower + (inner)</b> = 3V3 in, used on B only for R4; unused on A. <b>Lower − (outer)</b> carries no component, but <b>tie it to the upper − rail at column 30</b>: on B the 3V3 and the 5V arrive from the same Pi and must share one ground, and a single tie is what makes that true on the board rather than only at the Pi. ⚠ Rails on many of these boards are <b>split at the midpoint</b> — check yours is continuous, or bridge the break, or the right-hand half is dead.</p>
 
 <div class="warn"><b>⚠ Two clearances, and that is the whole list.</b> <b>Column 11, rows A/B:</b> that strip is <b>pin 40, VBUS</b>, and D1’s body floats over it. It is empty by rule anyway, which is exactly what makes the span safe — but never put anything there. <b>The pin-38 ground wire passes the upper + rail at column 13</b> on its way out to −, which is why it is drawn with a jog; that + rail hole at column 13 must stay empty. Reversing the top pair removed the other two clearances this layout used to need.</div>
 
 <h2>Where the device wires land</h2>
-<p class="note"><b>Every device wire lands in row I.</b> That is forced, not chosen: the Pico body covers rows D–G of columns 1–20, so the only holes sharing a strip with a pin are <b>A, B</b> (row-C side, <b>pins 21–40</b> — power) and <b>I, J</b> (row-H side, <b>pins 1–20</b> — every GPIO this design uses). Land the wire in <b>row I</b> and keep row J as the spare for metering.</p>
+<p class="note"><b>Every device wire lands in row I.</b> That is forced, not chosen: the Pico body covers rows D–G of columns 11–30, so the only holes sharing a strip with a pin are <b>A, B</b> (row-C side, <b>pins 21–40</b> — power) and <b>I, J</b> (row-H side, <b>pins 1–20</b> — every GPIO this design uses). Land the wire in <b>row I</b> and keep row J as the spare for metering.</p>
 
 <p class="note">⚠ <b>This is also the trap.</b> Every column <b>11–30</b> has a Pico pin on <em>both</em> sides, so a hole that looks free may not be. Before landing anything in <b>rows A/B</b>, work out <b>51 − column</b> and check what that pin is. Two on that side bite hardest: <b>column 15 is pin 36, 3V3 OUT</b> — landing the raw feed there would tie the unregulated rail to the Pico's own regulator output, which an earlier revision of this sheet did — and <b>column 11 is pin 40, VBUS: leave it empty.</b></p>
 
@@ -344,7 +344,7 @@ ol.build li{font-size:13.5px}
 </table>
 </div>
 
-<p class="note"><b>Rows A/B carry no device wires at all</b> — only the power chain: column 12 is VSYS in, column 13 is ground out to the upper − rail, and on A columns 17 and 18 are the divider. F1 stands in column 9 and D1 spans 9–12, both outside the Pico altogether. Everything else on that side is an unused Pico pin, and <b>VBUS at column 1 must stay empty.</b></p>
+<p class="note"><b>Rows A/B carry no device wires at all</b> — only the power chain: column 12 is VSYS in, column 13 is ground out to the upper − rail, and on A columns 17 and 18 are the divider. F1 stands in column 9 and D1 spans 9–12, both outside the Pico altogether. Everything else on that side is an unused Pico pin, and <b>VBUS at column 11 must stay empty.</b></p>
 
 <p class="note"><b>Three wires leave from the rails, not from a column:</b> V+ in and GND in on the <b>top</b> pair, and on B the 3V3 in on the <b>lower +</b>. Land those anywhere convenient along their rail — that is what a bus is for.</p>
 
@@ -519,7 +519,7 @@ ol.build li{font-size:13.5px}
   <text class="tsm" x="36" y="476"><tspan fill="var(--accent)">SPARE</tspan>  top side, row A: c19=GP27  c20=GP26  c22=GP22  c24=GP21  c25=GP20  c26=GP19  c27=GP18  c29=GP17  c30=GP16</text>
   <text class="tsm" x="36" y="494"><tspan fill="var(--accent)">SPARE</tspan>  bottom side, row I: c29=GP14  c30=GP15</text>
 </svg>
-<figcaption><b>The divider lands straight on the Pico's own pins.</b> R2 comes off the raw-feed bus into column 7, which <em>is</em> pin 34 / GP28; R3 goes from column 7 to column 8, which <em>is</em> pin 33 / AGND. No node wire, no floating junction. <b>Column 8's strip goes nowhere else</b> — deliberately not linked to the ground bus, so AGND single-points at the Pico and the divider's return never shares copper with the LED. R3 spans one column: stand it on end with the upper lead bent over.<br><br>⚠ <b>Column 7 does two unrelated jobs on this board.</b> Its row-C side is pin 7 / GP5 — LF Phase B, a green encoder wire in row A or B. Its row-H side is pin 34 / GP28 — the divider node. Separate tie-strips with no connection between them, but it is the one column carrying both a signal and the ADC, so check it twice before power.<br><br><b>The near-miss worth remembering.</b> An earlier revision landed the raw feed on the strip that is <b>pin 36, 3V3 OUT</b> — which would have tied the unregulated rail to the Pico's own regulator output. Under this layout that trap sits at <b>column 15, rows A/B</b>. R2 now stands in the + rail instead, so there is no feed jumper to misplace.</figcaption>
+<figcaption><b>The divider lands straight on the Pico's own pins.</b> R2 stands from the upper <b>+</b> rail into <code>c17a</code>, which <em>is</em> pin 34 / GP28; R3 goes from <code>c17b</code> to <code>c18b</code>, which <em>is</em> pin 33 / AGND. No node wire, no floating junction. <b>Column 18's strip goes nowhere else</b> — deliberately not linked to ground, so AGND single-points at the Pico and the divider's return shares copper with nothing. R3 spans one column: stand it on end with the upper lead bent over.<br><br>⚠ <b>Column 17 does two unrelated jobs on this board.</b> Its <b>row-C</b> side is pin 34 / GP28 — the divider node. Its <b>row-H</b> side is pin 7 / GP5 — LF Phase B, a green encoder wire in row I. Separate tie-strips with no connection between them, but it is the one column carrying both a signal and the ADC, so check it twice before power.<br><br><b>The near-miss worth remembering.</b> An earlier revision landed the raw feed on the strip that is <b>pin 36, 3V3 OUT</b> — which would have tied the unregulated rail to the Pico's own regulator output. Under this layout that trap sits at <b>column 15, rows A/B</b>. R2 now stands in the + rail instead, so there is no feed jumper to misplace.</figcaption>
 </figure>
 
 <h3 class="boardhead">Board B — sonar and IMU reset</h3>
@@ -693,11 +693,11 @@ ol.build li{font-size:13.5px}
   <text class="tsm" x="36" y="476"><tspan fill="var(--accent)">SPARE</tspan>  top side, row A: c17=GP28  c19=GP27  c20=GP26  c22=GP22  c24=GP21  c25=GP20  c26=GP19  c27=GP18  c29=GP17  c30=GP16</text>
   <text class="tsm" x="36" y="494"><tspan fill="var(--accent)">SPARE</tspan>  bottom side, row I: c19=GP6  c20=GP7  c21=GP8  c22=GP9  c24=GP10  c25=GP11  c29=GP14</text>
 </svg>
-<figcaption><b>Column 20 is the reset node</b> — R4 pulls it up to 3V3, and the wire to the BNO085 leaves from <code>c20b</code>. Pin 20 is only reachable from rows A and B, which is why R4 sits in row A rather than beside R1. <b>Its body floats over column 21</b> without touching it, and the 3V3 jumper dog-legs to <code>c22d</code> to stay clear of R1's body in row B — seat both flat and nothing collides. ⚠ <b>R1's lead does pass over <code>c20b</code></b> on its way from column 19, and that is the reset net — GP14 crossing GP15. The RST wire's insulation reaches the hole so it is not a short as built, but keep the lead clear of it and do not let a bare lead rest there. The six sonar lines land in rows A and B of <b>columns 1, 2, 4, 5, 6 and 7</b> — not 1–6. Column 3 is pin 3, a ground, so the run skips it; the coloured squares are authoritative where any caption disagrees.</figcaption>
+<figcaption><b>Column 30 is the reset node</b> — pin 20 / GP15. R4 rises straight from the lower <b>+</b> rail (Pi 3V3) into <code>c30j</code>, and the wire to the BNO085 leaves from the same strip. <b>No jumper at all:</b> the resistor does the connecting, which is why it stands in the rail rather than spanning columns. <b>R1 and LED1 are gone</b> — dropped 2026-09-26 in favour of the Pico's onboard <code>Pin("LED")</code> — and with them went this board's one hazard that could not be designed out: a bare GP14 lead crossing the GP15 reset net. The six sonar lines land in <b>row I of columns 11, 12, 14, 15, 16 and 17</b> — not 11–16. Columns 13 and 18 are grounds (pins 3 and 8), so the run skips them; the coloured squares are authoritative where any caption disagrees.</figcaption>
 </figure>
 
 <h2>Spare pins, and where to put an expansion header</h2>
-<p class="note"><b>The top section from column 14 rightwards is nearly empty, and that is where the spare GPIOs are.</b> Pins 21–40 land on that side, and everything this design needs from it sits in columns 12, 13 and — on A — 17 and 18. So columns 19–30 of rows A/B are free on both boards, and they carry <b>GP16–GP22, GP26 and GP27</b>: both SPI0 sets, both I²C sets, and two more ADC channels. A 1×8 or 2×6 header across rows A/B of columns 19–30 picks up most of it without disturbing anything.</p>
+<p class="note"><b>The top section from column 19 rightwards is nearly empty, and that is where the spare GPIOs are.</b> Pins 21–40 land on that side, and everything this design needs from it sits in columns 12, 13 and — on A — 17 and 18. So columns 19–30 of rows A/B are free on both boards, and they carry <b>GP16–GP22, GP26 and GP27</b>: both SPI0 sets, both I²C sets, and two more ADC channels. A 1×8 or 2×6 header across rows A/B of columns 19–30 picks up most of it without disturbing anything.</p>
 <div class="tw">
 <table>
   <thead><tr><th>GP</th><th>Pin</th><th>Col</th><th>Side</th><th>Alt function</th><th>Board A</th><th>Board B</th></tr></thead>
@@ -752,8 +752,8 @@ ol.build li{font-size:13.5px}
 </div>
 
 <p class="colophon">
-  <span>Design, not as-built</span>
-  <span>Master Hardware Design §4.7 rev 2.3</span>
+  <span>As-built 2026-09-27</span>
+  <span>Master Hardware Design §4.7 §4.7 + §4.8, rev 2.5</span>
   <span>Feed order: rail → F1 → D1 → VSYS 39</span>
   <span>Divider taps upstream of F1</span>
 </p>

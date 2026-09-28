@@ -2,7 +2,7 @@
 
 ## Master Hardware Design — As-Built
 
-**Revision 2.4 · Current Configuration · 2026-09-27**
+**Revision 2.5 · Current Configuration · 2026-09-28**
 
 ---
 
@@ -12,7 +12,7 @@
 |-------|-------|
 | Project | WildWilly Autonomous Rover |
 | Document | Master Hardware Design — as-built, current configuration only |
-| Revision | 2.4 |
+| Revision | 2.5 |
 | Date | 2026-09-24 |
 | Owner | Howard Himmel |
 | Status | Build complete; AI accelerator bonded; live verification in progress. **Filename retains `v2.0` deliberately** — renaming would break every cross-reference in Software Design, the FRD and `CLAUDE.md`. The revision field above is authoritative. |
@@ -961,6 +961,10 @@ reads encoders over I²C and times sonar locally, `brain.py`'s `_EXPECTED_I2C` s
 expects eleven devices, and M-1 / E-1 have not been re-run since the motors and
 connectors were disturbed. See Bench Test Procedures C-1.
 
+→ **The carrier boards themselves are §4.8** — bill of materials, the feed, the
+column-by-column layout, connector nets, spare pins and the four meter checks. This
+section is what the Picos do and where they connect; §4.8 is how the boards are built.
+
 **Board identities:**
 
 | | UID | MicroPython | Verified so far |
@@ -1236,6 +1240,345 @@ existing `uart3-pi5`, and the serial console must remain disabled (§9).
 9. **§5.3's line count drops to eleven** (twelve with the optional ToF TX) and
    three of its terminals change function. Relabel them — §5.3's own warning
    about SPI-named terminals carrying a UART now applies to GP12/GP13 as well.
+
+---
+
+### 4.8 The Pico carrier boards — as built
+
+✅ **Both built and installed 2026-09-27.** Folded into this document 2026-09-28;
+until then this design existed only in the published sheet
+(`docs/drawings/WildWilly_Pico_Carrier_Boards.html`) and its generator. **The
+generator is the authority on geometry** — several captions in that sheet still
+describe the pre-2026-09-26 layout, when the Pico sat on columns 1–20.
+
+**One carrier design, built twice.** Same board, same footprints, stuffed
+differently: the divider on A, the reset pull-up on B. Everything else is common, so
+a dead Pico is a swap rather than a rewire.
+
+| | |
+|---|---|
+| Board | EPLZON 30-column solderable breadboard, bus rails both edges — `X0049J8MSB` |
+| Rows | A–E and F–J, 5-hole tie-strips split by the centre channel |
+| Quantity | 2 identical |
+| Feed A | **R5 3.3V**, at the encoder 3V3 distribution |
+| Feed B | **Pi 5V at the breakout terminal** — never R2 |
+
+#### 4.8.1 Bill of materials per board
+
+| Ref | Part | Pico A | Pico B |
+|---|---|---|---|
+| — | 2 × 1×20 female socket, 2.54mm | fit | fit |
+| **F1** | PTC 0.5A hold / 1.0A trip | fit | fit |
+| **D1** | **1N5819**, DO-41 — **band toward the Pico** | fit | fit |
+| **J1** | JST-PH 2-way — power in | R5 3.3V | 5V at the breakout terminal |
+| **J2** | JST-PH 3-way — UART link | fit | fit |
+| **J3** | JST-PH 12-way — signal | all 12 ways | **ways 1–6 only** |
+| **R2, R3** | 10k 1% metal film — the R5 divider | **FIT** | leave empty |
+| **TP2** | test point, divider node | **FIT** | leave empty |
+| **R4** | 10k — the RST pull-up | leave empty | **FIT** |
+| **J4** | JST-PH 2-way — 3V3 in, RST out | leave empty | **FIT** |
+
+⚠ **No external status LED, and no R1** — dropped 2026-09-26. The Pico 2 W has one
+on the CYW43439, driven as `Pin("LED")`. Earlier revisions of the sheet claimed there
+was no usable onboard LED; that was wrong. The cost is that driving it powers up the
+wireless chip and loads its firmware over SPI — no network, no transmission — which
+is why **§12 item 17 was amended 2026-09-26 to permit `Pin("LED")` and nothing more.**
+Dropping R1/LED1 also frees GP14 and removes the one hazard that could not be
+designed out: a bare GP14 lead crossing the GP15 reset net on Board B.
+
+⚠ **No bulk capacitor on VSYS, deliberately.** The Pico carries its own. Adding more
+raises inrush through F1 — the one thing that would make a healthy rover
+nuisance-trip a fuse and hand you a silently dead board.
+
+#### 4.8.2 The feed — the only part of this board with real topology
+
+```
+rail (+)  --[ F1 PTC ]--[ D1 1N5819 ]-->  VSYS, pin 39
+              0.5A          band
+                  |
+        R2/R3 divider taps HERE, upstream of F1
+```
+
+Everything between the input and VSYS exists so that **one Pico cannot take the rover
+down, and USB cannot back-feed the rail.**
+
+⛔ **The divider taps upstream of F1, on the rail side.** Downstream it would read R5
+minus the fuse and diode drops, both of which vary with current — **a sagging rail and
+a warming PTC would look identical on ADC2.**
+
+The twelve encoder lines and the six sonar lines have nothing in circuit: they are
+straight connector-to-pin pass-throughs, so they live in the net tables below.
+
+#### 4.8.3 Geometry — the part that cost two boards
+
+⛔ **The first pair of boards was built to a WRONG Pico orientation and had to be
+scrapped** (owner-caught 2026-09-26). **No rotation rescues a board built that way:**
+a 180° turn maps the top row to `pin 21 − column`, not `column`, so no orientation
+makes the old holes right. Every *part* is reusable — F1, D1, R2, R3, R4 and the
+sockets desolder onto a fresh board.
+
+**The rule, stated once:**
+
+| | |
+|---|---|
+| Pico occupies | **columns 11–30**, pins in **rows C and H** |
+| USB | at the **column-11** end |
+| Pins | point **DOWN**; board seen from **above** |
+| Row C (top) | pins **21–40**, `pin = 51 − column` |
+| Row H (bottom) | pins **1–20**, `pin = column − 10` |
+
+So **every power connection is in the top section and every signal in the bottom**,
+and pin 1 and pin 40 share column 11 — both at the USB end.
+
+**Why rows C and H:** the Pico's pin rows are 17.78mm / 0.700″ apart, which is exactly
+C to H, and that leaves A/B reachable for pins 21–40 and I/J for pins 1–20. Land it in
+A and F instead and the body covers B through E, taking every access hole on that side
+with it.
+
+**Why columns 11–30 rather than 1–20** (owner-directed 2026-09-26): shifting the Pico
+right frees the ten columns to its left for F1 and D1, putting the protection chain
+immediately beside the pin it protects — **and then the jumpers go away entirely.** The
+24-column link across the board and the jumper that fed it are both gone; the parts do
+the connecting.
+
+**The USB plug reaches back over columns 5–10 at rows D–G** — mid-height, so it passes
+under nothing: F1 and D1 live in rows A and B, above it. Keep the cable from draping on
+them, and keep the Pico's short edge clear.
+
+#### 4.8.4 Rail order and bus assignment
+
+⚠ **The top pair is REVERSED relative to the bottom** (owner, corrected twice,
+2026-09-26). Reading down the board the four rails are:
+
+```
+−   (outer)
++   (inner)
+  ... rows A–E, channel, rows F–J ...
++   (inner)
+−   (outer)
+```
+
+**Both `+` rails are the inner ones.** That is what lets F1 and R2 stand from the `+`
+rail straight into row A **without crossing anything**, which is what makes the
+jumperless chain safe.
+
+| Rail | Carries | A | B |
+|---|---|---|---|
+| Upper **+** (inner) | raw V+ in — F1 stands in it, and on A so does R2 | R5 3.3V | Pi 5V |
+| Upper **−** (outer) | ground — the rover's GND lands here, pin 38 returns to it | ✓ | ✓ |
+| Lower **+** (inner) | 3V3 in | unused on A | **R4** ← Pi pin 1 |
+| Lower **−** (outer) | ground, **tied to the upper − rail at column 30** | ✓ | ✓ |
+
+⚠ **Rails on many of these boards are split at the midpoint.** Check yours is
+continuous, or bridge the break, or the right-hand half is dead.
+
+#### 4.8.5 Component placement — no jumpers
+
+| Part | From | To | Lands on |
+|---|---|---|---|
+| **F1** | upper **+** rail | `c9a` | — (outside the Pico) |
+| **D1** | `c9b` | `c12b`, **band at c12** | **pin 39 VSYS** |
+| GND wire | `c13a` (**pin 38**) | upper **−** rail | the one wire on the board |
+| **R2** (A) | upper **+** rail | `c17a` | **pin 34 GP28** — ADC2 |
+| **R3** (A) | `c17b` | `c18b` | **pin 33 AGND** |
+| **R4** (B) | lower **+** rail | `c30j` | **pin 20 GP15** |
+
+**F1 and D1 are outside the Pico altogether**, in columns 9–12. D1's body floats over
+columns 10 and 11.
+
+**The divider lands straight on the Pico's own pins** — no node wire, no floating
+junction. **Column 18's strip goes nowhere else:** deliberately not linked to ground,
+so **AGND single-points at the Pico** and the divider's return never shares copper with
+anything. R3 spans one column — stand it on end with the upper lead bent over.
+
+⚠ **Column 17 does two unrelated jobs on Board A.** Its **row-C side** is pin 34 /
+GP28, the divider node. Its **row-H side** is pin 7 / GP5 — **LF Phase B**, a green
+encoder wire. Separate tie-strips with no connection between them, but it is the one
+column carrying both a signal and the ADC. Check it twice before power.
+
+#### 4.8.6 Two clearances — and that is the whole list
+
+⛔ **Column 11, rows A/B, is pin 40 VBUS. It must stay empty**, and D1's body floats
+over it. It is empty by rule anyway, which is exactly what makes the span safe.
+
+⛔ **The upper `+` rail hole at column 13 must stay empty.** The pin-38 ground wire
+passes it on its way out to `−`, which is why it is drawn with a jog.
+
+Reversing the top pair removed the other two clearances this layout used to need.
+
+#### 4.8.7 Where the device wires land
+
+**Every device wire lands in row I. That is forced, not chosen:** the Pico body covers
+rows D–G of columns 11–30, so the only holes sharing a strip with a pin are **A/B**
+(row-C side, pins 21–40 — power) and **I/J** (row-H side, pins 1–20 — every GPIO this
+design uses). **Land the wire in row I and keep row J as the spare for metering.**
+
+⚠ **This is also the trap.** Every column 11–30 has a Pico pin on **both** sides, so a
+hole that looks free may not be. Before landing anything in rows A/B, work out
+`51 − column` and check what that pin is. Two on that side bite hardest: **column 15 is
+pin 36, 3V3 OUT** — landing the raw feed there would tie the unregulated rail to the
+Pico's own regulator output, which an earlier revision of the sheet did — and **column
+11 is pin 40, VBUS.**
+
+| Col | Pico A — row I | Pin | Pico B — row I | Pin |
+|---|---|---|---|---|
+| 11 | RF Phase A — yellow | 1 GP0 | TRIG-F → P1-1 | 1 GP0 |
+| 12 | RF Phase B — green | 2 GP1 | ECHO-F ← P1-4 | 2 GP1 |
+| 13 | *pin 3 is GND — spare ground landing* | | | |
+| 14 | RM Phase A | 4 GP2 | TRIG-L → P1-5 | 4 GP2 |
+| 15 | RM Phase B | 5 GP3 | ECHO-L ← P1-8 | 5 GP3 |
+| 16 | LF Phase A | 6 GP4 | TRIG-R → P1-9 | 6 GP4 |
+| 17 | LF Phase B | 7 GP5 | ECHO-R ← P1-12 | 7 GP5 |
+| 18 | *pin 8 is GND — spare ground landing* | | | |
+| 19 | LM Phase A | 9 GP6 | — | 9 GP6 |
+| 20 | LM Phase B | 10 GP7 | — | 10 GP7 |
+| 21 | RR Phase A | 11 GP8 | — | 11 GP8 |
+| 22 | RR Phase B | 12 GP9 | — | 12 GP9 |
+| 23 | *pin 13 is GND — spare ground landing* | | | |
+| 24 | LR Phase A | 14 GP10 | — | 14 GP10 |
+| 25 | LR Phase B | 15 GP11 | — | 15 GP11 |
+| 26 | **UART TX** → Pi GP13 phys 33 | 16 GP12 | **UART TX** → Pi GP5 phys 29 | 16 GP12 |
+| 27 | **UART RX** ← Pi GP12 phys 32 | 17 GP13 | **UART RX** ← Pi GP4 phys 7 | 17 GP13 |
+| 28 | signal GND → Pi pin 6/9 — **A's only ground to the Pi** | 18 GND | **EMPTY on B** — its ground is the − rail | — |
+| 29 | *pin 19 GP14 — free, no external LED* | | | |
+| 30 | — | 20 GP15 | **RST → BNO085** | 20 GP15 |
+
+**Sonar lands in columns 11, 12, 14, 15, 16, 17 — not 11–16.** Columns 13 and 18 are
+grounds, so the run skips them.
+
+**Three wires leave from the rails, not from a column:** V+ in and GND in on the top
+pair, and on B the 3V3 in on the lower `+`. Land those anywhere convenient along their
+rail — that is what a bus is for.
+
+#### 4.8.8 Connector nets — J2, J3, J4
+
+**Every way lands on the same Pico pin on both boards.** That is a requirement, not a
+coincidence: one carrier layout means one net per connector way, so B's sonar and A's
+encoders have to share pins way for way. **Two assignments moved off the §4.7 sketch to
+make it hold** — see 4.8.10.
+
+| Way | Pico A — encoders | Pico pin | Pico B — sonar | Pico pin |
+|---|---|---|---|---|
+| J2-1 | TX → Pi GP13, phys 33 | 16 GP12 | TX → Pi GP5, phys 29 | 16 GP12 |
+| J2-2 | RX ← Pi GP12, phys 32 | 17 GP13 | RX ← Pi GP4, phys 7 | 17 GP13 |
+| J2-3 | signal GND — **column 28** | 18 GND | signal GND — **the − rail**, not column 28 | plane |
+| J3-1 | RF Phase A — yellow | 1 GP0 | TRIG-F → P1-1 | 1 GP0 |
+| J3-2 | RF Phase B — green | 2 GP1 | ECHO-F ← P1-4 | 2 GP1 |
+| J3-3 | RM Phase A | 4 GP2 | TRIG-L → P1-5 | 4 GP2 |
+| J3-4 | RM Phase B | 5 GP3 | ECHO-L ← P1-8 | 5 GP3 |
+| J3-5 | LF Phase A | 6 GP4 | TRIG-R → P1-9 | 6 GP4 |
+| J3-6 | LF Phase B | 7 GP5 | ECHO-R ← P1-12 | 7 GP5 |
+| J3-7 | LM Phase A | 9 GP6 | not fitted | — |
+| J3-8 | LM Phase B | 10 GP7 | not fitted | — |
+| J3-9 | RR Phase A | 11 GP8 | not fitted | — |
+| J3-10 | RR Phase B | 12 GP9 | not fitted | — |
+| J3-11 | LR Phase A | 14 GP10 | not fitted | — |
+| J3-12 | LR Phase B | 15 GP11 | not fitted | — |
+| J4-1 | — | — | 3V3 from Pi header **pin 1** | via R4 |
+| J4-2 | — | — | **RST → BNO085** | 20 GP15 |
+
+**B's sonar occupies J3 ways 1–6 contiguously**, so the sonar harness is a plain 6-way
+into the first six positions.
+
+#### 4.8.9 Spare pins, and where an expansion header goes
+
+**The top section from column 19 rightwards is free on both boards.** Pins 21–40 land on
+that side, and everything this design needs from it sits in columns 12, 13 and — on A —
+17 and 18.
+
+| GP | Pin | Col | Side | Alt function | Board A | Board B |
+|---|---|---|---|---|---|---|
+| GP6–GP11 | 9,10,11,12,14,15 | 19,20,21,22,24,25 | bottom | — | encoders | **free — 6 pins** |
+| GP14 | 19 | 29 | bottom | — | free | free |
+| GP15 | 20 | 30 | bottom | — | free | BNO085 RST |
+| GP16 | 21 | 30 | top | SPI0 RX | free | free |
+| GP17 | 22 | 29 | top | SPI0 CSn | free | free |
+| GP18 | 24 | 27 | top | SPI0 SCK | free | free |
+| GP19 | 25 | 26 | top | SPI0 TX | free | free |
+| GP20 | 26 | 25 | top | I²C0 SDA | free | free |
+| GP21 | 27 | 24 | top | I²C0 SCL | free | free |
+| GP22 | 29 | 22 | top | — | free | free |
+| GP26 | 31 | 20 | top | ADC0 / I²C1 SDA | free | free |
+| GP27 | 32 | 19 | top | ADC1 / I²C1 SCL | free | free |
+| GP28 | 34 | 17 | top | ADC2 | **R5 sense** | free |
+
+**Eleven spare GPIOs on A, sixteen on B** — and on both, a full SPI0, a full I²C0, and
+two or three free ADC channels. Ground is right there: **pins 23 and 28 are GND on the
+top side, at columns 28 and 23**, and **3V3 OUT is column 15** if a small device needs
+powering from the Pico rather than the rail. A 1×8 or 2×6 header across rows A/B of
+columns 19–30 picks up most of it.
+
+⚠ **Four holes on the top side are NOT spare GPIOs, whatever the grid suggests:**
+
+| Col | Pin | Why not |
+|---|---|---|
+| 11 | 40 VBUS | leave empty — see 4.8.6 |
+| 14 | 37 3V3_EN | pull it low and the Pico's regulator shuts down |
+| 16 | 35 ADC_VREF | leave as fitted — it is the reference the R5 divider is measured against |
+| 21 | 30 RUN | pulling it low resets the chip |
+
+And on A, columns 12, 13, 17, 18 are the power chain and the divider.
+
+⚠ **One caution before committing spare pins.** §14 items 17 and 18 are still open, and
+every pin committed now is one the reflex layer cannot have later. **GP26/GP27 are the
+only spare ADC inputs**, and item 17 wants an ADS1115 channel or a Pico ADC for charge
+sense.
+
+#### 4.8.10 Two pin assignments moved off the §4.7 sketch
+
+One shared layout forbids the original pair:
+
+**(a) Both Picos run UART0 on GP12/GP13, pins 16/17.** The sketch had B on GP0/GP1,
+which cannot work here — J2 would have to land on pins 1/2 and 16/17 at once.
+
+**(b) B's BNO085 RST moves from GP10 to GP15, pin 20.** GP10 is **LR Phase A** on Board
+A, so with one J3 footprint fitted to both boards, **way 11 would have sat on B's reset
+net** — a live stub on an active-low reset, and a dead short onto it the first time
+anything was plugged into a 12-way housing on the wrong board.
+
+#### 4.8.11 Build order and the four meter checks
+
+1. **Check the orientation before the sockets go down.** USB at the column-11 end, and
+   the top-left Pico pin — **column 11, row C — must read VBUS.** If it reads GP0 the
+   board is round the wrong way and every hole is wrong. That is exactly what happened
+   to the first pair.
+2. **Build both in one sitting and mark them before stuffing** — they are identical
+   until R2/R3 or R4 go in. **Write A or B on the copper**, not on tape.
+3. **Flash both boards bare, before they go in the sockets.** Programming is USB only:
+   BOOTSEL, cable, drag the `.uf2`. None of J1–J4 is involved and the REPL runs over
+   **USB CDC, not over J2**. BOOTSEL faces up in the sockets and needs no cutout.
+4. **Populate J1 LAST.** Every check below is done with no power connected; fitting the
+   input connector last makes that hard to get wrong.
+
+**Four meter checks before a Pico ever sits in the sockets:**
+
+| # | Check | Pass | The fault it catches |
+|---|---|---|---|
+| 1 | J1-1 to the VSYS socket pin | forward a few hundred mV through D1, **open** the other way | a backwards diode — shows up only as "board won't boot" |
+| 2 | J1-1 to J1-2 | **open** | any reading is a short across the rover rail |
+| 3 | F1 cold resistance | **under ~0.5Ω** | several ohms will eat Pico A's 3.3V feed |
+| 4 | **A only** — R2 + R3 end to end | **≈ 20k**, and TP2 ≈ half of it to each end | that ratio is what ADC2 reports as the rail voltage |
+
+**Meter Board A's feed polarity first** — the encoder 3V3 distribution was found
+reversed on 2026-09-18, and a swapped pair of probes made it look right.
+
+**After the boards are in, reflashing in place is safe, and D1 is why.** USB 5V reaches
+VSYS through the Pico's internal Schottky but **cannot get back out onto the rover
+rail.** §12 item 19 predates that diode, so unplugging the rover feed first is now
+belt-and-braces rather than the only protection.
+
+#### 4.8.12 Where the drawings live
+
+| File | Artifact |
+|---|---|
+| `docs/drawings/gen_pico_carrier_boards.py` | — generates both board SVGs from one mapping, so A and B cannot drift |
+| `docs/drawings/WildWilly_Pico_Carrier_Boards.html` | <https://claude.ai/artifact/8bPyEf8FYqyxdj2pgd9k2M> |
+| `docs/drawings/WildWilly_Pinout_Card.html` | <https://claude.ai/artifact/A8exZZ4LfAfNEtcXwLKCZk> |
+| `docs/drawings/WildWilly_Hardware_Map.html` | <https://claude.ai/artifact/4fuaSpynW9e6Q79Y3YC1uD> |
+
+Committed to the repo 2026-09-27 (`bcd3e58`); before that they existed only in a
+session scratchpad. **Edit the repo file and republish to the same URL** — printed
+copies on the bench carry the old link.
 
 ---
 
@@ -3343,7 +3686,7 @@ None of these touch the 40-pin header except the display's power tap.
 
 ---
 
-**End of Master Hardware Design rev 2.4**
+**End of Master Hardware Design rev 2.5**
 
 ---
 
