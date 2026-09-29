@@ -1006,6 +1006,11 @@ credentials — unrelated to this decision.
 
 **S-9 — The sonar failure value is "clear path", which does not survive moving to
 a UART.** *Recorded 2026-09-24, on the arrival of the Pico 2 W boards.*
+> **Status 2026-09-29: the firmware half is DONE, the Pi half is not.** Pico B emits
+> `-1` for unmeasurable and never a distance, carries a per-channel age in ms and a
+> sequence number per frame — verified live, 0 gaps in 200 frames. `sensors.py:43,46`
+> still return `999.0` and `safety.py:22,38` still default to it, and **sonar is now
+> behind the serial link**, so the condition this entry warned about is live today.
 `sensors.py:43,46` return `999.0` on timeout and `safety.py:22,38` default to it, so
 the value that means *I did not get a reading* is also the value that means *nothing
 is in front of me*. Today that is survivable: the timeout is a local pin read, so
@@ -1019,6 +1024,10 @@ gates the hardware change, not the other way round. See also §6.5's warning tha
 the ToF's "unavailability is not a fault" rule does **not** extend to Pico B.
 
 **S-10 — The encoder transport changes and `Encoders` has no seam for it.**
+> **Status 2026-09-29: both Picos now run their firmware and Pico B is proven.**
+> Nothing in the rover code has moved. `_EXPECTED_I2C` still contains `0x27`, which a
+> live scan confirms is absent, so `_motion_enabled` stays false on a correctly built
+> rover. That one line is now the only thing between here and motion.
 *Recorded 2026-09-24; ⛔ **now the live blocker, 2026-09-27** — the Picos are fitted,
 so `sensors.py` is polling an expander that the harness has left. This is C-1 Phase 3.* `sensors.py::Encoders` polls the MCP23017 directly; under
 §4.7 it reads framed counts from Pico A over `uart4-pi5`, with the twelve lines on

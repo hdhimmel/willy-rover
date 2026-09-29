@@ -164,6 +164,48 @@ class Encoders:
                 return
 
 
+class Status:
+    """Onboard LED, lit from the moment the board is powered.
+
+    Wrapped, and never allowed to fail loudly. Driving Pin("LED") brings the
+    CYW43439 up over SPI, and this sits in main.py's boot path: if it threw, the
+    board would crash-loop and send nothing -- which is exactly the silent-board
+    failure that cost 2026-09-28. A Pico that cannot blink must still report.
+
+    Lit steady with a short wink once a second. LIT means powered; the wink means
+    the loop is still turning. Steady with no wink is a hung board, and dark is no
+    power -- three states, one indicator, readable from across the bench.
+    """
+
+    WINK_MS = 60
+    PERIOD_MS = 1000
+
+    def __init__(self, pin):
+        self.led = None
+        self.off_until = None
+        try:
+            self.led = Pin(pin, Pin.OUT)
+            self.led.value(1)
+        except Exception:
+            self.led = None
+        self.next_wink = time.ticks_add(time.ticks_ms(), self.PERIOD_MS)
+
+    def beat(self, now):
+        if self.led is None:
+            return
+        try:
+            if self.off_until is not None:
+                if time.ticks_diff(now, self.off_until) >= 0:
+                    self.led.value(1)
+                    self.off_until = None
+            elif time.ticks_diff(now, self.next_wink) >= 0:
+                self.led.value(0)
+                self.off_until = time.ticks_add(now, self.WINK_MS)
+                self.next_wink = time.ticks_add(self.next_wink, self.PERIOD_MS)
+        except Exception:
+            self.led = None
+
+
 def checksum(body):
     c = 0
     for ch in body:
@@ -178,8 +220,7 @@ def send(uart, body):
 
 
 def main():
-    led = Pin(LED_PIN, Pin.OUT)
-    led.value(0)
+    led = Status(LED_PIN)
     uart = UART(UART_ID, baudrate=BAUD,
                 tx=Pin(UART_TX), rx=Pin(UART_RX),
                 timeout=0, timeout_char=0)
@@ -192,9 +233,7 @@ def main():
     seq = 0
     zero = enc.counts()
     period_ms = 1000 // REPORT_HZ
-    led_ms = 1000 // (LED_HZ * 2)
     next_report = time.ticks_ms()
-    next_led = next_report
     rx = b""
 
     wdt = machine.WDT(timeout=2000)
@@ -246,9 +285,7 @@ def main():
                 mv, flags))
 
         # --- heartbeat ------------------------------------------------------
-        if time.ticks_diff(now, next_led) >= 0:
-            next_led = time.ticks_add(next_led, led_ms)
-            led.toggle()
+        led.beat(now)
 
 
 if __name__ == "__main__":

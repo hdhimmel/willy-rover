@@ -134,7 +134,7 @@ def pico_key(extra):
       '  <text class="tsm" x="%d" y="306" text-anchor="middle">%s</text>' % (x(20), extra)])
 
 
-def power_chain():
+def power_chain(protected=True):
     """No jumpers: F1 stands from the + rail into column 9, D1 spans 9 -> 12 (VSYS).
 
     With the top pair reversed, + is the inner rail, so F1 stands straight into row A
@@ -143,6 +143,22 @@ def power_chain():
     that passes a rail it must not touch -- the + rail at column 13 -- hence the jog.
     """
     o = []; a = o.append
+    if not protected:
+        # Owner-directed 2026-09-28: Board B carries NO protection parts. Its feed is the
+        # Pi's own 5 V, which beats USB's ~4.6 V whenever the Pi is up, so D1 never
+        # conducts in normal use. But F1 and D1 were also what did the CONNECTING, so B
+        # gains a jumper the protected layout does not have: + rail straight into column
+        # 12, which is pin 39 VSYS. Column 12 because the + rail hole at column 13 must
+        # stay clear for the pin-38 ground wire, and column 11 is pin 40 VBUS, empty by
+        # rule. Consequence carried on the drawing: a short on B now reaches the Pi.
+        a('  <line class="wire" x1="%d" y1="%d" x2="%d" y2="%d" stroke-width="3"/>' % (x(C_VSYS),UP_P,x(C_VSYS),RB))
+        a('  <circle class="jn" cx="%d" cy="%d" r="4"/>' % (x(C_VSYS), UP_P))
+        a('  <text class="t" x="%d" y="%d" text-anchor="end">V+ jumper &#183; + rail &#8594; c12 &#183; VSYS, pin 39</text>' % (x(C_VSYS)-16, RB-14))
+        a('  <text class="tsm" x="%d" y="%d" text-anchor="end" fill="%s">NO F1, NO D1, NO D2 on B &#8212; owner-directed 2026-09-28</text>' % (x(C_VSYS)-16, RB+2, DEST))
+        a('  <text class="tsm" x="%d" y="%d" text-anchor="end">a short on B now reaches the Pi&#8217;s 5 V rail</text>' % (x(C_VSYS)-16, RB+16))
+        a('  <polyline class="wire" points="%d,%d %d,%d %d,%d %d,%d" stroke-width="3"/>' % (x(C_GND38),RA,x(C_GND38)+10,RA-12,x(C_GND38)+10,UP_M+12,x(C_GND38),UP_M))
+        a('  <text class="tsm" x="%d" y="%d">GND &#183; pin 38 &#183; one of B&#8217;s TWO wires</text>' % (x(C_GND38)+16, RA-16))
+        return "\n".join(o)
     a('  <line class="wire" x1="%d" y1="%d" x2="%d" y2="%d" stroke-width="2"/>' % (x(9),UP_P,x(9),RA))
     a('  <rect x="%d" y="%d" width="22" height="30" rx="2" fill="var(--card)" stroke="currentColor" stroke-width="2"/>' % (x(9)-11, UP_P+15))
     a('  <line x1="%d" y1="%d" x2="%d" y2="%d" stroke="currentColor" stroke-width="1.6"/>' % (x(9)-6,UP_P+38,x(9)+6,UP_P+22))
@@ -153,6 +169,19 @@ def power_chain():
     a('  <text class="t" x="%d" y="%d" text-anchor="end">D1 &#183; c9b &#8594; c12b, band at c12 &#183; VSYS, pin 39</text>' % (x(9)-16, RB+4))
     a('  <polyline class="wire" points="%d,%d %d,%d %d,%d %d,%d" stroke-width="3"/>' % (x(C_GND38),RA,x(C_GND38)+10,RA-12,x(C_GND38)+10,UP_M+12,x(C_GND38),UP_M))
     a('  <text class="tsm" x="%d" y="%d">GND &#183; pin 38 &#183; the only wire on the board</text>' % (x(C_GND38)+16, RA-16))
+    # D2 -- reverse-polarity clamp across J1, added 2026-09-28 after Pico B's J1 was
+    # found wired backwards. Anode on the - rail, cathode (band) on the + rail, so it
+    # is reverse-biased and idle in normal use; reverse the feed and it conducts,
+    # which puts a near-short across F1 and trips it. It stands between the two TOP
+    # rails at column 6 -- clear of F1 at column 9, and the USB plug passes below it
+    # at rows D-G. NOT FITTED on either board yet, so it is drawn dashed.
+    a('  <line x1="%d" y1="%d" x2="%d" y2="%d" stroke="var(--accent)" stroke-width="2"/>' % (x(6),UP_M,x(6),UP_P))
+    a('  <rect x="%d" y="%d" width="22" height="16" rx="1" fill="var(--card)" '
+      'stroke="var(--accent)" stroke-width="1.8" stroke-dasharray="3 2"/>' % (x(6)-11, UP_M+4))
+    a('  <line x1="%d" y1="%d" x2="%d" y2="%d" stroke="var(--accent)" stroke-width="4"/>' % (x(6)-11,UP_M+17,x(6)+11,UP_M+17))
+    a('  <text class="t" x="%d" y="%d" text-anchor="end" fill="var(--accent)">D2 &#183; TO ADD</text>' % (x(6)-16, UP_M+2))
+    a('  <text class="tsm" x="%d" y="%d" text-anchor="end" fill="var(--accent)">&#8722; rail &#8594; + rail, band at + &#183; reverse-polarity clamp</text>' % (x(6)-16, UP_M+16))
+    a('  <text class="tsm" x="%d" y="%d" text-anchor="end" fill="var(--accent)">idle in normal use &#183; reversed J1 trips F1</text>' % (x(6)-16, UP_M+30))
     return "\n".join(o)
 
 
@@ -215,7 +244,7 @@ def legend(items, y=454):
     return "\n".join(o)
 
 
-A = ['<svg viewBox="-330 0 1500 512" role="img" aria-label="Board A hole layout. The Pico sits over columns 11 to 30 with pin rows in C and H, USB at the column-11 end. Row C carries pins 21 to 40, row H carries pins 1 to 20. The power chain occupies the ten free columns to the left: F1 stands from the upper plus rail into column 9 row A, and D1 spans column 9 to column 12 in row B with its band at column 12, landing VSYS directly on pin 39. There are no jumpers. Ground leaves column 13 for the upper minus rail. R2 drops from the upper plus rail into column 17 row A and R3 runs column 17 to column 18 in row B, landing the divider on GP28 and AGND. The twelve encoder wires land in row I of columns 11 to 25. Dashed squares mark the spare GPIOs: nine on the top side in row A and two on the bottom.">']
+A = ['<svg viewBox="-330 0 1500 512" role="img" aria-label="Board A hole layout. The Pico sits over columns 11 to 30 with pin rows in C and H, USB at the column-11 end. Row C carries pins 21 to 40, row H carries pins 1 to 20. The power chain occupies the ten free columns to the left: F1 stands from the upper plus rail into column 9 row A, and D1 spans column 9 to column 12 in row B with its band at column 12, landing VSYS directly on pin 39. There are no jumpers. Ground leaves column 13 for the upper minus rail. R2 drops from the upper plus rail into column 17 row A and R3 runs column 17 to column 18 in row B, landing the divider on GP28 and AGND. The twelve encoder wires land in row I of columns 11 to 25. Dashed squares mark the spare GPIOs: nine on the top side in row A and two on the bottom. D2, drawn dashed because it is not fitted yet, stands between the two top rails at column 6 with its band on the plus rail: a reverse-polarity clamp that trips F1 if the feed is connected backwards.">']
 A.append(frame("A"))
 A.append(pico_key("BOTTOM: cols 11&#8211;25 = encoders &#183; 26 = TX &#183; 27 = RX &#183; 28 = GND &#183; 29, 30 free"))
 A.append(power_chain())
@@ -247,7 +276,7 @@ A.append(spare_line("top side, row A", _at, 476))
 A.append(spare_line("bottom side, row I", _ab, 494))
 A.append('</svg>')
 
-B = ['<svg viewBox="-330 0 1500 512" role="img" aria-label="Board B hole layout, same geometry as board A and the same jumperless power chain: F1 from the plus rail into column 9, D1 from column 9 to column 12. Instead of the divider, R4 rises straight from the lower plus rail into column 30 row J, pulling pin 20 GP15 up to 3V3 with no jumper at all. The six sonar wires land in row I of columns 11, 12, 14, 15, 16 and 17, and the reset wire to the IMU in row I of column 30. Dashed squares mark the spare GPIOs: ten on the top side in row A, including the free ADC at column 17, and seven on the bottom.">']
+B = ['<svg viewBox="-330 0 1500 512" role="img" aria-label="Board B hole layout, same geometry as board A and the same jumperless power chain: F1 from the plus rail into column 9, D1 from column 9 to column 12. Instead of the divider, R4 rises straight from the lower plus rail into column 30 row J, pulling pin 20 GP15 up to 3V3 with no jumper at all. The six sonar wires land in row I of columns 11, 12, 14, 15, 16 and 17, and the reset wire to the IMU in row I of column 30. Dashed squares mark the spare GPIOs: ten on the top side in row A, including the free ADC at column 17, and seven on the bottom. D2, drawn dashed because it is not fitted yet, stands between the two top rails at column 6 with its band on the plus rail: a reverse-polarity clamp that trips F1 if the feed is connected backwards.">']
 B.append(frame("B"))
 B.append(pico_key("BOTTOM: cols 11,12,14,15,16,17 = sonar &#183; 26 = TX &#183; 27 = RX &#183; 28 = EMPTY, no second ground &#183; 30 = GP15 RST"))
 B.append(power_chain())

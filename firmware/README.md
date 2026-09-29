@@ -5,19 +5,34 @@ Written 2026-09-24, the day the boards arrived.
 
 | Board | UID | MicroPython | State |
 |---|---|---|---|
-| **A** | `643f69a756a232ea` | v1.29.0, 2026-08-24 | PIO counter **verified**; all code paths run |
-| **B** | `ad25bbf0f1e1f160` | v1.29.0, 2026-08-24 | all code paths run; open-drain reset **verified** |
+| **A** | `643f69a756a232ea` | v1.29.0, 2026-08-24 | **`main.py` installed 2026-09-29**, LED verified. Link to the Pi untested |
+| **B** | `ad25bbf0f1e1f160` | v1.29.0, 2026-08-24 | **PROVEN ON THE ROVER 2026-09-29** — three sonars ranging at 33.3 Hz over `uart2-pi5` |
 
-**Nothing is wired.** Proven on **A**: the PIO encoder counter, and that every
-code path runs — six state machines claim GP0–GP11, the drain loop turns over
-6,500 times a second, UART0 opens on GP12/GP13, the ADC path reads, GP14 toggled
-(that test predates the move to the onboard LED, which is **not** yet run).
-Proven on **B**: the open-drain reset behaves (idle 1 → asserted 0 → released 1
-against an emulated pull-up), three disconnected sonars report `-1` and never a
-distance, UART0 opens, GP14 toggles.
+**Both boards run their firmware as `main.py` since 2026-09-29.** Board **B** is
+proven end to end on the rover: `$S` frames at **33.3 Hz** over `uart2-pi5`, zero
+sequence gaps and zero bad checksums over six seconds, all three HC-SR04 ranging,
+and the stuck-ECHO flag firing correctly on two dead sensors and clearing on a good
+one. Board **A** is installed and runs, but nothing has listened to `uart4-pi5` yet.
 
-Not proven on either: anything needing a wire — the link to the Pi, the LEDs, the
-R5 divider, real echoes, and the frame rate under real load.
+⚠ **THE FAULT THAT COST 2026-09-28 WAS A FILENAME.** Both boards had their code on
+them as `pico_a.py` / `pico_b.py`, and **a Pico only autoruns `main.py`**. Each board
+sat at a bare REPL driving nothing, which on the UART is indistinguishable from an
+absent board, a reversed feed or a swapped pair. Worse, the Pi then heard a corrupted
+copy of its own transmission — crosstalk across the J2 harness into an unterminated
+stub — which read as damaged hardware. Nothing was broken. **`fs cp` the file to
+`:main.py`, and delete the copy under its own name so there is only ever one.**
+
+Still not proven: **A's link to the Pi**, the **R5 divider** on A, the encoders, and
+the **Pi → Pico direction on B** — `PING`, `ID` and a deliberate `BOGUS` all go
+unanswered while frames stream the other way, which isolates it to the one wire from
+Pi phys 7 to `c27`. That direction carries `RST`, so the BNO085 needs it.
+
+**The onboard LED is lit at boot and winks for 60 ms once a second** (`Status` in both
+files). Lit means powered, the wink means the loop is turning, steady means hung.
+It is wrapped in try/except on purpose: driving `Pin("LED")` brings the CYW43439 up
+over SPI, and that now sits in `main.py`'s boot path — if it threw, the board would
+crash-loop and send nothing, which is the exact failure this firmware exists to make
+impossible. Verified on **both** boards 2026-09-29; it had never been run before.
 
 | File | Board | Link | Job |
 |---|---|---|---|
@@ -42,6 +57,7 @@ a watchdog, the REPL is hard to reach.
 ```
 mpremote connect COM4 run firmware/pico_a.py      # try it, Ctrl-C to stop
 mpremote connect COM4 fs cp firmware/pico_a.py :main.py   # make it permanent
+mpremote connect COM4 fs rm :pico_a.py                    # leave only ONE file
 ```
 
 To recover a board that boots straight into a loop: hold **BOOTSEL** while

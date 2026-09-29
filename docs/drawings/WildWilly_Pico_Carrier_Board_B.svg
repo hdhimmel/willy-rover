@@ -1,4 +1,4 @@
-<svg viewBox="-330 0 1500 512" role="img" aria-label="Board B hole layout, same geometry as board A and the same jumperless power chain: F1 from the plus rail into column 9, D1 from column 9 to column 12. Instead of the divider, R4 rises straight from the lower plus rail into column 30 row J, pulling pin 20 GP15 up to 3V3 with no jumper at all. The six sonar wires land in row I of columns 11, 12, 14, 15, 16 and 17, and the reset wire to the IMU in row I of column 30. Dashed squares mark the spare GPIOs: ten on the top side in row A, including the free ADC at column 17, and seven on the bottom.">
+<svg viewBox="-330 0 1500 512" role="img" aria-label="Board B hole layout, same geometry as board A and the same jumperless power chain: F1 from the plus rail into column 9, D1 from column 9 to column 12. Instead of the divider, R4 rises straight from the lower plus rail into column 30 row J, pulling pin 20 GP15 up to 3V3 with no jumper at all. The six sonar wires land in row I of columns 11, 12, 14, 15, 16 and 17, and the reset wire to the IMU in row I of column 30. Dashed squares mark the spare GPIOs: ten on the top side in row A, including the free ADC at column 17, and seven on the bottom. D2, drawn dashed because it is not fitted yet, stands between the two top rails at column 6 with its band on the plus rail: a reverse-polarity clamp that trips F1 if the feed is connected backwards.">
   <defs>
     <pattern id="hBusB" width="24" height="24" patternUnits="userSpaceOnUse" x="48" y="48">
       <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.75"/>
@@ -76,6 +76,12 @@
   <text class="t" x="236" y="148" text-anchor="end">D1 &#183; c9b &#8594; c12b, band at c12 &#183; VSYS, pin 39</text>
   <polyline class="wire" points="348,120 358,108 358,72 348,60" stroke-width="3"/>
   <text class="tsm" x="364" y="104">GND &#183; pin 38 &#183; the only wire on the board</text>
+  <line x1="180" y1="60" x2="180" y2="84" stroke="var(--accent)" stroke-width="2"/>
+  <rect x="169" y="64" width="22" height="16" rx="1" fill="var(--card)" stroke="var(--accent)" stroke-width="1.8" stroke-dasharray="3 2"/>
+  <line x1="169" y1="77" x2="191" y2="77" stroke="var(--accent)" stroke-width="4"/>
+  <text class="t" x="164" y="62" text-anchor="end" fill="var(--accent)">D2 &#183; TO ADD</text>
+  <text class="tsm" x="164" y="76" text-anchor="end" fill="var(--accent)">&#8722; rail &#8594; + rail, band at + &#183; reverse-polarity clamp</text>
+  <text class="tsm" x="164" y="90" text-anchor="end" fill="var(--accent)">idle in normal use &#183; reversed J1 trips F1</text>
   <g class="variant">
     <line class="wire" x1="756" y1="396" x2="756" y2="360" stroke-width="2"/>
     <rect x="745" y="369" width="22" height="26" rx="1" fill="var(--card)" stroke="currentColor" stroke-width="2"/>

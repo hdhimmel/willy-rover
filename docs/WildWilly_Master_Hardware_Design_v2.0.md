@@ -1243,6 +1243,57 @@ existing `uart3-pi5`, and the serial console must remain disabled (§9).
 
 ---
 
+#### 4.7.1 As proven — 2026-09-29
+
+**Both boards run their firmware as `main.py`. Board B is proven end to end.**
+`$S` frames arrive on `/dev/ttyAMA2` at **33.3 Hz**, zero sequence gaps and zero bad
+checksums over six seconds, all three HC-SR04 ranging, and the stuck-ECHO flag firing
+correctly on two dead sensors and clearing on a good one. Rail `0x40` read
+**5.004 V @ 0.031 A** during that test, against the 4.990 V @ 0.026 A baseline of
+2026-09-17. Board A is installed and running but nothing has listened to
+`/dev/ttyAMA4` yet.
+
+⚠ **THE SILENT LINKS WERE A FILENAME, NOT DAMAGE.** Each board carried its code as
+`pico_a.py` / `pico_b.py`, and a Pico only autoruns `main.py`. Both sat at a bare REPL
+driving nothing. On a UART that is indistinguishable from an absent board, an
+unpowered one, a reversed feed or a swapped pair — and the Pi then received a
+corrupted copy of its own transmission, which read as damaged silicon. It was
+crosstalk across the J2 harness into an unterminated stub: byte count equal to bytes
+sent, corruption identical run to run, and silence the moment J2 was unplugged at the
+Pico end. **A stub is not a fault. Prove a board is present with USB or a meter before
+believing anything the link says.**
+
+**Outstanding on B: the Pi → Pico direction.** `PING`, `ID` and a deliberate `BOGUS`
+all go unanswered while `$S` frames stream the other way, which isolates it to the one
+conductor from **Pi phys 7 (GP4, TXD2) to `c27` (pin 17, GP13)**. Sonar does not need
+it — the Pico free-runs — but **`RST` does**, so the BNO085 is blocked behind that wire.
+
+#### 4.7.2 The protection gap — D2
+
+**Nothing on either carrier protects against a reversed J1, and Board B was found
+wired backwards on 2026-09-28.** F1 and D1 are both **in series with V+**: reversed,
+the incoming + lands on the board's ground rail and the Pico's pin 38, VSYS gets
+nothing, and the only return left is J2's signal ground through the **GPIO ESD clamps**.
+F1 never sees the current and cannot trip. Worse, **D1 is what forces it there** — the
+return through J1-1 runs backwards into D1's cathode and is blocked, so the signal
+wires become the only path. Without D1 that current would have gone through F1 and
+tripped it.
+
+**B survived it** — USB enumerates, GP12/GP13 are not tied, the LED lights and all
+three sonars range — but that is luck, not protection.
+
+**Q1 (FQP27P06, §2.3) cannot help.** It guards the *battery input*. Every JST on every
+rail downstream of it is unprotected, and the record is unambiguous: the encoder supply
+reversed 2026-09-18 with LF Phase A destroyed and Phase B dead on all six channels, two
+sonars destroyed the same way (§16.12), and now Pico B. **Four events, one mechanism,
+no part in between.**
+
+**The fix is one part per carrier: D2, a 1N5819 across J1, anode to GND, cathode to
+V+.** Reverse-biased and idle in normal use; reverse the feed and it conducts, putting
+a near-short across F1 and tripping it. A mis-crimped connector becomes a PTC you reset
+instead of current through the GPIOs. **Not fitted on either board.**
+
+
 ### 4.8 The Pico carrier boards — as built
 
 ✅ **Both built and installed 2026-09-27.** Folded into this document 2026-09-28;
@@ -2837,7 +2888,7 @@ Status as of **2026-09-11**.
 | Breakout connections verified | **PARTIAL — a GROUND FAULT was found and fixed 2026-09-17** | The GeeekPi board as installed had a ground defect (owner-found and corrected). It is the leading explanation for the two destroyed sonars: with its GND return open, a sensor's return current flows through the TRIG/ECHO lines and the Pi's protection diodes, which floats the sensor's reference, holds ECHO high, and cooks the part — matching every symptom seen. Front channel verified working since. Original note follows: GeeekPi Micro GPIO Terminal Block fitted; connections not re-verified. Re-run the §16.12 checks, in particular check 6 — the three ECHO divider junctions at 3.2–3.4V. **If this board has no per-pin LEDs** (the "Micro" line generally does not, unlike GeeekPi's LED variant) then it is electrically passive and adds no load, which removes the LED concerns that applied to the HDO040 candidate. **Confirm that before skipping the re-meter** |
 | AI accelerator PCIe bond | PASS | `/dev/hailo0`; firmware 5.1.1, HAILO10H |
 | Pi-rail INA260 address | **PASS — 0x45** | `config.py:212` `INA260_PI_ADDR=0x45` ("VERIFIED 9.068V"); `config.py:210` `INA260_MOTOR_ADDR=0x44` is the +12V bus. |
-| Sonars connected | ✅ **ALL THREE RANGE-TESTED AND WORKING, 2026-09-17** — first time since the build | Front 49.7cm, left 91.1cm, right 30.9cm, each stable to ±0.4cm over 8 samples and each reading its own direction (three distinct distances, so no cross-talk). **All three ECHO lines idle LOW and go low against a pull-down** — the healthy signature on every channel. Rail 4.990V @ **0.026A**, against 0.101A with one sensor and the 0.348A that flagged a short earlier the same day: no sensor is drawing fault current. Getting here took finding a reversed crimp pin that had not clicked home, a ground fault on the GeeekPi breakout (§5.3), and replacing two sensors destroyed by reverse polarity (§16.12) |
+| Sonars connected | ✅ **ALL THREE RANGE-TESTED AND WORKING AGAIN 2026-09-29, now through Pico B** — 33.3 Hz over `uart2-pi5`, rail 5.004V @ 0.031A. ⚠ **Four sonars have now been destroyed in total** (two on 2026-09-17, one in the 2026-09-28 smoke event, and a spare that proved dead when fitted) — the stuck-high ECHO signature identifies them in one frame. Previous entry: **ALL THREE RANGE-TESTED AND WORKING, 2026-09-17** — first time since the build | Front 49.7cm, left 91.1cm, right 30.9cm, each stable to ±0.4cm over 8 samples and each reading its own direction (three distinct distances, so no cross-talk). **All three ECHO lines idle LOW and go low against a pull-down** — the healthy signature on every channel. Rail 4.990V @ **0.026A**, against 0.101A with one sensor and the 0.348A that flagged a short earlier the same day: no sensor is drawing fault current. Getting here took finding a reversed crimp pin that had not clicked home, a ground fault on the GeeekPi breakout (§5.3), and replacing two sensors destroyed by reverse polarity (§16.12) |
 | Encoder counts on all six channels | Not tested | ⚠ **Blocked twice over.** Counts-per-rev waits for the 170 RPM motors (§7.1, §14 item 17); the MCP23017 path is then replaced by Pico A (§4.7) and the bus drops to ten devices when 0x27 leaves. Channel attribution must be re-run **after** the motor swap either way |
 | BNO085 interrupt and fusion output | Not tested | INT on GP15 is unused by the driver; library polls over I²C |
 | Battery divider calibration | **RE-TRIMMED 2026-09-17** | `BATTERY_DIVIDER_SCALE` 0.2386 → **0.3237**, from AIN0 = 3.7229V (raw 29783) against a bench supply metered at 11.5V. The old value belonged to the pre-2026-09-02 divider and was reporting **15.60V from an 11.5V input** — impossible for a 3S pack, and it passed every guard because the guards only catch readings that are too LOW. **Two open items:** the implied ratio (~10k/4.7k) does not match the 10k/3.197k described in §16, so meter the fitted parts; and at PGA ±4.096V this scale saturates at **12.65V**, ~50mV above a rested 3S pack, so full-charge readings are untrustworthy without moving to PGA ±6.144V |

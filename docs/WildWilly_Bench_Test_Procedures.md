@@ -522,15 +522,23 @@ motor ports and on the encoder channels.
 - [ ] Two carrier boards built to the schematic, **four meter checks passed** — diode
       orientation, no short across the input, PTC cold resistance under ~0.5Ω, divider
       ratio at TP2. Nothing plugged in.
-- [ ] Both Picos flashed, `os.uname()` and `machine.unique_id()` recorded against A and
+- [x] Both Picos flashed, `os.uname()` and `machine.unique_id()` recorded against A and
       B, and the IDs written **on the boards**. A is `643f69a756a232ea`, B is
       `ad25bbf0f1e1f160` — confirm rather than assume.
-- [ ] `Pin("LED")` verified on at least one board. It has never been run.
+      **Confirmed over USB 2026-09-29: both UIDs match, both on MicroPython v1.29.0
+      (2026-08-24), RP2350.** ⚠ **And add a step nobody thought to write down: check
+      the firmware is installed as `main.py`.** Both boards had it as `pico_a.py` /
+      `pico_b.py`, which does not autorun; that alone cost a full session and looked
+      exactly like dead hardware.
+- [x] `Pin("LED")` **verified on BOTH boards, 2026-09-29** — lit at boot, 60 ms wink
+      once a second, wrapped so a CYW43439 failure cannot take the link down.
 - [ ] On the Pi: `dtoverlay -h uart2-pi5` reports GPIOs 4–5 and `uart4-pi5` reports
       12–13. **A wrong overlay boots clean and the Pico reads as dead hardware** — that
       cost a full session on the SEN0628.
-- [ ] `dtoverlay=uart2-pi5` and `dtoverlay=uart4-pi5` added, rebooted, `/dev/ttyAMA*`
-      present, serial console still disabled.
+- [x] `dtoverlay=uart2-pi5` and `dtoverlay=uart4-pi5` added, rebooted, `/dev/ttyAMA*`
+      present, serial console still disabled. **Done 2026-09-28**; `pinctrl get 4,5,12,13`
+      reads `TXD2 RXD2 TXD4 RXD4`, so `uart4-pi5` IS GP12/GP13 and the `uart5-pi5`
+      fallback is not needed.
 
 ### Phase 2 — hardware
 

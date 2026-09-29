@@ -1566,13 +1566,18 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     correctly through a known rotation. Because the sensor's reset line runs
     through the MCP23017, the expander must be initialised first --- an
     ordering dependency, not a wiring choice. ⚠ **Under §4.7 the dependency moves
-    but does not disappear:** RST lands on Pico B GP10, driven open-drain against
+    but does not disappear:** RST lands on Pico B **GP15, pin 20** (moved from GP10 on 2026-09-24 —
+    GP10 is LR Phase A on the shared carrier layout), driven open-drain against
     a pull-up to Pi 3V3, so the ordering dependency becomes "Pico B link up and
     acknowledged" instead of "expander initialised". If initialisation succeeds but
     reads fail intermittently, the cause is I²C clock stretching rather than
     wiring.
 
--   **FR-800-002 (sonar).** All three units return distance tracking a tape
+-   **FR-800-002 (sonar).** ✅ **Re-proven 2026-09-29 through Pico B** — all three
+    ranging over `uart2-pi5` at 33.3 Hz, 0 sequence gaps, 0 bad checksums, and `-1`
+    rather than `999` for unmeasurable. ⚠ The **Pi → Pico** direction is still dead
+    (one wire, Pi phys 7 → `c27`), which blocks the BNO085 `RST` above but not sonar.
+    All three units return distance tracking a tape
     measure across their usable range. Test each independently before
     trusting any of them together. Front and right reading correctly while
     left returns garbage is the specific signature of the serial console

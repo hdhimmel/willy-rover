@@ -96,6 +96,7 @@ ol.build li{font-size:13.5px}
   .tools{display:none}
   figure{break-inside:avoid;border-color:#666}
   h3.boardhead{break-before:page}
+  h2.newpage{break-before:page}
   figure svg{min-width:0}
   h2{break-after:avoid}
   tr,li,.warn{break-inside:avoid}
@@ -111,17 +112,17 @@ ol.build li{font-size:13.5px}
   <h1>Pico Carrier Schematic</h1>
   <p class="sub">A single carrier design for both Pico 2 W boards. Same layout, same footprints, stuffed differently: the divider is fitted on A, the reset pull-up on B. Everything else is common, so a dead Pico is a swap rather than a rewire.</p>
   <div class="mast-foot">
-    <span><b>Rev</b> M · 2026-09-28</span>
+    <span><b>Rev</b> P · 2026-09-29</span>
     <span><b>Qty</b> 2 identical</span>
     <span><b>Feed A</b> R5 3.3 V</span>
     <span><b>Feed B</b> Pi 5 V, breakout</span>
-    <span><b>Status</b> ⚠ BOTH BOARDS BUILT AND INSTALLED 2026-09-27. Rev A–F boards had the Pico the wrong way round and were scrapped — kept on record below so the mistake is not repeated.</span>
+    <span><b>Status</b> ⚠ BOTH BOARDS BUILT AND INSTALLED 2026-09-27. Rev A–F boards had the Pico the wrong way round and were scrapped — kept on record below so the mistake is not repeated. <b>BOARD B IS PROVEN GOOD, 2026-09-29</b> — as built, F1 + D1 + R4, undamaged by the reversed J1 of 2026-09-28. Firmware installed as <code>main.py</code>; all three sonars ranging at 33.3&#160;Hz over <code>uart2-pi5</code>. Outstanding on B: the Pi→Pico RX wire, and D2. — see D2 and bring-up below.</span>
   </div>
 </header>
 
 <div class="tools">
   <button class="print" id="printbtn" type="button">Print this schematic</button>
-  <span id="printhint">5 pages · schematic, nets, landings, a board each</span>
+  <span id="printhint">7 pages · schematic, nets, landings, a board each, D2, bring-up</span>
 </div>
 
 <h2>Schematic</h2>
@@ -254,8 +255,8 @@ ol.build li{font-size:13.5px}
   <thead><tr><th>Ref</th><th>Part</th><th>Pico A</th><th>Pico B</th></tr></thead>
   <tbody>
     <tr><td>—</td><td>2 × 1×20 female socket, 2.54mm</td><td>fit</td><td>fit</td></tr>
-    <tr><td>F1</td><td>PTC 0.5A hold / 1.0A trip</td><td>fit</td><td>fit</td></tr>
-    <tr><td>D1</td><td>1N5819, DO-41 — band toward Pico</td><td>fit</td><td>fit</td></tr>
+    <tr><td>F1</td><td>PTC 0.5A hold / 1.0A trip</td><td><span class="pill">FIT</span></td><td><span class="pill">FIT</span></td></tr>
+    <tr><td>D1</td><td>1N5819, DO-41 — band toward Pico</td><td><span class="pill">FIT</span></td><td><span class="pill">FIT</span></td></tr>
     <tr><td>J1</td><td>JST-PH 2-way — power in</td><td>R5 3.3V, at the encoder 3V3 distribution</td><td>5V at the breakout terminal — <b>not R2</b></td></tr>
     <tr><td>J2</td><td>JST-PH 3-way — UART link</td><td>fit</td><td>fit</td></tr>
     <tr><td>J3</td><td>JST-PH 12-way — signal</td><td>all 12</td><td>ways 1–6 only</td></tr>
@@ -264,6 +265,7 @@ ol.build li{font-size:13.5px}
     <tr><td>TP2</td><td>test point, divider node</td><td><span class="pill">FIT</span></td><td>leave empty</td></tr>
     <tr><td>R4</td><td>10k</td><td>leave empty</td><td><span class="pill">FIT</span></td></tr>
     <tr><td>J4</td><td>JST-PH 2-way — 3V3 in, RST out on GP15 / pin 20</td><td>leave empty</td><td><span class="pill">FIT</span></td></tr>
+    <tr><td><b>D2</b></td><td>1N5819 <b>across J1</b> — anode to GND, cathode to V+ — reverse-polarity clamp, <b>not on either board yet</b></td><td><span class="pill">ADD</span></td><td><span class="pill">ADD</span></td></tr>
   </tbody>
 </table>
 </div>
@@ -350,7 +352,7 @@ ol.build li{font-size:13.5px}
 
 <h3 class="boardhead">Board A — encoders</h3>
 <figure>
-<svg viewBox="-330 0 1500 512" role="img" aria-label="Board A hole layout. The Pico sits over columns 11 to 30 with pin rows in C and H, USB at the column-11 end. Row C carries pins 21 to 40, row H carries pins 1 to 20. The power chain occupies the ten free columns to the left: F1 stands from the upper plus rail into column 9 row A, and D1 spans column 9 to column 12 in row B with its band at column 12, landing VSYS directly on pin 39. There are no jumpers. Ground leaves column 13 for the upper minus rail. R2 drops from the upper plus rail into column 17 row A and R3 runs column 17 to column 18 in row B, landing the divider on GP28 and AGND. The twelve encoder wires land in row I of columns 11 to 25. Dashed squares mark the spare GPIOs: nine on the top side in row A and two on the bottom.">
+<svg viewBox="-330 0 1500 512" role="img" aria-label="Board A hole layout. The Pico sits over columns 11 to 30 with pin rows in C and H, USB at the column-11 end. Row C carries pins 21 to 40, row H carries pins 1 to 20. The power chain occupies the ten free columns to the left: F1 stands from the upper plus rail into column 9 row A, and D1 spans column 9 to column 12 in row B with its band at column 12, landing VSYS directly on pin 39. There are no jumpers. Ground leaves column 13 for the upper minus rail. R2 drops from the upper plus rail into column 17 row A and R3 runs column 17 to column 18 in row B, landing the divider on GP28 and AGND. The twelve encoder wires land in row I of columns 11 to 25. Dashed squares mark the spare GPIOs: nine on the top side in row A and two on the bottom. D2, drawn dashed because it is not fitted yet, stands between the two top rails at column 6 with its band on the plus rail: a reverse-polarity clamp that trips F1 if the feed is connected backwards.">
   <defs>
     <pattern id="hBusA" width="24" height="24" patternUnits="userSpaceOnUse" x="48" y="48">
       <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.75"/>
@@ -428,6 +430,12 @@ ol.build li{font-size:13.5px}
   <text class="t" x="236" y="148" text-anchor="end">D1 &#183; c9b &#8594; c12b, band at c12 &#183; VSYS, pin 39</text>
   <polyline class="wire" points="348,120 358,108 358,72 348,60" stroke-width="3"/>
   <text class="tsm" x="364" y="104">GND &#183; pin 38 &#183; the only wire on the board</text>
+  <line x1="180" y1="60" x2="180" y2="84" stroke="var(--accent)" stroke-width="2"/>
+  <rect x="169" y="64" width="22" height="16" rx="1" fill="var(--card)" stroke="var(--accent)" stroke-width="1.8" stroke-dasharray="3 2"/>
+  <line x1="169" y1="77" x2="191" y2="77" stroke="var(--accent)" stroke-width="4"/>
+  <text class="t" x="164" y="62" text-anchor="end" fill="var(--accent)">D2 &#183; TO ADD</text>
+  <text class="tsm" x="164" y="76" text-anchor="end" fill="var(--accent)">&#8722; rail &#8594; + rail, band at + &#183; reverse-polarity clamp</text>
+  <text class="tsm" x="164" y="90" text-anchor="end" fill="var(--accent)">idle in normal use &#183; reversed J1 trips F1</text>
   <g class="variant">
     <line class="wire" x1="444" y1="84" x2="444" y2="120" stroke-width="2"/>
     <rect x="433" y="100" width="22" height="28" rx="1" fill="var(--card)" stroke="currentColor" stroke-width="2"/>
@@ -524,7 +532,7 @@ ol.build li{font-size:13.5px}
 
 <h3 class="boardhead">Board B — sonar and IMU reset</h3>
 <figure>
-<svg viewBox="-330 0 1500 512" role="img" aria-label="Board B hole layout, same geometry as board A and the same jumperless power chain: F1 from the plus rail into column 9, D1 from column 9 to column 12. Instead of the divider, R4 rises straight from the lower plus rail into column 30 row J, pulling pin 20 GP15 up to 3V3 with no jumper at all. The six sonar wires land in row I of columns 11, 12, 14, 15, 16 and 17, and the reset wire to the IMU in row I of column 30. Dashed squares mark the spare GPIOs: ten on the top side in row A, including the free ADC at column 17, and seven on the bottom.">
+<svg viewBox="-330 0 1500 512" role="img" aria-label="Board B hole layout, same geometry as board A and the same jumperless power chain: F1 from the plus rail into column 9, D1 from column 9 to column 12. Instead of the divider, R4 rises straight from the lower plus rail into column 30 row J, pulling pin 20 GP15 up to 3V3 with no jumper at all. The six sonar wires land in row I of columns 11, 12, 14, 15, 16 and 17, and the reset wire to the IMU in row I of column 30. Dashed squares mark the spare GPIOs: ten on the top side in row A, including the free ADC at column 17, and seven on the bottom. D2, drawn dashed because it is not fitted yet, stands between the two top rails at column 6 with its band on the plus rail: a reverse-polarity clamp that trips F1 if the feed is connected backwards.">
   <defs>
     <pattern id="hBusB" width="24" height="24" patternUnits="userSpaceOnUse" x="48" y="48">
       <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.1" opacity="0.75"/>
@@ -602,6 +610,12 @@ ol.build li{font-size:13.5px}
   <text class="t" x="236" y="148" text-anchor="end">D1 &#183; c9b &#8594; c12b, band at c12 &#183; VSYS, pin 39</text>
   <polyline class="wire" points="348,120 358,108 358,72 348,60" stroke-width="3"/>
   <text class="tsm" x="364" y="104">GND &#183; pin 38 &#183; the only wire on the board</text>
+  <line x1="180" y1="60" x2="180" y2="84" stroke="var(--accent)" stroke-width="2"/>
+  <rect x="169" y="64" width="22" height="16" rx="1" fill="var(--card)" stroke="var(--accent)" stroke-width="1.8" stroke-dasharray="3 2"/>
+  <line x1="169" y1="77" x2="191" y2="77" stroke="var(--accent)" stroke-width="4"/>
+  <text class="t" x="164" y="62" text-anchor="end" fill="var(--accent)">D2 &#183; TO ADD</text>
+  <text class="tsm" x="164" y="76" text-anchor="end" fill="var(--accent)">&#8722; rail &#8594; + rail, band at + &#183; reverse-polarity clamp</text>
+  <text class="tsm" x="164" y="90" text-anchor="end" fill="var(--accent)">idle in normal use &#183; reversed J1 trips F1</text>
   <g class="variant">
     <line class="wire" x1="756" y1="396" x2="756" y2="360" stroke-width="2"/>
     <rect x="745" y="369" width="22" height="26" rx="1" fill="var(--card)" stroke="currentColor" stroke-width="2"/>
@@ -751,11 +765,80 @@ ol.build li{font-size:13.5px}
   <b>4.</b> On A only — R2 + R3 end to end ≈ 20k, and the TP2 node ≈ half of it to each end. That ratio is what ADC2 reports as the rail voltage.
 </div>
 
+<h2 class="newpage">D2 &#8212; the part this board still needs</h2>
+<p class="note"><b>Nothing on either carrier protects against a reversed J1, and on 2026-09-28 Board B was found wired backwards.</b> Both protection parts sit <b>in series with V+</b>: reverse the connector and the incoming + lands on the board&#8217;s <b>ground rail</b> and on the Pico&#8217;s <b>pin 38</b>, VSYS gets nothing, and the only return left to the Pi is J2&#8217;s signal ground and the <b>GPIO ESD clamp diodes</b>. The current goes out through the UART pins. F1 and D1 sit there doing nothing, because neither is in that path.</p>
+
+<p class="note"><b>The rover&#8217;s one reverse-polarity part cannot help here.</b> <b>Q1, FQP27P06</b> (&#167;2.3) guards the <em>battery input</em> against a reversed pack. Everything downstream of it &#8212; every JST on every rail &#8212; is unprotected, and the design record says what that costs: the encoder supply reversed on 2026-09-18 with LF Phase A destroyed and Phase B dead on all six channels (&#167;16, &#8220;<b>may have taken those output stages</b>&#8221;), two sonars destroyed the same way (&#167;16.12, &#8220;<b>REVERSE POLARITY DESTROYS THESE SENSORS, AND IT HAS &#8212; TWICE</b>&#8221;), and now Pico B. <b>Four events, one mechanism, no part in between.</b></p>
+
+<div class="tw">
+<table>
+  <thead><tr><th>Part</th><th>Position</th><th>Stops</th><th>Does not stop</th></tr></thead>
+  <tbody>
+    <tr><td>F1 PTC</td><td>series, V+</td><td>a shorted Pico taking its feed down &#8212; the only limit on A&#8217;s branch, since <b>P8 has no fuse at all</b>, and what keeps a dead Pico B off the Pi&#8217;s 5 V</td><td>reversed J1</td></tr>
+    <tr><td>D1 1N5819</td><td>series, V+</td><td>USB 5 V getting back out onto the rover rail &#8212; which is what makes reflashing in place safe</td><td>reversed J1</td></tr>
+    <tr><td><b>D2 1N5819</b></td><td><b>across J1</b> &#8212; anode GND, cathode V+</td><td><b>reversed J1:</b> it conducts, F1 sees a near-short and trips</td><td>&#8212;</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="note"><b>D2 is not fitted on either board yet</b> — it is drawn <b>dashed at column 6, between the two top rails, band on the +</b>, on both board layouts above, clear of F1 at column 9 and above the USB plug. The circuit schematic at the top of this sheet predates it. Reverse-biased and idle in normal use, it turns a mis-crimped JST from silicon damage into a tripped PTC you reset &#8212; and F1, already fitted, is what makes that work. Fit it on both carriers. <b>One fuse and one Schottky per feed, on the board, not in the harness:</b> &#167;4.7 prerequisite 4 reads &#8220;fitted on <b>both boards</b>&#8221;, and the VSYS rows for A and B both specify the feed &#8220;via 500mA fuse <b>and series Schottky</b>&#8221; &#8212; those <em>are</em> F1 and D1. A second Schottky spliced into the harness is the same part twice, ~0.7&#160;V of A&#8217;s 3.3&#160;V feed spent for nothing, and one more joint to fail.</p>
+
+<p class="note"><b>One thing the 2026-09-28 reversal taught, and it cuts against the series diode.</b> Ask whether F1 and D1 &#8220;working&#8221; would have saved the Pico, and the answer is no &#8212; worse, <b>D1 is why the fault current went where it did.</b> Reversed, the incoming + sits on the ground rail and pin 38, and the return path through J1-1 runs backwards into D1&#8217;s cathode, which <b>blocks it</b>. So the only way out was the signal wires: through the GPIO ESD clamps, out of J2, to the Pi&#8217;s ground. F1 never saw the current and could not trip. <b>Without D1 that return would have gone through F1 instead and tripped it</b> &#8212; the board would have gone dark rather than hurt. That is the exact gap D2 closes on A: it gives reverse current a deliberate low-impedance path that F1 can act on. <b>Both boards are built with F1 and D1 and neither has D2, so a reversed J1 still has nothing between it and the GPIOs.</b></p>
+
+<h2>Bringing a built board up</h2>
+<p class="note"><b>The four meter checks above happen before a Pico sits in the sockets. These run on a board that is already built, stuffed and wired into the rover</b> &#8212; a different problem, because almost nothing about it can be tested from the Pi. A Pico with no <code>main.py</code> sits at a bare REPL and sends <b>nothing</b> on GP12/GP13, so <b>0 bytes at <code>/dev/ttyAMA4</code> reads identically to an absent board, a swapped TX/RX pair, a blown F1, a reversed feed and a board simply waiting for firmware.</b> The link cannot tell you a board is there. A meter can, and USB can. Do them in that order.</p>
+
+<ol class="build">
+  <li><b>Meter J1 polarity at the connector before anything else.</b> This is now first, not fourth. It was found reversed on the encoder supply on 2026-09-18 and on Pico B on 2026-09-28. ⚠ <b>A swapped pair of probes makes a reversed feed look right</b> &#8212; on a 3.3&#160;V feed, red on J1-1 and black on J1-2 must read <b>+3.3&#160;V</b>, and <b>&#8722;3.3&#160;V means reversed</b>, not that you are holding the meter backwards.</li>
+  <li><b>Then the rest, with the feed unplugged.</b> J1-1 to J1-2 <b>open</b> &#8212; any reading is a short across the rover rail. F1 cold <b>under ~0.5&#8486;</b>. On A, R2+R3 <b>&#8776; 20k</b> end to end with TP2 at half. D1 forward one way and open the other needs the Pico <em>out</em> of the sockets, so on a built board it usually is not repeatable: if it was never recorded, treat the diode as <b>unproven</b> and see step 4.</li>
+  <li><b>Prove the board is alive: 3V3 OUT, pin 36, to GND, feed on.</b> The <b>only</b> test that separates &#8220;present and powered&#8221; from &#8220;not there&#8221; without USB, and the one to reach for the moment a link goes quiet. Pin 36 is <b>column 15 on the row-C side</b> &#8212; the trap column from the note above, so meter it and never land a wire in it. VSYS sits a Schottky drop below the feed; the buck-boost still makes 3V3 from that, which is what lets A run off a 3.3&#160;V rail at all.</li>
+  <li><b>USB next &#8212; and lift that board&#8217;s J1 first unless D1 is proven.</b> D1 is what stops USB 5&#160;V reaching the rover rail, and that protection is only as good as an orientation check nobody recorded. On B the rail it would push into is the <b>Pi&#8217;s own 5&#160;V</b>. Pulling one JST costs nothing. Then: <code>[System.IO.Ports.SerialPort]::getportnames()</code>, then <code>python -m mpremote connect COM? exec "import os,machine;print(os.uname());print(machine.unique_id().hex())"</code>. <b>Identify the board by UID, never by port number</b> &#8212; A is <code>643f69a756a232ea</code>, B is <code>ad25bbf0f1e1f160</code>, and the COM number follows the USB slot. If it enumerates, the board and its MicroPython are both intact.</li>
+  <li><b>Ask whether the firmware is installed at all:</b> <code>python -m mpremote connect COM? fs ls :</code>. No <code>main.py</code> in that listing <em>is</em> an explanation for a silent link &#8212; <code>firmware/README.md</code> records the code as only ever having been <code>run</code> from the host, with <code>fs cp</code> as a later step nothing claims was done.</li>
+  <li><b>Onboard LED, one line:</b> <code>python -m mpremote connect COM? exec "from machine import Pin;Pin('LED').on()"</code>. Never run on either board, and it needs the CYW43439 up, so a failure here is the wireless chip, not the LED.</li>
+  <li><b>Run the firmware before installing it:</b> <code>python -m mpremote connect COM? run firmware\pico_a.py</code>, Ctrl-C to stop. This only proves it does not crash &#8212; its frames leave on GP12/GP13, which USB cannot see. Once <code>main.py</code> runs a loop with a watchdog the REPL is hard to reach, so do it in this order.</li>
+  <li><b>Install, reconnect the feed, unplug USB, then test the link from the Pi.</b> <code>fs cp firmware\pico_a.py :main.py</code>. On the Pi, confirm the mux &#8212; <code>pinctrl get 4,5,12,13</code> must read <code>TXD2 RXD2 TXD4 RXD4</code> &#8212; then open <b>A on <code>/dev/ttyAMA4</code></b> and <b>B on <code>/dev/ttyAMA2</code></b> at 115200, listen for the boot <code>$I</code>, and send <code>$ID*XX</code>. A board that answers <code>$I,&lt;board&gt;,&lt;uid&gt;,&lt;ver&gt;</code> with a good checksum is the first end-to-end proof this carrier works. <b>Never send <code>RST</code> while probing B</b> &#8212; it asserts the BNO085 reset.</li>
+</ol>
+
+<h2>Reading a silent link</h2>
+<p class="note"><b>What comes back is worth more than whether something comes back.</b> Four outcomes, four different faults &#8212; all four seen on Board B on 2026-09-28.</p>
+
+<div class="tw">
+<table>
+  <thead><tr><th>At the Pi</th><th>Means</th><th>Next</th></tr></thead>
+  <tbody>
+    <tr><td><b>0 bytes</b></td><td>nothing is driving the line. Not a baud mismatch &#8212; a wrong baud still delivers bytes, just wrong ones</td><td>no firmware, reversed or missing feed, or J2 wrong. Only USB separates them</td></tr>
+    <tr><td><b>Garbage, count &#8800; sent</b></td><td>something is transmitting and the framing disagrees</td><td>baud, or a board running the wrong firmware</td></tr>
+    <tr><td><b>Garbage, count = sent, identical every run</b></td><td><b>TX coupled into RX on the far side.</b> The Pi is hearing itself, not a reply. Deterministic corruption with extra 1-bits means a <b>high-resistance</b> path where <code>RXD</code>&#8217;s pull-up wins the sampling &#8212; a hard bridge echoes your bytes back <em>exactly</em></td><td>unplug J2 at the <b>Pico</b> end and re-probe. Still noisy &#8594; harness or Pi. Quiet &#8594; carrier or Pico pins. Then ohm <b>c26 to c27</b>: they are the only two adjacent signal columns on B, GP12 and GP13 side by side</td></tr>
+    <tr><td><b><code>$I,&lt;board&gt;,&lt;uid&gt;,&lt;ver&gt;</code>, checksum good</b></td><td>the carrier works</td><td>match the UID to the board and move on to C-1 Phase 3</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="tw">
+<table>
+  <thead><tr><th>Checked</th><th>Board A</th><th>Board B</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td>J1 polarity</td><td>not metered</td><td>was <b>REVERSED</b>, corrected</td><td>found 2026-09-28. <b>No damage resulted</b> &#8212; see below</td></tr>
+    <tr><td>USB enumerate</td><td>not tried</td><td><b>PASS</b></td><td>uid <code>ad25bbf0f1e1f160</code>, MicroPython v1.29.0, RP2350</td></tr>
+    <tr><td>GP12/GP13 tie</td><td>&#8212;</td><td><b>not tied</b></td><td>GP13 held high while GP12 was driven low, same as an unused control pair. No bridge, no damaged clamp</td></tr>
+    <tr><td><code>Pin("LED")</code></td><td>not run</td><td><b>PASS</b></td><td><b>first time run on either board.</b> Lit, winking once a second</td></tr>
+    <tr><td><code>main.py</code> present</td><td><b>NO</b></td><td><b>installed 2026-09-29</b></td><td>the whole fault: the code was on the board as <code>pico_b.py</code>, which does not autorun</td></tr>
+    <tr><td>Link, Pico &#8594; Pi</td><td>0 bytes</td><td><b>PASS</b></td><td>33.3&#160;Hz, 0 gaps, 0 bad checksums over 6&#160;s</td></tr>
+    <tr><td>Link, Pi &#8594; Pico</td><td>untested</td><td><b>FAIL</b></td><td><code>PING</code>, <code>ID</code> and a deliberate <code>BOGUS</code> all unanswered while frames stream in. One wire: Pi phys 7 &#8594; <code>c27</code></td></tr>
+    <tr><td>Sonars</td><td>&#8212;</td><td><b>all three ranging</b></td><td>the stuck-ECHO flag fired correctly on two dead sensors and cleared on a good one</td></tr>
+    <tr><td>Pi pin mux</td><td><code>GP12 TXD4 &#183; GP13 RXD4</code></td><td><code>GP4 TXD2 &#183; GP5 RXD2</code></td><td>overlays in place and verified</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="warn"><b>&#9888; Board B survived a reversed J1 &#8212; do not read that as the connector being safe.</b> It was wired backwards on 2026-09-28 and every pin tested good afterwards: USB enumerates, GP12 and GP13 are not tied, the LED lights, and all three sonars range. <b>The board got away with it. The next one may not</b>, which is why D2 is still listed to add.<br><br><b>What the silence actually was:</b> the firmware had been copied to the board under its own name, <code>pico_b.py</code>, and a Pico only autoruns <code>main.py</code>. The board sat at a bare REPL driving nothing. The Pi then heard a corrupted copy of its own transmission &#8212; <b>crosstalk across the J2 harness into an unterminated stub</b>, which is why the byte count matched, the corruption repeated exactly, and unplugging J2 at the Pico end silenced it. <b>Nothing was broken. One filename cost a day.</b></div>
+
 <p class="colophon">
-  <span>As-built 2026-09-27</span>
+  <span>As-built 2026-09-27 · B proven 2026-09-29</span>
   <span>Master Hardware Design §4.7 §4.7 + §4.8, rev 2.5</span>
   <span>Feed order: rail → F1 → D1 → VSYS 39</span>
   <span>Divider taps upstream of F1</span>
+  <span>B&#8217;s J1 found reversed 2026-09-28 — D2 outstanding</span>
 </p>
 </div>
 
