@@ -103,6 +103,7 @@ code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--rule
   <div class="mast-foot">
     <span><b>Status</b> DESIGN ONLY — Willie continues in his current form</span>
     <span><b>Layers</b> 4</span>
+    <span><b>Nets</b> 95, derived from &#167;16.1</span>
     <span><b>Recorded</b> 2026-09-30</span>
     <span><b>Spec</b> docs/superpowers/specs/2026-09-30-backplane-design.md</span>
   </div>
@@ -217,16 +218,21 @@ code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--rule
   <!-- edge connectors -->
   <text class="tsm" x="40" y="404">EDGE CONNECTORS &#8212; keyed and distinct per function</text>
   <g>
-    <rect class="body" x="60" y="416" width="96" height="26" rx="2"/><text class="tsm" x="108" y="433" text-anchor="middle">Pi 5</text>
-    <rect class="body" x="168" y="416" width="96" height="26" rx="2"/><text class="tsm" x="216" y="433" text-anchor="middle">6 encoders</text>
-    <rect class="body" x="276" y="416" width="96" height="26" rx="2"/><text class="tsm" x="324" y="433" text-anchor="middle">3 sonars</text>
-    <rect class="body" x="384" y="416" width="96" height="26" rx="2"/><text class="tsm" x="432" y="433" text-anchor="middle">6 steering</text>
-    <rect class="body" x="492" y="416" width="96" height="26" rx="2"/><text class="tsm" x="540" y="433" text-anchor="middle">7 arm</text>
-    <rect class="body" x="600" y="416" width="96" height="26" rx="2"/><text class="tsm" x="648" y="433" text-anchor="middle">FSR402</text>
-    <rect class="body" x="708" y="416" width="96" height="26" rx="2"/><text class="tsm" x="756" y="433" text-anchor="middle">SEN0628</text>
-    <rect class="body" x="816" y="416" width="96" height="26" rx="2"/><text class="tsm" x="864" y="433" text-anchor="middle">R1 R2 R3 R5</text>
+  <text class="tsm" x="40" y="394" fill="var(--stop)">NO MOTOR CONNECTORS &#8212; the six motor pairs stay on the FeatherWings&#8217; own terminals and never touch this board</text>
+    <rect x="60" y="410" width="96" height="38" rx="2" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text class="tsm" x="108" y="426" text-anchor="middle">Pi &#8212; 2&#215;20</text>
+    <text class="tsm" x="108" y="440" text-anchor="middle">KEYED box hdr</text>
+    <rect x="168" y="410" width="96" height="38" rx="2" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+    <text class="tsm" x="216" y="426" text-anchor="middle">6 &#215; encoder</text>
+    <text class="tsm" x="216" y="440" text-anchor="middle">4-way, ALL KEYED</text>
+    <rect class="body" x="276" y="410" width="96" height="38" rx="2"/><text class="tsm" x="324" y="426" text-anchor="middle">3 &#215; sonar</text><text class="tsm" x="324" y="440" text-anchor="middle">4-way each</text>
+    <rect class="body" x="384" y="410" width="96" height="38" rx="2"/><text class="tsm" x="432" y="433" text-anchor="middle">6 steering</text>
+    <rect class="body" x="492" y="410" width="96" height="38" rx="2"/><text class="tsm" x="540" y="433" text-anchor="middle">7 arm</text>
+    <rect class="body" x="600" y="410" width="96" height="38" rx="2"/><text class="tsm" x="648" y="433" text-anchor="middle">FSR402</text>
+    <rect class="body" x="708" y="410" width="96" height="38" rx="2"/><text class="tsm" x="756" y="426" text-anchor="middle">SEN0628 ToF</text><text class="tsm" x="756" y="440" text-anchor="middle">belly mount</text>
+    <rect class="body" x="816" y="410" width="96" height="38" rx="2"/><text class="tsm" x="864" y="426" text-anchor="middle">R1 R2 R3 R5</text><text class="tsm" x="864" y="440" text-anchor="middle">up to 10 A</text>
   </g>
-  <text class="tsm" x="40" y="466" fill="var(--accent)">Six identical 6-way encoder housings is how left/right transpositions keep happening &#8212; three on record.</text>
+  <text class="tsm" x="40" y="466" fill="var(--accent)">Six identical 4-way encoder housings is how left/right transpositions keep happening &#8212; three on record.</text>
   <text class="tsm" x="40" y="482" fill="var(--accent)">Keying per function is the main defence, and it is free at design time.</text>
 </svg>
 <figcaption><b>Pico A sits at the loud end, Pico B at the quiet end</b> &#8212; and that falls out of what they do. A counts twelve encoder lines coming from the motors; B reads three divider outputs and drives the IMU reset. The rail inputs on the right are the <b>planned boundary</b>: R1, R2, R3 and R5 each land on a fused, sensed input, so a future designed supply replaces only what is on the far side of four connectors.</figcaption>
@@ -251,7 +257,11 @@ code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--rule
 <div class="warn"><b>&#9888; Q1 still protects only the battery input.</b> Every rail downstream of it stays unprotected against a reversed connector, which is why D2 is per-Pico rather than one part. <b>Four reverse-polarity events are on record:</b> the encoder supply on 2026-09-18 (LF Phase A destroyed, all six Phase B greens dead since), two sonars (&#167;16.12), and Pico B (2026-09-28).<br><br><b>And the rail boundary exists because of trimpots.</b> R2 sat at <b>6.446&#160;V</b> on a nominal 5&#160;V rail for eleven days &#8212; HC-SR04 absolute max is 5.5&#160;V &#8212; and is the leading cause of the sonar lost in the 2026-09-28 smoke event. A future supply with fixed feedback resistors makes the rail a property of the board instead of a setting.</div>
 
 <h2>Open before layout</h2>
-<p class="note"><b>Five things this design cannot settle on paper.</b> <b>1.</b> Board outline and mounting &#8212; dictated by the deck, which is not dimensioned in any document. Measure first. <b>2.</b> Connector family; JST-PH throughout today, and a keyed-per-function scheme needs choosing. <b>3.</b> Fuse format &#8212; F2&#8211;F5 are ATC/ATO blade, which is large for a PCB, and a PCB-mount family changes the ratings available. <b>4.</b> Whether the Pi mounts to this board or stays separate; separate today. <b>5.</b> Cost at 4 layers for a deck-sized outline, unknown until the outline is measured.</p>
+<p class="note"><b>Decided 2026-09-30.</b> The <b>Pi connects by 40-way IDC ribbon to a 2&#215;20 SMD keyed box header</b> &#8212; shrouded and polarised, so the ribbon cannot go on backwards, and the board outline no longer has to accommodate where the Pi sits. Its <b>eight ground pins</b> replace the two wires (pin 6/9) the rover uses today. <b>Board-mounted connectors</b> for the six encoders, the three sonars and the ToF. <b>No motor connectors</b> &#8212; the pairs stay on the FeatherWing terminals, so no motor current crosses the board and there is no high-current copper to size. <b>Six M3 plated mounting holes</b>, with plastic standoffs specified wherever one passes a rail.</p>
+
+<p class="note"><b>Still open.</b> <b>1.</b> The deck is <b>not dimensioned in any document</b>, so there is no board outline &#8212; measure it first. <b>2.</b> The rail and signal connector families, and <b>one family will not cover both</b>: the rail inputs carry up to <b>10&#160;A</b> (F2, F4, F5), which rules out JST-PH at ~2&#160;A. The deciding input is the available crimp tooling, not a datasheet &#8212; three of the six wheel faults found on 2026-09-30 were loose crimps. <b>3.</b> Fuse format; ATC/ATO blade is large for a PCB. <b>4.</b> Cost at four layers, unknown until the outline exists.</p>
+
+<div class="warn"><b>&#9888; The power-return pour is not designed yet.</b> The derived netlist has <b>27 pins on the signal ground and one on the power return</b> &#8212; because &#167;16.1 is a device I/O index and does not contain the ground tree. Its real members, the FeatherWing stack, Q1, the fuses and the switches, have to come from &#167;2.1&#8217;s distribution tree and &#167;10&#8217;s star. <b>Until that pass is done this describes the signal half of a board and not the power half</b> &#8212; worth saying plainly, because the two pours are the entire reason it is four layers.</div>
 
 <p class="colophon">
   <span>Design only &#183; not built</span>
