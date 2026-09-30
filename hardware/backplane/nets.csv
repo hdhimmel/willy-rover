@@ -25,6 +25,7 @@ ECHO_L_5V,2,Signal board P1:P1-7 ; LEFT sonar:ECHO
 ECHO_R_3_33V,2,Signal board P1:P1-12 ; J_PI:GP21  pin 40
 ECHO_R_5V,2,Signal board P1:P1-11 ; RIGHT sonar:ECHO
 ENCODER_VCC,2,J_MOTOR:blue ; R5:3V3 encoder distribution
+ENC_3V3,6,J_ENC_LF:blue ; J_ENC_LM:blue ; J_ENC_RF:blue ; J_ENC_RM:blue ; J_ENC_LR:blue ; J_ENC_RR:blue
 ENC_LF_A,2,PICO_A:GP0 ; J_ENC_LF:yellow
 ENC_LF_B,2,PICO_A:GP1 ; J_ENC_LF:green
 ENC_LM_A,2,PICO_A:GP2 ; J_ENC_LM:yellow
@@ -41,7 +42,7 @@ EXCITATION_SAME_RAIL_AS_ADS1115_VDD,2,J_FSR:lead A ; J_PI:pin 1  3V3
 FSR_0_3_3V,2,Signal board P1:P1-16 ; ADS1115:A1
 FSR_LEG_B,2,Signal board P1:P1-15 ; J_FSR:lead B
 GNDP,1,J_MOTOR:black
-GNDS,9,"J_PI:pin 6, 9  GND ; Signal board P1:P1-17 ; ADS1115   0x48:GND ; INA260   0x40:SDA  /  SCL  /  VCC  /  GND ; INA260   0x44:SDA  /  SCL  /  VCC  /  GND ; INA260   0x45:SDA  /  SCL  /  VCC  /  GND ; LTC4311:VIN  /  GND  /  SDA  /  SCL ; BNO085   0x4A:VIN  /  GND ; J_SONAR:GND"
+GNDS,27,"J_PI:pin 6, 9  GND ; Signal board P1:P1-17 ; ADS1115   0x48:GND ; INA260   0x40:SDA  /  SCL  /  VCC  /  GND ; INA260   0x44:SDA  /  SCL  /  VCC  /  GND ; INA260   0x45:SDA  /  SCL  /  VCC  /  GND ; LTC4311:VIN  /  GND  /  SDA  /  SCL ; BNO085   0x4A:VIN  /  GND ; J_SONAR:GND ; J_ENC_LF:black ; J_ENC_LM:black ; J_ENC_RF:black ; J_ENC_RM:black ; J_ENC_LR:black ; J_ENC_RR:black ; J_SONAR_F:GND ; J_SONAR_L:GND ; J_SONAR_R:GND ; J_TOF:GND ; J_PI:pin 6 GND ; J_PI:pin 9 GND ; J_PI:pin 14 GND ; J_PI:pin 20 GND ; J_PI:pin 25 GND ; J_PI:pin 30 GND ; J_PI:pin 34 GND ; J_PI:pin 39 GND"
 GRIPPER_FORCE,2,ADS1115   0x48:A1 ; Signal board:P1-16
 I2C_OTHER,9,J_PI:I²C ; ADS1115   0x48:SDA  /  SCL ; BNO085   0x4A:SDA  /  SCL ; FeatherWing   0x60   RIGHT:logic ; FeatherWing   0x61   LEFT:logic ; PCA9685   0x42:logic ; PCA9685   0x43:logic ; GODIY hub × 2:upstream ; GODIY hub × 2:ports
 I2C_SCL,1,J_PI:pin 5  GP3
@@ -54,7 +55,8 @@ INLINE_IN_R3_6V,2,INA260   0x44:VIN+  /  VIN− ; DROK-6V out → arm servo dist
 INTERRUPT,2,BNO085   0x4A:INT ; J_PI:GP15  pin 10
 MOTOR,3,J_MOTOR:red ; FeatherWing:motor terminal ; J_MOTOR:white
 MOTOR_DRIVE,4,FeatherWing   0x60   RIGHT:M1  /  M2  /  M3 ; Motors RR / RM / RF:red + / white − ; FeatherWing   0x61   LEFT:M1  /  M2  /  M3 ; Motors LR / LM / LF:red + / white −
-N_3V3,1,RRB1:1
+N_3V3,2,J_TOF:VCC ; RRB1:1
+N_5V,3,J_SONAR_F:VCC ; J_SONAR_L:VCC ; J_SONAR_R:VCC
 PICO_A_RX,2,PICO_A:GP13 ; J_PI:PICO_A_TX
 PICO_A_TX,2,PICO_A:GP12 ; J_PI:PICO_A_RX
 PICO_B_RX,2,PICO_B:GP13 ; J_PI:PICO_B_TX
@@ -66,14 +68,22 @@ RESERVED,2,"J_PI:pin 27, 28  GP0/GP1 ; AI HAT+ 2:EEPROM"
 SENSOR_PI,2,J_TOF:TX ; J_PI:GP9  pin 21
 SONAR_FRONT_ECHO,2,J_PI:pin 37  GP26 ; Signal board:P1-4
 SONAR_FRONT_TRIG,2,J_PI:pin 29  GP5 ; Signal board:P1-1
+SONAR_F_ECHO_RAW,1,J_SONAR_F:ECHO
+SONAR_F_TRIG,2,J_SONAR_F:TRIG ; PICO_B:TRIG_F
 SONAR_LEFT_ECHO,2,J_PI:pin 8  GP14 ; Signal board:P1-8
 SONAR_LEFT_TRIG,2,J_PI:pin 33  GP13 ; Signal board:P1-5
+SONAR_L_ECHO_RAW,1,J_SONAR_L:ECHO
+SONAR_L_TRIG,2,J_SONAR_L:TRIG ; PICO_B:TRIG_L
 SONAR_RIGHT_ECHO,2,J_PI:pin 40  GP21 ; Signal board:P1-12
 SONAR_RIGHT_TRIG,2,J_PI:pin 7  GP4 ; Signal board:P1-9
+SONAR_R_ECHO_RAW,1,J_SONAR_R:ECHO
+SONAR_R_TRIG,2,J_SONAR_R:TRIG ; PICO_B:TRIG_R
 SPARE,2,FeatherWing   0x61   LEFT:M4 ; —:—
 STEERING_PWM,2,"PCA9685   0x42:CH0 – CH5 ; Steering servos LF, RF, LM, RM, LR, RR:signal"
 STRAP_0X48,2,ADS1115   0x48:ADDR ; —:tied GND
+TOF_RX,2,J_TOF:RX ; J_PI:pin 24 GP8
 TOF_SENSOR_TX_PI_RX,2,J_PI:pin 21  GP9 ; SEN0628:TX
+TOF_TX,2,J_TOF:TX ; J_PI:pin 21 GP9
 TRIG_F_FROM_PI,2,Signal board P1:P1-1 ; J_PI:GP5  pin 29
 TRIG_F_PASS_THROUGH,2,Signal board P1:P1-2 ; FRONT sonar:TRIG
 TRIG_L_FROM_PI,2,Signal board P1:P1-5 ; J_PI:GP13  pin 33

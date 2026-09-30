@@ -164,17 +164,50 @@ def main():
         add(net, src)
         add(net, dst)
 
-    # --- encoders: twelve lines onto Pico A, as-built order -----------------------
+    # --- one ENCODER connector per wheel, four ways -------------------------------
+    # Owner-directed 2026-09-30: NO MOTOR CONNECTORS ON THE BOARD. The motor pairs
+    # stay on the FeatherWings' own screw terminals and never touch this PCB, so no
+    # motor current crosses it and there is no high-current copper to size. Each
+    # wheel's six-wire harness splits at the chassis: two thick to the FeatherWing,
+    # four thin to its connector here.
+    #
+    # ⚠ ALL SIX MUST BE KEYED DIFFERENTLY. Six identical 4-way housings on six wheels
+    #   is how the fourth transposition happens -- three are already on record, and
+    #   the most recent was only untangled on 2026-09-29.
     for i, w in enumerate(ENCODER_ORDER):
-        add('ENC_%s_A' % w.upper(), 'PICO_A:GP%d' % (i * 2))
-        add('ENC_%s_A' % w.upper(), 'J_ENC_%s:yellow' % w.upper())
-        add('ENC_%s_B' % w.upper(), 'PICO_A:GP%d' % (i * 2 + 1))
-        add('ENC_%s_B' % w.upper(), 'J_ENC_%s:green' % w.upper())
+        W, J = w.upper(), 'J_ENC_%s' % w.upper()
+        add('ENC_%s_A' % W, 'PICO_A:GP%d' % (i * 2)); add('ENC_%s_A' % W, '%s:yellow' % J)
+        add('ENC_%s_B' % W, 'PICO_A:GP%d' % (i * 2 + 1)); add('ENC_%s_B' % W, '%s:green' % J)
+        add('ENC_3V3', '%s:blue' % J)          # encoder supply, R5 via the rail input
+        add('GNDS', '%s:black' % J)            # encoder return -- signal pour
+
+    # --- sonars and ToF: one board-mounted connector each -------------------------
+    for s_ in ('F', 'L', 'R'):
+        J = 'J_SONAR_%s' % s_
+        add('N_5V', '%s:VCC' % J); add('GNDS', '%s:GND' % J)
+        add('SONAR_%s_TRIG' % s_, '%s:TRIG' % J); add('SONAR_%s_TRIG' % s_, 'PICO_B:TRIG_%s' % s_)
+        add('SONAR_%s_ECHO_RAW' % s_, '%s:ECHO' % J)   # into the divider, not the Pico
+    add('N_3V3', 'J_TOF:VCC'); add('GNDS', 'J_TOF:GND')
+    add('TOF_TX', 'J_TOF:TX'); add('TOF_TX', 'J_PI:pin 21 GP9')
+    add('TOF_RX', 'J_TOF:RX'); add('TOF_RX', 'J_PI:pin 24 GP8')
 
     # --- the two UART links, 4.7 --------------------------------------------------
     for pico, a, b in (('PICO_A', 'GP12', 'GP13'), ('PICO_B', 'GP12', 'GP13')):
         add('%s_TX' % pico, '%s:%s' % (pico, a)); add('%s_TX' % pico, 'J_PI:%s_RX' % pico)
         add('%s_RX' % pico, '%s:%s' % (pico, b)); add('%s_RX' % pico, 'J_PI:%s_TX' % pico)
+
+    # --- the Pi link: 2x20 SMD KEYED BOX HEADER, 40-way IDC ribbon ----------------
+    # Owner-directed 2026-09-30. A shrouded, polarised header, so the ribbon cannot go
+    # on backwards -- which matters on a rover with four reverse-polarity events on
+    # record. It also decouples the board outline from wherever the Pi is mounted,
+    # which is one of the three things blocking layout.
+    #
+    # THE EIGHT GROUND PINS ARE A REAL GAIN. Today the Pi's reference reaches the
+    # boards through pin 6/9 -- two wires. Eight pins in parallel give a far lower
+    # impedance tie between the Pi's ground and the signal pour, at exactly the
+    # junction the star cares about.
+    for gpin in (6, 9, 14, 20, 25, 30, 34, 39):
+        add('GNDS', 'J_PI:pin %d GND' % gpin)
 
     # --- the BNO085 reset: 4.7 consequence 1, open-drain on Pico B GP15 -----------
     add('IMU_RST', 'PICO_B:GP15')

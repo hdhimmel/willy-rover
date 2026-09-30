@@ -75,6 +75,20 @@ receive a board with no sockets on it.
    drawn without it. Blender is the right tool and a mock-up script can come first.
 2. **Choose the connector family.** Keyed per function — six identical 6-way encoder
    housings is how left/right transpositions keep happening, three on record.
+
+   **Decided 2026-09-30 — the Pi.** A **2×20 2.54 mm SMD keyed box header**, with a
+   40-way IDC ribbon to the Pi's GPIO header. Shrouded and polarised, so the ribbon
+   cannot go on backwards. It decouples the board outline from wherever the Pi is
+   mounted, and its **eight ground pins** give a far better reference tie than the
+   two wires the rover uses today.
+
+   **Still undecided: everything else.** And one family will not cover it — the rail
+   inputs carry **up to 10 A** (F2, F4, F5), which rules out JST-PH at ~2 A. Expect a
+   power family and a signal family.
+
+   **The deciding input is your crimp tooling**, not a datasheet. Three of the six
+   wheel faults found on 2026-09-30 were loose joints at the motor end; a family you
+   cannot crimp reliably reproduces that fault on a new board.
 3. **Choose the fuse format.** F2–F5 are ATC/ATO blade today, which is large for a
    PCB; a PCB-mount family changes the ratings available.
 4. Netlist → schematic → layout → pours → DRC → plot.

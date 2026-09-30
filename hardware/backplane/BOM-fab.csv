@@ -14,6 +14,7 @@ DA2;DB2,1N5819,Reverse-polarity clamp across each Pico feed,2,DO-41,NEW 2026-09-
 FHA1;FHB1,PTC holder 0.5A,Pico VSYS fuse,2,TBD,MHD 4.7,"0.5A hold / 1.0A trip"
 FH2;FH3;FH4;FH5,Blade fuse holder,Rail fuses F2-F5,4,TBD,MHD 2.1,"FORMAT UNDECIDED - ATC/ATO is large for a PCB"
 FH6,Blade fuse holder,P8 rail fuse,1,TBD,NEW 2026-09-30,"P8 has NO fuse today - MHD 14 item 16"
+MH1..MH6,M3 plated,Board mounting holes for standoffs,6,MountingHole_3.2mm,owner 2026-09-30,"⚠ PLASTIC standoffs where they pass a rail - a metal one shorted +12V on 2026-09-28"
 SWM,SPST,Motor branch switch,1,TBD,MHD 2.1,"check its position before metering - an off switch reads like a blown fuse"
 SWA,SPST,Arm rail switch,1,TBD,MHD 2.1,
 XPICOA;XPICOB,2x20 female 2.54mm,Pico 2 W sockets,4,TBD,MHD 4.8,"two strips per board"
@@ -25,13 +26,13 @@ XPCA42;XPCA43,Module header,PCA9685 sockets,2,TBD,MHD 15.4,"0x42 steering 0x43 a
 XBNO,Module header,BNO085 socket,1,TBD,MHD 15.4,"quiet end - 29mm from the FeatherWings today"
 CPCA42,1000u 16V,PCA9685 0x42 bulk,1,TBD,MHD 15.4,
 CPCA43,2200u 16V low-ESR,PCA9685 0x43 bulk,1,TBD,MHD 15.4,"Rubycon"
-JPI,TBD,Raspberry Pi 5 interface,1,TBD,MHD 16,"CONNECTOR FAMILY UNDECIDED"
-JENC1..JENC6,TBD,Encoder connectors,6,TBD,MHD 7.2,"KEY THESE DIFFERENTLY - 3 transpositions on record"
-JSON1..JSON3,TBD,HC-SR04 connectors,3,TBD,MHD 6.1,
+JPI,2x20 2.54mm SMD box header,Raspberry Pi 5 interface - KEYED/SHROUDED,1,Header_2x20_P2.54mm_SMD_Shrouded,owner 2026-09-30,"40-way IDC ribbon to the Pi GPIO header. Keyed so the ribbon cannot go on backwards. 8 GND pins (6 9 14 20 25 30 34 39) all land on the signal pour - today the Pi reference arrives on two wires"
+J_ENC_LF;J_ENC_LM;J_ENC_RF;J_ENC_RM;J_ENC_LR;J_ENC_RR,4-way board mount,Encoder connectors - one per wheel,6,TBD,owner 2026-09-30,"blue black yellow green. ALL SIX KEYED DIFFERENTLY - 3 transpositions on record. Motor pairs are NOT on this board - they stay on the FeatherWing terminals"
+J_SONAR_F;J_SONAR_L;J_SONAR_R,4-way board mount,HC-SR04 connectors,3,TBD,MHD 6.1,
 JSTEER,TBD,Steering servo connector,1,TBD,MHD 10,"6 corners"
 JARM,TBD,Arm servo connector,1,TBD,MHD 11.1,"7 joints"
 JFSR,TBD,FSR402 connector,1,TBD,MHD 6.6,"2 way - no polarity"
-JTOF,TBD,SEN0628 ToF connector,1,TBD,MHD 6.5,"uart3-pi5 GP8/GP9"
+J_TOF,4-way board mount,SEN0628 ToF connector,1,TBD,MHD 6.5,"uart3-pi5 - TX to Pi GP9 phys21, RX from Pi GP8 phys24, 3V3 <80mA. Belly mounted"
 JR1;JR2;JR3;JR5,TBD,Rail inputs from the DROKs,4,TBD,NEW 2026-09-30,"the planned boundary for a future supply board"
 TP_STAR,Test point,Star ground stitch,1,TBD,NEW 2026-09-30,"L2-to-L3 continuity check lives here"
 TP_E1;TP_E2;TP_E3,Test point,ECHO divider junctions,3,TBD,MHD 16.12,"check 6 - expect 3.2-3.4V - never run"

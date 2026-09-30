@@ -128,7 +128,7 @@ Rules that fall out of it:
 | **F6, new** | **P8 has no fuse today** (§14 item 16) — the only +12 V branch without one, and it feeds Pico A's VSYS. On a backplane it is one more fuse holder rather than a wiring job. |
 | **D2 ×2, new** | Reverse-polarity clamp across each Pico's feed: anode to GND, cathode to V+, idle in normal use, conducting into F1 on a reversed feed. Neither carrier has one today, and **Board B survived a reversed J1 on 2026-09-28 on luck alone**. |
 | **J1 disappears** | Absorbing the Pico carriers removes the connector that was reversed. A Pico that sockets directly into the backplane has no feed to get backwards. |
-| **Plated, placed mounting holes** | With designed keep-outs. The 2026-09-28 short was a metal standoff in a hole nobody had specified. |
+| **Plated, placed mounting holes** | Six M3, with designed keep-outs, and **plastic standoffs specified wherever one passes a rail**. The 2026-09-28 short was a metal standoff in a hole nobody had specified. |
 | **Q1 on-board** | Reverse-polarity protection at the battery input stops being a stacked daughterboard. |
 
 ⚠ **Q1 still protects only the battery input.** Every rail downstream of it remains
@@ -185,8 +185,21 @@ as a failure mode: the rail becomes a property of the board instead of a setting
 
 1. **Board outline and mounting** — dictated by the existing deck, which is not
    dimensioned in any document. Needs measuring before layout.
-2. **Connector family.** JST-PH is used throughout today. A keyed-per-function scheme
-   needs choosing, and it is the main defence against transposition.
+2. **Connector family.** Partly decided.
+
+   **The Pi is settled: a 2x20 2.54 mm SMD keyed box header, 40-way IDC ribbon.**
+   Shrouded and polarised so the ribbon cannot go on backwards, which matters on a
+   rover with four reverse-polarity events on record. It also decouples the board
+   outline from wherever the Pi is mounted, removing one of the three blockers. And
+   its **eight ground pins** replace the two wires (pin 6/9) the rover uses today --
+   a much lower-impedance reference tie at exactly the junction the star cares about.
+
+   **The rest is open, and one family will not cover it.** The rail inputs carry up
+   to **10 A** (F2, F4, F5), which rules out JST-PH at ~2 A. Expect a power family and
+   a signal family. **The deciding input is the available crimp tooling**, not a
+   datasheet: three of the six wheel faults found on 2026-09-30 were loose joints at
+   the motor end, and a family that cannot be crimped reliably reproduces that fault
+   on a new board.
 3. **Fuse format.** F2–F5 are ATC/ATO blade today. Blade holders are large for a
    PCB; a switch to a PCB-mount family changes the current ratings available.
 4. **Whether the Pi mounts to this board or stays separate.** Currently separate.
