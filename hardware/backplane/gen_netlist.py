@@ -104,6 +104,44 @@ def edge(name):
     return EDGE.get((name or '').strip().lower(), name)
 
 
+# --- footprints ------------------------------------------------------------------
+# THROUGH-HOLE, owner-directed 2026-09-30. The board stays hand-assemblable, which
+# matters because the person fixing it is the person who built it. Only parts whose
+# form factor is actually decided get a footprint here; everything else stays TBD
+# rather than being guessed, because a fab BOM with invented footprints is worse than
+# one with honest blanks.
+#
+# ⚠ The Pi header was specified SMD. On an otherwise through-hole board a THT
+#   shrouded box header is far easier to hand-solder and is equally keyed; both
+#   options are left here for the choice to be made deliberately.
+FOOTPRINT = {
+    'J_PI':    'Connector_IDC:IDC-Header_2x20_P2.54mm_Vertical',   # or _SMD_ if kept SMD
+    'PICO_A':  'Connector_PinHeader_2.54mm:PinSocket_2x20_P2.54mm_Vertical',
+    'PICO_B':  'Connector_PinHeader_2.54mm:PinSocket_2x20_P2.54mm_Vertical',
+}
+FOOTPRINT_BY_PREFIX = (
+    ('RE',  'Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal'),
+    ('RB',  'Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal'),
+    ('RF',  'Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal'),
+    ('RPA', 'Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal'),
+    ('RRB', 'Resistor_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal'),
+    ('DA',  'Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal'),
+    ('DB',  'Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal'),
+    ('Q1',  'Package_TO_SOT_THT:TO-220-3_Vertical'),
+    ('CQ',  'Capacitor_THT:C_Disc_D5.0mm_W2.5mm_P5.00mm'),
+    ('MH',  'MountingHole:MountingHole_3.2mm_M3'),
+)
+
+
+def footprint_for(ref):
+    if ref in FOOTPRINT:
+        return FOOTPRINT[ref]
+    for pfx, fp in FOOTPRINT_BY_PREFIX:
+        if ref.startswith(pfx):
+            return fp
+    return 'TBD:TBD'
+
+
 def pour_of(name):
     n = (name or '').lower()
     for k in POWER_RETURN:
@@ -242,7 +280,8 @@ def main():
         f.write('  (components\n')
         for c in comps:
             ref = re.sub(r'[^A-Za-z0-9_]', '_', c)
-            f.write('    (comp (ref "%s") (value "%s") (footprint "TBD:TBD"))\n' % (ref, c))
+            f.write('    (comp (ref "%s") (value "%s") (footprint "%s"))\n'
+                    % (ref, c, footprint_for(ref)))
         f.write('  )\n  (nets\n')
         for i, n in enumerate(sorted(nets), 1):
             f.write('    (net (code "%d") (name "%s")\n' % (i, n))
