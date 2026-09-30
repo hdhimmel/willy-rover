@@ -60,9 +60,21 @@ class PicoLink:
         self._thread = None
         self._bad_checksums = 0
         self._opened = False
+        self._last_seq = {}
+        self._seq_gaps = 0
+        self._reboots = 0
 
     # --- lifecycle ----------------------------------------------------------------
-    def start(self):
+    def start(self, port=None):
+        """`port` injects an already-open serial-like object, for tests. It needs only
+        `in_waiting`, `read(n)`, `write(b)`, `flush()` and `close()`."""
+        if port is not None:
+            self._serial = port
+            self._opened = True
+            self._running = True
+            self._thread = threading.Thread(target=self._read_loop, daemon=True)
+            self._thread.start()
+            return
         if config.SIMULATE_HARDWARE:
             self._running = True
             return
@@ -117,8 +129,32 @@ class PicoLink:
             self._bad_checksums += 1
             return
         fields = body.split(',')
+        kind = fields[0]
+        # Sequence gaps. The protocol numbers every frame for one reason: "so a gap is
+        # visible rather than silently interpolated" (firmware/README.md). Counting them
+        # here is what makes that true on the Pi -- a link that drops one frame in ten
+        # still looks healthy to a freshness check, because the frames that DO arrive are
+        # recent. Only the sequence shows it.
+        if kind in ('E', 'S') and len(fields) > 1:
+            try:
+                seq = int(fields[1])
+            except ValueError:
+                seq = None
+            if seq is not None:
+                prev = self._last_seq.get(kind)
+                if prev is not None:
+                    step = (seq - prev) & 0xFFFF     # the counter wraps at 16 bits
+                    if step != 1:
+                        self._seq_gaps += 1
+                        # A board that rebooted restarts its numbering, which is a gap
+                        # with a very large step. Worth separating: a dropped frame is
+                        # noise, a reboot means the Pico restarted under us and any
+                        # ZERO or RST state it held is gone.
+                        if step > 0x8000 or seq <= 1:
+                            self._reboots += 1
+                self._last_seq[kind] = seq
         with self._lock:
-            self._frames[fields[0]] = (fields, time.monotonic())
+            self._frames[kind] = (fields, time.monotonic())
 
     # --- consumer API -------------------------------------------------------------
     def latest(self, kind):
@@ -160,6 +196,19 @@ class PicoLink:
     @property
     def bad_checksums(self):
         return self._bad_checksums
+
+    @property
+    def seq_gaps(self):
+        """Frames the Pico sent that never arrived. A link dropping one in ten still
+        passes a freshness check -- the frames that do arrive are recent. Only this
+        shows it."""
+        return self._seq_gaps
+
+    @property
+    def reboots(self):
+        """Times the sequence restarted. The Pico came back up under us, so anything it
+        was holding -- a ZERO'd count origin, a completed RST -- is gone."""
+        return self._reboots
 
     def is_healthy(self, kind, max_age_s):
         return self.fresh(kind, max_age_s) is not None
