@@ -238,8 +238,10 @@ ARM_WAVE_APPROACH_STEP_US=50    # shoulder step size travelling to the pose
 ARM_CURRENT_LIMIT_A=2.5
 ARM_CURRENT_LIMIT_S=0.4
 
-# Wheel encoders — MCP23017 @0x27 (§9.1), quadrature A/B per wheel. counts/rev is a "starting
-# value" from the motor listing, not bench-confirmed.
+# Wheel encoders — Pico A over uart4-pi5, Phase A edges only (§4.7). Not quadrature: all six
+# Phase B greens have read dead since 2026-09-18, so the counts have magnitude and NO
+# DIRECTION. counts/rev below is still a listing-derived guess and is wrong for this
+# transport; it has never been bench-confirmed.
 # ENCODER_ADDR REMOVED 2026-09-30. The MCP23017 is off the bus; a live scan returns ten
 # devices and none of them is 0x27. Encoder decode is Pico A's job now, over uart4-pi5.
 PICO_A_DEVICE='/dev/ttyAMA4'   # uart4-pi5, Pi GP12/GP13 -- encoders + R5 rail sense
@@ -257,10 +259,12 @@ ENCODER_POLL_HZ=50.0
 # 7.2 predicted exactly this: the encoder column "may follow the physical wheels, or the port
 # permutation, or neither".
 #
-# Method: drive one wheel 1.0s, compare the MCP23017 resting state before and after, and count
-# over six trials how often each pin changes. A pin on that wheel's encoder changes on most
-# trials (the shaft stops wherever it stops); a pin picking up PWM crosstalk changes rarely and
-# inconsistently. Confirmed on two independent runs.
+# Method, SUPERSEDED 2026-09-29 and kept only because the reasoning still holds. It used to be:
+# drive one wheel 1.0s and compare the MCP23017's resting state before and after, over six
+# trials, because a pin on that wheel's encoder changes on most trials while one picking up PWM
+# crosstalk changes rarely. That was a workaround for an I2C poll too slow to see edges.
+# Pico A counts every edge in PIO, so the question is now answered directly: drive one wheel
+# and read which channel's count moves. Done on blocks 2026-09-29, five wheels, unambiguous.
 #
 # DO NOT sample these pins in a tight loop looking for edges. At 0.6 duty the edge rate is
 # ~7.7kHz and I2C polling tops out near 1.2kHz, which aliases to a CONSTANT reading -- that is

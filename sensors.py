@@ -158,11 +158,12 @@ class SonarArray:
 class IMU:
     # BNO085 SH-2 fusion chip — quaternion already drift-free, no complementary filter needed.
     # Mounting-axis convention (which physical axis reads as pitch/roll) is unconfirmed —
-    # §20.7 bench calibration (mount level, verify) hasn't been run yet. RST (MCP23017 port B
-    # bit 4, confirmed 2026-08-08) is now wired up below via adafruit_mcp230xx's DigitalInOut
-    # pin, so BNO08X_I2C.hard_reset() does a real GPIO pulse instead of the silent no-op it was
-    # before — a genuine SH-2 chip reset before enable_feature, not just the I2C soft-reset
-    # command. INT (GP15) is still unused — the library works over I2C polling alone; §8.2 of
+    # §20.7 bench calibration (mount level, verify) hasn't been run yet. RST: see the note in
+    # __init__. Between 2026-08-14 and 2026-09-30 it was a real GPIO pulse through the
+    # MCP23017's port B bit 4; the expander is gone and the line has not been reconnected, so
+    # hard_reset() is back to the silent no-op it was before that. The chip itself is healthy —
+    # verified 2026-09-30, it answers SHTP on 0x4A with an incrementing sequence number.
+    # INT (GP15) is still unused — the library works over I2C polling alone; §8.2 of
     # the master doc calls INT "required for SH-2 report timing" while this comment previously
     # called it optional, a still-unreconciled contradiction (not addressed by this change).
     def __init__(self):
