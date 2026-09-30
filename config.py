@@ -156,10 +156,7 @@ TOF_PROFILE_SAMPLES=10      # frames averaged when capturing; one frame carries 
 I2C_BAUDRATE=100000
 
 IMU_ADDR=0x4A; IMU_TILT_LIMIT=25; IMU_TILT_WARN=18; IMU_POLL_HZ=100  # BNO085, §8.2/§8.5
-# RST wired to MCP23017 (§9.1's same chip, ENCODER_ADDR) port B bit 4 — confirmed 2026-08-08
-# (previously only documented as "spare pin", no bit number). MCP230xx get_pin() numbering is
-# 0-7=port A, 8-15=port B, so B4 -> pin index 12. Doesn't collide with any ENCODER_PINS bit
-# (bank B only uses bits 0-3 there).
+# RST: see the note below. It is no longer an expander pin.
 # IMU_RST_MCP_PIN REMOVED 2026-09-30 with the expander that hosted it. Section 4.7
 # consequence 1 moves the BNO085 reset to Pico B GP15, open-drain against R4, exposed as
 # an explicit acknowledged RST command over uart2-pi5. ⚠ That direction is dead today --
