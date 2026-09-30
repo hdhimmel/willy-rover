@@ -1,0 +1,86 @@
+net,pins,pin_list
+10_S_PULSE,2,J_SONAR:TRIG ; Signal board:P1-2  /  P1-6  /  P1-10
+12V_VIA_F2_AND_SW_M,3,FeatherWing   0x60   RIGHT:VIN ; +12V bus:INA260  0x45 ; FeatherWing   0x61   LEFT:VIN
+12V_VIA_INLINE_FUSE,2,Signal board P1:P1-13 ; +12V bus:branch
+3_3V,3,J_PI:pin 1  3V3 ; All I²C device logic + SEN0628:VIN  /  VDD ; ADS1115   0x48:VDD
+3_3V_80MA,2,J_TOF:VCC ; J_PI:pin 1  3V3
+3_PIN_JST_SH_DEBUG_UART,2,"J_PI:*service port* ; *unused —  reserved for the console , deliberately not spent on a rover subsystem (§4.7)*:—"
+5V,4,PCA9685   0x42:V+ ; J_R2:output ; J_SONAR:VCC ; R2:servo rail
+5V_FROM_WITTY_PI,2,"J_PI:pin 2, 4  5V ; J_PI:5V out"
+5V_PULSE,2,J_SONAR:ECHO ; Signal board:P1-3  /  P1-7  /  P1-11
+5_4V,2,J_PI:5V out ; J_PI:header 5V
+6V,2,PCA9685   0x43:V+ ; J_R3:output
+9V,2,J_PI:VIN ; J_R1:output
+ACCELERATOR,2,J_PI:PCIe ; AI HAT+ 2:FFC
+ARM_PWM,14,"PCA9685   0x43:CH0 ; Wrist pitch:signal ; PCA9685   0x43:CH1 ; Elbow:signal ; PCA9685   0x43:CH2 ; Shoulder, lift axis:signal ; PCA9685   0x43:CH3 ; Second shoulder axis:signal ; PCA9685   0x43:CH4 ; Wrist rotate:signal ; PCA9685   0x43:CH5 ; Gripper:signal ; PCA9685   0x43:CH6 ; Base yaw:signal"
+BATTERY_2_90V,2,Signal board P1:P1-14 ; ADS1115:A0
+BATTERY_DIVIDER,2,ADS1115   0x48:A0 ; Signal board:P1-14
+CAMERA_SERIAL,2,J_PI:CSI ; Front camera:FFC
+DISPLAY_3_PIN_POWER_TAP,2,J_PI:DSI ; Display:ribbon + GPIO
+DIVIDER_TAP,2,J_FSR:lead B ; Signal board:P1-15
+ECHO_F_3_33V,2,Signal board P1:P1-4 ; J_PI:GP26  pin 37
+ECHO_F_5V,2,Signal board P1:P1-3 ; FRONT sonar:ECHO
+ECHO_L_3_33V,2,Signal board P1:P1-8 ; J_PI:GP14  pin 8
+ECHO_L_5V,2,Signal board P1:P1-7 ; LEFT sonar:ECHO
+ECHO_R_3_33V,2,Signal board P1:P1-12 ; J_PI:GP21  pin 40
+ECHO_R_5V,2,Signal board P1:P1-11 ; RIGHT sonar:ECHO
+ENCODER_VCC,2,J_MOTOR:blue ; R5:3V3 encoder distribution
+ENC_LF_A,2,PICO_A:GP0 ; J_ENC_LF:yellow
+ENC_LF_B,2,PICO_A:GP1 ; J_ENC_LF:green
+ENC_LM_A,2,PICO_A:GP2 ; J_ENC_LM:yellow
+ENC_LM_B,2,PICO_A:GP3 ; J_ENC_LM:green
+ENC_LR_A,2,PICO_A:GP8 ; J_ENC_LR:yellow
+ENC_LR_B,2,PICO_A:GP9 ; J_ENC_LR:green
+ENC_RF_A,2,PICO_A:GP4 ; J_ENC_RF:yellow
+ENC_RF_B,2,PICO_A:GP5 ; J_ENC_RF:green
+ENC_RM_A,2,PICO_A:GP6 ; J_ENC_RM:yellow
+ENC_RM_B,2,PICO_A:GP7 ; J_ENC_RM:green
+ENC_RR_A,2,PICO_A:GP10 ; J_ENC_RR:yellow
+ENC_RR_B,2,PICO_A:GP11 ; J_ENC_RR:green
+EXCITATION_SAME_RAIL_AS_ADS1115_VDD,2,J_FSR:lead A ; J_PI:pin 1  3V3
+FSR_0_3_3V,2,Signal board P1:P1-16 ; ADS1115:A1
+FSR_LEG_B,2,Signal board P1:P1-15 ; J_FSR:lead B
+GNDP,1,J_MOTOR:black
+GNDS,9,"J_PI:pin 6, 9  GND ; Signal board P1:P1-17 ; ADS1115   0x48:GND ; INA260   0x40:SDA  /  SCL  /  VCC  /  GND ; INA260   0x44:SDA  /  SCL  /  VCC  /  GND ; INA260   0x45:SDA  /  SCL  /  VCC  /  GND ; LTC4311:VIN  /  GND  /  SDA  /  SCL ; BNO085   0x4A:VIN  /  GND ; J_SONAR:GND"
+GRIPPER_FORCE,2,ADS1115   0x48:A1 ; Signal board:P1-16
+I2C_OTHER,9,J_PI:I²C ; ADS1115   0x48:SDA  /  SCL ; BNO085   0x4A:SDA  /  SCL ; FeatherWing   0x60   RIGHT:logic ; FeatherWing   0x61   LEFT:logic ; PCA9685   0x42:logic ; PCA9685   0x43:logic ; GODIY hub × 2:upstream ; GODIY hub × 2:ports
+I2C_SCL,1,J_PI:pin 5  GP3
+I2C_SDA,1,J_PI:pin 3  GP2
+IMU_INTERRUPT,2,J_PI:pin 10  GP15 ; BNO085:INT
+IMU_RST,3,PICO_B:GP15 ; RRB1:2 ; BNO085:RST
+INLINE_IN_12V_BUS,2,INA260   0x45:VIN+  /  VIN− ; +12V bus → both FeatherWing  VIN:—
+INLINE_IN_R2_5V,2,INA260   0x40:VIN+  /  VIN− ; DROK-5V out → servo/sonar:—
+INLINE_IN_R3_6V,2,INA260   0x44:VIN+  /  VIN− ; DROK-6V out → arm servo distribution:—
+INTERRUPT,2,BNO085   0x4A:INT ; J_PI:GP15  pin 10
+MOTOR,3,J_MOTOR:red ; FeatherWing:motor terminal ; J_MOTOR:white
+MOTOR_DRIVE,4,FeatherWing   0x60   RIGHT:M1  /  M2  /  M3 ; Motors RR / RM / RF:red + / white − ; FeatherWing   0x61   LEFT:M1  /  M2  /  M3 ; Motors LR / LM / LF:red + / white −
+N_3V3,1,RRB1:1
+PICO_A_RX,2,PICO_A:GP13 ; J_PI:PICO_A_TX
+PICO_A_TX,2,PICO_A:GP12 ; J_PI:PICO_A_RX
+PICO_B_RX,2,PICO_B:GP13 ; J_PI:PICO_B_TX
+PICO_B_TX,2,PICO_B:GP12 ; J_PI:PICO_B_RX
+PI_SENSOR_REQUIRED_NOT_OPTIONAL,2,J_TOF:RX ; J_PI:GP8  pin 24
+PI_TX_TOF_SENSOR_RX,2,J_PI:pin 24  GP8 ; SEN0628:RX
+REAR_CAMERA,2,J_PI:USB ; Rear camera:USB
+RESERVED,2,"J_PI:pin 27, 28  GP0/GP1 ; AI HAT+ 2:EEPROM"
+SENSOR_PI,2,J_TOF:TX ; J_PI:GP9  pin 21
+SONAR_FRONT_ECHO,2,J_PI:pin 37  GP26 ; Signal board:P1-4
+SONAR_FRONT_TRIG,2,J_PI:pin 29  GP5 ; Signal board:P1-1
+SONAR_LEFT_ECHO,2,J_PI:pin 8  GP14 ; Signal board:P1-8
+SONAR_LEFT_TRIG,2,J_PI:pin 33  GP13 ; Signal board:P1-5
+SONAR_RIGHT_ECHO,2,J_PI:pin 40  GP21 ; Signal board:P1-12
+SONAR_RIGHT_TRIG,2,J_PI:pin 7  GP4 ; Signal board:P1-9
+SPARE,2,FeatherWing   0x61   LEFT:M4 ; —:—
+STEERING_PWM,2,"PCA9685   0x42:CH0 – CH5 ; Steering servos LF, RF, LM, RM, LR, RR:signal"
+STRAP_0X48,2,ADS1115   0x48:ADDR ; —:tied GND
+TOF_SENSOR_TX_PI_RX,2,J_PI:pin 21  GP9 ; SEN0628:TX
+TRIG_F_FROM_PI,2,Signal board P1:P1-1 ; J_PI:GP5  pin 29
+TRIG_F_PASS_THROUGH,2,Signal board P1:P1-2 ; FRONT sonar:TRIG
+TRIG_L_FROM_PI,2,Signal board P1:P1-5 ; J_PI:GP13  pin 33
+TRIG_L_PASS_THROUGH,2,Signal board P1:P1-6 ; LEFT sonar:TRIG
+TRIG_R_FROM_PI,2,Signal board P1:P1-9 ; J_PI:GP4  pin 7
+TRIG_R_PASS_THROUGH,2,Signal board P1:P1-10 ; RIGHT sonar:TRIG
+UNCONNECTED,2,"ADS1115   0x48:A2 ,  A3 ,  ALRT ; —:—"
+UNCONNECTED_DI_LOW_FIXES_0X4A,2,"BNO085   0x4A:DI ,  P0 ,  P1 ,  BT ,  3Vo ; —:—"
+UNCONNECTED_PULLED_HIGH_ON_BREAKOUT,2,LTC4311:EN ; —:—
+UNUSED,2,PCA9685   0x43:CH7 ; —:—

@@ -1,0 +1,13 @@
+Item,Qty,Fitted by,Notes
+Raspberry Pi Pico 2 W,2,owner,"identify by UID never by port - A 643f69a756a232ea / B ad25bbf0f1e1f160"
+Adafruit INA260,3,owner,"0x40 0x44 0x45"
+ADS1115,1,owner,0x48
+Adafruit LTC4311,1,owner,"no address - transparent"
+Adafruit PCA9685,2,owner,"0x42 0x43"
+BNO085,1,owner,0x4A
+Adafruit DC Motor FeatherWing,2,owner,"stacked - 0x60 RIGHT 0x61 LEFT measured 2026-09-18"
+PTC 0.5A hold / 1.0A trip,2,owner,"Pico feeds"
+Blade fuse 10A,2,owner,"F2 motors / F4 DROK-5V"
+Blade fuse 5A,1,owner,"F3 DROK-Pi"
+Blade fuse 10A,1,owner,"F5 DROK-6V arm"
+Blade fuse TBD,1,owner,"F6 - NEW - P8 rating to be chosen"

@@ -1,0 +1,271 @@
+<title>WildWilly Backplane</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#f5f7f8; --card:#ffffff; --ink:#141c24; --ink-2:#4f5b67; --ink-3:#7d8892;
+  --rule:#d5dade; --rule-2:#e7eaed; --accent:#9a5b2e; --accent-soft:#f0e3d8;
+  --stop:#a3282d; --stop-soft:#f6e0e0; --live:#1d5c73; --live-soft:#dcebf0;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#10151a; --card:#171e25; --ink:#e4e9ed; --ink-2:#a3aeb8; --ink-3:#77838d;
+    --rule:#2b343d; --rule-2:#222a32; --accent:#d5905c; --accent-soft:#3a2a1d;
+    --stop:#e08b8b; --stop-soft:#3a2224; --live:#7cc0d8; --live-soft:#1b2f38;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#10151a; --card:#171e25; --ink:#e4e9ed; --ink-2:#a3aeb8; --ink-3:#77838d;
+  --rule:#2b343d; --rule-2:#222a32; --accent:#d5905c; --accent-soft:#3a2a1d;
+  --stop:#e08b8b; --stop-soft:#3a2224; --live:#7cc0d8; --live-soft:#1b2f38;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;font-size:15px;line-height:1.55}
+.wrap{max-width:1000px;margin:0 auto;padding-inline:20px;padding-block:32px 64px}
+
+.mast{border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:24px}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--accent);margin:0 0 6px}
+h1{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;
+  font-size:clamp(28px,5vw,40px);line-height:1.05;margin:0;text-wrap:balance}
+.sub{color:var(--ink-2);margin:8px 0 0;max-width:64ch}
+.mast-foot{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:12px;
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-3)}
+.mast-foot b{color:var(--ink-2);font-weight:500}
+
+.tools{display:flex;gap:10px;align-items:center;margin-bottom:26px;flex-wrap:wrap}
+button.print{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:600;font-size:14px;
+  color:var(--card);background:var(--ink);border:1px solid var(--ink);border-radius:2px;
+  padding:7px 16px;cursor:pointer}
+button.print:hover{background:var(--accent);border-color:var(--accent)}
+button.print:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tools span{font-size:12.5px;color:var(--ink-3);font-family:"IBM Plex Mono",monospace}
+
+h2{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:21px;
+  margin:38px 0 4px;border-bottom:1px solid var(--rule);padding-bottom:7px}
+h2:first-of-type{margin-top:0}
+p.note{color:var(--ink-2);font-size:13.5px;margin:0 0 16px;max-width:72ch}
+
+figure{margin:0 0 10px;background:var(--card);border:1px solid var(--rule);
+  border-radius:2px;padding:18px 16px 10px;overflow-x:auto}
+figure svg{display:block;width:100%;min-width:640px;max-width:100%;height:auto;color:var(--ink)}
+figcaption{font-size:12.5px;color:var(--ink-2);margin-top:12px;
+  border-top:1px solid var(--rule-2);padding-top:9px;max-width:78ch}
+svg text{font-family:"IBM Plex Mono",ui-monospace,monospace;fill:currentColor}
+.t{font-size:12px}
+.tsm{font-size:11px}
+.tbig{font-size:13px;font-weight:600}
+.body{stroke:currentColor;stroke-width:2;fill:none}
+.wire{stroke:currentColor;stroke-width:2;fill:none}
+
+table{width:100%;border-collapse:collapse;margin:0 0 6px;font-size:13px}
+th,td{text-align:left;padding:6px 9px;border-bottom:1px solid var(--rule-2);vertical-align:top}
+th{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:12px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--ink-2);border-bottom:1px solid var(--rule)}
+td:first-child{font-family:"IBM Plex Mono",monospace;font-weight:500;white-space:nowrap}
+.tw{overflow-x:auto}
+code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--rule-2);
+  padding:1px 4px;border-radius:2px}
+.pill{font-family:"IBM Plex Mono",monospace;font-size:10.5px;padding:1px 6px;border-radius:2px;
+  border:1px solid var(--accent);color:var(--accent);white-space:nowrap}
+.warn{border:1px solid var(--stop);background:var(--stop-soft);border-radius:2px;
+  padding:12px 14px;margin:16px 0 0;font-size:13.5px}
+.warn b{color:var(--stop)}
+.colophon{margin-top:38px;padding-top:14px;border-top:1px solid var(--rule);
+  font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-3);
+  display:flex;flex-wrap:wrap;gap:6px 20px}
+
+@page{margin:14mm 12mm}
+@media print{
+  :root{--paper:#fff;--card:#fff;--ink:#000;--ink-2:#333;--ink-3:#666;--rule:#999;
+    --rule-2:#ccc;--accent:#000;--accent-soft:#eee;--stop:#000;--stop-soft:#e8e8e8;
+    --live:#000;--live-soft:#eee;}
+  body{font-size:10.5pt;background:#fff}
+  .wrap{max-width:none;padding:0}
+  .tools{display:none}
+  figure{break-inside:avoid;border-color:#666}
+  figure svg{min-width:0}
+  h2{break-after:avoid}
+  tr,li,.warn{break-inside:avoid}
+  h1{font-size:22pt}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">WildWilly · future design enhancement · not built</p>
+  <h1>WildWilly Backplane</h1>
+  <p class="sub">One board to replace the wires between the boards. Every purchased module stays exactly as it is and plugs in; the hand-built boards that only held passives are absorbed into copper.</p>
+  <div class="mast-foot">
+    <span><b>Status</b> DESIGN ONLY — Willie continues in his current form</span>
+    <span><b>Layers</b> 4</span>
+    <span><b>Recorded</b> 2026-09-30</span>
+    <span><b>Spec</b> docs/superpowers/specs/2026-09-30-backplane-design.md</span>
+  </div>
+</header>
+
+<div class="tools">
+  <button class="print" id="printbtn" type="button">Print this sheet</button>
+  <span id="printhint">3 pages · stack, floorplan, ground topology</span>
+</div>
+
+<h2>Why four layers</h2>
+<p class="note">This rover is star-grounded by design (&#167;10), and <b>its two worst failures were ground failures.</b> The GeeekPi breakout&#8217;s ground fault let sonar return current flow through the TRIG/ECHO lines and the Pi&#8217;s protection diodes &#8212; it floated the sensors&#8217; reference, held ECHO high, and <b>destroyed two HC-SR04s</b> (&#167;5.3, &#167;16.12). A metal standoff under the MOSFET stack <b>shorted the +12&#160;V rail</b> on 2026-09-28 and invalidated every rail reading taken near it. Today the star is a <em>wiring convention</em> &#8212; it holds only while whoever lands a ground wire remembers where it goes. On this board it becomes geometry.</p>
+
+<figure>
+<svg viewBox="0 0 920 400" role="img" aria-label="Four-layer stack cross-section. Layer 1 top carries signal routing and module footprints. Layer 2 is a solid signal ground pour. Layer 3 is a solid power return pour. Layer 4 bottom carries the power rails. Layers 2 and 3 are separate copper joined at exactly one point, a via stitch at the star beside Q1, drawn as a narrow column near the middle of the board. Sensor return current is shown circulating only in layer 2 and motor return current only in layer 3.">
+  <text class="t tbig" x="20" y="26">CROSS-SECTION &#8212; the two ground pours never touch except at the star</text>
+
+  <!-- layer bars -->
+  <rect x="190" y="52" width="600" height="42" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+  <text class="tsm" x="180" y="78" text-anchor="end">L1  top</text>
+  <text class="tsm" x="205" y="78">signal routing &#183; module footprints &#183; connectors</text>
+
+  <rect x="190" y="122" width="600" height="42" rx="2" fill="var(--live-soft)" stroke="var(--live)" stroke-width="2.5"/>
+  <text class="tsm" x="180" y="148" text-anchor="end">L2</text>
+  <text class="t" x="205" y="141" fill="var(--live)">SIGNAL GROUND &#8212; solid pour</text>
+  <text class="tsm" x="205" y="157">under the I&#178;C trunk, the dividers, the BNO085</text>
+
+  <rect x="190" y="192" width="600" height="42" rx="2" fill="var(--stop-soft)" stroke="var(--stop)" stroke-width="2.5"/>
+  <text class="tsm" x="180" y="218" text-anchor="end">L3</text>
+  <text class="t" x="205" y="211" fill="var(--stop)">POWER RETURN &#8212; solid pour</text>
+  <text class="tsm" x="205" y="227">under the FeatherWing stack and the 12&#160;V distribution</text>
+
+  <rect x="190" y="262" width="600" height="42" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+  <text class="tsm" x="180" y="288" text-anchor="end">L4  bottom</text>
+  <text class="tsm" x="205" y="288">+12&#160;V &#183; R1 9&#160;V &#183; R2 5&#160;V &#183; R3 6&#160;V &#183; R5 3.3&#160;V</text>
+
+  <!-- the star stitch -->
+  <rect x="470" y="164" width="24" height="28" fill="var(--accent)" opacity="0.85" stroke="currentColor" stroke-width="1.5"/>
+  <line class="wire" x1="482" y1="164" x2="482" y2="192" stroke="currentColor" stroke-width="3"/>
+  <line x1="494" y1="178" x2="560" y2="178" stroke="var(--accent)" stroke-width="2"/>
+  <text class="t" x="566" y="174" fill="var(--accent)">STAR &#8212; via stitch</text>
+  <text class="tsm" x="566" y="190" fill="var(--accent)">the ONLY connection, beside Q1</text>
+
+  <!-- current loops -->
+  <path d="M250,143 q0,-22 40,-22 q40,0 40,22" fill="none" stroke="var(--live)" stroke-width="2" stroke-dasharray="5 3"/>
+  <text class="tsm" x="250" y="112" fill="var(--live)">sensor return stays here</text>
+  <path d="M640,213 q0,26 -40,26 q-40,0 -40,-26" fill="none" stroke="var(--stop)" stroke-width="2" stroke-dasharray="5 3"/>
+  <text class="tsm" x="560" y="258" fill="var(--stop)">motor return stays here</text>
+
+  <!-- the impossible path -->
+  <line x1="700" y1="143" x2="700" y2="213" stroke="var(--stop)" stroke-width="2" stroke-dasharray="4 4"/>
+  <line x1="688" y1="166" x2="712" y2="190" stroke="var(--stop)" stroke-width="3"/>
+  <line x1="712" y1="166" x2="688" y2="190" stroke="var(--stop)" stroke-width="3"/>
+  <text class="tsm" x="722" y="174" fill="var(--stop)">this path is what</text>
+  <text class="tsm" x="722" y="189" fill="var(--stop)">killed two sonars</text>
+
+  <text class="tsm" x="20" y="340">A 2-layer board cannot do this. Without the two pours the star is built by routing discipline &#8212;</text>
+  <text class="tsm" x="20" y="356">which is precisely the thing that has repeatedly failed on this rover.</text>
+  <text class="tsm" x="20" y="382" fill="var(--accent)">The extra two layers are the cheapest reliability available here.</text>
+</svg>
+<figcaption><b>Layers 2 and 3 are separate copper.</b> They meet at exactly one place: a via stitch at the star, placed beside Q1 and the battery input. Motor return current flows in layer 3 and <b>physically cannot share copper</b> with the BNO085 or the analog dividers &#8212; the mechanism that destroyed two sonars stops being unlikely and becomes impossible.</figcaption>
+</figure>
+
+<h2>Floorplan</h2>
+<p class="note">Placement follows the grounding, and it lands on the same banding &#167;2.2 already uses &#8212; which is a good sign rather than a coincidence. Quiet devices sit over the signal-ground pour, loud ones over the power-return pour, and the I&#178;C trunk runs between them.</p>
+
+<figure>
+<svg viewBox="0 0 960 500" role="img" aria-label="Board floorplan. The left third is the quiet end over the signal ground pour, holding the BNO085, the ADS1115, three INA260s, the battery, FSR and echo dividers, Pico B and both PCA9685s. The middle is the I2C trunk with the LTC4311 inline. The right third is the loud end over the power return pour, holding the FeatherWing stack, Q1, the fuses F2 to F6, switches SW-M and SW-A, and Pico A. The star via stitch is marked beside Q1. Edge connectors run along the top and bottom edges.">
+  <rect x="40" y="46" width="880" height="330" rx="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
+
+  <rect x="52" y="58" width="300" height="306" rx="4" fill="var(--live-soft)" opacity="0.55"/>
+  <rect x="608" y="58" width="300" height="306" rx="4" fill="var(--stop-soft)" opacity="0.55"/>
+
+  <text class="t tbig" x="202" y="80" text-anchor="middle" fill="var(--live)">QUIET END</text>
+  <text class="tsm" x="202" y="96" text-anchor="middle" fill="var(--live)">over the L2 signal-ground pour</text>
+  <text class="t tbig" x="480" y="80" text-anchor="middle">I&#178;C TRUNK</text>
+  <text class="t tbig" x="758" y="80" text-anchor="middle" fill="var(--stop)">LOUD END</text>
+  <text class="tsm" x="758" y="96" text-anchor="middle" fill="var(--stop)">over the L3 power-return pour</text>
+
+  <!-- quiet modules -->
+  <rect class="body" x="70" y="112" width="124" height="38" rx="2"/><text class="tsm" x="132" y="135" text-anchor="middle">BNO085</text>
+  <rect class="body" x="206" y="112" width="132" height="38" rx="2"/><text class="tsm" x="272" y="135" text-anchor="middle">ADS1115 0x48</text>
+  <rect class="body" x="70" y="164" width="268" height="38" rx="2"/><text class="tsm" x="204" y="187" text-anchor="middle">INA260 &#215;3 &#8212; 0x40  0x44  0x45</text>
+  <rect class="body" x="70" y="216" width="268" height="44" rx="2"/>
+  <text class="tsm" x="204" y="234" text-anchor="middle">DIVIDERS &#8212; 3&#215; ECHO, battery R7/R8/R9,</text>
+  <text class="tsm" x="204" y="250" text-anchor="middle">FSR R10  &#183;  absorbed from the signal board</text>
+  <rect class="body" x="70" y="274" width="124" height="38" rx="2"/><text class="tsm" x="132" y="297" text-anchor="middle">PICO B</text>
+  <rect class="body" x="206" y="274" width="132" height="38" rx="2"/><text class="tsm" x="272" y="290" text-anchor="middle">PCA9685 0x42</text><text class="tsm" x="272" y="304" text-anchor="middle">PCA9685 0x43</text>
+
+  <!-- trunk -->
+  <line x1="352" y1="190" x2="608" y2="190" stroke="currentColor" stroke-width="3"/>
+  <rect class="body" x="424" y="164" width="112" height="52" rx="2" fill="var(--card)"/>
+  <text class="tsm" x="480" y="185" text-anchor="middle">LTC4311</text>
+  <text class="tsm" x="480" y="200" text-anchor="middle">inline, &#167;16.4</text>
+  <text class="tsm" x="480" y="236" text-anchor="middle">shortest leads</text>
+  <text class="tsm" x="480" y="251" text-anchor="middle">of any bus device</text>
+
+  <!-- loud modules -->
+  <rect class="body" x="626" y="112" width="266" height="52" rx="2"/>
+  <text class="tsm" x="759" y="133" text-anchor="middle">FEATHERWING STACK &#8212; 0x60 RIGHT / 0x61 LEFT</text>
+  <text class="tsm" x="759" y="150" text-anchor="middle">socketed &#183; motor VIN + 6 pairs stay on its own terminals</text>
+  <rect class="body" x="626" y="178" width="126" height="40" rx="2"/><text class="tsm" x="689" y="196" text-anchor="middle">Q1 FQP27P06</text><text class="tsm" x="689" y="210" text-anchor="middle">+ 220nF</text>
+  <rect class="body" x="766" y="178" width="126" height="40" rx="2"/><text class="tsm" x="829" y="196" text-anchor="middle">F2 F3 F4 F5</text><text class="tsm" x="829" y="210" text-anchor="middle">+ F6 NEW</text>
+  <rect class="body" x="626" y="232" width="126" height="38" rx="2"/><text class="tsm" x="689" y="255" text-anchor="middle">SW-M &#183; SW-A</text>
+  <rect class="body" x="766" y="232" width="126" height="38" rx="2"/><text class="tsm" x="829" y="255" text-anchor="middle">PICO A</text>
+
+  <!-- star -->
+  <circle cx="689" cy="300" r="13" fill="var(--accent)" opacity="0.85" stroke="currentColor" stroke-width="1.5"/>
+  <text class="t" x="712" y="297" fill="var(--accent)">STAR &#8212; L2 to L3, one stitch</text>
+  <text class="tsm" x="712" y="312" fill="var(--accent)">beside Q1 and the battery input</text>
+
+  <!-- edge connectors -->
+  <text class="tsm" x="40" y="404">EDGE CONNECTORS &#8212; keyed and distinct per function</text>
+  <g>
+    <rect class="body" x="60" y="416" width="96" height="26" rx="2"/><text class="tsm" x="108" y="433" text-anchor="middle">Pi 5</text>
+    <rect class="body" x="168" y="416" width="96" height="26" rx="2"/><text class="tsm" x="216" y="433" text-anchor="middle">6 encoders</text>
+    <rect class="body" x="276" y="416" width="96" height="26" rx="2"/><text class="tsm" x="324" y="433" text-anchor="middle">3 sonars</text>
+    <rect class="body" x="384" y="416" width="96" height="26" rx="2"/><text class="tsm" x="432" y="433" text-anchor="middle">6 steering</text>
+    <rect class="body" x="492" y="416" width="96" height="26" rx="2"/><text class="tsm" x="540" y="433" text-anchor="middle">7 arm</text>
+    <rect class="body" x="600" y="416" width="96" height="26" rx="2"/><text class="tsm" x="648" y="433" text-anchor="middle">FSR402</text>
+    <rect class="body" x="708" y="416" width="96" height="26" rx="2"/><text class="tsm" x="756" y="433" text-anchor="middle">SEN0628</text>
+    <rect class="body" x="816" y="416" width="96" height="26" rx="2"/><text class="tsm" x="864" y="433" text-anchor="middle">R1 R2 R3 R5</text>
+  </g>
+  <text class="tsm" x="40" y="466" fill="var(--accent)">Six identical 6-way encoder housings is how left/right transpositions keep happening &#8212; three on record.</text>
+  <text class="tsm" x="40" y="482" fill="var(--accent)">Keying per function is the main defence, and it is free at design time.</text>
+</svg>
+<figcaption><b>Pico A sits at the loud end, Pico B at the quiet end</b> &#8212; and that falls out of what they do. A counts twelve encoder lines coming from the motors; B reads three divider outputs and drives the IMU reset. The rail inputs on the right are the <b>planned boundary</b>: R1, R2, R3 and R5 each land on a fused, sensed input, so a future designed supply replaces only what is on the far side of four connectors.</figcaption>
+</figure>
+
+<h2>What it designs out</h2>
+<div class="tw">
+<table>
+  <thead><tr><th>Part</th><th>Fault it removes</th><th>On record</th></tr></thead>
+  <tbody>
+    <tr><td><b>F6</b> <span class="pill">NEW</span></td><td><b>P8 has no fuse today</b> &#8212; the only +12&#160;V branch without one, and it feeds Pico A&#8217;s VSYS</td><td>&#167;14 item 16</td></tr>
+    <tr><td><b>D2 &#215;2</b> <span class="pill">NEW</span></td><td>Reverse-polarity clamp per Pico: anode GND, cathode V+, idle in use, conducting into F1 on a reversed feed</td><td>Board B survived a reversed J1 on luck, 2026-09-28</td></tr>
+    <tr><td>J1 gone</td><td>Absorbing the carriers removes the connector that was reversed. A socketed Pico has no feed to get backwards</td><td>2026-09-28</td></tr>
+    <tr><td>Two pours</td><td>Sensor return can no longer travel home through signal lines</td><td>&#167;5.3 ground fault, two sonars destroyed</td></tr>
+    <tr><td>Plated holes</td><td>Mounting placed and kept out by design, not by whichever standoff was to hand</td><td>+12&#160;V short, 2026-09-28</td></tr>
+    <tr><td>Test points</td><td>&#167;16.12 check 6 &#8212; three ECHO junctions at 3.2&#8211;3.4&#160;V &#8212; becomes three probes, not a disassembly</td><td>never run</td></tr>
+    <tr><td>Encoder LED</td><td>Per-wheel supply indicator on the board, mirroring the one on the motor PCBs</td><td>found a fault 2026-09-30, in no document</td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="warn"><b>&#9888; Q1 still protects only the battery input.</b> Every rail downstream of it stays unprotected against a reversed connector, which is why D2 is per-Pico rather than one part. <b>Four reverse-polarity events are on record:</b> the encoder supply on 2026-09-18 (LF Phase A destroyed, all six Phase B greens dead since), two sonars (&#167;16.12), and Pico B (2026-09-28).<br><br><b>And the rail boundary exists because of trimpots.</b> R2 sat at <b>6.446&#160;V</b> on a nominal 5&#160;V rail for eleven days &#8212; HC-SR04 absolute max is 5.5&#160;V &#8212; and is the leading cause of the sonar lost in the 2026-09-28 smoke event. A future supply with fixed feedback resistors makes the rail a property of the board instead of a setting.</div>
+
+<h2>Open before layout</h2>
+<p class="note"><b>Five things this design cannot settle on paper.</b> <b>1.</b> Board outline and mounting &#8212; dictated by the deck, which is not dimensioned in any document. Measure first. <b>2.</b> Connector family; JST-PH throughout today, and a keyed-per-function scheme needs choosing. <b>3.</b> Fuse format &#8212; F2&#8211;F5 are ATC/ATO blade, which is large for a PCB, and a PCB-mount family changes the ratings available. <b>4.</b> Whether the Pi mounts to this board or stays separate; separate today. <b>5.</b> Cost at 4 layers for a deck-sized outline, unknown until the outline is measured.</p>
+
+<p class="colophon">
+  <span>Design only &#183; not built</span>
+  <span>Willie continues in his current form</span>
+  <span>Spec: docs/superpowers/specs/2026-09-30-backplane-design.md</span>
+  <span>Star: L2&#8211;L3, one stitch, beside Q1</span>
+</p>
+</div>
+
+<script>
+(function(){
+  var b=document.getElementById('printbtn'),h=document.getElementById('printhint');
+  b.addEventListener('click',function(){
+    try{ window.print(); }catch(e){ h.textContent='Printing blocked here — use Ctrl-P / ⌘P'; }
+  });
+})();
+</script>

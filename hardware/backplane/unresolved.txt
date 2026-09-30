@@ -1,0 +1,26 @@
+Rows this script could not place. Each one needs a human decision.
+Generated 2026-09-30
+
+
+
+--- SUPERSEDED, no decision needed ---
+The MCP23017 is fully removed from the design; the Picos replace it.
+Its encoder lines are synthesised onto Pico A GP0-GP11 in the as-built
+order, its reset onto Pico B GP15. These document rows have no successor
+on this board:
+
+  BNO085   0x4A:RST -> MCP23017:GPB4
+  MCP23017   0x27:VDD  /  VSS -> J_PI:pin 1  3V3
+  MCP23017   0x27:SDA  /  SCL -> GODIY hub:—
+  MCP23017   0x27:A0 , A1 , A2 -> —:—
+  MCP23017   0x27:RESET -> VCC:—
+  MCP23017   0x27:GPA0  /  GPA1 -> Motor LF:yellow / green
+  MCP23017   0x27:GPA2  /  GPA3 -> Motor LM:yellow / green
+  MCP23017   0x27:GPA4  /  GPA5 -> Motor RF:yellow / green
+  MCP23017   0x27:GPA6  /  GPA7 -> Motor RM:yellow / green
+  MCP23017   0x27:GPB0  /  GPB1 -> Motor LR:yellow / green
+  MCP23017   0x27:GPB2  /  GPB3 -> Motor RR:yellow / green
+  MCP23017   0x27:GPB4 -> BNO085:RST
+  MCP23017   0x27:GPB5 – GPB7 -> —:—
+  J_MOTOR:yellow -> MCP23017:even pin of the pair
+  J_MOTOR:green -> MCP23017:odd pin of the pair

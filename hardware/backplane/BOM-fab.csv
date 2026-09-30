@@ -1,0 +1,40 @@
+Designator,Value,Description,Qty,Footprint,Source,Notes
+RE1H;RE2H;RE3H,1k,Sonar ECHO divider high side,3,TBD,MHD 4.4,"absorbed from signal board R1/R3/R5"
+RE1L;RE2L;RE3L,2k,Sonar ECHO divider low side,3,TBD,MHD 4.4,"gives 2/3 ratio; 5V echo arrives at 3.33V"
+RB1,10k,Battery divider high side,1,TBD,MHD 4.4,"was R7"
+RB2,4.7k,Battery divider low side,1,TBD,MHD 4.4,"was R8; parallel with RB3 -> ~3.2k"
+RB3,10k,Battery divider low-side parallel leg,1,TBD,MHD 4.4,"was R9; 3.2k is the value to watch"
+RF1,10k,FSR402 pull-down,1,TBD,MHD 4.3/6.6,"was R10; excitation is Pi pin1 3V3 = ADS VDD rail"
+RPA1;RPA2,10k 1%,Pico A rail-sense divider,2,TBD,MHD 4.8,"taps R5 UPSTREAM of the fuse; 1% matters"
+RRB1,10k,BNO085 reset pull-up,1,TBD,MHD 4.8,"Pico B only; open-drain reset"
+Q1,FQP27P06,P-channel MOSFET reverse polarity,1,TO-220,MHD 2.3,"battery input only - does NOT protect downstream rails"
+CQ1,220n,Q1 gate capacitor,1,TBD,MHD 2.3,
+DA1;DB1,1N5819,Series Schottky into each Pico VSYS,2,DO-41,MHD 4.7/4.8,"band toward the Pico"
+DA2;DB2,1N5819,Reverse-polarity clamp across each Pico feed,2,DO-41,NEW 2026-09-30,"anode GND cathode V+; conducts into F1 and trips it"
+FHA1;FHB1,PTC holder 0.5A,Pico VSYS fuse,2,TBD,MHD 4.7,"0.5A hold / 1.0A trip"
+FH2;FH3;FH4;FH5,Blade fuse holder,Rail fuses F2-F5,4,TBD,MHD 2.1,"FORMAT UNDECIDED - ATC/ATO is large for a PCB"
+FH6,Blade fuse holder,P8 rail fuse,1,TBD,NEW 2026-09-30,"P8 has NO fuse today - MHD 14 item 16"
+SWM,SPST,Motor branch switch,1,TBD,MHD 2.1,"check its position before metering - an off switch reads like a blown fuse"
+SWA,SPST,Arm rail switch,1,TBD,MHD 2.1,
+XPICOA;XPICOB,2x20 female 2.54mm,Pico 2 W sockets,4,TBD,MHD 4.8,"two strips per board"
+XFW1,Feather female header set,FeatherWing stack socket,1,TBD,MHD 15.4,"bus and logic only - motor VIN and outputs stay on its terminals"
+XINA40;XINA44;XINA45,Module header,INA260 sockets,3,TBD,MHD 15.4,"0x40 R2 5V / 0x44 R3 6V arm / 0x45 12V motor branch"
+XADS,Module header,ADS1115 socket,1,TBD,MHD 15.4,"0x48 - A0 battery A1 FSR A2 spare"
+XLTC,Module header,LTC4311 socket,1,TBD,MHD 15.4,"MUST sit inline on the trunk - MHD 16.4 shortest leads"
+XPCA42;XPCA43,Module header,PCA9685 sockets,2,TBD,MHD 15.4,"0x42 steering 0x43 arm"
+XBNO,Module header,BNO085 socket,1,TBD,MHD 15.4,"quiet end - 29mm from the FeatherWings today"
+CPCA42,1000u 16V,PCA9685 0x42 bulk,1,TBD,MHD 15.4,
+CPCA43,2200u 16V low-ESR,PCA9685 0x43 bulk,1,TBD,MHD 15.4,"Rubycon"
+JPI,TBD,Raspberry Pi 5 interface,1,TBD,MHD 16,"CONNECTOR FAMILY UNDECIDED"
+JENC1..JENC6,TBD,Encoder connectors,6,TBD,MHD 7.2,"KEY THESE DIFFERENTLY - 3 transpositions on record"
+JSON1..JSON3,TBD,HC-SR04 connectors,3,TBD,MHD 6.1,
+JSTEER,TBD,Steering servo connector,1,TBD,MHD 10,"6 corners"
+JARM,TBD,Arm servo connector,1,TBD,MHD 11.1,"7 joints"
+JFSR,TBD,FSR402 connector,1,TBD,MHD 6.6,"2 way - no polarity"
+JTOF,TBD,SEN0628 ToF connector,1,TBD,MHD 6.5,"uart3-pi5 GP8/GP9"
+JR1;JR2;JR3;JR5,TBD,Rail inputs from the DROKs,4,TBD,NEW 2026-09-30,"the planned boundary for a future supply board"
+TP_STAR,Test point,Star ground stitch,1,TBD,NEW 2026-09-30,"L2-to-L3 continuity check lives here"
+TP_E1;TP_E2;TP_E3,Test point,ECHO divider junctions,3,TBD,MHD 16.12,"check 6 - expect 3.2-3.4V - never run"
+TP_R1;TP_R2;TP_R3;TP_R5,Test point,Rail sense points,4,TBD,NEW 2026-09-30,
+TPA1;TPA2,Test point,Pico A TP1 and TP2,2,TBD,MHD 4.8,
+LED_ENC1..LED_ENC6,LED + resistor,Per-wheel encoder supply indicator,6,TBD,NEW 2026-09-30,"mirrors the LED on the motor PCBs - found a fault 2026-09-30"
