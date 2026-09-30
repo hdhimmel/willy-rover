@@ -1,3 +1,4 @@
+import time, threading
 import config
 import hw_sim
 if not config.SIMULATE_HARDWARE:
@@ -40,7 +41,39 @@ class Arm:
         self._pca=hw_sim.SimServoBank() if config.SIMULATE_HARDWARE else PCA9685(_i2c,address=config.ARM_PCA_ADDR)
         self._pca.frequency=config.SERVO_PWM_FREQ
         self._pulse=dict.fromkeys(self._JOINTS,config.ARM_SERVO_CENTER_US)
+        self._asleep=False; self._idle_since=time.monotonic(); self._running=True
+        if config.ARM_RELEASE_WHEN_IDLE:
+            self._thread=threading.Thread(target=self._idle_loop,daemon=True); self._thread.start()
+    # Idle release, added 2026-09-30. THIS IS SERVO PROTECTION, not power saving. The servo
+    # fitted before 2026-09-17 held ~8A at 1500us indefinitely and was destroyed by it (see
+    # center_all below) -- a joint stalling against its own mechanism cooks itself, and the
+    # only thing that stops it is taking the pulses away. Idle draw is 0.35W, which is not
+    # the point.
+    # ⚠ A RELEASED ARM FALLS. config.ARM_RELEASE_AFTER_S is deliberately long, and the first
+    #   test belongs with the arm low and nothing underneath it.
+    def _idle_loop(self):
+        while self._running:
+            time.sleep(0.5)
+            if (not self._asleep and self._idle_since is not None
+                    and time.monotonic()-self._idle_since>=config.ARM_RELEASE_AFTER_S):
+                self.release()
+    def release(self):
+        """Stop driving every joint. The arm goes limp and will move under gravity."""
+        try: self._pca.mode1_reg=self._pca.mode1_reg|0x10      # MODE1 bit4 SLEEP
+        except Exception: pass
+        self._asleep=True
+    def _wake(self):
+        if not self._asleep: return
+        try:
+            m=self._pca.mode1_reg
+            if m & 0x10: self._pca.mode1_reg=m & ~0x10
+            time.sleep(0.001)                                  # >=500us oscillator settle
+        except Exception: pass
+        self._asleep=False
+    @property
+    def released(self): return self._asleep
     def _drive(self,joint,us):
+        self._wake(); self._idle_since=time.monotonic()
         us=max(config.ARM_SERVO_MIN_US,min(config.ARM_SERVO_MAX_US,us))
         self._pca.channels[self._JOINTS[joint]].duty_cycle=int(us/self._PERIOD_US*65535)
         self._pulse[joint]=us

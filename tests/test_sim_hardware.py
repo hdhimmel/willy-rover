@@ -15,7 +15,12 @@ _REPO_ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _SCRIPT='''
 import brain,time
 b=brain.RoverBrain()
-assert b.motors._motors["lf"].throttle==0.0
+# Nothing is commanded on a fresh brain. throttle may be 0.0 (braked) or None (coasting):
+# config.MOTOR_COAST_AFTER_S releases the bridges once every wheel has been at zero for a
+# couple of seconds, and RoverBrain's own __init__ takes longer than that, so which one you
+# see here is a race against the world-model load. The invariant is the TARGET, not the pin.
+assert all(v==0.0 for v in b.motors._target.values())
+assert b.motors._motors["lf"].throttle in (0.0, None)
 
 b.start()
 time.sleep(1.0)

@@ -75,6 +75,30 @@ MOTOR_PORT={'lf':(MOTORKIT_LEFT_ADDR,3),'lm':(MOTORKIT_LEFT_ADDR,2),'lr':(MOTORK
 # not create torque, and full duty is already full duty. If more torque is needed
 # it is a motor change -- see Master Hardware Design v2.0 section 7.1.
 SPEED_ROAM=0.75; SPEED_TURN=0.70; SPEED_SLOW=0.55; SPEED_MAX=1.00
+# Seconds of being stopped AND fully ramped down before the bridges are released and the
+# two MotorKit PCA9685s are put to sleep. Measured 2026-09-30: the +12V motor branch idles
+# at 0.019A holding six stopped wheels in adafruit_motor's hard-brake -- about 0.2W spent
+# to hold nothing. brake() is exempt: ESTOP wants the wheels held, not coasting.
+# ~ Raise this if the rover is ever parked on a slope; a released 35.5:1 gearbox has high
+#   backdrive resistance but it is not a parking brake.
+MOTOR_COAST_AFTER_S=2.0
+
+# --- servo idle release -------------------------------------------------------------
+# A servo holds its angle only while it is receiving pulses. Stop the pulses and it goes
+# LIMP. That is the point -- and the hazard.
+#
+# WHY THIS IS NOT ABOUT BATTERY. Idle draw measured 2026-09-30 is 0.23W on R2 and 0.35W on
+# R3, which is nothing against a 63Wh pack. The real reason is arm.py's note: the servo
+# fitted before 2026-09-17 "held ~8A at 1500us indefinitely and was destroyed by it". A
+# servo stalling against its own mechanism cooks itself in minutes, and releasing an idle
+# joint is what prevents that. Treat this as servo protection that happens to save power.
+#
+# ⚠ THE ARM WILL FALL when released, to wherever gravity and its stops take it. The delay
+#   is longer than steering's for that reason, and the first test should be done with the
+#   arm LOW and nothing underneath it. Set ARM_RELEASE_WHEN_IDLE=False to disable.
+STEER_RELEASE_AFTER_S=2.0
+ARM_RELEASE_AFTER_S=10.0
+ARM_RELEASE_WHEN_IDLE=True
 SPEED_RAMP_PER_S=2.0  # FR-400-003: max throttle change per second (slew rate), full range in 0.5s
 TURN_INNER_SCALE=0.0
 

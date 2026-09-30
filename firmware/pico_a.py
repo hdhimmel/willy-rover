@@ -49,7 +49,13 @@ BOARD = "A"
 # --- wiring, section 4.7 -----------------------------------------------------
 # Pairs are in MCP23017 GPA0->GPB3 order so the existing twelve-way harness
 # lands 1:1 (config.py:235). Yellow = Phase A = even GP, green = Phase B = odd.
-WHEELS = ("rf", "rm", "lf", "lm", "rr", "lr")
+WHEELS = ("lf", "lm", "rf", "rm", "lr", "rr")
+# CORRECTED 2026-09-29. This tuple used to read rf, rm, lf, lm, rr, lr -- copied
+# from config.ENCODER_PINS, which disagrees with the as-built landing recorded in
+# Master Hardware Design 16.6 by a left/right swap at every position. Bench proof,
+# one wheel at a time on blocks: driving lf counted on GP0/GP1, rf on GP4/GP5, lm on
+# GP2/GP3, rr on GP10/GP11 -- the as-built table, every time. The HARNESS was never
+# wrong; this label was. Do not "fix" it by re-landing twelve wires.
 PHASE_A = {"rf": 0, "rm": 2, "lf": 4, "lm": 6, "rr": 8, "lr": 10}
 PHASE_B = {"rf": 1, "rm": 3, "lf": 5, "lm": 7, "rr": 9, "lr": 11}
 
