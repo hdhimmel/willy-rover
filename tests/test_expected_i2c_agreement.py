@@ -67,7 +67,9 @@ def test_the_all_call_broadcast_is_in_neither():
 def test_every_expected_address_comes_from_config():
     """No literals. An address written as a number in one file and a config name in the other is
     how these two drifted apart in the first place."""
-    from_config = {config.ENCODER_ADDR, config.INA260_5V_ADDR, config.STEER_PCA_ADDR,
+    # config.ENCODER_ADDR left this set on 2026-09-30 with the MCP23017 (§4.7). The bus is
+    # ten devices now, and a live scan confirms 0x27 is absent.
+    from_config = {config.INA260_5V_ADDR, config.STEER_PCA_ADDR,
                    config.ARM_PCA_ADDR, config.INA260_BUS_12V_ADDR, config.INA260_ARM_6V_ADDR,
                    config.ADS_ADDR, config.IMU_ADDR, config.MOTORKIT_LEFT_ADDR,
                    config.MOTORKIT_RIGHT_ADDR, config.WITTY_PI_ADDR}

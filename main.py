@@ -23,7 +23,8 @@ if not os.environ.get('WILLY_SIMULATE'):
     import smbus2
     import config
     def _i2c_bus_online():
-        addrs=(config.ENCODER_ADDR,config.IMU_ADDR,config.ADS_ADDR,config.STEER_PCA_ADDR,
+        # 0x27 dropped 2026-09-30 with the MCP23017 (section 4.7).
+        addrs=(config.IMU_ADDR,config.ADS_ADDR,config.STEER_PCA_ADDR,
                config.ARM_PCA_ADDR,config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR,
                config.INA260_5V_ADDR,config.INA260_BUS_12V_ADDR,config.INA260_ARM_6V_ADDR)
         try:

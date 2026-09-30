@@ -19,18 +19,22 @@ def test_validate_detects_duplicate_i2c_address(monkeypatch):
     problems=config.validate()
     assert any('duplicate I2C address' in p for p in problems)
 
-def test_validate_detects_duplicate_gpio_pin(monkeypatch):
-    monkeypatch.setattr(config,'SONAR_LEFT_TRIG',config.SONAR_FRONT_TRIG)
-    problems=config.validate()
-    assert any('duplicate GPIO pin' in p for p in problems)
-
-def test_validate_detects_mcp23017_pin_collision(monkeypatch):
-    # ENCODER_PINS['lr'] uses bank B bits 0,1 -> MCP pin index 8. Colliding IMU_RST_MCP_PIN with
-    # it should be caught even though it's a completely different chip *role* (reset line vs
-    # encoder), since they'd fight over the same physical MCP23017 pin.
-    monkeypatch.setattr(config,'IMU_RST_MCP_PIN',8)
-    problems=config.validate()
-    assert any('IMU_RST_MCP_PIN' in p and 'collides' in p for p in problems)
+# REMOVED 2026-09-30: test_validate_detects_duplicate_gpio_pin and
+# test_validate_detects_mcp23017_pin_collision. Both exercised checks that went with the
+# hardware they guarded (section 4.7):
+#
+#   * the GPIO duplicate check covered SONAR_*_TRIG/ECHO. Those constants named GP4, GP5
+#     and GP13, which the uart2-pi5 and uart4-pi5 overlays now claim as TXD2, RXD2 and
+#     RXD4. The sonars answer through Pico B and nothing on the Pi times an ECHO line.
+#   * the MCP23017 collision check verified twelve encoder bits and IMU_RST_MCP_PIN did
+#     not share a pin on 0x27. There is no 0x27.
+#
+# Deleting a test with the code it covers is correct; keeping it green by reintroducing
+# the constants would be the tail wagging the dog. ⚠ The equivalent risk did not vanish,
+# it MOVED -- the wheel-to-GP mapping now lives in firmware/pico_a.py's WHEELS, and it
+# was WRONG until 2026-09-29 by a left/right swap at every position. It is checked on
+# hardware by driving one wheel at a time, not by a unit test, because no unit test can
+# see which wheel actually turned.
 
 def test_validate_detects_out_of_order_battery_tiers(monkeypatch):
     monkeypatch.setattr(config,'BAT_SAFE_V',config.BAT_RTH_V+1.0)  # SAFE now above RTH -- wrong

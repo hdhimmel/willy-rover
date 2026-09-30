@@ -1,12 +1,15 @@
 import time, math, threading, statistics, logging, config
+import pico_link
 if not config.SIMULATE_HARDWARE:
     import smbus2
-    import RPi.GPIO as GPIO
     import board, busio
     import adafruit_bno08x
     from adafruit_bno08x.i2c import BNO08X_I2C
     from adafruit_bno08x import BNO_REPORT_ROTATION_VECTOR
-    from adafruit_mcp230xx.mcp23017 import MCP23017
+    # RPi.GPIO and the MCP23017 both left on 2026-09-30 (§4.7). Nothing in this module
+    # drives a Pi GPIO any more: the sonars answer through Pico B and the encoders
+    # through Pico A. GP4, GP5 and GP13 -- the pins Sonar used to time -- are TXD2,
+    # RXD2 and RXD4 now, and driving them would fight the UART overlays.
 
     # adafruit_bno08x.hard_reset() only waits 10ms after releasing RST before the caller
     # sends the first I2C command (soft_reset). The BNO085 needs longer than that to boot
@@ -25,81 +28,130 @@ if not config.SIMULATE_HARDWARE:
 
 log=logging.getLogger('sensors')
 
-# FR-800-002 (read sonar obstacle data): three independent units, see SonarArray below.
-class Sonar:
-    def __init__(self,trig,echo):
-        self.trig=trig; self.echo=echo
-        if not config.SIMULATE_HARDWARE:
-            GPIO.setup(trig,GPIO.OUT,initial=GPIO.LOW); GPIO.setup(echo,GPIO.IN)
-        self._lock=threading.Lock(); self._last=999.0
-    def _ping(self):
-        if config.SIMULATE_HARDWARE: return 200.0  # simulated "clear path" reading
-        with self._lock:
-            GPIO.output(self.trig,GPIO.LOW); time.sleep(0.000002)
-            GPIO.output(self.trig,GPIO.HIGH); time.sleep(0.000010)
-            GPIO.output(self.trig,GPIO.LOW)
-            t0=time.perf_counter()
-            while GPIO.input(self.echo)==0:
-                if time.perf_counter()-t0>config.SONAR_TIMEOUT: return 999.0
-            t1=time.perf_counter()
-            while GPIO.input(self.echo)==1:
-                if time.perf_counter()-t1>config.SONAR_TIMEOUT: return 999.0
-            t2=time.perf_counter()
-        return round((t2-t1)*34300/2,1)
-    def read(self): return statistics.median([self._ping() for _ in range(config.SONAR_SAMPLES)])
-    @property
-    def distance(self): return self._last
-    def update(self): self._last=self.read()
-
+# FR-800-002 (read sonar obstacle data): three HC-SR04s, read over uart2-pi5 from Pico B.
+#
+# MOVED OFF THE PI 2026-09-30, Master Hardware Design §4.7. This class used to time GP4,
+# GP5 and GP13 itself. Those three pins are now TXD2, RXD2 and RXD4 -- the two UART
+# overlays claim them -- so the old code was driving UART pins at sensors that are no
+# longer on the Pi at all.
+#
+# ⚠ S-9 LIVES HERE. The old code returned 999.0 on a timeout and safety.py defaulted to
+#   the same value, so "I got no reading" and "nothing is in front of me" were one
+#   number. Behind a serial link that is a fail-open: a dropped frame becomes a positive
+#   assertion of clear path. Two different silences now get two different answers:
+#
+#     FRESH frame, channel reads -1  -> the Pico pinged and heard nothing back. For a
+#                                       sensor pointed at an open room that is true, and
+#                                       it means CLEAR -> SONAR_MAX_CM.
+#     NO fresh frame                 -> link down, board unpowered, wire out. Nothing is
+#                                       known -> STOP -> 0.0, which every existing
+#                                       comparison already reads as blocked.
+#
+#   The firmware sends a per-channel age so the Pi never has to guess which it is.
 class SonarArray:
-    def __init__(self):
-        if not config.SIMULATE_HARDWARE: GPIO.setmode(GPIO.BCM); GPIO.setwarnings(False)
-        self.front=Sonar(config.SONAR_FRONT_TRIG,config.SONAR_FRONT_ECHO)
-        self.left=Sonar(config.SONAR_LEFT_TRIG,config.SONAR_LEFT_ECHO)
-        self.right=Sonar(config.SONAR_RIGHT_TRIG,config.SONAR_RIGHT_ECHO)
-        self._sensors=[self.front,self.left,self.right]
-        self._running=False; self._thread=None
-        # Optional multi-zone ToF (§6.5). Set by brain.py when ENABLE_TOF; None otherwise, which
-        # is also what an unavailable sensor degrades to. ALONGSIDE the sonar, never replacing
-        # it -- the two are blind to different things, and ToF looks straight through glass.
-        self.tof=None
+    _ORDER = ('front', 'left', 'right')      # $S field order, firmware/README.md
+
+    def __init__(self, link=None):
+        self._link = link if link is not None else pico_link.PicoLink(
+            config.PICO_B_DEVICE, 'pico_b')
+        self._owns_link = link is None
+        self._sim = dict.fromkeys(self._ORDER, config.SONAR_MAX_CM)
+        # Optional multi-zone ToF (§6.5). Set by brain.py when ENABLE_TOF; None otherwise,
+        # which is also what an unavailable sensor degrades to. ALONGSIDE the sonar, never
+        # replacing it -- the two are blind to different things, and ToF looks through glass.
+        self.tof = None
+
     def start(self):
-        self._running=True
-        self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
+        if self._owns_link:
+            self._link.start()
+
     def stop(self):
-        self._running=False
-        if self._thread is not None: self._thread.join(timeout=2.0)
-    def _loop(self):
-        while self._running:
-            for s in self._sensors: s.update(); time.sleep(config.SONAR_INTERVAL/3)
+        if self._owns_link:
+            self._link.stop()
+
+    # --- the reading ---------------------------------------------------------------
+    def _read_all(self):
+        """{'front':cm,...}. Stale link -> 0.0 on every channel, which means STOP."""
+        if config.SIMULATE_HARDWARE:
+            return dict(self._sim)
+        f = self._link.fresh('S', config.SONAR_STALE_S)
+        if f is None:
+            return dict.fromkeys(self._ORDER, 0.0)
+        out = {}
+        for i, name in enumerate(self._ORDER):
+            try:
+                mm = int(f[3 + i * 2])
+                age_ms = int(f[4 + i * 2])
+            except (IndexError, ValueError):
+                out[name] = 0.0
+                continue
+            if mm < 0:
+                # No echo. Nothing within range -- genuinely clear, not a failure.
+                out[name] = config.SONAR_MAX_CM
+            elif age_ms >= 0 and age_ms > config.SONAR_STALE_S * 1000:
+                # The frame is fresh but THIS channel has not been updated inside it.
+                # Per-channel staleness is why the protocol carries an age per channel.
+                out[name] = 0.0
+            else:
+                out[name] = mm / 10.0
+        return out
+
+    @property
+    def flags(self):
+        """Pico B's flag byte. Bit 0/1/2 = front/left/right ECHO stuck high, which is the
+        signature of a DESTROYED sensor rather than a timeout -- four have died on this
+        rover. Bit 6 = an IMU reset has been performed since boot."""
+        f = self._link.fresh('S', config.SONAR_STALE_S) if not config.SIMULATE_HARDWARE else None
+        try:
+            return int(f[9]) if f else 0
+        except (IndexError, ValueError):
+            return 0
+
+    @property
+    def is_healthy(self):
+        if config.SIMULATE_HARDWARE:
+            return True
+        return self._link.is_healthy('S', config.SONAR_STALE_S)
+
     @property
     def distances(self):
-        """THE fusion point (§6.5). 'front' is the minimum of the sonar reading and the nearest
-        ToF zone reporting an obstacle -- whichever sensor sees something closer wins.
+        """THE fusion point (§6.5). 'front' is the minimum of the sonar reading and the
+        nearest ToF zone reporting an obstacle -- whichever sensor sees something closer
+        wins.
 
-        min() is the whole design: fail-safe by construction, no arbitration logic, no new FSM
-        state, no threshold changes. DIST_STOP/DIST_SLOW/DIST_CLEAR, _roam(), _slow() and
-        _avoid() all keep working against the same dict key and never learn the ToF exists.
+        min() is the whole design: fail-safe by construction, no arbitration logic, no new
+        FSM state, no threshold changes. DIST_STOP/DIST_SLOW/DIST_CLEAR, _roam(), _slow()
+        and _avoid() all keep working against the same dict key and never learn the ToF
+        exists.
 
-        The ToF only ever pulls 'front' DOWN. A None from it means "nothing to report" -- not
-        "the way is clear" -- so an uncalibrated or unavailable sensor can never mask a real
-        sonar obstacle. Sides are untouched: this is a front sensor, and the left/right sonars
-        are the only side coverage there is."""
-        front=self.front.distance
-        tof=self.tof
-        if tof is not None and getattr(tof,'available',False):
+        The ToF only ever pulls 'front' DOWN. A None from it means "nothing to report" --
+        not "the way is clear" -- so an uncalibrated or unavailable sensor can never mask a
+        real sonar obstacle. Sides are untouched: this is a front sensor, and the
+        left/right sonars are the only side coverage there is."""
+        d = self._read_all()
+        front = d['front']
+        tof = self.tof
+        if tof is not None and getattr(tof, 'available', False):
             try:
-                near=tof.nearest_obstacle_cm()
-                if near is not None and near<front: front=near
+                near = tof.nearest_obstacle_cm()
+                if near is not None and near < front:
+                    front = near
             except Exception:
                 # distances() runs on the 20Hz tick. An exception escaping here would stop
                 # obstacle checks entirely -- strictly worse than having no ToF at all.
-                log.warning('ToF read raised inside distances(); using sonar alone',exc_info=True)
-        return {'front':front,'left':self.left.distance,'right':self.right.distance}
-    def obstacle_ahead(self): return self.front.distance<config.DIST_STOP
-    def should_slow(self): return self.front.distance<config.DIST_SLOW
-    def better_side(self): return 'left' if self.left.distance>=self.right.distance else 'right'
+                log.warning('ToF read raised inside distances(); using sonar alone',
+                            exc_info=True)
+        return {'front': front, 'left': d['left'], 'right': d['right']}
 
+    def obstacle_ahead(self):
+        return self.distances['front'] < config.DIST_STOP
+
+    def should_slow(self):
+        return self.distances['front'] < config.DIST_SLOW
+
+    def better_side(self):
+        d = self.distances
+        return 'left' if d['left'] >= d['right'] else 'right'
 # FR-800-001 (read IMU orientation data). tilt/is_safe below feed FR-800-003 (excessive
 # tilt halts motion) and FR-300 approve_motion()'s tilt check -- the halt itself lives in
 # safety.py/brain.py, this class only supplies the reading.
@@ -120,9 +172,19 @@ class IMU:
             # intent in one place rather than leaving a 100000 literal here that would quietly
             # contradict the kernel the moment the dtparam is raised. See config.I2C_BAUDRATE.
             self._i2c=busio.I2C(board.SCL,board.SDA,frequency=config.I2C_BAUDRATE)
-            mcp=MCP23017(self._i2c,address=config.ENCODER_ADDR)
-            reset_pin=mcp.get_pin(config.IMU_RST_MCP_PIN)
-            self._bno=BNO08X_I2C(self._i2c,reset=reset_pin,address=config.IMU_ADDR)
+            # ⚠ NO HARDWARE RESET LINE, as of 2026-09-30. RST used to be MCP23017 GPB4;
+            # the expander is gone and §4.7 consequence 1 moves the line to Pico B GP15,
+            # driven open-drain against R4 and exposed as an explicit, acknowledged RST
+            # command over uart2-pi5. That command travels Pi -> Pico B, and THAT
+            # DIRECTION IS CURRENTLY DEAD -- PING, ID and a deliberate BOGUS all go
+            # unanswered while frames stream the other way, isolating it to the one
+            # conductor from Pi phys 7 to c27. So reset=None and the library falls back
+            # to the I2C soft reset, which is what it did before 2026-08-14 anyway.
+            #
+            # The consequence to carry: if the BNO085 ever wedges, there is no way to
+            # clear it in software. Fix that wire. Verified 2026-09-30 that the chip is
+            # otherwise healthy -- it answers SHTP on 0x4A with an incrementing sequence.
+            self._bno=BNO08X_I2C(self._i2c,reset=None,address=config.IMU_ADDR)
             self._bno.enable_feature(BNO_REPORT_ROTATION_VECTOR)
         self._pitch=0.0; self._roll=0.0
         self._lock=threading.Lock(); self._last_ok=0.0
@@ -290,113 +352,154 @@ class ADC:
             time.sleep(1.0)
 
 class Encoders:
-    # MCP23017 @0x27 (§9.1), quadrature A/B per wheel, polled. G-2 (FRD v3.1 §V.2): interrupt-
-    # driven decode was decided 2026-08-18 and retracted 2026-08-23 -- it would have wired the
-    # MCP23017's INTA pin straight to a bare Pi GPIO for no gain: it would not have reduced
-    # I2C transaction
-    # count anyway (an interrupt only says "something changed"; learning what still costs a
-    # register read, same as polling). The "~8.5kHz/channel" figure that motivated it was also
-    # wrong -- it double-counted the gearbox reduction already baked into ENCODER_COUNTS_PER_REV.
-    # Real edge rate is unresolved, roughly 450-4400 Hz depending on an unconfirmed gear ratio;
-    # resolve by bench test (mark a wheel, jog known turns), not more arithmetic. If polling turns
-    # out to be too slow, raise dtparam=i2c_arm_baudrate (this bus carries an LTC4311 for exactly
-    # that), not interrupt-driven decode.
-    #
-    # Sign convention (forward=+) is asserted here, not yet confirmed against a physical dry-test
-    # per §9.3 — flip per-wheel in config.py if a corner reads backwards once tested.
-    _IODIRA=0x00; _IODIRB=0x01; _GPPUA=0x0C; _GPPUB=0x0D
-    _GPIOA=0x12; _GPIOB=0x13
-    _QTABLE=[0,-1,1,0, 1,0,0,-1, -1,0,0,1, 0,1,-1,0]  # [old_state<<2|new_state] -> delta
-    def __init__(self,bus=1):
-        if config.SIMULATE_HARDWARE:
-            self._bus=None
-        else:
-            self._bus=smbus2.SMBus(bus)
-            self._bus.write_byte_data(config.ENCODER_ADDR,self._IODIRA,0xFF)
-            self._bus.write_byte_data(config.ENCODER_ADDR,self._IODIRB,0xFF)
-            self._bus.write_byte_data(config.ENCODER_ADDR,self._GPPUA,0xFF)
-            self._bus.write_byte_data(config.ENCODER_ADDR,self._GPPUB,0xFF)
-        self._counts=dict.fromkeys(config.ENCODER_PINS,0)
-        self._rate=dict.fromkeys(config.ENCODER_PINS,0.0)
-        self._state=dict.fromkeys(config.ENCODER_PINS,0)
-        self._last_counts=dict(self._counts); self._last_rate_t=time.perf_counter()
-        self._lock=threading.Lock(); self._running=False; self._thread=None; self._last_ok=0.0
-        if not config.SIMULATE_HARDWARE:
-            # Seed real initial state instead of assuming 0 for every wheel (would otherwise
-            # register a spurious first-count delta on whichever wheel's real resting state isn't
-            # 0b00) -- deliberately does not go through _update()/_QTABLE, just captures the
-            # starting point.
-            a=self._bus.read_byte_data(config.ENCODER_ADDR,self._GPIOA)
-            b=self._bus.read_byte_data(config.ENCODER_ADDR,self._GPIOB)
-            for w,(bank,bitA,bitB) in config.ENCODER_PINS.items():
-                byte=a if bank=='A' else b
-                self._state[w]=(((byte>>bitA)&1)<<1)|((byte>>bitB)&1)
-            self._last_ok=time.perf_counter()
+    """Per-wheel counts, read over uart4-pi5 from Pico A at 50 Hz.
+
+    MOVED OFF THE MCP23017 2026-09-30, Master Hardware Design §4.7. This class used to
+    poll an I²C expander at 0x27 that is no longer on the bus -- a live scan returns ten
+    devices and none of them is it. Until this change, constructing it raised
+    `ValueError: No I2C device at address: 0x27`, `_init_device` retried eight times and
+    re-raised, and `RoverBrain.__init__` died. The rover could not start.
+
+    ⚠ COUNTS ARE UNSIGNED AND HAVE NO DIRECTION. `pico_a.py` counts rising edges on
+      Phase A only, because all six Phase B greens have read dead since 2026-09-18 and
+      may have been destroyed by that day's reversed supply. A wheel driven backwards
+      counts UP exactly like one driven forwards. `lf` was found running in reverse on
+      2026-09-29 and the telemetry could not see it. The quadrature table this class used
+      to carry is gone with the expander; when the greens are repaired the firmware gains
+      a decoder and the counts gain a sign, and **this docstring is the thing to delete
+      that day.**
+
+    ⚠ `config.ENCODER_COUNTS_PER_REV` is wrong for these counts. 752 assumes ×4
+      quadrature on a 17.1:1 gearbox; the fitted motors are 35.5:1 and this transport is
+      ×1, so the real figure is near 11 × 35.5 ≈ 390. `odometry.py` scales every distance
+      by it. Measure it with `scripts/encoder_calibration.py` before trusting a distance.
+
+    The wheel order comes from the frame, and the frame's order is the as-built landing
+    proved on hardware one wheel at a time on 2026-09-29: lf, lm, rf, rm, lr, rr.
+    """
+
+    _ORDER = ('lf', 'lm', 'rf', 'rm', 'lr', 'rr')      # $E field order == as-built J3
+
+    def __init__(self, link=None):
+        self._link = link if link is not None else pico_link.PicoLink(
+            config.PICO_A_DEVICE, 'pico_a')
+        self._owns_link = link is None
+        self._counts = dict.fromkeys(self._ORDER, 0)
+        self._rate = dict.fromkeys(self._ORDER, 0.0)
+        self._last_counts = dict(self._counts)
+        self._last_rate_t = time.perf_counter()
+        self._lock = threading.Lock()
+        self._running = False
+        self._thread = None
+        self._last_ok = 0.0
+
+    def start(self):
+        if self._owns_link:
+            self._link.start()
+        self._running = True
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._running = False
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+        if self._owns_link:
+            self._link.stop()
+
     def _update(self):
         if config.SIMULATE_HARDWARE:
-            # No simulated physics loop drives wheel rotation — counts simply hold their current
-            # value each tick. Enough to exercise is_healthy/stalled()/the odometry wiring path
-            # off real hardware; not a claim that simulated counts track a simulated motion.
-            self._last_ok=time.perf_counter(); return
-        a=self._bus.read_byte_data(config.ENCODER_ADDR,self._GPIOA)
-        b=self._bus.read_byte_data(config.ENCODER_ADDR,self._GPIOB)
+            # No simulated physics loop drives wheel rotation -- counts hold their value.
+            # Enough to exercise is_healthy/stalled()/the odometry wiring path off real
+            # hardware; not a claim that simulated counts track simulated motion.
+            self._last_ok = time.perf_counter()
+            return
+        f = self._link.fresh('E', config.ENCODER_STALE_S)
+        if f is None:
+            return                      # stale link: hold, and let is_healthy report it
         with self._lock:
-            for w,(bank,bitA,bitB) in config.ENCODER_PINS.items():
-                byte=a if bank=='A' else b
-                state=(((byte>>bitA)&1)<<1)|((byte>>bitB)&1)
-                self._counts[w]+=self._QTABLE[(self._state[w]<<2)|state]
-                self._state[w]=state
-        self._last_ok=time.perf_counter()
-    def start(self):
-        self._running=True
-        self._thread=threading.Thread(target=self._loop,daemon=True); self._thread.start()
-    def stop(self):
-        self._running=False
-        if self._thread is not None: self._thread.join(timeout=2.0)
+            for i, w in enumerate(self._ORDER):
+                try:
+                    self._counts[w] = int(f[3 + i])
+                except (IndexError, ValueError):
+                    pass
+        self._last_ok = time.perf_counter()
+
     def _loop(self):
-        # Polling loop -- practical ceiling near 1kHz, set by the I2C transaction cost (bus +
-        # smbus2/kernel driver + CPython), not by this loop's own overhead. See this class's
-        # docstring (G-2/S-2) for the real edge-rate question and how it gets resolved (bench
-        # test), and dtparam=i2c_arm_baudrate as the fix if polling proves too slow.
-        #
-        # The 1ms sleep is NOT optional throttling -- it is what keeps this thread from
-        # saturating I2C bus 1, which is shared with everything safety-relevant: both MotorKits
-        # (0x60/0x61, i.e. stop commands), the ADS1115 battery ADC feeding the brownout logic,
-        # and the BNO085 IMU. Without it every one of those transactions queues behind a
-        # back-to-back encoder read stream. It also holds continuous CPU/GIL pressure on a Pi
-        # where WHISPER_CPU_THREADS=3 was chosen specifically to keep peak draw off the 5V rail.
-        # Restored 2026-08-23 after the interrupt-decode revert dropped it by accident (the
-        # pre-interrupt code had it; the revert produced a sleepless loop that had never run
-        # in this form). Do not remove without measuring bus occupancy against motor latency.
+        # No 1 ms sleep and no bus contention any more: the old loop had to be throttled
+        # because it shared I²C bus 1 with both MotorKits, the battery ADC and the IMU, and
+        # a back-to-back encoder read stream queued stop commands behind it. This reads a
+        # dedicated UART, so the constraint is gone -- but there is no point running faster
+        # than Pico A emits, which is 50 Hz.
+        iv = 1.0 / max(1.0, config.ENCODER_POLL_HZ)
         while self._running:
-            try: self._update()
+            try:
+                self._update()
             except Exception:
-                log.warning('MCP23017 encoder read failed', exc_info=True)
-            now=time.perf_counter()
-            if now-self._last_rate_t>=0.2:
+                log.warning('Pico A encoder read failed', exc_info=True)
+            now = time.perf_counter()
+            if now - self._last_rate_t >= 0.2:
                 with self._lock:
-                    dt=now-self._last_rate_t
+                    dt = now - self._last_rate_t
                     for w in self._counts:
-                        self._rate[w]=(self._counts[w]-self._last_counts[w])/dt
-                        self._last_counts[w]=self._counts[w]
-                self._last_rate_t=now
-            time.sleep(0.001)
+                        self._rate[w] = (self._counts[w] - self._last_counts[w]) / dt
+                        self._last_counts[w] = self._counts[w]
+                self._last_rate_t = now
+            time.sleep(iv)
+
     @property
-    # FR-500-001 (read wheel encoders): raw per-wheel quadrature counts.
+    def r5_millivolts(self):
+        """Pico A's own ADC reading of the R5 encoder rail, via its 10k/10k divider.
+
+        This did not exist while the expander owned the encoders: the rail that powers the
+        encoders had no monitor, and a sagging R5 looked exactly like six dead channels.
+        It is already corrected for the divider by the firmware.
+        """
+        f = self._link.fresh('E', config.ENCODER_STALE_S)
+        try:
+            return int(f[9]) if f else None
+        except (IndexError, ValueError):
+            return None
+
+    @property
+    def flags(self):
+        """Pico A's flag byte. Bit 0 = at least one Phase B pin has transitioned since
+        boot, which turns the open question about the six dead greens into telemetry.
+        Bit 1 = R5 below its warning threshold. Bit 2 = a counter wrapped between reports.
+        """
+        f = self._link.fresh('E', config.ENCODER_STALE_S)
+        try:
+            return int(f[10]) if f else 0
+        except (IndexError, ValueError):
+            return 0
+
+    @property
+    # FR-500-001 (read wheel encoders): raw per-wheel counts. Phase A edges, unsigned.
     def counts(self):
-        with self._lock: return dict(self._counts)
+        with self._lock:
+            return dict(self._counts)
+
     @property
     # FR-500-002 (speed and distance): rate here; distance-over-time conversion using
     # wheel circumference happens in odometry.py, not this class.
     def counts_per_sec(self):
-        with self._lock: return dict(self._rate)
-    # FR-500-003 (stall detection, Directive 5).
-    def stalled(self,wheel,commanded):
-        # §8.5 fault behavior: no counts while commanded -> caller should stop the affected drive.
-        with self._lock: return commanded and abs(self._rate.get(wheel,0.0))<1.0
-    @property
-    def is_healthy(self): return (time.perf_counter()-self._last_ok)<1.0
+        with self._lock:
+            return dict(self._rate)
 
+    # FR-500-003 (stall detection, Directive 5).
+    def stalled(self, wheel, commanded):
+        # §8.5 fault behaviour: no counts while commanded -> caller should stop that drive.
+        # ⚠ A stale link makes every wheel look stalled, which is the safe direction: it
+        #   stops a rover that has lost sight of its own wheels rather than driving one
+        #   blind. is_healthy is what distinguishes the two for anything that cares.
+        with self._lock:
+            return commanded and abs(self._rate.get(wheel, 0.0)) < 1.0
+
+    @property
+    def is_healthy(self):
+        if config.SIMULATE_HARDWARE:
+            return (time.perf_counter() - self._last_ok) < 1.0
+        return self._link.is_healthy('E', config.ENCODER_STALE_S)
 class CurrentMonitor:
     # INA260 x3 (§5.2): 0x40 = R2 5V (steering servos, sonar, screen), 0x44 = R3 6V (arm servo
     # distribution), 0x45 = +12V bus (both FeatherWing VIN). CORRECTED 2026-09-15 -- this comment

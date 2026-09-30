@@ -19,7 +19,11 @@ class ApprovedMotion:
     def __init__(self,action,speed,duration): self.action=action; self.speed=speed; self.duration=duration
     def __repr__(self): return f'ApprovedMotion({self.action!r},speed={self.speed},duration={self.duration})'
 
-def approve_motion(action,speed=None,duration=None,*,front_cm=999.0,tilt_deg=0.0,
+# ⚠ front_cm DEFAULTS TO 0.0, NOT 999.0 -- changed 2026-09-30, Software Design S-9.
+# 999.0 meant 'assume the way is clear unless told otherwise', and sonar now arrives
+# over a serial link where not-being-told is a normal failure mode. A caller that omits
+# front_cm is a caller with no obstacle information, and the answer to that is no.
+def approve_motion(action,speed=None,duration=None,*,front_cm=0.0,tilt_deg=0.0,
                     bat_tier='normal',motion_enabled=True):
     """Pure decision logic, no hardware access — independently unit-testable (tests/test_safety.py).
     Returns ApprovedMotion (with speed/duration clamped to configured limits) or Rejected(reason)."""
@@ -35,7 +39,10 @@ def approve_motion(action,speed=None,duration=None,*,front_cm=999.0,tilt_deg=0.0
 class SafetyController:
     def __init__(self,drive_base):
         self._drive=drive_base
-        self._ctx={'front_cm':999.0,'tilt_deg':0.0,'bat_tier':'normal','motion_enabled':False}
+        # front_cm starts at 0.0 -- blocked -- so forward motion is refused until a real
+        # sonar reading has actually arrived. It used to start at 999.0, which granted
+        # clear path before a single frame had been read. S-9.
+        self._ctx={'front_cm':0.0,'tilt_deg':0.0,'bat_tier':'normal','motion_enabled':False}
         self._deadline=None; self._active_action=None
         self._last_estop_log_t=0.0
 

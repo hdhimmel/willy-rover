@@ -12,7 +12,10 @@ log=logsetup.setup('diagnostics')
 # all-call broadcast) — PCA9685.reset() clears MODE1's ALLCALL bit during motors.py/arm.py's
 # construction in RoverBrain.__init__, which runs before this self-test, so 0x70 legitimately
 # never answers by the time we scan; it was never a real device to begin with. See brain.py.
-_EXPECTED_I2C={config.ENCODER_ADDR,config.INA260_5V_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
+# 0x27 REMOVED 2026-09-30, mirroring brain.py. The MCP23017 is off the bus; encoder decode
+# moved to Pico A over uart4-pi5 (§4.7). Both sets must change together -- that is what
+# tests/test_expected_i2c_agreement.py exists to enforce, after they drifted on 2026-09-14.
+_EXPECTED_I2C={config.INA260_5V_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
                config.INA260_BUS_12V_ADDR,config.INA260_ARM_6V_ADDR,config.ADS_ADDR,config.IMU_ADDR,
                config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR}
 # Witty Pi 5 joins only when enabled, mirroring brain.py:71 exactly. THIS LINE WAS MISSING until
@@ -65,7 +68,12 @@ def main():
     encoders_healthy=encoders.is_healthy
     current_healthy=current.is_healthy
 
-    print(f'\nSonar    front={sonars.front.distance}cm left={sonars.left.distance}cm right={sonars.right.distance}cm')
+    # Reads one $S frame from Pico B rather than three pin-timed Sonar objects (§4.7).
+    # 0.0 on every channel means the LINK is stale -- not that the rover is boxed in.
+    d=sonars.distances
+    print(f'\nSonar    front={d["front"]:.1f}cm left={d["left"]:.1f}cm right={d["right"]:.1f}cm'
+          f'   link={"ok" if sonars.is_healthy else "STALE -> treated as STOP"}'
+          f'   flags={sonars.flags:#04x}')
     print(f'IMU      healthy={imu_healthy}  tilt={imu.tilt:.1f}deg  pitch={imu.pitch:.1f}  roll={imu.roll:.1f}')
     print(f'Battery  healthy={adc_healthy}  volts={adc.battery_volts:.2f}V  pct={adc.battery_pct}%  charging={adc.is_charging}')
     print(f'Encoders healthy={encoders_healthy}  counts={encoders.counts}')

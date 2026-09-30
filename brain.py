@@ -62,15 +62,21 @@ class _SdNotify:
 # all-call broadcast) — PCA9685.reset() clears MODE1's ALLCALL bit during motors.py/arm.py's
 # construction in RoverBrain.__init__, which runs before this self-test, so 0x70 legitimately
 # never answers by the time we scan; it was never a real device to begin with.
-_EXPECTED_I2C={config.ENCODER_ADDR,config.INA260_5V_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
+# 0x27 REMOVED 2026-09-30. The MCP23017 is off the bus -- encoder decode moved to Pico A over
+# uart4-pi5 (§4.7) and the expander is physically gone. Leaving it here made a correctly built
+# rover fail its own self-test: missing={0x27} -> critical -> _motion_enabled stayed false, so
+# Willie could not move no matter what else was right. Verified against a live scan the same day,
+# which returns exactly these ten: 0x40 0x42 0x43 0x44 0x45 0x48 0x4a 0x51 0x60 0x61.
+_EXPECTED_I2C={config.INA260_5V_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
                config.INA260_BUS_12V_ADDR,config.INA260_ARM_6V_ADDR,config.ADS_ADDR,config.IMU_ADDR,
                config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR}
 # Witty Pi 5 only joins the expected-device set once it's actually installed and enabled --
 # adding it unconditionally when the hardware is absent would make the self-test report a
 # real device as missing every single run. The gate is still correct; the hardware IS now
-# fitted and ENABLE_WITTY_PI is True (config.py), so 0x51 is expected and the self-test
-# looks for eleven devices, not ten. (Comment corrected 2026-09-11 -- it still said the
-# hardware did not exist on this unit.)
+# fitted and ENABLE_WITTY_PI is True (config.py), so 0x51 is expected. The self-test now looks
+# for TEN devices: nine plus the Witty Pi. It was eleven until 2026-09-30, when 0x27 left the
+# set with the MCP23017 it named. (Comment corrected 2026-09-11 -- it still said the hardware
+# did not exist on this unit.)
 if config.ENABLE_WITTY_PI: _EXPECTED_I2C.add(config.WITTY_PI_ADDR)
 
 # Battery ladder (§13.2), most severe first. Each entry's threshold is the "below this" boundary;

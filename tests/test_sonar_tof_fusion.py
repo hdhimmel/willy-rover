@@ -21,9 +21,11 @@ from sensors import SonarArray
 # the sonar" is the plausible-sounding change that would quietly remove glass detection.
 
 
-class _FakeSonar:
-    def __init__(self, d): self.distance = d
-    def update(self): pass
+# _FakeSonar is gone (2026-09-30). SonarArray no longer owns three Sonar objects that
+# each time a pin -- the readings arrive together in one $S frame from Pico B over
+# uart2-pi5 (§4.7). The fixture now injects the readings where they actually come from.
+# The FUSION logic under test is unchanged: 'front' is still the minimum of the sonar
+# reading and the nearest ToF zone, and the ToF can still only ever pull it down.
 
 
 class _FakeToF:
@@ -36,14 +38,16 @@ class _FakeToF:
 @pytest.fixture
 def array():
     a = SonarArray.__new__(SonarArray)
-    a.front = _FakeSonar(100.0)
-    a.left = _FakeSonar(100.0)
-    a.right = _FakeSonar(100.0)
-    a._sensors = [a.front, a.left, a.right]
-    a._running = False
-    a._thread = None
+    a._link = None
+    a._owns_link = False
+    a._sim = {'front': 100.0, 'left': 100.0, 'right': 100.0}
     a.tof = None
     return a
+
+
+def _set_front(array, cm):
+    """What the sonar alone reports, as if Pico B had sent it."""
+    array._sim['front'] = cm
 
 
 def test_without_a_tof_front_is_the_sonar_reading(array):
@@ -59,7 +63,7 @@ def test_the_sonar_wins_when_it_sees_something_closer(array):
     """The case that matters for glass: ToF looks straight through a patio door, sonar does not.
     If the ToF's 'nothing there' could override a real sonar return, adding this sensor would
     have made him blind to glass."""
-    array.front.distance = 25.0
+    _set_front(array, 25.0)
     array.tof = _FakeToF(cm=90.0)
     assert array.distances['front'] == pytest.approx(25.0)
 
@@ -67,7 +71,7 @@ def test_the_sonar_wins_when_it_sees_something_closer(array):
 def test_a_tof_reporting_no_obstacle_never_raises_the_front_distance(array):
     """None means 'nothing to report', not 'the way is clear'. Treating it as a distance would
     let an uncalibrated or unavailable sensor mask a real sonar obstacle."""
-    array.front.distance = 15.0
+    _set_front(array, 15.0)
     array.tof = _FakeToF(cm=None)
     assert array.distances['front'] == pytest.approx(15.0)
 

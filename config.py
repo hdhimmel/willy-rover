@@ -105,10 +105,20 @@ TURN_INNER_SCALE=0.0
 # Sonar (§8.1 master doc) — FRONT_ECHO/LEFT_ECHO were wired to GP11/GP19 here, which do not match
 # the documented harness (GP26/GP14) and aren't connected to anything real — front/left obstacle
 # detection has likely been silently reading 999cm (no obstacle) on every call. Fixed 2026-08-02.
-SONAR_FRONT_TRIG=5;  SONAR_FRONT_ECHO=26
-SONAR_LEFT_TRIG=13;  SONAR_LEFT_ECHO=14
-SONAR_RIGHT_TRIG=4;  SONAR_RIGHT_ECHO=21
-SONAR_TIMEOUT=0.025; SONAR_SAMPLES=3; SONAR_INTERVAL=0.05
+# SONAR PIN CONSTANTS REMOVED 2026-09-30. They named GP5, GP13 and GP4, which the
+# uart2-pi5 and uart4-pi5 overlays now claim as TXD2, RXD4 and RXD2 -- pinctrl confirms
+# it. The three HC-SR04s are read by Pico B and arrive as $S frames over uart2-pi5, so
+# nothing on the Pi times an ECHO line any more. Master Hardware Design section 4.7.
+SONAR_INTERVAL=0.05
+# Furthest a fresh "no echo" reading means. A -1 on a channel whose frame is FRESH is
+# the Pico saying it pinged and heard nothing -- for a sensor pointed at an open room
+# that is true, and it means clear, not broken. Distinct from a stale link, which means
+# stop. Software Design S-9.
+SONAR_MAX_CM=400.0
+# How old a $S frame may be before sonar is treated as UNKNOWN, which means STOP.
+# 33 Hz nominal, so this is ~10 missed frames -- long enough not to trip on jitter,
+# short enough that a dead link cannot be driven through.
+SONAR_STALE_S=0.30
 DIST_STOP=20; DIST_SLOW=40; DIST_CLEAR=60; DIST_SIDE_CLEAR=25
 
 # --- FR-1000-002 / FR-1200-005 multi-zone ToF (DFRobot SEN0628, Master Hardware Design §6.5).
@@ -150,7 +160,10 @@ IMU_ADDR=0x4A; IMU_TILT_LIMIT=25; IMU_TILT_WARN=18; IMU_POLL_HZ=100  # BNO085, �
 # (previously only documented as "spare pin", no bit number). MCP230xx get_pin() numbering is
 # 0-7=port A, 8-15=port B, so B4 -> pin index 12. Doesn't collide with any ENCODER_PINS bit
 # (bank B only uses bits 0-3 there).
-IMU_RST_MCP_PIN=12
+# IMU_RST_MCP_PIN REMOVED 2026-09-30 with the expander that hosted it. Section 4.7
+# consequence 1 moves the BNO085 reset to Pico B GP15, open-drain against R4, exposed as
+# an explicit acknowledged RST command over uart2-pi5. ⚠ That direction is dead today --
+# one wire, Pi phys 7 to c27 -- so the IMU currently has no hardware reset at all.
 
 # Steering — PCA9685 @0x42, CH0-5 (§3.1/§10). Servo mode (500-2500/1000-2000/900-2100us) is
 # unconfirmed per-unit — default to the narrowest documented range so a narrow-mode servo can't
@@ -230,7 +243,17 @@ ARM_CURRENT_LIMIT_S=0.4
 
 # Wheel encoders — MCP23017 @0x27 (§9.1), quadrature A/B per wheel. counts/rev is a "starting
 # value" from the motor listing, not bench-confirmed.
-ENCODER_ADDR=0x27
+# ENCODER_ADDR REMOVED 2026-09-30. The MCP23017 is off the bus; a live scan returns ten
+# devices and none of them is 0x27. Encoder decode is Pico A's job now, over uart4-pi5.
+PICO_A_DEVICE='/dev/ttyAMA4'   # uart4-pi5, Pi GP12/GP13 -- encoders + R5 rail sense
+PICO_B_DEVICE='/dev/ttyAMA2'   # uart2-pi5, Pi GP4/GP5  -- sonar + BNO085 reset
+# Identify a board by UID, never by port: the port follows the USB slot, not the board.
+PICO_A_UID='643f69a756a232ea'
+PICO_B_UID='ad25bbf0f1e1f160'
+# $E arrives at 50 Hz. Ten missed frames before the encoders are considered unknown --
+# at which point every wheel reads as stalled, which is the safe direction.
+ENCODER_STALE_S=0.20
+ENCODER_POLL_HZ=50.0
 # MEASURED 2026-09-18 (E-1) -- LEFT AND RIGHT WERE TRANSPOSED, the same swap found on the
 # motor boards the same day (see MOTOR_PORT above). The encoders were landed at the same time
 # as the motors, so the same left/right confusion propagated into both. Master Hardware Design
@@ -256,8 +279,13 @@ ENCODER_ADDR=0x27
 # on its Phase A immediately afterwards. Phase B did not recover, so those output stages may
 # have been damaged by the reverse polarity -- the same failure that destroyed two sonars the
 # previous day, on connectors reassembled during the same rebuild.
-ENCODER_PINS={'lf':('A',4,5),'lm':('A',6,7),'lr':('B',2,3),
-              'rf':('A',0,1),'rm':('A',2,3),'rr':('B',0,1)}
+# ENCODER_PINS REMOVED 2026-09-30 with the expander. ⚠ AND IT WAS WRONG: it disagreed
+# with the as-built landing in Master Hardware Design 16.6 by a left/right swap at every
+# position, and the firmware's WHEELS tuple had inherited the same error. Proved on
+# hardware 2026-09-29, one wheel at a time on blocks: driving lf counted on GP0/GP1, rf
+# on GP4/GP5, lm on GP2/GP3, rm on GP6/GP7, rr on GP10/GP11 -- the as-built table, five
+# for five. The order now lives in ONE place, firmware/pico_a.py's WHEELS, and reaches
+# the Pi in the frame itself.
 # !! 752 IS PROBABLY WRONG FOR THE MOTORS FITTED RIGHT NOW. The vendor parameter
 # table (2026-09-27) lists the JGA25-370 family by part suffix, and the suffix IS the
 # reduction ratio -- every row's no-load speed times its suffix gives the same ~6,000
@@ -969,7 +997,7 @@ def validate():
     FR-1100-004) instead -- run `python3 diagnostics.py` to see current results."""
     problems=[]
 
-    i2c_addrs={'ENCODER_ADDR':ENCODER_ADDR,'INA260_5V_ADDR':INA260_5V_ADDR,
+    i2c_addrs={'INA260_5V_ADDR':INA260_5V_ADDR,
                'STEER_PCA_ADDR':STEER_PCA_ADDR,'ARM_PCA_ADDR':ARM_PCA_ADDR,
                'INA260_BUS_12V_ADDR':INA260_BUS_12V_ADDR,'INA260_ARM_6V_ADDR':INA260_ARM_6V_ADDR,
                'ADS_ADDR':ADS_ADDR,'IMU_ADDR':IMU_ADDR,
@@ -985,27 +1013,20 @@ def validate():
         problems.append(f'AUDIO_INPUT_RATE={AUDIO_INPUT_RATE} is not a whole multiple of 16000 '
                         f'(openwakeword frame rate); decimation would be fractional')
 
-    gpio_pins={'SONAR_FRONT_TRIG':SONAR_FRONT_TRIG,'SONAR_FRONT_ECHO':SONAR_FRONT_ECHO,
-               'SONAR_LEFT_TRIG':SONAR_LEFT_TRIG,'SONAR_LEFT_ECHO':SONAR_LEFT_ECHO,
-               'SONAR_RIGHT_TRIG':SONAR_RIGHT_TRIG,'SONAR_RIGHT_ECHO':SONAR_RIGHT_ECHO}
-    seen={}
-    for name,pin in gpio_pins.items():
-        if pin in seen: problems.append(f'duplicate GPIO pin {pin}: {seen[pin]} and {name}')
-        else: seen[pin]=name
+    # The GPIO duplicate check went with the sonar pins on 2026-09-30. Nothing in this
+    # config names a raw Pi GPIO any more: the sonars answer through Pico B, the encoders
+    # through Pico A, and the only Pi pins still in play are claimed by device-tree
+    # overlays (uart2-pi5, uart3-pi5, uart4-pi5), which the kernel arbitrates, not us.
+    # ⚠ If a raw Pi GPIO is ever reintroduced here, restore this check with it. The pins
+    #   it used to guard -- GP4, GP5, GP13 -- are now TXD2, RXD2 and RXD4, and a constant
+    #   naming one of those is a conflict the kernel will not warn about.
 
-    # MCP23017 (0x27) pin-index namespace is separate from raw Pi GPIO above -- 0-7=port A,
-    # 8-15=port B (adafruit_mcp230xx's own get_pin() numbering). Encoders use bank-A entirely
-    # (2 bits x 6 wheels doesn't fit in 8, so lr/rr spill onto B0-B3) plus IMU_RST_MCP_PIN=B4.
-    mcp_pins={}
-    for wheel,(bank,bitA,bitB) in ENCODER_PINS.items():
-        base=0 if bank=='A' else 8
-        for bit,role in ((bitA,'A'),(bitB,'B')):
-            idx=base+bit
-            key=f'ENCODER_PINS[{wheel!r}] ({role})'
-            if idx in mcp_pins: problems.append(f'duplicate MCP23017 pin {idx}: {mcp_pins[idx]} and {key}')
-            else: mcp_pins[idx]=key
-    if IMU_RST_MCP_PIN in mcp_pins:
-        problems.append(f'IMU_RST_MCP_PIN={IMU_RST_MCP_PIN} collides with {mcp_pins[IMU_RST_MCP_PIN]}')
+    # The MCP23017 pin-collision check is gone with the expander (2026-09-30). It used to
+    # verify that twelve encoder bits and IMU_RST_MCP_PIN did not land on the same pin of
+    # 0x27. There is no 0x27: encoder decode is Pico A's, and the BNO085 reset is Pico B
+    # GP15. The equivalent risk now lives in firmware/pico_a.py's WHEELS tuple, which is
+    # checked on hardware rather than here -- and WAS wrong until 2026-09-29, by a
+    # left/right swap at every position.
 
     if not (BAT_SHUTDOWN_V<BAT_SAFE_V<BAT_RTH_V<BAT_WARN_V):
         problems.append(f'battery tier thresholds not strictly ordered: '
