@@ -1,7 +1,17 @@
 """Pico B firmware -- three HC-SR04 sonars and the BNO085 reset, over uart2-pi5.
 
-NOT YET RUN ON HARDWARE. Written 2026-09-24. Master Hardware Design section 4.7
-is the wiring authority; this file must not disagree with it.
+PROVEN ON HARDWARE 2026-09-30 -- this said "NOT YET RUN" until then, and that line
+outlived the truth by a day. Measured from the Pi on /dev/ttyAMA2: $S frames at
+33.3 Hz, 200 frames in 6.0s with ZERO sequence gaps and ZERO bad checksums, all
+three HC-SR04s ranging, and the stuck-ECHO flag firing correctly on two dead
+sensors and clearing on a good one. Rail 0x40 read 5.004 V @ 0.031 A during it.
+
+STILL NOT PROVEN: the Pi -> Pico direction. PING, ID and a deliberate BOGUS all go
+unanswered while frames stream the other way, which isolates it to the one conductor
+from Pi phys 7 to c27. RST travels that way, so the BNO085 has no reachable reset.
+
+Written 2026-09-24. Master Hardware Design section 4.7 is the wiring authority;
+this file must not disagree with it.
 
 THERE IS NO 999 SENTINEL HERE, AND THERE MUST NEVER BE ONE.
 `sensors.py:43,46` return 999.0 on timeout and `safety.py:22,38` default to it,
@@ -51,7 +61,7 @@ BAUD = 115200
 # That was wrong: driving it brings up the wireless CHIP and loads its firmware
 # over SPI, but joins no network and transmits nothing. Section 12 item 17 was
 # amended 2026-09-26 to permit exactly that and nothing more. Do NOT import
-# `network`. NOT YET RUN: the boards were unplugged when this was written.
+# `network`. VERIFIED on both boards 2026-09-30 -- lit, and winking once a second.
 LED_PIN = "LED"       # GP14 is free
 RST_PIN = 15          # BNO085 RST, open-drain against a 10k pull-up to Pi 3V3
 

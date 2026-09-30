@@ -22,8 +22,12 @@ copy of its own transmission — crosstalk across the J2 harness into an untermi
 stub — which read as damaged hardware. Nothing was broken. **`fs cp` the file to
 `:main.py`, and delete the copy under its own name so there is only ever one.**
 
-Still not proven: **A's link to the Pi**, the **R5 divider** on A, the encoders, and
-the **Pi → Pico direction on B** — `PING`, `ID` and a deliberate `BOGUS` all go
+**A is now proven too, 2026-09-30:** `$E` at exactly 50.0 Hz, 300 frames in 6.0 s with
+zero gaps and zero bad checksums, a bare `ID` answered with its own UID, the R5 divider
+reading 3.392 V, and all six channels counting under real edge load with one wheel driven
+at a time on blocks.
+
+Still not proven: the **Pi → Pico direction on B** — `PING`, `ID` and a deliberate `BOGUS` all go
 unanswered while frames stream the other way, which isolates it to the one wire from
 Pi phys 7 to `c27`. That direction carries `RST`, so the BNO085 needs it.
 

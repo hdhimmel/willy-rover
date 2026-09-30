@@ -5,8 +5,16 @@ Written 2026-09-24, the day the boards arrived. Master Hardware Design section
 
 STATE: the PIO encoder counter is VERIFIED ON HARDWARE (see count_edges) on the
 board carrying UID 643f69a756a232ea -- Pico A, MicroPython v1.29.0 (2026-08-24).
-NOTHING IS WIRED YET, so the UART link, the LED, the R5 divider and the frame
-rate under real edge load are all unproven.
+ALL OF IT IS NOW PROVEN ON HARDWARE, 2026-09-30. This said "NOTHING IS WIRED YET"
+until then. Measured from the Pi on /dev/ttyAMA4: $E at exactly 50.0 Hz, 300 frames
+in 6.0s with zero sequence gaps and zero bad checksums; the board answered a bare ID
+with its own UID, so the Pi -> Pico direction works here (it does not on B); the R5
+divider read 3.392 V; the LED lights and winks; and all six channels counted under
+real edge load with one wheel driven at a time on blocks.
+
+⚠ COUNTS HAVE NO DIRECTION and will not until the greens are repaired. A wheel
+driven backwards counts up exactly like one driven forwards -- lf was found running
+in reverse on 2026-09-29 and this telemetry could not see it.
 
 WHY PIO AND NOT INTERRUPTS. At 620 RPM output that is 7,773 counts/s per wheel
 (752 counts/rev x 10.33 rev/s), ~3,900 edges/s on each of twelve channels.
@@ -70,7 +78,7 @@ BAUD = 115200
 # That was wrong: driving it brings up the wireless CHIP and loads its firmware
 # over SPI, but joins no network and transmits nothing. Section 12 item 17 was
 # amended 2026-09-26 to permit exactly that and nothing more. Do NOT import
-# `network`. NOT YET RUN: the boards were unplugged when this was written.
+# `network`. VERIFIED on both boards 2026-09-30 -- lit, and winking once a second.
 LED_PIN = "LED"       # GP14 is free
 R5_SENSE = 28         # ADC2, 10k/10k divider tapped UPSTREAM of F1
 
