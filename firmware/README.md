@@ -74,11 +74,18 @@ Line-based ASCII, NMEA-style: `$<body>*<XX>\n` where `XX` is the XOR of every
 character between `$` and `*`. Deliberately human-readable — every frame this
 rover has lost a session to was one nobody could read at a terminal.
 
+⚠ **THE $E WHEEL ORDER IS lf, lm, rf, rm, lr, rr** — the as-built J3 landing of
+Master Hardware Design §16.6, proved on hardware 2026-09-29 one wheel at a time on
+blocks. **This document said rf, rm, lf, lm, rr, lr until 2026-09-30**, and
+`scripts/encoder_calibration.py` copied that order straight out of here, so it would
+have attributed every measurement to the wrong side. `tests/test_encoder_order.py` now
+pins the three places this order lives to each other.
+
 **Pico → Pi**
 
 ```
 $I,<board>,<uid>,<ver>*XX                                  on boot, and on ID
-$E,<seq>,<ms>,<rf>,<rm>,<lf>,<lm>,<rr>,<lr>,<r5mv>,<flags>*XX     50 Hz, Pico A
+$E,<seq>,<ms>,<lf>,<lm>,<rf>,<rm>,<lr>,<rr>,<r5mv>,<flags>*XX     50 Hz, Pico A
 $S,<seq>,<ms>,<f_mm>,<f_age>,<l_mm>,<l_age>,<r_mm>,<r_age>,<flags>*XX  13-33 Hz, Pico B
 $P,<seq>*XX            reply to PING
 $R,ok,<count>*XX       reply to RST

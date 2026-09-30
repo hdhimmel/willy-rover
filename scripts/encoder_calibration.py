@@ -50,12 +50,18 @@ better: an error in judging one turn is divided by the count.
 import os,sys,threading,time
 sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
+import sensors
 
 _DEFAULT_REVS=10
 _DEFAULT_WINDOW_S=45.0
 _DEVICE='/dev/ttyAMA4'          # Pico A, uart4-pi5, Pi GP12/GP13
 _BAUD=115200
-_WHEELS=('rf','rm','lf','lm','rr','lr')   # $E field order, firmware/README.md
+# $E field order. NOT a local copy any more: this is imported from sensors.Encoders so
+# there is one definition. It was ('rf','rm','lf','lm','rr','lr') until 2026-09-30 --
+# copied out of firmware/README.md, which was itself wrong -- and it would have
+# attributed every measurement to the wheel on the other side of the rover. The one
+# thing this script exists to do is assign counts to the right wheel.
+_WHEELS=sensors.Encoders._ORDER
 _PHASE_A_ONLY_EXPECTED=11*35.5            # see the docstring -- a check, not an answer
 
 
