@@ -2256,7 +2256,7 @@ An earlier line here said "the only downstream change is ENCODER_COUNTS_PER_REV"
 | Top speed | **0.90 m/s** no-load, **0.70 m/s** rated, against 3.30 / 2.54 m/s today |
 | Torque at the wheel | reduction goes 9.6 → 35.5, i.e. **3.70×**; measured rated torque rises **3.45×** (0.20 → 0.69 kg·cm). The 3–5× this section speculated was **right** — it was yesterday's 2.05× that was wrong. Rated **1.33 N per wheel, 8.0 N over six**, against 0.39 N and 2.3 N today |
 | **Stall current** | **1.8 A per motor**, 10.8 A if all six stall — see the warning below |
-| Breakaway duty | **should fall well below the ~0.5 measured 2026-08-24.** That figure was a torque shortfall and more reduction is exactly what fixes it. `SPEED_SLOW` was raised 0.35→0.55 that day to spend headroom; **re-measure breakaway and consider putting it back** |
+| Breakaway duty | Predicted to fall well below the ~0.5 measured 2026-08-24. **Measured 2026-10-01 (wheels free, `scripts/breakaway_sweep.py`): only partly true** — rm 0.15, lr 0.20, lf 0.30, rr 0.35, but lm 0.40–0.50 and rf 0.45–0.55. `SPEED_SLOW` raised 0.55→**0.60** to clear rf; motors accepted as-is pending break-in, re-sweep after use |
 | `SPEED_*`, `SPEED_RAMP_PER_S` | the same duty now buys ~1/3.6 of the ground speed. Re-tune against the measured top speed; do not scale the old values |
 | `STALL_GRACE_S` | counts-per-second at a given duty scale with the ratio; re-check the window still clears `SPEED_RAMP_PER_S`'s worst-case ramp |
 | Odometry | inherits `ENCODER_COUNTS_PER_REV` directly (`odometry.py`) |
@@ -3087,9 +3087,8 @@ measurement work rather than wiring.
     re-run **both** the M-1 per-wheel drive check and
     `scripts/encoder_map_check.py`: the two left/right transpositions found on
     2026-09-18 came from landing motors and encoders in one pass, and six new
-    motors is that pass again. Re-measure breakaway duty before keeping
-    `SPEED_SLOW=0.55`, which was raised to spend headroom the old gearbox did not
-    have.
+    motors is that pass again. Breakaway was re-measured 2026-10-01 and
+    `SPEED_SLOW` went UP to 0.60, not down: lm and rf still need 0.45–0.55 from rest.
 
 ---
 

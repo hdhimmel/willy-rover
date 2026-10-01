@@ -82,7 +82,14 @@ MOTOR_PORT={'lf':(MOTORKIT_LEFT_ADDR,3),'lm':(MOTORKIT_LEFT_ADDR,2),'lr':(MOTORK
 # choices cut force at the ground. Raising these numbers spends headroom; it does
 # not create torque, and full duty is already full duty. If more torque is needed
 # it is a motor change -- see Master Hardware Design v2.0 section 7.1.
-SPEED_ROAM=0.75; SPEED_TURN=0.70; SPEED_SLOW=0.55; SPEED_MAX=1.00
+# SLOW 0.55 -> 0.60 on 2026-10-01, after the 170 RPM / 35.5:1 motors went in. The
+# prediction that more reduction would drop breakaway well below 0.5 did not hold for
+# every wheel: scripts/breakaway_sweep.py, wheels free, found 0.15-0.35 on four wheels
+# but lm at 0.40-0.50 and rf at 0.45-0.55 from rest (rf failed to move at 0.50 twice
+# across five sweeps). Owner accepted the motors as-is, expecting break-in, so SLOW
+# carries margin over rf on the block -- loaded on the floor needs more, not less.
+# Re-run the sweep after some hours of use; this should come down.
+SPEED_ROAM=0.75; SPEED_TURN=0.70; SPEED_SLOW=0.60; SPEED_MAX=1.00
 # Seconds of being stopped AND fully ramped down before the bridges are released and the
 # two MotorKit PCA9685s are put to sleep. Measured 2026-09-30: the +12V motor branch idles
 # at 0.019A holding six stopped wheels in adafruit_motor's hard-brake -- about 0.2W spent

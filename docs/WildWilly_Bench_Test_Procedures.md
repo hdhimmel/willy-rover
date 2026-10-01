@@ -561,9 +561,10 @@ motor ports and on the encoder channels.
 
 - [ ] `config.py`: `ENCODER_COUNTS_PER_REV` → **1562**; `ENCODER_ADDR` and `ENCODER_PINS`
       retire; re-measure `MOTOR_PORT` before trusting it (see Phase 5).
-- [ ] `config.py`: re-measure breakaway duty before keeping `SPEED_SLOW=0.55`. It was
-      raised 0.35→0.55 on 2026-08-24 to spend headroom the old gearbox did not have;
-      with **3.45× the rated torque** it probably does not need it.
+- [x] `config.py`: re-measure breakaway duty before keeping `SPEED_SLOW=0.55`. **Done
+      2026-10-01 with `scripts/breakaway_sweep.py`: SLOW raised to 0.60, not lowered.**
+      Four wheels break away at 0.15–0.35, but lm sits at 0.40–0.50 and rf wanders
+      0.45–0.55. Motors accepted as-is pending break-in; re-sweep after use.
 - [ ] `config.py`: `STALL_GRACE_S` is now a **hardware protection parameter**. Stall is
       1.8 A against the TB6612's 1.2 A continuous — 150% — so the window must be short
       enough to matter thermally, not merely short enough to feel responsive.
