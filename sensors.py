@@ -442,6 +442,8 @@ class Encoders:
             config.PICO_A_DEVICE, 'pico_a')
         self._owns_link = link is None
         self._counts = dict.fromkeys(self._ORDER, 0)
+        self._prev_raw = dict.fromkeys(self._ORDER)     # last value off the wire, for unwrap
+        self._seen_reboots = 0
         self._rate = dict.fromkeys(self._ORDER, 0.0)
         self._last_counts = dict(self._counts)
         self._last_rate_t = time.perf_counter()
@@ -474,12 +476,27 @@ class Encoders:
         f = self._link.fresh('E', config.ENCODER_STALE_S)
         if f is None:
             return                      # stale link: hold, and let is_healthy report it
+        reboots = getattr(self._link, 'reboots', 0)
+        rebase = reboots != getattr(self, '_seen_reboots', 0)
+        self._seen_reboots = reboots
         with self._lock:
             for i, w in enumerate(self._ORDER):
                 try:
-                    self._counts[w] = int(f[3 + i])
+                    raw = int(f[3 + i])
                 except (IndexError, ValueError):
+                    continue
+                p = self._prev_raw[w]
+                if p is None:
+                    self._counts[w] = raw
+                elif rebase:
+                    # Pico A rebooted and started again from zero. Keep the running total and
+                    # take the new origin, rather than reading the reset as a backwards move.
                     pass
+                else:
+                    # Unwrap across the 32-bit boundary, signed (a-0.3) or unsigned (a-0.2):
+                    # the step is the shortest way round, and _counts is an unbounded int.
+                    self._counts[w] += ((raw - p + 0x80000000) & 0xFFFFFFFF) - 0x80000000
+                self._prev_raw[w] = raw
         self._last_ok = time.perf_counter()
 
     def _loop(self):
@@ -543,7 +560,9 @@ class Encoders:
             return 0
 
     @property
-    # FR-500-001 (read wheel encoders): raw per-wheel counts. Phase A edges, unsigned.
+    # FR-500-001 (read wheel encoders): per-wheel counts, SIGNED since Pico A a-0.3, in the
+    # board's raw sign -- +throttle counts up on every wheel. Rover-forward is
+    # config.ENCODER_SIGN, applied in odometry.py.
     def counts(self):
         with self._lock:
             return dict(self._counts)

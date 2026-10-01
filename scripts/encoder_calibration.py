@@ -111,7 +111,8 @@ class PicoEncoders:
 
 
 def _delta(after,before):
-    return (after-before)&0xFFFFFFFF     # PIO counter is unsigned 32-bit
+    # Signed since a-0.3 (a wheel driven backwards counts down); unwraps either encoding.
+    return ((after-before+0x80000000)&0xFFFFFFFF)-0x80000000
 
 
 def main():
@@ -152,7 +153,7 @@ def main():
         enc.stop()
 
     deltas={w:_delta(final[w],start[w]) for w in final}
-    moved={w:d for w,d in deltas.items() if d>20}   # 20 counts of slop ignores line noise
+    moved={w:d for w,d in deltas.items() if abs(d)>20}   # 20 counts of slop ignores line noise
     print(f'\n=== result ===   {enc._frames} frames, {enc._bad} bad checksums')
     for w,d in sorted(deltas.items()):
         print(f'  {w:4} {d:+8d} counts' + ('  <-- MOVED' if w in moved else ''))

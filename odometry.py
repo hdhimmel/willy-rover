@@ -26,7 +26,9 @@ class Pose:
 _LEFT=('lf','lm','lr'); _RIGHT=('rf','rm','rr')
 _COUNTS_TO_M=(math.pi*config.WHEEL_DIAMETER_M)/config.ENCODER_COUNTS_PER_REV
 
-def _avg(counts,wheels): return sum(counts[w] for w in wheels)/len(wheels)
+# ENCODER_SIGN (2026-10-01): counts are signed and the sides are mirrored, so rover-forward is
+# +counts on the left and -counts on the right. Without the sign, straight ahead reads as a spin.
+def _avg(counts,wheels): return sum(counts[w]*config.ENCODER_SIGN[w] for w in wheels)/len(wheels)
 
 def integrate(pose,d_left_m,d_right_m,dt,timestamp):
     """Pure function, no hardware/threading — independently testable (tests/test_odometry.py).

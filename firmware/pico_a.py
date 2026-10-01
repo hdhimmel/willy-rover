@@ -12,11 +12,12 @@ with its own UID, so the Pi -> Pico direction works here (it does not on B); the
 divider read 3.392 V; the LED lights and winks; and all six channels counted under
 real edge load with one wheel driven at a time on blocks.
 
-⚠ PHASE B IS ALIVE ON ALL SIX, proven 2026-10-01 on the new motors (see PHASE_A below).
-This firmware still counts Phase A only, so counts have no direction until it decodes
-quadrature -- the paragraph below describes today's firmware, not a dead wire. A wheel
-driven backwards counts up exactly like one driven forwards -- lf was found running
-in reverse on 2026-09-29 and this telemetry could not see it.
+COUNTS ARE SIGNED, from a-0.3 (2026-10-01). Phase B is alive on all six new motors
+(proven that day over USB -- see PHASE_A below), so count_quad() decodes direction:
+both edges of A, with B sampled at each, x2 resolution. Until a-0.3 the counts were
+Phase-A-rising-only and unsigned -- lf ran in reverse on 2026-09-29 and nothing could
+see it. Which sign is "forward" differs by side, because the motors are mirrored;
+the Pi owns that (config.ENCODER_SIGN), not this board.
 
 WHY PIO AND NOT INTERRUPTS. At 620 RPM output that is 7,773 counts/s per wheel
 (752 counts/rev x 10.33 rev/s), ~3,900 edges/s on each of twelve channels.
@@ -34,15 +35,12 @@ Those old-motor figures were never measured; the motors came out first. On the
 fitted 35.5:1 motors the count is MEASURED: 382 Phase A edges per wheel revolution
 (2026-10-01, config.py), i.e. an effective ~34.7:1.
 
-WHY EDGE COUNTING AND NOT QUADRATURE, FOR NOW. Phase B (green) reads dead on
-all six channels (config.py:222) and may have been destroyed by the reversed
-supply of 2026-09-18. Direction-aware decode cannot be validated against
-hardware that cannot produce a B transition, so this firmware counts Phase A
-edges only -- distance without direction, which is exactly what the rover can
-prove today. It also SAMPLES the B pins and reports whether any of them has
-ever moved, which turns that open question into telemetry instead of a bench
-session. When the green wires are fixed, replace count_edges() with a
-jump-table quadrature decoder and the wire protocol does not change.
+WHY x2 AND NOT FULL x4 QUADRATURE. Phase B read dead on the OLD motors from
+2026-09-18; on the new ones it works. x4 would also count B's edges, which needs
+a jump-table decoder that MicroPython's asm_pio makes awkward, for resolution the
+rover does not need: x2 is 763 counts per wheel revolution, ~0.42 mm of travel
+per count. x2 keeps one state machine per wheel -- the CYW43 radio driver holds
+one of the twelve, so there is no room for two per wheel anyway.
 
 THE RADIO IS NOT INITIALISED. Do not import `network`. Section 12 item 17.
 """
@@ -53,7 +51,7 @@ import time
 import machine
 from machine import Pin, ADC, UART
 
-VERSION = "a-0.2"
+VERSION = "a-0.3"
 BOARD = "A"
 
 # --- wiring, section 4.7 -----------------------------------------------------
@@ -146,6 +144,47 @@ def count_edges():
     wrap()
 
 
+@rp2.asm_pio()
+def count_quad():
+    """Signed x2 quadrature: both edges of A (in_base), B (jmp_pin) sampled at each.
+
+    Forward-for-this-encoder means A leads B: A rises while B is low, and falls while
+    B is high. Those edges DECREMENT X; the other two INCREMENT it. PIO has no
+    increment, so X++ is done as X = ~(~X - 1). The count is (-X), so A-leads-B
+    reads positive -- the same convention count_edges() used, and the same pushing
+    from inside the loop, for the reasons recorded there.
+
+    Every label names a real instruction (count_edges' failure 1).
+    """
+    wrap_target()
+    wait(1, pin, 0)              # A rose
+    jmp(pin, "rise_b_hi")
+    jmp(x_dec, "rise_push")      # B low: A leads -> X--
+    label("rise_push")
+    jmp("push_rise")
+    label("rise_b_hi")
+    mov(x, invert(x))            # B high: B leads -> X++
+    jmp(x_dec, "rise_inv")
+    label("rise_inv")
+    mov(x, invert(x))
+    label("push_rise")
+    mov(isr, x)
+    push(noblock)
+    wait(0, pin, 0)              # A fell
+    jmp(pin, "fall_b_hi")
+    mov(x, invert(x))            # B low: B leads -> X++
+    jmp(x_dec, "fall_inv")
+    label("fall_inv")
+    mov(x, invert(x))
+    jmp("push_fall")
+    label("fall_b_hi")
+    jmp(x_dec, "push_fall")      # B high: A leads -> X--
+    label("push_fall")
+    mov(isr, x)
+    push(noblock)
+    wrap()
+
+
 class Encoders:
     def __init__(self):
         self._sm = {}
@@ -155,13 +194,13 @@ class Encoders:
         self.phase_b_seen = False
         for i, w in enumerate(WHEELS):
             pin = Pin(PHASE_A[w], Pin.IN, Pin.PULL_UP)
-            sm = rp2.StateMachine(i, count_edges, freq=2_000_000, in_base=pin)
+            b = Pin(PHASE_B[w], Pin.IN, Pin.PULL_UP)
+            sm = rp2.StateMachine(i, count_quad, freq=2_000_000, in_base=pin, jmp_pin=b)
             sm.exec("set(x, 0)")
             sm.active(1)
             self._sm[w] = sm
             self._raw[w] = 0
-            # Phase B is sampled, not counted -- see the module docstring.
-            b = Pin(PHASE_B[w], Pin.IN, Pin.PULL_UP)
+            # B is also sampled for F_PHASE_B_SEEN -- kept as a cheap wiring check.
             self._b[w] = b
             self._b_first[w] = b.value()
 
@@ -294,7 +333,12 @@ def main():
         if time.ticks_diff(now, next_report) >= 0:
             next_report = time.ticks_add(next_report, period_ms)
             raw = enc.counts()
-            deltas = [(raw[w] - zero[w]) & 0xFFFFFFFF for w in WHEELS]
+            # Signed since a-0.3: a wheel driven backwards counts DOWN. Sent as a signed
+            # decimal; the Pi unwraps across the 32-bit boundary either way.
+            deltas = []
+            for w in WHEELS:
+                d = (raw[w] - zero[w]) & 0xFFFFFFFF
+                deltas.append(d - 0x100000000 if d & 0x80000000 else d)
 
             mv = int(adc.read_u16() / 65535 * ADC_VREF_MV * R5_DIVIDER)
 

@@ -326,8 +326,13 @@ ENCODER_POLL_HZ=50.0
 # on GP4/GP5, lm on GP2/GP3, rm on GP6/GP7, rr on GP10/GP11 -- the as-built table, five
 # for five. The order now lives in ONE place, firmware/pico_a.py's WHEELS, and reaches
 # the Pi in the frame itself.
+# 763 since Pico A firmware a-0.3 (2026-10-01): x2 quadrature, both edges of A with B sampled
+# at each, SIGNED. That is exactly twice the x1 figure measured below the same day -- the same
+# edges, both of them counted -- so it is derived from a measurement, not from a datasheet.
+# The x1 measurement, for the record:
+#
 # MEASURED 2026-10-01: 382 counts per wheel revolution, on the fitted 170 RPM motors
-# (JGA25-370-35.5K) and the CURRENT transport -- Pico A counting Phase A rising edges only (x1).
+# (JGA25-370-35.5K) and the then transport -- Pico A counting Phase A rising edges only (x1).
 # Method: drove lf at 0.35 until Pico A had counted 3905, hard-braked (final 3911, 6 of coast);
 # a tape mark on the tyre made 10.25 turns. 3911 / 10.25 = 381.6, +/- ~5 from judging the stop
 # to an eighth of a turn. 2.3% under the 11 PPR x 35.5 = 390.5 prediction: the effective
@@ -342,9 +347,16 @@ ENCODER_POLL_HZ=50.0
 # vendor table, never set) -> 1562 (11 x4 x 35.5, assumed x4 quadrature this transport does
 # not do). odometry.py divides by this, so at 752 every distance read 752/382 = 1.97x short.
 #
-# WHEN PHASE B IS REPAIRED and pico_a.py decodes quadrature, counts quadruple (~1526). The
-# frame format does not change, so nothing will fail loudly -- re-measure that day.
-ENCODER_COUNTS_PER_REV=382
+# PHASE B WAS NEVER BROKEN ON THESE MOTORS: the dead greens were the old ones. Found alive on
+# all six new motors 2026-10-01 and decoded from a-0.3 the same day. If the firmware ever moves
+# to full x4, this doubles again (~1526) -- the frame format would not change, so re-measure.
+ENCODER_COUNTS_PER_REV=763
+# Which count sign is rover-FORWARD, per wheel. Pico A sends the board's raw sign; measured
+# 2026-10-01 on a-0.3, each wheel alone on the block: +throttle -> +counts on all six. The
+# motors are mirrored (MOTOR_SIGN), so forward is +counts on the left and -counts on the right.
+# odometry.py applies this; Encoders.counts stays raw. Kept separate from MOTOR_SIGN because a
+# swapped encoder pair on one motor would flip this and not that.
+ENCODER_SIGN={'lf':1,'lm':1,'lr':1,'rf':-1,'rm':-1,'rr':-1}
 
 # Odometry (§8, WildWilly_Claude_Fix_Implementation_Plan.md). This comment used to cite a
 # "430x330x220mm chassis envelope (§2)" — that figure appears ONLY in
