@@ -177,6 +177,17 @@ TOF_PROFILE_SAMPLES=10      # frames averaged when capturing; one frame carries 
 I2C_BAUDRATE=100000
 
 IMU_ADDR=0x4A; IMU_TILT_LIMIT=25; IMU_TILT_WARN=18; IMU_POLL_HZ=100  # BNO085, §8.2/§8.5
+# Hardware-reset recovery, 2026-10-01 (sensors.IMU._poll_once). 10 consecutive failed reads is
+# 0.1 s at IMU_POLL_HZ -- long enough that one I2C hiccup never pulses RST, short enough that
+# recovery starts before anyone notices. At most one recovery per 10 s: a chip that will not
+# come back must not be hammered, and brain.py's SENSOR_FAULT already stops motion while the
+# IMU is down (is_healthy goes false on its own deadline).
+IMU_RESET_AFTER_FAILS=10; IMU_RESET_MIN_INTERVAL_S=10.0
+# A quaternion unchanged for this long is a FAILED read, not a still rover. Measured 2026-10-01
+# at rest: 101 distinct values in 10 s (~10 Hz reports), longest identical run 0.50 s. The case
+# it exists for: a reset the driver did not cause leaves it returning its cached value forever
+# with no error, so without this, tilt would freeze and nothing would notice.
+IMU_STALE_S=1.5
 # RST: see the note below. It is no longer an expander pin.
 # IMU_RST_MCP_PIN REMOVED 2026-09-30 with the expander that hosted it. Section 4.7
 # consequence 1 moves the BNO085 reset to Pico B GP15, open-drain against R4, exposed as

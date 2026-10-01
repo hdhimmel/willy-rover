@@ -69,6 +69,28 @@ class SonarArray:
         if self._owns_link:
             self._link.stop()
 
+    def reset_imu(self, timeout_s=0.5):
+        """Pulse the BNO085's RST through Pico B GP15. True only once the board acknowledges.
+
+        Lives here because Pico B's link does; IMU takes it as a callable. Proven on the rover
+        2026-10-01: `$R,ok,<count>` back, then the chip reboots. A bare newline goes first:
+        that day the first RST after opening the port was lost, most likely to a stray byte
+        in front of it, and the Pico ignores an empty line.
+
+        ⚠ Never send speculatively -- this is called from IMU recovery only."""
+        if config.SIMULATE_HARDWARE:
+            return True
+        before, _ = self._link.latest('R')
+        if not (self._link.send('') and self._link.send('RST')):
+            return False
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            f, _ = self._link.latest('R')
+            if f is not None and f != before:
+                return len(f) > 1 and f[1] == 'ok'
+            time.sleep(0.01)
+        return False
+
     # --- the reading ---------------------------------------------------------------
     def _read_all(self):
         """{'front':cm,...}. Stale link -> 0.0 on every channel, which means STOP."""
@@ -159,42 +181,79 @@ class IMU:
     # BNO085 SH-2 fusion chip — quaternion already drift-free, no complementary filter needed.
     # Mounting-axis convention (which physical axis reads as pitch/roll) is unconfirmed —
     # §20.7 bench calibration (mount level, verify) hasn't been run yet. RST: see the note in
-    # __init__. Between 2026-08-14 and 2026-09-30 it was a real GPIO pulse through the
-    # MCP23017's port B bit 4; the expander is gone and the line has not been reconnected, so
-    # hard_reset() is back to the silent no-op it was before that. The chip itself is healthy —
-    # verified 2026-09-30, it answers SHTP on 0x4A with an incrementing sequence number.
+    # __init__ and _poll_once. Between 2026-08-14 and 2026-09-30 it was a GPIO pulse through
+    # the MCP23017's port B bit 4; since 2026-10-01 it is Pico B GP15, used for recovery.
     # INT (GP15) is still unused — the library works over I2C polling alone; §8.2 of
     # the master doc calls INT "required for SH-2 report timing" while this comment previously
     # called it optional, a still-unreconciled contradiction (not addressed by this change).
-    def __init__(self):
+    def __init__(self, reset=None):
+        # reset: a callable that pulses the chip's RST and returns True when acknowledged --
+        # SonarArray.reset_imu, wired by brain.py. None leaves only the library's soft reset.
+        self._reset = reset
+        self._fails = 0; self._last_recover = float('-inf'); self.recoveries = 0
+        self._settle_s = 0.5      # after RST: the chip reboots and re-advertises before I2C works
+        self._last_q = None; self._last_change = time.monotonic()   # frozen-value check, _update
         if not config.SIMULATE_HARDWARE:
             # frequency= does NOT set the bus speed on Blinka/Linux -- the kernel i2c driver
             # does, via dtparam=i2c_arm_baudrate. Passing config.I2C_BAUDRATE keeps the stated
             # intent in one place rather than leaving a 100000 literal here that would quietly
             # contradict the kernel the moment the dtparam is raised. See config.I2C_BAUDRATE.
             self._i2c=busio.I2C(board.SCL,board.SDA,frequency=config.I2C_BAUDRATE)
-            # ⚠ NO HARDWARE RESET LINE, as of 2026-09-30. RST used to be MCP23017 GPB4;
-            # the expander is gone and §4.7 consequence 1 moves the line to Pico B GP15,
-            # driven open-drain against R4 and exposed as an explicit, acknowledged RST
-            # command over uart2-pi5. That command travels Pi -> Pico B, and THAT
-            # DIRECTION IS CURRENTLY DEAD -- PING, ID and a deliberate BOGUS all go
-            # unanswered while frames stream the other way, isolating it to the one
-            # conductor from Pi phys 7 to c27. So reset=None and the library falls back
-            # to the I2C soft reset, which is what it did before 2026-08-14 anyway.
-            #
-            # The consequence to carry: if the BNO085 ever wedges, there is no way to
-            # clear it in software. Fix that wire. Verified 2026-09-30 that the chip is
-            # otherwise healthy -- it answers SHTP on 0x4A with an incrementing sequence.
-            self._bno=BNO08X_I2C(self._i2c,reset=None,address=config.IMU_ADDR)
-            self._bno.enable_feature(BNO_REPORT_ROTATION_VECTOR)
+            # RST is NOT the library's reset= pin. It is Pico B GP15 (§4.7 consequence 1),
+            # driven open-drain against R4 and reached by an acknowledged RST command over
+            # uart2-pi5 -- self._reset above. The library is still given reset=None, so at
+            # construction it does its I2C soft reset as before. The hardware line is for
+            # recovery (_poll_once), proven on the rover 2026-10-01 once the Pi -> Pico B
+            # wire was resoldered.
+            self._bno=self._make_bno()
         self._pitch=0.0; self._roll=0.0
         self._lock=threading.Lock(); self._last_ok=0.0
         self._running=False; self._thread=None
+    def _make_bno(self):
+        b=BNO08X_I2C(self._i2c,reset=None,address=config.IMU_ADDR)
+        b.enable_feature(BNO_REPORT_ROTATION_VECTOR)
+        return b
+    def _poll_once(self):
+        """One read. Consecutive failures escalate to a hardware reset AND a rebuild.
+
+        Always both. Measured 2026-10-01: across an RST the existing driver raised twice
+        (KeyError, then 'Unprocessable Batch bytes') and then silently returned the last cached
+        quaternion forever -- no error, no new data. A reset without a rebuild would leave tilt
+        frozen at whatever it read before, which is worse than a visible fault."""
+        try:
+            self._update(); self._fails=0; return
+        except Exception:
+            self._fails+=1
+            if self._fails==1:
+                log.warning('BNO085 read failed (§8.5: disable autonomy, allow limited manual)', exc_info=True)
+        if self._fails<config.IMU_RESET_AFTER_FAILS: return
+        now=time.monotonic()
+        if now-self._last_recover<config.IMU_RESET_MIN_INTERVAL_S: return
+        self._last_recover=now; self.recoveries+=1
+        acked=False
+        if self._reset is not None:
+            try: acked=bool(self._reset())
+            except Exception: log.warning('BNO085 RST via Pico B raised', exc_info=True)
+        how='hardware RST acknowledged' if acked else 'no hardware RST, soft path only'
+        log.warning(f'BNO085: {self._fails} consecutive failed reads -- {how}, '
+                    f'rebuilding the driver (recovery #{self.recoveries})')
+        time.sleep(self._settle_s)
+        try:
+            self._bno=self._make_bno(); self._fails=0
+            self._last_q=None; self._last_change=time.monotonic()
+            log.info('BNO085 driver rebuilt')
+        except Exception:
+            log.warning('BNO085 rebuild failed; will retry after the rate limit', exc_info=True)
     def _update(self):
         if config.SIMULATE_HARDWARE:
             with self._lock: self._pitch=0.0; self._roll=0.0  # simulated level chassis
             self._last_ok=time.perf_counter(); return
-        i,j,k,w=self._bno.quaternion
+        q=self._bno.quaternion; now=time.monotonic()
+        if q!=self._last_q:
+            self._last_q=q; self._last_change=now
+        elif now-self._last_change>config.IMU_STALE_S:
+            raise RuntimeError(f'BNO085 quaternion unchanged for {now-self._last_change:.1f}s')
+        i,j,k,w=q
         roll=math.degrees(math.atan2(2*(w*i+j*k),1-2*(i*i+j*j)))
         pitch=math.degrees(math.asin(max(-1.0,min(1.0,2*(w*j-k*i)))))
         with self._lock:
@@ -209,9 +268,7 @@ class IMU:
     def _loop(self):
         iv=1.0/config.IMU_POLL_HZ
         while self._running:
-            try: self._update()
-            except Exception:
-                log.warning('BNO085 read failed (§8.5: disable autonomy, allow limited manual)', exc_info=True)
+            self._poll_once()
             time.sleep(iv)
     @property
     def pitch(self):

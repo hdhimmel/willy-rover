@@ -140,7 +140,8 @@ class RoverBrain:
         self.steering=_init_device(Steering,'steering')
         self.safety=SafetyController(self.motors)
         self.sonars=_init_device(SonarArray,'sonars')
-        self.imu=_init_device(IMU,'imu')
+        # The BNO085's RST is on Pico B, whose link SonarArray owns (§4.7 consequence 1).
+        self.imu=_init_device(lambda:IMU(reset=self.sonars.reset_imu),'imu')
         self.adc=_init_device(ADC,'adc')
         self.encoders=_init_device(Encoders,'encoders')
         self.current=_init_device(CurrentMonitor,'current')

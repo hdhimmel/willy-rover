@@ -1267,7 +1267,12 @@ believing anything the link says.**
 went unanswered while `$S` frames streamed the other way, which isolated it to the one
 conductor from **Pi phys 7 (GP4, TXD2) to `c27` (pin 17, GP13)**. Metered: no continuity
 end to end — **cold solder joints**, resoldered. All three now answer (`$P`, `$I,B,…`,
-`$X,unknown`), so `RST` can reach the BNO085. `RST` itself has not been sent yet.
+`$X,unknown`), so `RST` can reach the BNO085 — **and does, proven the same day**: `RST` →
+`$R,ok,<count>`, then the chip reboots (SHTP advertisement, then EXE reset-complete `0x01`).
+`sensors.IMU` uses it for recovery only: after `IMU_RESET_AFTER_FAILS` consecutive failed
+reads — or a quaternion frozen past `IMU_STALE_S` — it pulses `RST` and **rebuilds the
+driver**, at most once per `IMU_RESET_MIN_INTERVAL_S`. The rebuild is not optional: across a
+reset the live driver raised twice and then returned its cached quaternion forever, silently.
 
 #### 4.7.2 The protection gap — D2
 

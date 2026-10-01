@@ -163,7 +163,12 @@ Order of operations within `_tick()`:
    unhealthy beyond `SENSOR_FAULT_GRACE_S` returns a sustained fault, which
    routes unconditionally through `emergency_stop()` and forces the
    `SENSOR_FAULT` state. This runs *before* any sensor value is consulted, so
-   a stale IMU reading cannot mask a real tilt fault.
+   a stale IMU reading cannot mask a real tilt fault. The IMU's own read thread
+   also treats a quaternion frozen past `IMU_STALE_S` as a failed read — the
+   BNO085 driver returns its cached value forever, without error, after a chip
+   reset it did not cause — and after `IMU_RESET_AFTER_FAILS` failures pulses the
+   chip's hardware `RST` through Pico B (`SonarArray.reset_imu`, acknowledged
+   `$R,ok`) and rebuilds the driver, at most once per `IMU_RESET_MIN_INTERVAL_S`.
 4. **Directive checks** — tilt, then battery tier, in that order.
 5. **Safety context update** — cached into `SafetyController`.
 6. **State dispatch** — the Directive 6 layer.

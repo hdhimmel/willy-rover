@@ -1568,8 +1568,13 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     ordering dependency, not a wiring choice. ⚠ **Under §4.7 the dependency moves
     but does not disappear:** RST lands on Pico B **GP15, pin 20** (moved from GP10 on 2026-09-24 —
     GP10 is LR Phase A on the shared carrier layout), driven open-drain against
-    a pull-up to Pi 3V3, so the ordering dependency becomes "Pico B link up and
-    acknowledged" instead of "expander initialised". If initialisation succeeds but
+    a pull-up to Pi 3V3. ✅ **Since 2026-10-01 there is no ordering dependency at
+    all:** start-up uses the library's I²C soft reset, and the hardware `RST` is
+    used only for RECOVERY — proven on the rover that day (`$R,ok`, chip reboots).
+    After `IMU_RESET_AFTER_FAILS` consecutive failed reads, or a quaternion frozen
+    past `IMU_STALE_S`, `sensors.IMU` pulses `RST` through Pico B and rebuilds the
+    driver, at most once per `IMU_RESET_MIN_INTERVAL_S`; `SENSOR_FAULT` holds motion
+    stopped meanwhile. If initialisation succeeds but
     reads fail intermittently, the cause is I²C clock stretching rather than
     wiring.
 
@@ -1577,7 +1582,7 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     ranging over `uart2-pi5` at 33.3 Hz, 0 sequence gaps, 0 bad checksums, and `-1`
     rather than `999` for unmeasurable. The **Pi → Pico** direction (one wire, Pi phys 7
     → `c27`) was dead until 2026-10-01 — cold solder joints — and now answers `PING`,
-    `ID` and `BOGUS`, so the BNO085 `RST` above is reachable. `RST` itself is unsent.
+    `ID` and `BOGUS`; the BNO085 `RST` above is proven over it (FR-800-001).
     All three units return distance tracking a tape
     measure across their usable range. Test each independently before
     trusting any of them together. Front and right reading correctly while
