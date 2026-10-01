@@ -159,7 +159,8 @@ Order of operations within `_tick()`:
    task sub-machine and calls `emergency_stop()`. This is the only place the
    flag is cleared.
 2. **Watchdog notify** — `WATCHDOG=1` to systemd.
-3. **Health check** — per-subsystem `_fault_since` tracking; a subsystem
+3. **Health check** — per-subsystem `_fault_since` tracking (IMU, encoders,
+   current, battery ADC, and since 2026-10-01 sonar and the motor ramp thread); a subsystem
    unhealthy beyond `SENSOR_FAULT_GRACE_S` returns a sustained fault, which
    routes unconditionally through `emergency_stop()` and forces the
    `SENSOR_FAULT` state. This runs *before* any sensor value is consulted, so

@@ -113,6 +113,10 @@ _MOTION_SCHEMA={'action':str,'duration':(int,float),'speed':(int,float)}
 # ValueError is caught broadly rather than matched on message text, which would be fragile
 # against a library string. The cost is that a genuine ValueError bug inside a constructor is
 # retried before surfacing; unrelated exception types still propagate on the first attempt.
+# States in which the tick's dispatch commands motion. A voice "stop" must leave these, or the
+# same tick's dispatch drives again -- see the stop_requested branch of _tick().
+_MOTION_STATES=('ROAM','SLOW','AVOID','STUCK','DOCK','WAVE','RETRIEVE','NAVIGATE','MANUAL','PURSUE')
+
 def _sonar_returns(d):
     """The sonar readings that are echoes off something real, for the world model.
 
@@ -330,6 +334,8 @@ class RoverBrain:
         if self.adc.battery_volts<=0: critical.append('battery ADC not reporting')
         if not self.encoders.is_healthy: critical.append('encoders not reporting')
         if not self.current.is_healthy: critical.append('current monitors not reporting')
+        if not self.sonars.is_healthy: critical.append('sonar link (Pico B) not reporting')
+        if not self.motors.is_healthy: critical.append('motor drivers not responding')
         # Recorded on self so the override offer can consult it. Set on EVERY self-test run,
         # pass or fail, so a retry that clears the critical fault also clears the block.
         self._selftest_critical=list(critical)
@@ -442,8 +448,13 @@ class RoverBrain:
         # reads/writes for failure -- a total bus dropout would likely show up here via
         # the other devices going unhealthy, but an isolated motor-driver disconnect
         # would not be caught by this check on its own.
+        # 'sonars' and 'motors' added 2026-10-01 (FRD gap audit). A stale Pico B link reads 0.0
+        # on every channel -- fail-safe for forward motion, but with no fault raised ROAM fell
+        # into AVOID and reversed blind on a loop. 'motors' is DriveBase's ramp thread: one I2C
+        # error used to kill it silently, after which stop() did nothing.
         checks={'imu':self.imu.is_healthy,'encoders':self.encoders.is_healthy,
-                'current':self.current.is_healthy,'battery_adc':self.adc.is_healthy}
+                'current':self.current.is_healthy,'battery_adc':self.adc.is_healthy,
+                'sonars':self.sonars.is_healthy,'motors':self.motors.is_healthy}
         now=time.time(); sustained_fault=None
         for name,healthy in checks.items():
             was=self._health.get(name,True)
@@ -518,6 +529,12 @@ class RoverBrain:
             self._abandon_stuck_if_active()
             self.safety.emergency_stop('voice stop')
             self._revoke_roam_permission()  # stop means stop, not "pause for 30 seconds"
+            # LEAVE THE MOTION STATE. Found 2026-10-01 (FRD gap audit): this branch braked and
+            # aborted the tasks but left _state alone, so the dispatch at the bottom of this
+            # same tick ran _roam() -- or SLOW/AVOID/DOCK/WAVE -- and drove again. Braking does
+            # not latch anything in SafetyController; only the state does. Fault states are
+            # left as they are: a voice stop must never clear a latched fault.
+            if self._state in _MOTION_STATES: self._go('IDLE')
             log.info('Voice-triggered immediate stop')
         if self._shutdown_pending and time.time()>self._shutdown_deadline:
             self._shutdown_pending=False

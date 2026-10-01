@@ -1258,7 +1258,13 @@ decision rather than by implementation.
 
 -   **FR-300-004 (controller failure).** Loss of the I²C bus, or a failed read
     from either motor driver, halts motion rather than continuing on stale
-    state. Verified by disconnecting the bus mid-run.
+    state. Verified by disconnecting the bus mid-run. ⚠ **Gap found and fixed in
+    software 2026-10-01 (not yet bus-pull tested):** one I²C error in
+    `DriveBase._ramp_loop` used to kill the ramp thread silently, after which
+    ramped `stop()` did nothing. Writes are now guarded, the thread survives,
+    and `DriveBase.is_healthy` feeds `_check_health()` → `SENSOR_FAULT`. Sonar
+    (Pico B link) is now in `_check_health()` and the self-test too — before,
+    a stale link read 0.0 everywhere with no fault, and ROAM→AVOID reversed blind.
 
 -   ⚠ **Coverage note --- SUPERSEDED 2026-08-24, marked 2026-09-13.** This
     paragraph said the hardware cut "is the backstop, not the requirement", and that
@@ -1683,7 +1689,12 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     after link loss is the failure this requirement exists to prevent.
 
 -   **FR-900-004 (emergency override).** Available at all times and takes
-    effect immediately.
+    effect immediately. ⚠ **Gap found and fixed 2026-10-01:** a voice "stop"
+    braked but left the state machine in ROAM/SLOW/AVOID/DOCK/WAVE, so the same
+    tick's dispatch drove again. It now leaves any motion state for IDLE (fault
+    states untouched); `tests/test_brain_voice_stop.py` drives it through
+    `_tick()`. Still open: the battery return-home tier re-enters DOCK every
+    tick, so "stop" cannot hold the rover while that tier is active.
 
 -   **FR-900-005 (commanded shutdown).** A voice or manual shutdown runs the
     graceful sequence with the rail still powered: motion halts, the arm

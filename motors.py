@@ -1,5 +1,6 @@
-import time, threading, config
+import time, threading, logging, config
 import hw_sim
+log=logging.getLogger('motors')
 if not config.SIMULATE_HARDWARE:
     import board, busio
     from adafruit_motorkit import MotorKit
@@ -19,6 +20,7 @@ class DriveBase:
         self._target=dict.fromkeys(self._WHEELS,0.0); self._actual=dict.fromkeys(self._WHEELS,0.0)
         self._lock=threading.Lock(); self.current_speed=0.0
         self._coasting=False; self._idle_since=time.monotonic()
+        self._write_fail_t=None; self._write_fail_logged_t=0.0   # see _write()
         self._running=True
         self._thread=threading.Thread(target=self._ramp_loop,daemon=True); self._thread.start()
     # FR-500-004 (closed-loop speed) -- NOT implemented as closed-loop: this ramps the
@@ -59,13 +61,32 @@ class DriveBase:
                     cur = tgt if abs(tgt-cur)<=step else cur+(step if tgt>cur else -step)
                     self._actual[w]=cur
                     if not self._coasting:      # MOTOR_SIGN: the right side is mounted mirrored
-                        self._motors[w].throttle=max(-1.0,min(1.0,cur))*config.MOTOR_SIGN[w]
+                        self._write(w,max(-1.0,min(1.0,cur))*config.MOTOR_SIGN[w])
                 self.current_speed=(self._actual['lf']+self._actual['rf'])/2
                 if not commanded and not self._coasting and                         all(self._actual[w]==0.0 for w in self._WHEELS):
                     now=time.monotonic()
                     if self._idle_since is None: self._idle_since=now
                     elif now-self._idle_since>=config.MOTOR_COAST_AFTER_S: self._coast()
             time.sleep(dt)
+    def _write(self,w,value):
+        """One throttle write that cannot kill the ramp thread. Until 2026-10-01 a single I2C
+        OSError here escaped _ramp_loop and ended the thread, after which every ramped stop()
+        did nothing -- only brake() still reached the wheels -- and nothing noticed. Now the
+        failure is recorded, the other wheels are still written, and is_healthy goes false so
+        brain.py's _check_health() escalates to SENSOR_FAULT and brakes."""
+        try:
+            self._motors[w].throttle=value
+        except Exception:
+            now=time.monotonic(); self._write_fail_t=now
+            if now-self._write_fail_logged_t>5.0:
+                self._write_fail_logged_t=now
+                log.warning(f'motor driver write failed ({w})',exc_info=True)
+    @property
+    def is_healthy(self):
+        """Ramp thread alive and no failed driver write in the last second."""
+        if not self._thread.is_alive(): return False
+        t=self._write_fail_t
+        return t is None or time.monotonic()-t>1.0
     # FR-400-001 (independent left/right control): six wheels individually targetable
     # (lf/lm/lr vs rf/rm/rr), driver assignment fixed by as-built wiring -- **0x61 LEFT,
     # 0x60 RIGHT**, measured 2026-09-18 by M-1. This comment said "0x60 left, 0x61 right"
@@ -92,7 +113,8 @@ class DriveBase:
         # throttle=0.0 is adafruit_motor's hard-brake (both legs driven); throttle=None coasts.
         with self._lock:
             if self._coasting: self._wake()   # a sleeping PCA9685 cannot brake; wake before driving
-            for w in self._WHEELS: self._target[w]=0.0; self._actual[w]=0.0; self._motors[w].throttle=0.0
+            # _write: one failing driver must not leave the wheels after it unbraked.
+            for w in self._WHEELS: self._target[w]=0.0; self._actual[w]=0.0; self._write(w,0.0)
         self.current_speed=0.0
     # No *_for() blocking helpers here anymore — a sleep-based timed move on this thread would
     # stall whatever calls it (originally brain.py's tick loop, §2 of
