@@ -32,7 +32,8 @@ from wheel_current_test import _read_amps
 
 _RAIL=config.INA260_ARM_6V_ADDR
 _OPEN_US=1500        # well open: 0.075A, nowhere near contact
-_START_US=1600       # below the ~1700us jaw contact config.py records
+_START_US=1500       # step from open: a 1500->1600 jump read 1.0A on 2026-10-01, which
+                     # could not tell motion current from the jaws stalling on the object
 _STOP_US=1780        # config.py measured 1.049A here -- the hard ceiling
 _STEP_US=5
 _DWELL_S=0.6         # let the servo arrive and the pad settle before reading
