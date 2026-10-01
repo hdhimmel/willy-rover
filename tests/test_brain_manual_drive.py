@@ -55,6 +55,7 @@ def make_brain(cmds,reject=None,available=False):
     ns._roam_ask_pending=False   # roam-permission ask (2026-09-09); not what this test exercises
     ns._go=types.MethodType(RoverBrain._go,ns)
     ns._drain_voice_commands=types.MethodType(RoverBrain._drain_voice_commands,ns)
+    ns._say=types.MethodType(RoverBrain._say,ns)
     return ns
 
 # 1. Approved forward -> real safety call with the requested args, transitions to MANUAL.

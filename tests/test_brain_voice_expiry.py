@@ -35,6 +35,7 @@ def fb():
     )
     ns.calls=calls
     ns._drain_voice_commands=types.MethodType(RoverBrain._drain_voice_commands,ns)
+    ns._say=types.MethodType(RoverBrain._say,ns)
     return ns
 
 def q(ns,intent,age_s,**args):

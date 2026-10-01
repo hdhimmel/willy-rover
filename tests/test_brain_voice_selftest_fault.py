@@ -26,7 +26,7 @@ def fb():
         _self_test=lambda:(calls.append(("selftest",)),(False,REASON))[1],
     )
     ns.said=said; ns.calls=calls
-    for m in ("_drain_voice_commands","_drain_voice_in_selftest_fault"):
+    for m in ("_drain_voice_commands","_drain_voice_in_selftest_fault","_say"):
         setattr(ns,m,types.MethodType(getattr(RoverBrain,m),ns))
     return ns
 
