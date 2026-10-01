@@ -225,6 +225,11 @@ class VoicePipeline:
         self._running=False; self._thread=None; self._speaker_thread=None
         self._wakeword=None; self._whisper=None; self._local_ai=None
         self._noise_rms=None  # ambient floor, maintained by _update_noise() on the wake loop
+        # Wake-loop heartbeat (2026-10-01). Voice went silently deaf for weeks: the thread was
+        # alive and reading, nothing was logged, and the only symptom was "no chirp". One line a
+        # minute -- frames scored vs muted, best wake score, loudest frame, overflows -- says
+        # which half is broken without stopping the service to test the mic by hand.
+        self._hb=dict(t=time.time(),scored=0,muted=0,best=0.0,peak=0.0,overflows=0)
         # No echo cancellation on this mic+speaker puck — TTS playback leaks straight back into
         # capture, gets transcribed as a new "command", and self-triggers another AI round-trip
         # forever (found 2026-08-15: "One moment, checking..." looping on its own echo, deaf to
@@ -346,7 +351,8 @@ class VoicePipeline:
         # THE rate boundary. Everything downstream of this -- wake scoring, the noise floor, the
         # endpointer's fps math, Whisper -- assumes 16kHz/1280, and this is what keeps that true
         # no matter what the mic's native rate is. Both capture paths go through it.
-        raw,_=stream.read(self._blocksize)
+        raw,overflowed=stream.read(self._blocksize)
+        if overflowed: self._hb['overflows']+=1
         return downsample_to_16k(raw.flatten(),self._rate_factor)
 
     def _loop(self):
@@ -371,15 +377,28 @@ class VoicePipeline:
                     if not privacy.mic_enabled():
                         time.sleep(1.0); continue  # FR-1800-005, re-checked continuously
                     flat=self._read_frame(stream)
+                    self._heartbeat()
                     if self._speaking.is_set():
+                        self._hb['muted']+=1
                         continue  # still drain the buffer, just don't score our own echo
                     self._update_noise(flat)
                     scores=self._wakeword.predict(flat)
+                    hb=self._hb; hb['scored']+=1
+                    hb['best']=max(hb['best'],max(scores.values(),default=0.0))
+                    hb['peak']=max(hb['peak'],float(np.sqrt(np.mean((flat.astype(np.float32)/32768.0)**2))))
                     if max(scores.values(),default=0.0)>=config.WAKEWORD_THRESHOLD:
                         self._handle_wake(stream,frame_len,time.time())
         except Exception as e:
             log.error(f'Voice input stream failed, pipeline stopping: {e}')
             self._running=False
+
+    def _heartbeat(self):
+        hb=self._hb; now=time.time()
+        if now-hb['t']<60.0: return
+        log.info('wake loop: %d scored, %d muted, best score %.3f (threshold %.2f), peak rms %.4f, '
+                 'noise %.4f, %d overflows',hb['scored'],hb['muted'],hb['best'],
+                 config.WAKEWORD_THRESHOLD,hb['peak'],self._noise_rms or 0.0,hb['overflows'])
+        self._hb=dict(t=now,scored=0,muted=0,best=0.0,peak=0.0,overflows=0)
 
     def _update_noise(self,samples):
         # Ambient floor for endpointing, tracked continuously on the wake-scoring loop rather
