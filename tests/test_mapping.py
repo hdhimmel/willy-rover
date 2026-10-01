@@ -114,12 +114,15 @@ assert b._motion_enabled, f"self-test failed under simulation: {b._init_fail_rea
 
 ok,msg=b.mapping.start()
 assert ok, msg
+# A real echo for the passive feed to record. The sim default is SONAR_MAX_CM on every
+# channel, which means CLEAR -- no echo -- and since 2026-10-01 is correctly NOT plotted
+# (brain._sonar_returns). This test used to rely on that clear reading becoming an
+# obstacle, i.e. it pinned the phantom-wall bug. Set something in front instead.
+b.sonars._sim['front']=150.0
 b._tick(); b._tick()
 assert b.mapping.active is True
 
-# §9's passive per-tick sonar feed (brain.py) should have populated at least one obstacle by now
-# -- sensors.py's simulated Sonar._ping() returns a fixed 200cm "clear path" reading, still a
-# real non-timeout hit that brain.py records into the world model regardless of mapping state.
+# §9's passive per-tick sonar feed (brain.py) should have populated at least one obstacle by now.
 pose=b.odometry.pose
 near=b.world_model.get_nearby_obstacles(pose.x,pose.y,radius_m=100.0)
 assert len(near)>0, "expected at least one obstacle observation from the passive sonar feed"
