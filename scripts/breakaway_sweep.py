@@ -8,8 +8,10 @@ on 2026-09-30 were typed into a terminal; this is that test, committed, so the n
 sets SPEED_SLOW can be repeated.
 
 Each step starts from REST: every wheel coasts and the rail settles before the pulse, so a
-wheel that is already spinning cannot carry momentum into the next duty. A wheel has broken
-away when Pico A's Phase A count rate clears _MOVING_CPS. Current comes from the +12V motor
+wheel that is already spinning cannot carry momentum into the next duty. The sweep runs to
+the top duty either way, so the table also gives each wheel's speed and draw when properly
+spinning -- late breakaway AND slow-and-hungry at the top is a dragging wheel. A wheel has
+broken away when Pico A's Phase A count rate clears _MOVING_CPS. Current comes from the +12V motor
 bus INA260 as a delta over the stopped baseline, the same method as wheel_current_test.py,
 so a high-current/low-speed wheel (the dragging-motor signature) stands out in the table.
 
@@ -18,8 +20,8 @@ rover's weight on carpet, so treat the result as a floor: SPEED_SLOW needs margi
 the worst wheel, not equality with it.
 
     sudo systemctl stop willy-rover
-    python3 scripts/breakaway_sweep.py            # all six
-    python3 scripts/breakaway_sweep.py lm rm      # just these
+    venv/bin/python3 scripts/breakaway_sweep.py            # all six
+    venv/bin/python3 scripts/breakaway_sweep.py lm rm      # just these
     sudo systemctl start willy-rover
 """
 import os,sys,time
@@ -68,7 +70,7 @@ def main():
 
     print(f'rail 0x{_RAIL:02x}  moving > {_MOVING_CPS} counts/s  RPM at '
           f'{_PHASE_A_ONLY_EXPECTED:.1f} counts/rev (nominal, Phase A only)\n')
-    breakaway={}
+    breakaway={}; top={}
     try:
         with SMBus(_BUS) as bus:
             for w in wheels:
@@ -84,21 +86,24 @@ def main():
                     cps=_delta(enc.counts[w],c0)/(time.monotonic()-t0)
                     coast()
                     print(f'{duty:.2f}={cps:.0f}c/s ',end='',flush=True)
-                    if cps>_MOVING_CPS:
+                    if cps>_MOVING_CPS and breakaway[w] is None:
                         breakaway[w]=(duty,cps,amps-base)
-                        break
+                    top[w]=(cps,amps-base)
                 print()
     finally:
         coast(); enc.stop()
 
-    print(f'\n{"wheel":6} {"breakaway":>9} {"c/s":>6} {"RPM":>6} {"A":>7}')
+    print(f'\n{"wheel":6} {"breakaway":>9} {"c/s":>6} {"RPM":>6} {"A":>7}   '
+          f'{"RPM@"+format(_DUTIES[-1],".2f"):>8} {"A":>7}')
     for w,r in breakaway.items():
         if r is None:
             print(f'{w:6} {"NONE":>9}  -- never moved up to {_DUTIES[-1]:.2f}; check wiring '
                   f'before the motor')
         else:
             d,cps,a=r
-            print(f'{w:6} {d:9.2f} {cps:6.0f} {_rpm(cps):6.1f} {a:7.3f}')
+            tc,ta=top[w]
+            print(f'{w:6} {d:9.2f} {cps:6.0f} {_rpm(cps):6.1f} {a:7.3f}   '
+                  f'{_rpm(tc):8.1f} {ta:7.3f}')
     moved=[r[0] for r in breakaway.values() if r]
     if moved and len(moved)==len(breakaway):
         worst=max(moved)
