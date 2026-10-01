@@ -5,14 +5,14 @@ Written 2026-09-24, the day the boards arrived.
 
 | Board | UID | MicroPython | State |
 |---|---|---|---|
-| **A** | `643f69a756a232ea` | v1.29.0, 2026-08-24 | **`main.py` installed 2026-09-29**, LED verified. Link to the Pi untested |
-| **B** | `ad25bbf0f1e1f160` | v1.29.0, 2026-08-24 | **PROVEN ON THE ROVER 2026-09-29** — three sonars ranging at 33.3 Hz over `uart2-pi5` |
+| **A** | `643f69a756a232ea` | v1.29.0, 2026-08-24 | **PROVEN ON THE ROVER 2026-09-30** — six encoders at 50.0 Hz over `uart4-pi5`; answers `ID` |
+| **B** | `ad25bbf0f1e1f160` | v1.29.0, 2026-08-24 | **PROVEN BOTH WAYS 2026-10-01** — three sonars at 33.3 Hz over `uart2-pi5`; answers `PING`/`ID`/`BOGUS`. `RST` not yet sent |
 
 **Both boards run their firmware as `main.py` since 2026-09-29.** Board **B** is
 proven end to end on the rover: `$S` frames at **33.3 Hz** over `uart2-pi5`, zero
 sequence gaps and zero bad checksums over six seconds, all three HC-SR04 ranging,
 and the stuck-ECHO flag firing correctly on two dead sensors and clearing on a good
-one. Board **A** is installed and runs, but nothing has listened to `uart4-pi5` yet.
+one. Board **A** is proven too — see below.
 
 ⚠ **THE FAULT THAT COST 2026-09-28 WAS A FILENAME.** Both boards had their code on
 them as `pico_a.py` / `pico_b.py`, and **a Pico only autoruns `main.py`**. Each board
@@ -27,9 +27,11 @@ zero gaps and zero bad checksums, a bare `ID` answered with its own UID, the R5 
 reading 3.392 V, and all six channels counting under real edge load with one wheel driven
 at a time on blocks.
 
-Still not proven: the **Pi → Pico direction on B** — `PING`, `ID` and a deliberate `BOGUS` all go
-unanswered while frames stream the other way, which isolates it to the one wire from
-Pi phys 7 to `c27`. That direction carries `RST`, so the BNO085 needs it.
+**B's Pi → Pico direction proven 2026-10-01.** `PING`, `ID` and a deliberate `BOGUS` went
+unanswered while frames streamed the other way, which isolated it to the one wire from
+Pi phys 7 to `c27`: metered open end to end, **cold solder joints**, resoldered. All three
+now answer. That direction carries `RST`, so the BNO085 reset is reachable — but `RST`
+itself has **not yet been sent**, and `sensors.py` does not use it yet.
 
 **The onboard LED is lit at boot and winks for 60 ms once a second** (`Status` in both
 files). Lit means powered, the wink means the loop is turning, steady means hung.

@@ -113,6 +113,17 @@ _MOTION_SCHEMA={'action':str,'duration':(int,float),'speed':(int,float)}
 # ValueError is caught broadly rather than matched on message text, which would be fragile
 # against a library string. The cost is that a genuine ValueError bug inside a constructor is
 # retried before surfacing; unrelated exception types still propagate on the first attempt.
+def _sonar_returns(d):
+    """The sonar readings that are echoes off something real, for the world model.
+
+    NOT `< 999`. That was the timeout sentinel the Pico cutover retired (S-9). Pico B's path
+    reports "no echo, nothing in range" as SONAR_MAX_CM -- a CLEAR path -- and "no fresh
+    frame" as 0.0, which means unknown and makes safety STOP. Both are below 999, so until
+    2026-10-01 an open room plotted a phantom wall SONAR_MAX_CM out on every tick, and a
+    stale link plotted one on top of the rover. Only a reading strictly inside
+    (0, SONAR_MAX_CM) is a return."""
+    return {n:cm for n,cm in d.items() if 0.0<cm<config.SONAR_MAX_CM}
+
 def _init_device(ctor,name,attempts=8,delay_s=0.75):
     for attempt in range(attempts):
         try: return ctor()
@@ -573,10 +584,9 @@ class RoverBrain:
         # §9: passive Layer-1 obstacle feed, same "no motor consequence, just keeps an estimate
         # current" spirit as the odometry pose logging above -- every real (non-timeout) sonar hit
         # this tick becomes a world_model Obstacle point at the robot's current pose+bearing.
-        for name,dist_cm in d.items():
-            if dist_cm<999.0:
-                x,y=project_point(pose,config.SONAR_BEARING_DEG[name],dist_cm/100.0)
-                self.world_model.update_observation(Observation('obstacle',x,y,payload={'source':f'sonar_{name}'}))
+        for name,dist_cm in _sonar_returns(d).items():
+            x,y=project_point(pose,config.SONAR_BEARING_DEG[name],dist_cm/100.0)
+            self.world_model.update_observation(Observation('obstacle',x,y,payload={'source':f'sonar_{name}'}))
         # §10: orthogonal to self._state -- see mapping.py's module docstring for why this is a
         # passive tick alongside whatever ROAM/SLOW/AVOID/STUCK is already doing, not its own FSM state.
         if self.mapping.active: self.mapping.tick(d,tilt)
