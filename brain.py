@@ -79,6 +79,29 @@ _EXPECTED_I2C={config.INA260_5V_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
 # did not exist on this unit.)
 if config.ENABLE_WITTY_PI: _EXPECTED_I2C.add(config.WITTY_PI_ADDR)
 
+# FULL SCAN ONCE, THEN PROBE ONLY WHAT IS MISSING (2026-10-01). Blinka's scan() probes every
+# address with an SMBus quick-write -- a zero-length write. The BNO085 (0x4A) logs each one as
+# SHTP error 2 "host write too short" and later sends the accumulated list as a channel-0 Error
+# List packet, which adafruit_bno08x mis-parses as sensor data: 'Unprocessable Batch bytes'
+# while the list is short, then KeyError: 12 once it ends in 0x0C ("list truncated"). With the
+# base off the self-test retried every SELFTEST_RETRY_S, so the scan knocked the IMU over every
+# 30 s and the RST recovery picked it back up. A device seen once is not re-probed: each one
+# already has its own health check (IMU, ADC, encoders, current, motors) for dropping out later.
+def _i2c_present(seen,scan,probe):
+    """seen: addresses already found, or None before the first run. scan(): full-bus scan.
+    probe(addr): True if addr answers. Returns the updated set of expected addresses present."""
+    if seen is None: return set(scan())&_EXPECTED_I2C
+    return set(seen)|{a for a in _EXPECTED_I2C-set(seen) if probe(a)}
+
+def _i2c_probe(addr):
+    # Same two-step probe as Blinka's generic_linux scan(), for one address.
+    from Adafruit_PureIO.smbus import SMBus
+    with SMBus(1) as bus:
+        try: bus.write_quick(addr); return True
+        except OSError:
+            try: bus.read_byte(addr); return True
+            except OSError: return False
+
 # Battery ladder (§13.2), most severe first. Each entry's threshold is the "below this" boundary;
 # recovering to a less severe tier requires climbing BAT_HYSTERESIS_V above that boundary, not
 # just crossing it, so a hovering voltage doesn't flap the state back and forth.
@@ -182,7 +205,7 @@ class RoverBrain:
         # Scoped to the startup self-test only: TILT/STALL/SENSOR faults keep their own reset
         # gate and are NOT overridable, since those represent live physical danger rather than
         # a missing diagnostic device.
-        self._selftest_retry_t=0.0; self._selftest_fail_count=0
+        self._selftest_retry_t=0.0; self._selftest_fail_count=0; self._i2c_seen=None
         self._selftest_overridden=False
         # STUCK help-photo throttling (owner request 2026-08-24) -- see _send_stuck_alert().
         self._stuck_alert_t=0.0; self._stuck_alert_count=0
@@ -322,10 +345,13 @@ class RoverBrain:
             pass  # no real bus to scan — every sim class already reports itself healthy below
         else:
             try:
-                i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
-                while not i2c.try_lock(): pass
-                found=set(i2c.scan()); i2c.unlock()
-                missing=_EXPECTED_I2C-found
+                def _full_scan():
+                    i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
+                    while not i2c.try_lock(): pass
+                    try: return i2c.scan()
+                    finally: i2c.unlock()
+                self._i2c_seen=_i2c_present(self._i2c_seen,_full_scan,_i2c_probe)
+                missing=_EXPECTED_I2C-self._i2c_seen
                 if missing: critical.append('I2C missing: '+','.join(hex(a) for a in sorted(missing)))
             except Exception as e:
                 critical.append(f'I2C scan failed: {e}')
