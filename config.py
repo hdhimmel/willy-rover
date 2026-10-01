@@ -180,8 +180,9 @@ IMU_ADDR=0x4A; IMU_TILT_LIMIT=25; IMU_TILT_WARN=18; IMU_POLL_HZ=100  # BNO085, �
 # RST: see the note below. It is no longer an expander pin.
 # IMU_RST_MCP_PIN REMOVED 2026-09-30 with the expander that hosted it. Section 4.7
 # consequence 1 moves the BNO085 reset to Pico B GP15, open-drain against R4, exposed as
-# an explicit acknowledged RST command over uart2-pi5. ⚠ That direction is dead today --
-# one wire, Pi phys 7 to c27 -- so the IMU currently has no hardware reset at all.
+# an explicit acknowledged RST command over uart2-pi5. That direction was dead until
+# 2026-10-01 -- cold solder joints on the one wire, Pi phys 7 to c27 -- and is now proven:
+# PING, ID and BOGUS all answered. RST itself has not yet been sent.
 
 # Steering — PCA9685 @0x42, CH0-5 (§3.1/§10). Servo mode (500-2500/1000-2000/900-2100us) is
 # unconfirmed per-unit — default to the narrowest documented range so a narrow-mode servo can't

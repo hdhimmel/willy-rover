@@ -1263,10 +1263,11 @@ sent, corruption identical run to run, and silence the moment J2 was unplugged a
 Pico end. **A stub is not a fault. Prove a board is present with USB or a meter before
 believing anything the link says.**
 
-**Outstanding on B: the Pi → Pico direction.** `PING`, `ID` and a deliberate `BOGUS`
-all go unanswered while `$S` frames stream the other way, which isolates it to the one
-conductor from **Pi phys 7 (GP4, TXD2) to `c27` (pin 17, GP13)**. Sonar does not need
-it — the Pico free-runs — but **`RST` does**, so the BNO085 is blocked behind that wire.
+**B's Pi → Pico direction: fixed 2026-10-01.** `PING`, `ID` and a deliberate `BOGUS`
+went unanswered while `$S` frames streamed the other way, which isolated it to the one
+conductor from **Pi phys 7 (GP4, TXD2) to `c27` (pin 17, GP13)**. Metered: no continuity
+end to end — **cold solder joints**, resoldered. All three now answer (`$P`, `$I,B,…`,
+`$X,unknown`), so `RST` can reach the BNO085. `RST` itself has not been sent yet.
 
 #### 4.7.2 The protection gap — D2
 

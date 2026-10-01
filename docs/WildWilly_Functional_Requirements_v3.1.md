@@ -1575,8 +1575,9 @@ and Master Hardware Design §8 / §16.11 carry the same table.
 
 -   **FR-800-002 (sonar).** ✅ **Re-proven 2026-09-29 through Pico B** — all three
     ranging over `uart2-pi5` at 33.3 Hz, 0 sequence gaps, 0 bad checksums, and `-1`
-    rather than `999` for unmeasurable. ⚠ The **Pi → Pico** direction is still dead
-    (one wire, Pi phys 7 → `c27`), which blocks the BNO085 `RST` above but not sonar.
+    rather than `999` for unmeasurable. The **Pi → Pico** direction (one wire, Pi phys 7
+    → `c27`) was dead until 2026-10-01 — cold solder joints — and now answers `PING`,
+    `ID` and `BOGUS`, so the BNO085 `RST` above is reachable. `RST` itself is unsent.
     All three units return distance tracking a tape
     measure across their usable range. Test each independently before
     trusting any of them together. Front and right reading correctly while

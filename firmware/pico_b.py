@@ -6,9 +6,9 @@ outlived the truth by a day. Measured from the Pi on /dev/ttyAMA2: $S frames at
 three HC-SR04s ranging, and the stuck-ECHO flag firing correctly on two dead
 sensors and clearing on a good one. Rail 0x40 read 5.004 V @ 0.031 A during it.
 
-STILL NOT PROVEN: the Pi -> Pico direction. PING, ID and a deliberate BOGUS all go
-unanswered while frames stream the other way, which isolates it to the one conductor
-from Pi phys 7 to c27. RST travels that way, so the BNO085 has no reachable reset.
+Pi -> Pico direction PROVEN 2026-10-01: PING, ID and BOGUS answered. It was dead
+until then -- cold solder joints on the one conductor from Pi phys 7 to c27. RST
+travels that way and is now reachable, but has not yet been sent.
 
 Written 2026-09-24. Master Hardware Design section 4.7 is the wiring authority;
 this file must not disagree with it.
