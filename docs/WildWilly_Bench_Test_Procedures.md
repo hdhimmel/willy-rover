@@ -100,6 +100,8 @@ current, which independently confirms *which* motor moved.
 | `rr` | `MOTORKIT_RIGHT_ADDR`, 1 | | |
 
 **Pass:** all six map to the wheel their key names, and forward is forward on both sides.
+**If a whole side runs backward**, that is `MOTOR_SIGN`, not `MOTOR_PORT`: the motors are
+mounted mirrored (harness-end outward), so one side is negated in software (2026-10-01).
 **If it fails:** correct `MOTOR_PORT` in `config.py`, then re-run this whole procedure —
 not just the rows that were wrong. A mapping is a permutation; fixing one entry can move
 another.

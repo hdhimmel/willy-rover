@@ -2428,6 +2428,14 @@ under per-wheel work — odometry attribution, crab or differential steering, st
 tracing — where a fault reported on `lf` names a wheel on the wrong side of the robot.
 That is why this sat undetected through every revision of this document.
 
+**The two sides are mounted mirrored, and the software now knows it (2026-10-01).** Every
+drive motor sits harness-end outward, so left and right face opposite ways, and all six are
+wired alike. The same throttle therefore turns the sides opposite ways at the ground: on the
+block, +0.6 rolled `lf` forward and `rf` backward. `config.MOTOR_SIGN` negates the right
+side at the single point `motors.py` writes throttle. Before it, `forward()` pivoted the
+rover in place and the turn commands drove it straight. Phase A counts carry no sign, so a
+wrong entry is invisible to telemetry — confirm by watching the wheels.
+
 **How the right side was found dead, and why that was a wiring fault and not a mapping
 one.** The first M-1 sweep showed all three ports on 0x60 drawing +0.001 A while all
 three on 0x61 drew ~0.070 A. Three motors do not fail together; one board losing motor

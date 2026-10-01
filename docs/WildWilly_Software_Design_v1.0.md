@@ -68,7 +68,7 @@ refresh; treat those as approximate.
 | `safety.py` | 124 | The motion authority — sole gate to the motors |
 | `pursuit_task.py` | 101 | Come-here and follow-me sub-FSM |
 | `hailo_llm.py` | 88 | Hailo NPU intent-parsing LLM (`ENABLE_HAILO_LLM`, not currently enabled — see §7) |
-| `motors.py` | 93 | Drive base and steering primitives |
+| `motors.py` | 94 | Drive base and steering primitives. Applies `config.MOTOR_SIGN` at the throttle write — the sides are mounted mirrored, so the right side is negated |
 | `smart_home.py` | 82 | Home Assistant REST client |
 | `odometry.py` | 74 | Dead-reckoning pose integration |
 | `mapping.py` | 68 | Learning-mode map recording session |

@@ -62,15 +62,21 @@ MOTORKIT_LEFT_ADDR=0x61; MOTORKIT_RIGHT_ADDR=0x60
 # unverified for the same reason and is NOT settled by settling this one. It has its
 # own bench test (E-1) and its own swap risk.
 #
-# MIRRORED MOTORS (owner-stated 2026-10-01): the left and right motors face opposite
-# ways, so to drive forward or backward the two sides' SHAFTS must spin in OPPOSITE
-# directions. motors._set() gives both sides the SAME sign for forward/reverse, which
-# is only correct if one side's motor leads are crossed at the terminals to cancel the
-# mirroring. If they are not, forward() spins him in place and turn_left()/turn_right()
-# drive him straight. Phase-A-only encoder counts have no sign, so nothing in telemetry
-# can tell these apart -- watch the wheels.
 MOTOR_PORT={'lf':(MOTORKIT_LEFT_ADDR,3),'lm':(MOTORKIT_LEFT_ADDR,2),'lr':(MOTORKIT_LEFT_ADDR,1),
             'rf':(MOTORKIT_RIGHT_ADDR,3),'rm':(MOTORKIT_RIGHT_ADDR,2),'rr':(MOTORKIT_RIGHT_ADDR,1)}
+# MIRRORED MOTORS, 2026-10-01. Every motor is mounted harness-end OUTWARD, so the left and
+# right motors face opposite ways, and both sides are wired the same (owner-stated). The
+# same throttle therefore turns the two sides opposite ways at the ground. Until this sign
+# existed, motors._set() sent both sides the same value: forward() pivoted him in place and
+# turn_left()/turn_right() drove him straight. Observed on the block the same day: +0.6 on
+# lf rolled forward, +0.6 on rf rolled BACKWARD, so the right side is negated. Only lf and
+# rf were watched; rm/rr follow on the owner's word that all six are mounted and wired
+# alike. motors.py applies this at the one place it writes throttle, so everything above
+# it -- _target, _actual, current_speed -- stays in rover terms (+ = forward). Scripts that
+# drive a single wheel raw (wheel_current_test, breakaway_sweep) bypass it, which is fine:
+# they measure current and |counts|, not direction. Phase-A-only counts have no sign, so
+# telemetry cannot see a wrong entry here -- watch the wheels.
+MOTOR_SIGN={'lf':1,'lm':1,'lr':1,'rf':-1,'rm':-1,'rr':-1}
 # Raised 2026-08-24. The previous set (ROAM .55 / TURN .50 / SLOW .35 / MAX .80)
 # was below breakaway torque for this chassis: commanded motion produced an
 # audible hum with no rotation. Measured per-wheel on the bench that day, a

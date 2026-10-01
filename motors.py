@@ -58,7 +58,8 @@ class DriveBase:
                     tgt=self._target[w]; cur=self._actual[w]
                     cur = tgt if abs(tgt-cur)<=step else cur+(step if tgt>cur else -step)
                     self._actual[w]=cur
-                    if not self._coasting: self._motors[w].throttle=max(-1.0,min(1.0,cur))
+                    if not self._coasting:      # MOTOR_SIGN: the right side is mounted mirrored
+                        self._motors[w].throttle=max(-1.0,min(1.0,cur))*config.MOTOR_SIGN[w]
                 self.current_speed=(self._actual['lf']+self._actual['rf'])/2
                 if not commanded and not self._coasting and                         all(self._actual[w]==0.0 for w in self._WHEELS):
                     now=time.monotonic()
