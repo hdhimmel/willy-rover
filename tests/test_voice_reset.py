@@ -26,7 +26,7 @@ class FakeSafety:
     def emergency_stop(self,reason): self.calls.append(reason)
 
 def fb(voice_items,has_voice=True):
-    ns=types.SimpleNamespace(_state="SENSOR_FAULT",_motor_rail_lost=False,_bat_xcheck_flagged=False)
+    ns=types.SimpleNamespace(_state="SENSOR_FAULT",_motor_rail_lost=False,_bat_xcheck_flagged=False,_r5_low=False)
     ns.display=FakeDisplay(); ns.safety=FakeSafety()
     if has_voice: ns.voice=FakeVoice(voice_items)
     ns._go=lambda s: setattr(ns,"_state",s)

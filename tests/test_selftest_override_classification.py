@@ -28,7 +28,7 @@ class FakeSafety:
     def emergency_stop(self,reason): pass
 
 def brain_in_selftest_fault(critical,override_tap,fail_count=99):
-    ns=types.SimpleNamespace(_state="INIT",_motor_rail_lost=False,_bat_xcheck_flagged=False,
+    ns=types.SimpleNamespace(_state="INIT",_motor_rail_lost=False,_bat_xcheck_flagged=False,_r5_low=False,
                              _motion_enabled=False,_selftest_overridden=False,
                              _selftest_critical=list(critical),
                              _init_fail_reason="; ".join(critical) or "storage not writable",
