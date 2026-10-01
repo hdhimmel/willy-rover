@@ -28,6 +28,20 @@ from sensors import SonarArray
 # reading and the nearest ToF zone, and the ToF can still only ever pull it down.
 
 
+class _FakeLink:
+    """A Pico B link that always has a fresh $S frame. Fed through the REAL _read_all path,
+    not SonarArray._sim: the sim branch is only taken when config.SIMULATE_HARDWARE is set,
+    and that is fixed when config is FIRST imported. The setdefault('WILLY_SIMULATE') above
+    only works if this file is first; in the full suite an earlier test imports config in
+    real-hardware mode, _read_all called .fresh() on a None link, and all seven tests here
+    failed while passing on their own (2026-10-01)."""
+    def __init__(self): self.cm = {'front': 100.0, 'left': 100.0, 'right': 100.0}
+    def fresh(self, kind, max_age_s):
+        f = ['S', '0', '0']
+        for name in SonarArray._ORDER: f += [str(int(self.cm[name] * 10)), '0']
+        return f + ['0']
+
+
 class _FakeToF:
     def __init__(self, cm=None, available=True):
         self._cm = cm; self.available = available
@@ -38,16 +52,17 @@ class _FakeToF:
 @pytest.fixture
 def array():
     a = SonarArray.__new__(SonarArray)
-    a._link = None
+    a._link = _FakeLink()
     a._owns_link = False
-    a._sim = {'front': 100.0, 'left': 100.0, 'right': 100.0}
     a.tof = None
-    return a
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(config, 'SIMULATE_HARDWARE', False)   # same path either way the suite runs
+        yield a
 
 
 def _set_front(array, cm):
     """What the sonar alone reports, as if Pico B had sent it."""
-    array._sim['front'] = cm
+    array._link.cm['front'] = cm
 
 
 def test_without_a_tof_front_is_the_sonar_reading(array):
