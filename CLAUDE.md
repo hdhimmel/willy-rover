@@ -243,13 +243,10 @@ front and right sonar read fine, left returns garbage.
   service is safe to enable on this account.
   
   Two things remain, neither blocking:
-  - ~~**Re-trim `BATTERY_DIVIDER_SCALE` against a meter.**~~ **DONE 2026-09-17:
-    0.2386 → 0.3237** (A0 3.7229V against 11.5V metered). Not the "~1.5% off, low risk"
-    predicted here — it was **34% off and reporting 15.60V from an 11.5V supply**, which
-    passed every guard because the guards only catch readings that are too LOW. Two new
-    open items: the implied ratio is ~10k/4.7k not the documented 10k/3.197k (meter the
-    parts), and at PGA ±4.096V the scale saturates at 12.65V — ~50mV above a rested 3S
-    pack, so full-charge readings clip.
+  - ~~**Re-trim `BATTERY_DIVIDER_SCALE` against a meter.**~~ **DONE AGAIN 2026-10-01:
+    0.3237 → 0.2432** (A0 2.7653V against 11.37V metered), matching the rev 15.1 board's
+    nominal 0.242. 0.3237 belonged to the old bus node board, and left in place it read a
+    healthy pack as 8.53V and shut Willie down. Second calibration point still open.
   - **The software gap stands regardless** — `sensors.py` still cannot tell a real zero
     from a broken sensor, so a *future* divider fault would repeat this silently. See
     Software Design §12 item 13.

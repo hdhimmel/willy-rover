@@ -498,31 +498,26 @@ INA260_BUS_12V_ADDR=0x45 # +12V bus (battery via F1/KCD4/Q1) -> both FeatherWing
 ENABLE_WITTY_PI=True
 WITTY_PI_ADDR=0x51
 
-ADS_ADDR=0x48; ADS_CH_BATTERY=0  # AIN0 only; charge-sense divider not yet wired
-# Re-trimmed 2026-09-17: AIN0 read 3.7229V (raw 29783) against a bench supply set and
-# metered at 11.5V. New scale = 3.7229/11.5 = 0.3237.
+ADS_ADDR=0x48; ADS_CH_BATTERY=0  # AIN0 = battery divider. (A1 = gripper FSR402, no reader yet)
+# Re-trimmed 2026-10-01: AIN0 read 2.7653V (raw ~22120, 40 samples) against the pack metered at
+# 11.37V at the divider input. Scale = 2.7653/11.37 = 0.2432 -- within 0.4% of the 10k/3.197k
+# = 0.2423 that Master Hardware Design §16 specifies. The divider now matches its design.
 #
-# This is the re-trim the divider fitted 2026-09-02 had been waiting for. The previous
-# 0.2386 (2026-08-16) belonged to the OLD divider and was producing 15.60V from an 11.5V
-# input -- impossible for a 3S pack, and it passed every plausibility guard because the
-# guards only catch readings that are too LOW.
+# WHY IT MOVED: the 2026-09-17 trim (0.3237, ~10k/4.7k) was measured against the OLD bus node
+# board, whose low side was ~4.7k rather than the drawn 3.2k. The rev 15.1 board is built to the
+# drawn value (MHD §6.2), which already flagged 0.3237 as wrong for it. Nobody re-trimmed, and
+# the stale 0.3237 read a healthy 11.37V pack as 8.53V: below BAT_SHUTDOWN_V, so Willie walked
+# IDLE->SHUTDOWN on his own. A scale change this size is a divider change, not drift.
+# ONE-POINT calibration: §6.2 asks for two points across the range -- repeat near 12.6V
+# (full) and near 10.5V when the chance arises.
 #
-# NOTE the implied divider is not the one the docs describe. Master Hardware Design v2.0
-# §16 calls it 10k/3.197k = 0.2423; the measured 0.3237 is ~10k/4.7k (0.3197 nominal,
-# within resistor tolerance). Meter the fitted parts before trusting either figure.
+# HEADROOM: at PGA ±4.096V the ADC now represents up to 4.096/0.2432 = 16.8V, so a full or
+# on-charger 3S pack (12.6V) reads correctly. The 12.65V ceiling of the 0.3237 era is gone.
 #
-# HEADROOM WARNING: at PGA ±4.096V the ADC saturates at 4.096V, so this scale can only
-# represent a pack up to 4.096/0.3237 = 12.65V. A fully charged 3S LiPo rests at 12.6V --
-# about 50mV of margin. Above that the reading clips and UNDER-reports. Every threshold in
-# the ladder below sits under 11.6V so the safety path is unaffected, but a full-charge or
-# on-charger reading cannot be trusted. Drop to PGA ±6.144V if the top of the range ever
-# needs to be real.
-#
-# Previous values: 0.2481 (MCP3008-era), 0.2865 (2026-08-02), 0.2386 (2026-08-16).
-# If this ever disagrees with a meter again, check the physical divider connection before
-# recalibrating -- that is what the 2026-08-16 trim did, and it was trimming around a
-# hardware change nobody had recorded.
-BATTERY_DIVIDER_SCALE=0.3237
+# Previous values: 0.2481 (MCP3008-era), 0.2865 (2026-08-02), 0.2386 (2026-08-16),
+# 0.3237 (2026-09-17, old bus node board). If this ever disagrees with a meter again, check the physical
+# divider connection before recalibrating.
+BATTERY_DIVIDER_SCALE=0.2432
 
 # Battery threshold ladder (§13.2) — one-way toward safer states until voltage recovers above
 # the next threshold up + hysteresis. Supersedes the old flat BAT_LOW/BAT_CRITICAL pair.

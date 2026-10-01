@@ -143,8 +143,8 @@ matches §3.3's table.
    service is safe to enable on this account.
    
    Two things remain, neither blocking:
-   - ⛔ **`BATTERY_DIVIDER_SCALE=0.3237` does not describe the fitted divider.** The
-     rev 15.1 board (§4) is 10k/3.2k, nominal **0.242**. **Re-meter — see §6.2 and §14.**
+   - ✅ **`BATTERY_DIVIDER_SCALE` re-trimmed to 0.2432 (2026-10-01)** — A0 2.7653V against
+     the pack metered at 11.37V; nominal 0.242. One point only — see §6.2 and §14 item 12.
    - **The software gap stands regardless** — `sensors.py` still cannot tell a real zero
      from a broken sensor, so a *future* divider fault would repeat this silently. See
      Software Design §12 item 7.
@@ -1869,15 +1869,13 @@ midpoint to GND, on the signal conditioning board (§4.3). Midpoint goes to
 **ADS1115 A0**. Nominal ratio **0.242**, so ~2.76V at an 11.4V pack, ~3.05V at
 12.6V.
 
-⛔ **`BATTERY_DIVIDER_SCALE` IS WRONG FOR THIS BOARD AND UNDER-REPORTS THE PACK.**
-The stored **0.3237** was measured 2026-09-17 against the *old* bus node board,
-whose fitted low-side turned out to be ~4.7k rather than the 3.2k it was drawn
-as. Rev 15.1 is built to the drawn value, so the scale is now nominally 0.242 —
-about a quarter lower. Until it is re-metered, calibrated volts read low, and
-`config.py` records the battery-tier ladder (11.4 warn / 10.8 RTH / 10.5 safe /
-10.2 shutdown) as the primary safety mechanism. **Do not enable
-`willy-rover.service` on the stored constant.** §4.5's powered check produces
-the replacement; §14 item 12 tracks it.
+✅ **`BATTERY_DIVIDER_SCALE` = 0.2432, measured 2026-10-01** — A0 read 2.7653V
+(raw ~22120, 40 samples) with the pack metered at 11.37V at the divider input. That
+is within 0.4% of nominal, so rev 15.1 is built as drawn. The previous **0.3237**
+belonged to the old bus node board (~4.7k low side); left in place, it read the
+healthy 11.37V pack as **8.53V** and walked the tier ladder to an unordered
+SHUTDOWN on 2026-10-01. At 0.2432 the ±4.096V PGA represents up to 16.8V, so a full
+or on-charger pack no longer clips. §14 item 12 tracks the second point.
 
 **Calibrate rather than trusting the nominal**, even after the powered check.
 Resistor tolerance alone shifts this by ~5%, which is 600mV at the pack —
@@ -2949,7 +2947,7 @@ Status as of **2026-09-11**.
 - **Motor mapping** — `MOTOR_PORT` unverified since 2026-09-04, bench test needed.
 - **`arm_jog.py`** — per-joint limits still "Not tested"; now unblocked by the
   connector repair.
-- **`BATTERY_DIVIDER_SCALE`** — wrong for the fitted board; re-meter (§14 item 12).
+- **`BATTERY_DIVIDER_SCALE`** — 0.2432, one-point trim 2026-10-01; second point open (§14 item 12).
 - **Breakout connections** — installed 2026-09-14, not re-verified (§16.12 check 6).
 - **SEN0628** — not yet fitted.
 
@@ -2982,8 +2980,8 @@ measurement work rather than wiring.
    `0x45` is a usable proxy for pack voltage whenever the divider is suspect,
    allowing ~0.19V for the fuse-and-switch drop.
 
-   **The calibration constant itself is item 12** — it belongs to a board that is
-   no longer in the rover.
+   **The calibration constant itself is item 12** — re-trimmed to the fitted board
+   2026-10-01.
 
 3. **PCA9685 V+ current path** — servo current now flows through each board's
    V+ terminal, PCB trace and channel headers rather than signal current
@@ -3062,13 +3060,11 @@ measurement work rather than wiring.
 
 ---
 
-12. **Battery divider calibration, AGAIN — the constant belongs to a board that
-    does not describe the fitted divider.** `BATTERY_DIVIDER_SCALE` is **0.3237**;
-    the rev 15.1 signal board (§4) is 10k/3.2k by design, nominal **0.242**. The
-    stored value therefore under-reports the pack by roughly a quarter, and
-    `config.py` records the battery-tier ladder as the primary safety mechanism.
-    **Run §4.5's powered divider check, record the 12V-in / pin-14-out pair, and
-    set the constant from it before `willy-rover.service` is enabled.**
+12. **Battery divider calibration — ONE POINT DONE 2026-10-01.** `BATTERY_DIVIDER_SCALE`
+    = **0.2432** (A0 2.7653V / 11.37V metered), against nominal 0.242 for the rev 15.1
+    10k/3.2k divider. The old 0.3237 belonged to the previous board and caused an
+    unordered battery SHUTDOWN the day it met a correctly built divider. **Still open:
+    a second point near 12.6V (full) or 10.5V**, as §6.2 asks.
 13. ⚠ **FSR402 — the gripper touch sensor. THE LAST OUTSTANDING BUILD ITEM**
     (owner, 2026-09-27) (§6.6). Fitted and wired to **ADS1115 A1**; three things
     stand between that and a working touch sense:
