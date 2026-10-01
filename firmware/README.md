@@ -5,7 +5,7 @@ Written 2026-09-24, the day the boards arrived.
 
 | Board | UID | MicroPython | State |
 |---|---|---|---|
-| **A** | `643f69a756a232ea` | v1.29.0, 2026-08-24 | **PROVEN ON THE ROVER 2026-09-30** — six encoders at 50.0 Hz over `uart4-pi5`; answers `ID` |
+| **A** | `643f69a756a232ea` | v1.29.0, 2026-08-24 | **PROVEN ON THE ROVER 2026-09-30** — six encoders at 50.0 Hz over `uart4-pi5`; answers `ID`. **a-0.3 installed 2026-10-01** (signed x2 quadrature; a-0.2 kept on the board as `main_a02.py`) |
 | **B** | `ad25bbf0f1e1f160` | v1.29.0, 2026-08-24 | **PROVEN BOTH WAYS 2026-10-01** — three sonars at 33.3 Hz over `uart2-pi5`; answers `PING`/`ID`/`BOGUS`. `RST` not yet sent |
 
 **Both boards run their firmware as `main.py` since 2026-09-29.** Board **B** is
@@ -95,6 +95,11 @@ $Z,ok*XX               reply to ZERO
 $X,unknown*XX          unrecognised command
 ```
 
+**`$E` wheel counts are SIGNED decimal from a-0.3 (2026-10-01)** — a wheel driven
+backwards counts down. Raw: +throttle gives +counts on every wheel, so rover-forward
+is +counts on the left, −counts on the right (mirrored motors); the Pi applies `config.ENCODER_SIGN`. Up to a-0.2 they were
+unsigned Phase-A-rising counts with no direction.
+
 **Pi → Pico:** `PING`, `ID`, `ZERO` (A — rezero counts), `RST` (B — assert the
 IMU reset). One per line.
 
@@ -122,6 +127,10 @@ separately **samples the B pins and reports whether any of them has ever
 moved** — turning that open question into telemetry instead of a bench session.
 When the green wires are fixed, replace `count_edges()` with a jump-table
 quadrature decoder; the wire protocol does not change.
+**Superseded 2026-10-01:** the six dead greens were the OLD motors. Phase B is alive
+on all six new JGA25-370-35.5K (proven over USB: raw pin poll, each wheel driven alone,
+A and B toggle in step). a-0.3 replaces `count_edges()` with `count_quad()` — x2
+(both edges of A, B sampled at each), signed. Not x4: see the `pico_a.py` docstring.
 
 **PIO is not optional.** 7,773 counts/s per wheel across twelve channels, against a
 MicroPython IRQ overhead of 5–15 µs.
@@ -197,7 +206,9 @@ once the UART is carrying real traffic.
    the equivalent check on the old path.
    ✅ **Done 2026-10-01: 382 counts/rev** — ×1, Phase A rising edges only (lf wheel,
    3911 counts / 10.25 turns). Hand-turning also fails on the new motors (hub likely
-   slips). Re-measure (≈1526) once Phase B decodes ×4.
+   slips). Re-measure (≈1526) once Phase B decodes ×4. **Superseded 2026-10-01:**
+   a-0.3 decodes x2, so `ENCODER_COUNTS_PER_REV` = **763** (2 × 381.6, same edges, both
+   counted). 382 was correct for a-0.2's ×1. ×4 is not planned.
 2. **`machine.WDT` on RP2350** — confirm the 2 s timeout behaves as expected, and
    that it does not fire during `time_pulse_us`'s 25 ms worst case.
 3. **Slot timing.** 30 ms per sensor assumes an HC-SR04 needs ~60 ms between its

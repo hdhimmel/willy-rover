@@ -286,7 +286,7 @@ settled, since it changes what "E-stop fired" actually means in the wiring.
 **G-2 --- FR-500-002/004, encoder counts ARE under-sampled at speed.
 RECOMPUTED 2026-09-13.**
 
-⛔ **Superseded 2026-10-01: `ENCODER_COUNTS_PER_REV` measured = 382** on the fitted 170 RPM motors (see *Resolution* below). That is ×1 — Phase A rising edges only (Pico A firmware; Phase B dead since 2026-09-18), not ×4 quadrature, so 752, 422 and 1562 below are all wrong for the current transport. The 752 arithmetic is kept as the reasoning trail.
+⛔ **Superseded 2026-10-01: `ENCODER_COUNTS_PER_REV` measured = 382** on the fitted 170 RPM motors (see *Resolution* below). That is ×1 — Phase A rising edges only (Pico A firmware; Phase B dead since 2026-09-18), not ×4 quadrature, so 752, 422 and 1562 below are all wrong for the current transport. The 752 arithmetic is kept as the reasoning trail. **Superseded again 2026-10-01: 763** — Phase B is alive on the new motors (the dead greens were the old ones); Pico A a-0.3 decodes signed x2, exactly 2 × 381.6.
 
 With the measured values:
 
@@ -312,7 +312,7 @@ to 8.5 kHz, not the few hundred Hz a lower counts-per-rev figure would imply.
 
 ⚠ **Reverted 2026-09-27 — this note flipped twice; here is the arithmetic.** The JGA25-370 family runs **one ~6,000 RPM motor** behind every gearbox (multiply any row's no-load speed by its ratio and you get ~6,000 every time), so the bare speed does not change across the swap. Fitted: **9.6:1, 422 counts/rev, 620 RPM → 4,365 counts/s per wheel.** On order: **35.5:1, 1562 counts/rev, 170 RPM → 4,426.** Within 1.5%. Yesterday's "it falls 1.78×" was computed from an assumed 10,600 RPM bare motor — the same inference that produced the wrong 17.1:1 ratio. **The original claim was right: a slower rover is not a slower encoder.** Still ~4× the ~1 kHz poll ceiling, so PIO decode is required either way.
 
-⛔ **And 752 is wrong for the motors fitted right now** — the table makes them 9.6:1, so it should be **422**, and `odometry.py` is under-reporting distance by 1.78×. See Master Hardware Design §7.1. **Superseded 2026-10-01: the 9.6:1 motors are out; the 170 RPM replacements measured 382 (×1).**
+⛔ **And 752 is wrong for the motors fitted right now** — the table makes them 9.6:1, so it should be **422**, and `odometry.py` is under-reporting distance by 1.78×. See Master Hardware Design §7.1. **Superseded 2026-10-01: the 9.6:1 motors are out; the 170 RPM replacements measured 382 (×1); 763 under a-0.3's x2.**
 
 **Resolution:** bench test, not more arithmetic --- drive one wheel a known number of
 turns **under power** and read the counts. ⚠ **Not by jogging or hand-turning:** the
@@ -334,6 +334,10 @@ It is 2.3% under the 11 × 35.5 = 390.5 prediction (effective ratio ≈ 34.7:1).
 ⚠ **Hand-turning failed again** (459, then 0, counts for 10 turns while powered driving counted
 normally) — the hub likely slips on the shaft when back-driven. Measure under power only.
 **Re-measure once Phase B is repaired** and firmware decodes ×4: expect ≈1526.
+**Superseded 2026-10-01:** Phase B was never broken on these motors — the six dead greens
+belonged to the OLD ones. Pico A **a-0.3** decodes signed **x2** (both edges of A, B sampled
+at each), so `ENCODER_COUNTS_PER_REV` = **763**, exactly 2 × 381.6 (same edges, both counted).
+382 was right for a-0.2's ×1. ×4 is not planned.
 
 **If polling does turn out to be too slow: raise the I²C bus speed, not
 interrupt-driven decode.** `dtparam=i2c_arm_baudrate=400000` (~4x the
@@ -1359,6 +1363,9 @@ GPA0→GPB3 so the harness lands 1:1. Nothing below changes in substance; the
 transport does. Note also that **Phase B (green) reads dead on all six channels
 today** (`config.py:222`), so FR-500-001's direction requirement cannot pass until
 those wires are metered — one wiring pattern, not six faults.
+**Superseded 2026-10-01:** that was the OLD motors. Phase B is alive on all six new
+motors (raw pin poll over USB, each wheel driven alone: A and B toggle in step), and
+Pico A a-0.3 reports signed counts.
 
 -   **FR-500-001 (read encoders).** All six channels change count **under power,
     one wheel driven at a time with the rover on blocks and the wheels free**, and
@@ -1366,6 +1373,11 @@ those wires are metered — one wiring pattern, not six faults.
     must be correct: forward rotation increments, reverse decrements. A
     channel counting backwards indicates the A and B lines are swapped for
     that motor.
+
+    ✅ **Direction verified 2026-10-01** (a-0.3): each wheel alone at ±0.5/±0.7 —
+    +throttle gives +raw counts on all six, reverse negative, no crosstalk. Rover-forward
+    is +raw left, −raw right (mirrored motors); `config.ENCODER_SIGN` (left +1, right −1)
+    normalises it in `odometry.py`.
 
     **Under power, not by hand** --- corrected 2026-09-24, previously "under manual
     wheel rotation". The encoder is on the motor shaft behind the 17.1:1 gearbox
@@ -1391,7 +1403,9 @@ those wires are metered — one wiring pattern, not six faults.
     criterion is meant to distinguish it from.
 
     ✅ **Unblocked 2026-10-01: `ENCODER_COUNTS_PER_REV` measured 382** (×1, lf wheel, under
-    power; G-2 *Resolution*). The straight-line check can now be run.
+    power; G-2 *Resolution*). The straight-line check can now be run. **763 since a-0.3
+    (x2, 2026-10-01).** Odometry now has direction; still one-wheel scale, no slip
+    model, and `TRACK_WIDTH_M` is the measured geometric 0.310 m, not a calibrated skid-steer effective track.
 
 -   **FR-500-003 (stall detection).** A commanded motor showing no count
     change within the stall window triggers stop-and-report, not increased
@@ -1738,7 +1752,9 @@ separately under FR-1200.
     distinct, separately-spoken outcome.
 
     **Blocked on hardware, not design.** `Navigator` steers by `odometry.pose` and the
-    encoders have produced no edges since 2026-08-25. The *find* leg is not blocked and
+    encoders have produced no edges since 2026-08-25. **Superseded 2026-10-01:** all six
+    count, signed with direction (Pico A a-0.3); odometry still rests on a one-wheel scale,
+    no slip model and an uncalibrated (geometric-only) `TRACK_WIDTH_M`. The *find* leg is not blocked and
     can be built and live-tested today.
 
     Two prerequisites belong to this requirement rather than to separate work: a

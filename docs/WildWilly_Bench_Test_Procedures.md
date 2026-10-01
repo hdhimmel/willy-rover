@@ -114,7 +114,8 @@ another.
 ## E-1 — Encoder supply and output
 
 ✅ **Counts/rev MEASURED 2026-10-01: 382** (×1, Phase A only — see C-1 Phase 5). Every 752
-below is the old-motor figure and is superseded.
+below is the old-motor figure and is superseded. **Now 763** — Pico A a-0.3 decodes signed x2
+the same day, exactly 2 × 381.6.
 
 **Why:** `ENCODER_COUNTS_PER_REV=752` (11 PPR × 4 quadrature × 17.1:1) is arithmetic, not a
 measurement, and the A/B assignment is flagged unverified. FRD G-2 separately computes that
@@ -148,13 +149,17 @@ taken under power.
 | Phase B (green, odd pin) | ❌ **dead on all six** | one wiring pattern, not six faults — trace the green wires |
 | Counts per revolution vs 752 | not measured | blocked on Phase B: quadrature needs both channels |
 
+**Superseded 2026-10-01:** the dead Phase B was the OLD motors. On the six new motors A and B
+toggle in step on every wheel (raw pin poll over USB, each wheel driven alone); a-0.3 decodes
+signed x2, direction verified on all six; counts/rev **763**.
+
 **The method matters more than the numbers here.** Do not poll these pins for edges: at 0.6
 duty the edge rate is ~7.7 kHz against a ~1.2 kHz I²C ceiling, and the aliasing reads as a
 CONSTANT. Three attempts concluded "no encoder output at all" and all three were wrong. Drive
 one wheel ~1 s, compare the MCP23017 resting state before and after, and count across several
 trials which pins change.
 
-**Still open:** the green/Phase-B wiring, and only then counts-per-rev. Note step 3 below is
+**Still open:** the green/Phase-B wiring, and only then counts-per-rev. **Both closed 2026-10-01.** Note step 3 below is
 itself invalid — `scripts/encoder_calibration.py` is built on hand-turning, which produces
 nothing on this rover (§2.2: the encoder is behind the 17.1:1 gearbox and does not
 back-drive).
@@ -163,7 +168,7 @@ back-drive).
 being replaced with 170 RPM variants.** `ENCODER_COUNTS_PER_REV` is 11 × 4 × the gearbox
 ratio, so calibrating it against the 17.1:1 motors measures hardware that is about to come
 out. **Do step 1 and step 2 now; leave step 3 until the new motors are fitted.**
-**Done 2026-10-01: 382** — under power, not with step 3's script (C-1 Phase 5).
+**Done 2026-10-01: 382** — under power, not with step 3's script (C-1 Phase 5). **763** under a-0.3's x2.
 
 Two things to carry into that session:
 
@@ -176,12 +181,12 @@ Two things to carry into that session:
   reads as wheel slip, which is exactly what FR-500-002 is supposed to distinguish it
   from. Measure the value; do not adopt either recorded figure.
 | Channels responding per wheel | | |
-| Observed counts/rev vs 382 | | ×1; was "vs 752" before 2026-10-01 |
+| Observed counts/rev vs 763 | | x2 (a-0.3); was "vs 382" (×1) earlier 2026-10-01, "vs 752" before |
 | Counts plausible at speed, or systematically low? | | bears on FRD G-2 |
 
 **Pass:** supply holds within tolerance under load, every wheel produces distinct A/B
-activity, and observed counts/rev are within a few percent of **382** (×1; ≈1526 once Phase B
-decodes ×4). Was 752 before 2026-10-01.
+activity, and observed counts/rev are within a few percent of **763** (x2, a-0.3), and each wheel counts
+up driven forward, down in reverse. Was 382 (×1) earlier 2026-10-01, 752 before.
 
 ---
 
@@ -485,7 +490,7 @@ counts-per-rev on the fitted motors, and once they are out it can never be run. 
 ## C-0 — counts-per-rev on the FITTED motors ⛔ DO THIS BEFORE ANYTHING ELSE
 
 ⚠ **Overtaken 2026-10-01:** the cutover is done and these motors are out; the table below
-was never filled. The 170 RPM replacements measured **382** (C-1 Phase 5).
+was never filled. The 170 RPM replacements measured **382** (C-1 Phase 5) — **763** under a-0.3's x2.
 
 **Why:** the vendor parameter table (2026-09-27) makes the fitted motors
 `JGA25-370-9.6K`, i.e. **9.6:1**, which puts `ENCODER_COUNTS_PER_REV` at **422** rather
@@ -570,7 +575,7 @@ motor ports and on the encoder channels.
 ### Phase 3 — software
 
 - [x] `config.py`: `ENCODER_COUNTS_PER_REV` → **382, measured 2026-10-01** (this line said
-      **1562**, which assumed ×4 quadrature — wrong for Pico A's ×1 Phase-A count); `ENCODER_ADDR` and `ENCODER_PINS`
+      **1562**, which assumed ×4 quadrature — wrong for Pico A's ×1 Phase-A count; **now 763**, a-0.3 x2); `ENCODER_ADDR` and `ENCODER_PINS`
       retire; re-measure `MOTOR_PORT` before trusting it (see Phase 5).
 - [x] `config.py`: re-measure breakaway duty before keeping `SPEED_SLOW=0.55`. **Done
       2026-10-01 with `scripts/breakaway_sweep.py`: SLOW raised to 0.60, not lowered.**
@@ -608,8 +613,11 @@ ten.
 
 - [ ] **M-1**: drive each port alone by raw address, owner names the wheel that turns.
       `0x61` is LEFT, `0x60` is RIGHT — confirm it survived the swap.
-- [ ] **E-1 step 2**: `scripts/encoder_map_check.py`, channel-to-wheel attribution.
-- [ ] **Green wires**: Phase B has read dead on all six since 2026-09-18. Meter them
+- [x] **E-1 step 2**: `scripts/encoder_map_check.py`, channel-to-wheel attribution. **Done
+      2026-10-01 over USB on Pico A** (raw pin poll, each wheel alone): lf GP0/1, lm GP2/3,
+      rf GP4/5, rm GP6/7, lr GP8/9, rr GP10/11.
+- [x] **Green wires**: Phase B has read dead on all six since 2026-09-18. **Superseded
+      2026-10-01: alive on all six new motors** — the dead ones were the old motors. Meter them
       during the re-land — the connectors are open anyway, and it is the cheapest this
       check will ever be.
 - [x] **Counts/rev on the new motors**: expect **1562**. If it comes out otherwise, the
@@ -619,7 +627,7 @@ ten.
       was the wrong expectation for this transport. 2.3% under 11 × 35.5 = 390.5 (effective
       ≈ 34.7:1). One wheel only. ⚠ Hand-turning failed (459, then 0, for 10 turns) — hub
       likely slips when back-driven; measure under power. Re-measure (≈1526) once Phase B
-      decodes ×4.
+      decodes ×4. **Superseded 2026-10-01: a-0.3 decodes x2 → 763** (2 × 381.6); ×4 not planned.
 - [ ] Only then: rails under load, and a drive test.
 
 ## Recording results

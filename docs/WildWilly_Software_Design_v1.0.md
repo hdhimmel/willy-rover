@@ -888,6 +888,9 @@ answer got worse.**
 (lf wheel, under power, 3911 counts / 10.25 turns, ±~5). That is ×1 — Phase A rising edges only (Pico A firmware; Phase B dead since 2026-09-18), not ×4 quadrature,
 so 752, 422 and 1562 below are all wrong for the current transport. Kept as the reasoning trail.
 Re-measure (≈1526) once Phase B decodes ×4.
+**Superseded again 2026-10-01: 763.** Phase B is alive on the new motors (the dead greens were
+the old ones); Pico A a-0.3 decodes signed x2 (both edges of A, B sampled at each) — exactly
+2 × 381.6. 382 was right for a-0.2's ×1. ×4 is not planned.
 
 With the measured values:
 
@@ -907,7 +910,7 @@ So the per-channel edge rate at full speed is:
 
 > ⚠ **Reverted 2026-09-27 — this note flipped twice; here is the arithmetic.** The JGA25-370 family runs **one ~6,000 RPM motor** behind every gearbox (multiply any row's no-load speed by its ratio and you get ~6,000 every time), so the bare speed does not change across the swap. Fitted: **9.6:1, 422 counts/rev, 620 RPM → 4,365 counts/s per wheel.** On order: **35.5:1, 1562 counts/rev, 170 RPM → 4,426.** Within 1.5%. Yesterday's "it falls 1.78×" was computed from an assumed 10,600 RPM bare motor — the same inference that produced the wrong 17.1:1 ratio. **The original claim was right: a slower rover is not a slower encoder.** Still ~4× the ~1 kHz poll ceiling, so PIO decode is required either way.
 >
-> ⛔ **And 752 is wrong for the motors fitted right now** — the table makes them 9.6:1, so it should be **422**, and `odometry.py` is under-reporting every distance by 1.78× today. Measure it with E-1 **before** those motors come out. After the swap: **1562**. **Superseded 2026-10-01: measured 382** — ×1, not ×4.
+> ⛔ **And 752 is wrong for the motors fitted right now** — the table makes them 9.6:1, so it should be **422**, and `odometry.py` is under-reporting every distance by 1.78× today. Measure it with E-1 **before** those motors come out. After the swap: **1562**. **Superseded 2026-10-01: measured 382** — ×1, not ×4; **763** under a-0.3's x2.
 
 This does not change what to do — a bench test still settles it, and arithmetic is not
 a substitute for one. It changes the expectation you should carry into that test: plan
@@ -960,6 +963,7 @@ it becomes **1562** (11 × 4 × 35.5, part number `JGA25-370-35.5K`).
 **Superseded 2026-10-01: measured 382** on the fitted 170 RPM motors — ×1 (Phase A only), so
 1562's ×4 was wrong; 2.3% under the 390.5 that 11 × 35.5 predicts. One wheel (lf). The third
 constant is now measured; `WHEEL_DIAMETER_M` and `TRACK_WIDTH_M` remain.
+**Now 763** (a-0.3 x2, 2026-10-01 — 2 × 381.6).
 
 **S-4 — No inverse kinematics for the arm.** No per-joint calibration exists,
 so there is no reach-envelope model to plan against. Grasp is a fixed primitive
@@ -1055,6 +1059,10 @@ its own ADC**, which closes the unmonitored-rail gap that killed the encoders on
 2026-08-25 and which no INA260 observes (Master Hardware Design §2.1, P8). Note
 that **Phase B reads dead on all six channels today** (`config.py:222`), so direction-
 aware decode cannot be validated on either transport until those wires are metered.
+**Superseded 2026-10-01:** that was the OLD motors. Phase B is alive on all six new ones;
+Pico A a-0.3 sends signed x2 counts, verified per wheel at ±0.5/±0.7 with no crosstalk.
+`Encoders.counts` stays raw (unwrapped across 32 bits, re-based on a Pico reboot);
+`odometry.py` applies `config.ENCODER_SIGN` (left +1, right −1), so odometry has direction.
 
 ---
 
@@ -1208,7 +1216,7 @@ wants it.
    half has no trip threshold defined.
 4. **Bench-confirm `ENCODER_COUNTS_PER_REV`, `WHEEL_DIAMETER_M`,
    `TRACK_WIDTH_M` (S-2, S-3).** ✅ **Counts-per-rev MEASURED 2026-10-01: 382** (×1, lf wheel,
-   under power) — the blocking note that follows is superseded. ⚠ **The counts-per-rev half is blocked until the
+   under power; **763** since a-0.3's x2 the same day) — the blocking note that follows is superseded. ⚠ **The counts-per-rev half is blocked until the
    170 RPM motors are fitted** (owner, 2026-09-24) — calibrating it against the
    17.1:1 motors would measure hardware that is being removed. The wheel and track
    constants are independent of the swap and can be settled now. The channel-to-wheel

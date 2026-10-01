@@ -1116,6 +1116,12 @@ Pin numbers are **Pico 2 W physical**; the Pi column is **Pi physical**.
 | GND | 38 | supply return | R5 return → star |
 | GND | **18** | signal reference | breakout GND, phys 6 or 9 — **column 28**, beside TX/RX. A's two grounds are legitimate: pin 38 returns to **R5**, pin 18 references the **Pi**, two different sources |
 
+⛔ **Superseded 2026-10-01 — the wheel names in GP0–GP11 above are left/right swapped.**
+Proven on the rover over USB (raw pin poll, each wheel driven alone): **lf GP0/GP1, lm
+GP2/GP3, rf GP4/GP5, rm GP6/GP7, lr GP8/GP9, rr GP10/GP11** (A/B) — `$E` slot *i* = GP 2*i*
+(A) / 2*i*+1 (B), matching §16.6. Phase B (green) is **alive on all six**. The same swap
+applies to the §4.8.7 / §4.8.8 tables and the `config.py:235` order quoted next.
+
 **The pair order is deliberately identical to MCP23017 GPA0→GPB3**
 (`config.py:235`: `rf` A0/A1, `rm` A2/A3, `lf` A4/A5, `lm` A6/A7, `rr` B0/B1,
 `lr` B2/B3). The existing twelve-way harness therefore lands 1:1 in the same
@@ -1197,7 +1203,8 @@ existing `uart3-pi5`, and the serial console must remain disabled (§9).
 2. **Meter all six green wires before landing them.** Phase B reads dead on all
    six today (`config.py:222`) — one wiring pattern, not six faults — and the
    2026-09-18 reverse-polarity event may have taken those output stages. Settle
-   that on the bench, not through a new UART.
+   that on the bench, not through a new UART. **Superseded 2026-10-01:** the dead
+   greens were the OLD motors; Phase B is alive on all six new JGA25-370-35.5K.
 3. **ECHO junctions at 3.2–3.4V under servo load, not idle** (§16.10). Mandatory
    now, not advisory — see consequence 3.
 4. **Pico VSYS fuse and Schottky fitted on both boards** before either is powered
@@ -1290,7 +1297,7 @@ three sonars range — but that is luck, not protection.
 
 **Q1 (FQP27P06, §2.3) cannot help.** It guards the *battery input*. Every JST on every
 rail downstream of it is unprotected, and the record is unambiguous: the encoder supply
-reversed 2026-09-18 with LF Phase A destroyed and Phase B dead on all six channels, two
+reversed 2026-09-18 with LF Phase A destroyed and Phase B dead on all six channels (old motors, since replaced), two
 sonars destroyed the same way (§16.12), and now Pico B. **Four events, one mechanism,
 no part in between.**
 
@@ -1450,7 +1457,7 @@ anything. R3 spans one column — stand it on end with the upper lead bent over.
 
 ⚠ **Column 17 does two unrelated jobs on Board A.** Its **row-C side** is pin 34 /
 GP28, the divider node. Its **row-H side** is pin 7 / GP5 — **LF Phase B**, a green
-encoder wire. Separate tie-strips with no connection between them, but it is the one
+encoder wire (**RF** Phase B physically — see the §4.7 correction, 2026-10-01). Separate tie-strips with no connection between them, but it is the one
 column carrying both a signal and the ADC. Check it twice before power.
 
 #### 4.8.6 Two clearances — and that is the whole list
@@ -1533,6 +1540,10 @@ make it hold** — see 4.8.10.
 | J3-12 | LR Phase B | 15 GP11 | not fitted | — |
 | J4-1 | — | — | 3V3 from Pi header **pin 1** | via R4 |
 | J4-2 | — | — | **RST → BNO085** | 20 GP15 |
+
+⛔ **Superseded 2026-10-01:** Pico A's wheel names in both tables above are left/right
+swapped — physically lf GP0/GP1, lm GP2/GP3, rf GP4/GP5, rm GP6/GP7, lr GP8/GP9, rr
+GP10/GP11 (§4.7 correction). Pins and ways are unchanged.
 
 **B's sonar occupies J3 ways 1–6 contiguously**, so the sonar harness is a plain 6-way
 into the first six positions.
@@ -2247,6 +2258,8 @@ is still vendor-stated rather than measured.
 3911 counts over 10.25 tape-marked turns, ±~5. It is also 2.3% under 11 × 35.5 = 390.5
 (effective ratio ≈ 34.7:1), so the part number did *not* leave nothing to calibrate.
 One wheel only; re-measure (≈1526) once Phase B decodes ×4.
+**Superseded again 2026-10-01: 763.** Phase B is alive on these motors (the dead greens were
+the old ones); Pico A a-0.3 decodes signed x2, exactly 2 × 381.6. ×4 is not planned.
 
 **The bare motor is the SAME one.** 170 × 35.5 = **6,035 RPM**, and the fitted 620 RPM
 at 9.6:1 is **5,952 RPM**. One motor, two gearboxes — which is the whole design of this
@@ -2256,14 +2269,14 @@ family and the reason several conclusions below revert to what they were.
 against the 17.1:1 motors now would measure hardware that is about to be removed.
 E-1's counts-per-rev step should wait; its channel-attribution step will have to be
 re-run regardless — see the connector warning below. **Counts-per-rev closed
-2026-10-01: 382.**
+2026-10-01: 382** (×1); **763** under a-0.3's x2 the same day.
 
 An earlier line here said "the only downstream change is ENCODER_COUNTS_PER_REV".
 **That is wrong.** What actually moves:
 
 | Quantity | How it changes at 170 RPM |
 |---|---|
-| `ENCODER_COUNTS_PER_REV` | ~~1562 (11 × 4 × 35.5)~~ **382, measured 2026-10-01** (×1; 1562 assumed ×4), from 422 |
+| `ENCODER_COUNTS_PER_REV` | ~~1562 (11 × 4 × 35.5)~~ ~~382 (×1)~~ **763, 2026-10-01** (x2 under a-0.3 = 2 × measured 381.6; 1562 assumed ×4), from 422 |
 | Top speed | **0.90 m/s** no-load, **0.70 m/s** rated, against 3.30 / 2.54 m/s today |
 | Torque at the wheel | reduction goes 9.6 → 35.5, i.e. **3.70×**; measured rated torque rises **3.45×** (0.20 → 0.69 kg·cm). The 3–5× this section speculated was **right** — it was yesterday's 2.05× that was wrong. Rated **1.33 N per wheel, 8.0 N over six**, against 0.39 N and 2.3 N today |
 | **Stall current** | **1.8 A per motor**, 10.8 A if all six stall — see the warning below |
@@ -2280,6 +2293,7 @@ RPM bare motor is ~142 RPM output, not 170. So after the swap 3292 is wrong by
 roughly 1.2× instead of 4.4× — **which makes it more dangerous, not less.** A 20%
 odometry error does not announce itself the way a 4× error does; it looks like wheel
 slip. Neither 752 nor 3292 is the value for these motors — **382 is, measured 2026-10-01.**
+**Superseded the same day: 763** (a-0.3 x2; 382 was ×1).
 
 ⚠ **G-2's polling shortfall is not changed by the swap — and this note has now
 flipped twice, so here is the arithmetic rather than the conclusion.** The 11 PPR
@@ -2292,7 +2306,7 @@ behind every gearbox, so the bare speed does not change either:
 | Fitted | 9.6:1 | 422 | 620 RPM | **4,365** |
 | On order | 35.5:1 | 1562 | 170 RPM | **4,426** |
 
-*(2026-10-01: counts/rev here are ×4. Pico A counts ×1 — measured **382** — so it sees a quarter of these rates.)*
+*(2026-10-01: counts/rev here are ×4. Pico A counts ×1 — measured **382** — so it sees a quarter of these rates.)* *(Superseded 2026-10-01: a-0.3 counts x2 — **763** — so half.)*
 
 **Within 1.5% — the swap changes nothing here.** On 2026-09-26 this was "corrected"
 to say the rate would fall 1.78×; that was computed from an assumed 10,600 RPM bare
@@ -2349,14 +2363,14 @@ own rule is that a ratio inferred from a table is no better than a ratio inferre
 a speed — *"measure it instead of deriving it from another assumed gear ratio, which
 is exactly how the wrong number got there in the first place"*. **Superseded 2026-10-01:**
 the 9.6:1 motors are out, and the value for the fitted 170 RPM motors is **measured at 382**
-(×1). The rest of this paragraph is history. If 422 is right,
+(×1) — **763** under a-0.3's x2. The rest of this paragraph is history. If 422 is right,
 `odometry.py` is **under-reporting distance by 1.78×** today. **Bench Test Procedures **C-0** exists for exactly this** — it is the first thing in
 the cutover and the only step that cannot be redone afterwards.
 
 The vendor part number should still be read off the motor body and recorded here.
 
 That ratio sets `config.ENCODER_COUNTS_PER_REV` = 11 PPR × 4 × 17.1 = **752**.
-*(Old motors. Superseded 2026-10-01: measured **382** on the 170 RPM motors, ×1.)*
+*(Old motors. Superseded 2026-10-01: measured **382** on the 170 RPM motors, ×1; **763** x2 under a-0.3.)*
 A figure of 3292 ("823.1 PPR ×4") implies a 74.8:1 gearbox, which belongs to the
 100–200 RPM variants, not these motors — it is 4.375× too high. Since
 `odometry.py` divides by it, that error reports distances at ~23% of actual from the
@@ -2420,6 +2434,10 @@ therefore only half-verified.** Only the even pin of each pair produces transiti
 odd pin is silent but for a flicker on GPA7. Six wheels failing on exactly the odd pin is one
 wiring pattern, not six faults — trace the green wires before trusting any direction-aware
 decode. Until then the decode can count distance but cannot resolve direction.
+**Superseded 2026-10-01:** that was the OLD motors. Phase B is alive on all six new ones
+(each wheel driven alone over USB, A and B toggle in step); Pico A a-0.3 decodes signed x2
+and direction is verified on every wheel. The GPA column above is also superseded — see
+the §4.7 correction for the physical map.
 
 **Left and right are from Willie's own point of view, facing forward** — the vehicle
 convention, as if sitting in a car. Standing in front of him mirrors it. Convention
@@ -2478,7 +2496,7 @@ crosstalk changes rarely and inconsistently. Two independent runs agreed.
 
 ⚠ **The encoder supply was found REVERSED on 2026-09-18** and corrected. LF's Phase A went
 from 2/6 to 6/6 immediately afterwards. Phase B did not recover, so those output stages were
-probably destroyed by the reverse polarity — **the same failure that destroyed two sonars the
+probably destroyed by the reverse polarity (old motors; the 2026-09-29 replacements have live Phase B) — **the same failure that destroyed two sonars the
 previous day, on connectors reassembled during the same rebuild.** Note that with the supply
 reversed, blue-to-black reads −3.3 V; a meter showing +3.3 V means the probes were swapped
 too, which is how it passed an earlier check. §16's warning applies: meter polarity at every
@@ -2916,7 +2934,7 @@ Status as of **2026-09-11**.
 | AI accelerator PCIe bond | PASS | `/dev/hailo0`; firmware 5.1.1, HAILO10H |
 | Pi-rail INA260 address | **PASS — 0x45** | `config.py:212` `INA260_PI_ADDR=0x45` ("VERIFIED 9.068V"); `config.py:210` `INA260_MOTOR_ADDR=0x44` is the +12V bus. |
 | Sonars connected | ✅ **ALL THREE RANGE-TESTED AND WORKING AGAIN 2026-09-29, now through Pico B** — 33.3 Hz over `uart2-pi5`, rail 5.004V @ 0.031A. ⚠ **Four sonars have now been destroyed in total** (two on 2026-09-17, one in the 2026-09-28 smoke event, and a spare that proved dead when fitted) — the stuck-high ECHO signature identifies them in one frame. Previous entry: **ALL THREE RANGE-TESTED AND WORKING, 2026-09-17** — first time since the build | Front 49.7cm, left 91.1cm, right 30.9cm, each stable to ±0.4cm over 8 samples and each reading its own direction (three distinct distances, so no cross-talk). **All three ECHO lines idle LOW and go low against a pull-down** — the healthy signature on every channel. Rail 4.990V @ **0.026A**, against 0.101A with one sensor and the 0.348A that flagged a short earlier the same day: no sensor is drawing fault current. Getting here took finding a reversed crimp pin that had not clicked home, a ground fault on the GeeekPi breakout (§5.3), and replacing two sensors destroyed by reverse polarity (§16.12) |
-| Encoder counts on all six channels | Not tested | ⚠ **Blocked twice over.** Counts-per-rev waits for the 170 RPM motors (§7.1, §14 item 17); the MCP23017 path is then replaced by Pico A (§4.7) and the bus drops to ten devices when 0x27 leaves. Channel attribution must be re-run **after** the motor swap either way |
+| Encoder counts on all six channels | Not tested | ⚠ **Blocked twice over.** Counts-per-rev waits for the 170 RPM motors (§7.1, §14 item 17); the MCP23017 path is then replaced by Pico A (§4.7) and the bus drops to ten devices when 0x27 leaves. Channel attribution must be re-run **after** the motor swap either way. **Superseded 2026-10-01:** all six count A and B through Pico A, signed x2 (a-0.3), direction verified per wheel; 763 counts/rev |
 | BNO085 interrupt and fusion output | Not tested | INT on GP15 is unused by the driver; library polls over I²C |
 | Battery divider calibration | **RE-TRIMMED 2026-09-17** | `BATTERY_DIVIDER_SCALE` 0.2386 → **0.3237**, from AIN0 = 3.7229V (raw 29783) against a bench supply metered at 11.5V. The old value belonged to the pre-2026-09-02 divider and was reporting **15.60V from an 11.5V input** — impossible for a 3S pack, and it passed every guard because the guards only catch readings that are too LOW. **Two open items:** the implied ratio (~10k/4.7k) does not match the 10k/3.197k described in §16, so meter the fitted parts; and at PGA ±4.096V this scale saturates at **12.65V**, ~50mV above a rested 3S pack, so full-charge readings are untrustworthy without moving to PGA ±6.144V |
 | Steering servo sweep | Not tested | — |
@@ -3075,7 +3093,8 @@ measurement work rather than wiring.
     (a) `dtoverlay -h uart2-pi5` and `uart4-pi5` really reporting GPIOs 4–5 and
     12–13 on the running image — the `-pi5` suffix trap of §6.5, where the wrong
     overlay boots clean and the device reads as dead hardware; (b) whether the six
-    encoder Phase B (green) lines are intact, still dead as of `config.py:222`;
+    encoder Phase B (green) lines are intact, still dead as of `config.py:222`
+    (**closed 2026-10-01: alive on all six new motors; the dead ones were the old motors**);
     (c) the UART framing contract that replaces the 999cm sentinel (Software Design
     S-9); and (d) C-1 Phase 3, the `sensors.py` / `brain.py` / `config.py` swap —
     until that runs, the Picos are fitted and unread, and `_EXPECTED_I2C` still
@@ -3103,12 +3122,12 @@ measurement work rather than wiring.
 
 18. ⚠ **Motor swap to the 12V 170 RPM variant — delivered 2026-09-26, not fitted**
     (§7.1, *Motor change pending*). **Part number is `JGA25-370-35.5K`**, so the ratio is
-    **35.5:1** and `ENCODER_COUNTS_PER_REV` = ~~1562~~ **382, measured 2026-10-01** (×1 — 1562 assumed ×4). ⛔ **The same table says the
+    **35.5:1** and `ENCODER_COUNTS_PER_REV` = ~~1562~~ ~~382~~ **763, 2026-10-01** (a-0.3 x2 = 2 × measured ×1 381.6; 1562 assumed ×4). ⛔ **The same table says the
     FITTED motors are 9.6:1, not 17.1:1 — so today's 752 should be 422 and odometry
     is under-reporting by 1.78×. Measure it with E-1 BEFORE the motors come out.** Note the supplied PDF is a generic *DC Motor User
     Manual* — precautions and a choking warning, no part number, no ratio, no
     torque; the figures above came from the owner, not that document.
-    **Encoder counts-per-rev calibration is blocked until they land** (**done 2026-10-01: 382**) — calibrating
+    **Encoder counts-per-rev calibration is blocked until they land** (**done 2026-10-01: 382 ×1, 763 x2**) — calibrating
     the 17.1:1 motors measures hardware that is being removed. `WHEEL_DIAMETER_M`
     and `TRACK_WIDTH_M` are independent and can be settled now. After the swap,
     re-run **both** the M-1 per-wheel drive check and
