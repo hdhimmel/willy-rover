@@ -690,6 +690,12 @@ STALL_GRACE_S=1.0           # FR-500-003 (Directive 5): how long a commanded whe
 WILLIE_GOOGLE_ACCOUNT='willie.pi5.droid@gmail.com'
 
 ENABLE_SMART_HOME=False  # FR-1300
+# Remote commands IN from Home Assistant / Google Home (remote_cmd.py, owner 2026-10-01). Fixed
+# intents only: status, battery, stop, come_here. Never starts without the token file.
+ENABLE_REMOTE_CMD=True
+REMOTE_CMD_PORT=8765
+REMOTE_CMD_TOKEN_PATH='secrets/remote_cmd_token.txt'
+REMOTE_CMD_REPLY_TIMEOUT_S=8.0   # under HA rest_command's timeout, so HA always gets an answer
 GOOGLE_HOME_CREDS_PATH='secrets/google_home_token.json'
 SMART_HOME_DISCOVERY_TIMEOUT_S=5
 

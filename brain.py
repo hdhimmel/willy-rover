@@ -18,6 +18,7 @@ from vision import ObjectDetector
 from retrieval_task import RetrievalTask
 from pursuit_task import PursuitTask
 from email_client import EmailClient
+from remote_cmd import RemoteCommandServer
 from witty_pi import WittyPi
 if config.ENABLE_HAILO_LLM:
     from hailo_llm import HailoIntentModel
@@ -200,6 +201,7 @@ class RoverBrain:
         self.retrieval=RetrievalTask(self.safety,self.arm,self.detector,display=self.display,voice=self.voice)
         self.pursuit=PursuitTask(self.safety,self.detector,display=self.display,voice=self.voice)  # FR-1000
         self.email=EmailClient()
+        self.remote=RemoteCommandServer(self.voice)  # HA / Google Home in, see remote_cmd.py
         self.witty=WittyPi()
         self._state='INIT'; self._stuck_count=0; self._last_action='none'; self._manual_action=None
         self._idle_t=0.0; self._avoid_start=0.0; self._avoid_phase=None; self._running=False
@@ -291,7 +293,7 @@ class RoverBrain:
         # neither can move the robot on its own (voice queues motion intents for _tick() to
         # gate; email never acts autonomously per FR-2000-004) — but both stay inert no-ops if
         # their ENABLE_* flag is off or credentials/models are missing (see each module).
-        self.voice.start(); self.email.start()
+        self.voice.start(); self.email.start(); self.remote.start()
         self._running=True
         # FR-100-003 (run startup self-test): _self_test() below.
         ok,reason=self._self_test()
@@ -395,7 +397,7 @@ class RoverBrain:
         if self.mapping.active: self.mapping.abort('shutdown')
         if self.navigator.active: self.navigator.abort('shutdown')
         if self.pursuit.active: self.pursuit.abort('shutdown')
-        self.voice.stop(); self.email.stop(); self.detector.close()
+        self.remote.stop(); self.voice.stop(); self.email.stop(); self.detector.close()
         self.memory.close()  # FR-1900-011: persist any new/updated memory before power-off
         self.world_model.close()  # §9/§10: persist rooms/landmarks/objects/routes before power-off
         self.motors.cleanup(); self.sonars.stop(); self.imu.stop(); self.adc.stop()
@@ -805,6 +807,17 @@ class RoverBrain:
          'TILT_FAULT':lambda d,t:None,'SAFE_MODE':lambda d,t:None,'SHUTDOWN':lambda d,t:None,
         }.get(self._state,lambda d,t:None)(d,tilt)
 
+    def _say(self,text):
+        # Every answer from the two drain passes goes through here. Speaks it, and hands it to
+        # a remote caller (remote_cmd.py) when the command being answered came from one, so
+        # Home Assistant can read it back on the Nest. The callback runs even with voice off.
+        cb=getattr(self,'_reply_to',None)
+        if cb is not None:
+            self._reply_to=None
+            try: cb(text)
+            except Exception as e: log.warning(f'Remote reply callback failed: {e}')
+        if self.voice.available: self.voice.speak(text)
+
     def _drain_voice_in_selftest_fault(self):
         # See _SELFTEST_FAULT_INTENTS. Peeks like the speech-only pass, but a disallowed intent
         # is popped and refused rather than left at the head, where it would block every query
@@ -817,11 +830,10 @@ class RoverBrain:
             intent=q.queue[0].get('intent')
         if not intent or intent in _SELFTEST_FAULT_INTENTS:
             self._drain_voice_commands(); return
-        try: q.get_nowait()
+        try: self._reply_to=q.get_nowait().get('on_reply')
         except Exception: return
         log.info(f'Voice intent "{intent}" refused: self-test failing ({self._init_fail_reason})')
-        if self.voice.available:
-            self.voice.speak(f"I can't do that. My self-test is failing: {self._init_fail_reason}.")
+        self._say(f"I can't do that. My self-test is failing: {self._init_fail_reason}.")
 
     def _drain_voice_commands(self,speech_only=False):
         # speech_only is the every-tick pass: it answers queries that read cached state and
@@ -842,6 +854,7 @@ class RoverBrain:
             cmd=self.voice.pending_commands.get_nowait()
         except Exception:
             return
+        self._reply_to=cmd.get('on_reply')  # remote_cmd.py: the HA caller waiting for the answer
         if self._shutdown_pending:
             # First queued command after a 'shutdown' intent is treated as the yes/no answer to
             # that confirmation, not dispatched normally below -- see the 'shutdown' branch and
@@ -852,7 +865,7 @@ class RoverBrain:
                 self._begin_shutdown()
             else:
                 log.info('Voice shutdown declined.')
-                if self.voice.available: self.voice.speak("Okay, I won't shut down.")
+                self._say("Okay, I won't shut down.")
             return
         if self._roam_ask_pending:
             # Same contract as the shutdown confirmation above: the first queued command after the
@@ -866,7 +879,7 @@ class RoverBrain:
                 self._end_roam_ask(True)
             else:
                 log.info('Roam permission declined.')
-                if self.voice.available: self.voice.speak('Okay, maybe later.')
+                self._say('Okay, maybe later.')
                 self._end_roam_ask(False)
             return
         # Drop commands that have gone stale in the queue. voice.py has always stamped 'ts' here
@@ -922,37 +935,36 @@ class RoverBrain:
             result=method(duration,speed)
             if isinstance(result,Rejected):
                 log.info(f'Voice-triggered {action} rejected: {result.reason}')
-                if self.voice.available: self.voice.speak(f"Can't do that — {result.reason}")
+                self._say(f"Can't do that — {result.reason}")
             else:
                 self._manual_action=action; self._go('MANUAL')
                 log.info(f'Voice-triggered manual move: {action} speed={result.speed} duration={result.duration}')
         elif cmd.get('intent') in('come_here','follow'):
             if not self.detector.available:
-                if self.voice.available: self.voice.speak("My camera isn't available, I can't find you.")
+                self._say("My camera isn't available, I can't find you.")
             else:
                 mode='follow' if cmd['intent']=='follow' else 'come_here'
                 ok,msg=self.pursuit.start(mode=mode)
                 if ok: self._go('PURSUE')
+                self._say('On my way.' if ok else f"I can't come over: {msg}")
                 log.info(f'Voice-triggered pursuit: mode={mode} ({msg})')
         elif cmd.get('intent')=='status':
             bat_v=self.adc.battery_volts; bat_pct=self.adc.battery_pct
-            if self.voice.available:
-                if not self._motion_enabled and self._init_fail_reason:
-                    self.voice.speak(f"I can't move. My self-test is failing: {self._init_fail_reason}.")
-                elif bat_v<=0:
-                    self.voice.speak(f"I'm currently {self._state.lower()}, and I can't read my battery.")
-                else:
-                    self.voice.speak(f"I'm currently {self._state.lower()}, battery at {bat_v:.1f} volts, {bat_pct} percent.")
+            if not self._motion_enabled and self._init_fail_reason:
+                self._say(f"I can't move. My self-test is failing: {self._init_fail_reason}.")
+            elif bat_v<=0:
+                self._say(f"I'm currently {self._state.lower()}, and I can't read my battery.")
+            else:
+                self._say(f"I'm currently {self._state.lower()}, battery at {bat_v:.1f} volts, {bat_pct} percent.")
         elif cmd.get('intent')=='battery':
             bat_v=self.adc.battery_volts; bat_pct=self.adc.battery_pct
-            if self.voice.available:
-                self.voice.speak("I can't read my battery right now." if bat_v<=0 else
+            self._say("I can't read my battery right now." if bat_v<=0 else
                                  f"Battery is at {bat_v:.1f} volts, about {bat_pct} percent.")
         elif cmd.get('intent') in('arm_stow','arm_home'):
             # No calibrated stow/home pose exists yet (§20.6) -- both alias to center_all() as a
             # known-safe placeholder position until real per-joint poses are bench-calibrated.
             self.arm.center_all()
-            if self.voice.available: self.voice.speak('Arm centered.')
+            self._say('Arm centered.')
         elif cmd.get('intent')=='wave':
             self._start_wave()
         elif cmd.get('intent')=='diagnostics':
@@ -961,15 +973,13 @@ class RoverBrain:
             # an owner decision, not something to do automatically (same reasoning as
             # config.validate() staying non-blocking in _self_test() above). Runs synchronously on
             # the tick thread (~0.5s+, real I2C scan) -- accepted: this only ever runs from IDLE.
-            if self.voice.available: self.voice.speak('Running diagnostics now, one moment.')
+            self._say('Running diagnostics now, one moment.')
             ok,reason=self._self_test()
-            if self.voice.available:
-                self.voice.speak('Everything checks out.' if ok else f'Diagnostics found a problem: {reason}')
+            self._say('Everything checks out.' if ok else f'Diagnostics found a problem: {reason}')
         elif cmd.get('intent')=='where_are_you':
             pose=self.world_model.get_robot_pose()
             room=self.world_model.get_room(pose.x,pose.y)
-            if self.voice.available:
-                self.voice.speak(f"I'm in the {room.name}." if room else "I'm not sure which room I'm in.")
+            self._say(f"I'm in the {room.name}." if room else "I'm not sure which room I'm in.")
         elif cmd.get('intent')=='what_do_you_see':
             # v1: names detected object classes from the existing CPU-YOLO detector, not a real
             # VLM caption (no Hailo-backed VLM wired into vision.py yet -- see its module docstring).
@@ -978,10 +988,9 @@ class RoverBrain:
             else:
                 classes=sorted({det['class'] for det in self.detector.detect()})
                 reply=f"I can see {', '.join(classes)}." if classes else "I don't see anything right now."
-            if self.voice.available: self.voice.speak(reply)
+            self._say(reply)
         elif cmd.get('intent')=='shutdown':
-            if self.voice.available:
-                self.voice.speak('Are you sure you want me to shut down? Say confirm to proceed.')
+            self._say('Are you sure you want me to shut down? Say confirm to proceed.')
             self._shutdown_pending=True; self._shutdown_deadline=time.time()+15.0
         elif cmd.get('intent'):
             log.info(f'Voice intent "{cmd["intent"]}" received but not wired to an executor.')
@@ -989,7 +998,7 @@ class RoverBrain:
             # should be reported, not silently absorbed -- the LLM's own free-form 'reply' already
             # got spoken by voice.py's _act_on_intent when this was queued, which can sound like
             # confident compliance even though nothing is wired here. This is the corrective.
-            if self.voice.available: self.voice.speak("I heard you, but I don't know how to do that yet.")
+            self._say("I heard you, but I don't know how to do that yet.")
 
     def _retrieve(self,d,tilt):
         self.retrieval.tick(d,tilt)
