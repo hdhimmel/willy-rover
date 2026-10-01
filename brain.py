@@ -44,6 +44,13 @@ _NON_EXPIRING_INTENTS=frozenset({'confirm_receipt'})
 # Both belong here once they are made non-blocking, and not before.
 _SPEECH_ONLY_INTENTS=frozenset({'status','battery','where_are_you'})
 
+# Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
+# that state, before either drain pass, so Willie heard every command and answered none -- with
+# the base off he could not even say why he was not moving. The rover is parked with motion
+# disabled, so blocking the tick is harmless here: 'diagnostics' (the self-test, ~0.5 s) is
+# allowed, as is 'shutdown'. Anything else is refused out loud with the self-test reason.
+_SELFTEST_FAULT_INTENTS=_SPEECH_ONLY_INTENTS|{'diagnostics','shutdown'}
+
 class _SdNotify:
     # Hand-rolled systemd sd_notify (no extra dependency) — sends READY=1 once init passes and
     # periodic WATCHDOG=1 so systemd's WatchdogSec can restart us on a stalled tick loop
@@ -624,6 +631,7 @@ class RoverBrain:
                    and not self._selftest_critical)
             self._upd('fault',f'SELF-TEST FAILED: {self._init_fail_reason}',
                        {'front':999,'left':999,'right':999},0.0,offer_override=offer)
+            self._drain_voice_in_selftest_fault()
             return
         d=self.sonars.distances; tilt=self.imu.tilt; bat_v=self.adc.battery_volts; bat=self.adc.battery_pct
         self.safety.update_context(front_cm=d['front'],tilt_deg=tilt,motion_enabled=self._motion_enabled)
@@ -797,6 +805,24 @@ class RoverBrain:
          'TILT_FAULT':lambda d,t:None,'SAFE_MODE':lambda d,t:None,'SHUTDOWN':lambda d,t:None,
         }.get(self._state,lambda d,t:None)(d,tilt)
 
+    def _drain_voice_in_selftest_fault(self):
+        # See _SELFTEST_FAULT_INTENTS. Peeks like the speech-only pass, but a disallowed intent
+        # is popped and refused rather than left at the head, where it would block every query
+        # queued behind it for as long as the fault lasts.
+        if self._shutdown_pending or self._roam_ask_pending:
+            self._drain_voice_commands(); return
+        q=self.voice.pending_commands
+        with q.mutex:
+            if not q.queue: return
+            intent=q.queue[0].get('intent')
+        if not intent or intent in _SELFTEST_FAULT_INTENTS:
+            self._drain_voice_commands(); return
+        try: q.get_nowait()
+        except Exception: return
+        log.info(f'Voice intent "{intent}" refused: self-test failing ({self._init_fail_reason})')
+        if self.voice.available:
+            self.voice.speak(f"I can't do that. My self-test is failing: {self._init_fail_reason}.")
+
     def _drain_voice_commands(self,speech_only=False):
         # speech_only is the every-tick pass: it answers queries that read cached state and
         # leaves everything else untouched for the IDLE-gated pass below to handle normally.
@@ -911,11 +937,17 @@ class RoverBrain:
         elif cmd.get('intent')=='status':
             bat_v=self.adc.battery_volts; bat_pct=self.adc.battery_pct
             if self.voice.available:
-                self.voice.speak(f"I'm currently {self._state.lower()}, battery at {bat_v:.1f} volts, {bat_pct} percent.")
+                if not self._motion_enabled and self._init_fail_reason:
+                    self.voice.speak(f"I can't move. My self-test is failing: {self._init_fail_reason}.")
+                elif bat_v<=0:
+                    self.voice.speak(f"I'm currently {self._state.lower()}, and I can't read my battery.")
+                else:
+                    self.voice.speak(f"I'm currently {self._state.lower()}, battery at {bat_v:.1f} volts, {bat_pct} percent.")
         elif cmd.get('intent')=='battery':
             bat_v=self.adc.battery_volts; bat_pct=self.adc.battery_pct
             if self.voice.available:
-                self.voice.speak(f"Battery is at {bat_v:.1f} volts, about {bat_pct} percent.")
+                self.voice.speak("I can't read my battery right now." if bat_v<=0 else
+                                 f"Battery is at {bat_v:.1f} volts, about {bat_pct} percent.")
         elif cmd.get('intent') in('arm_stow','arm_home'):
             # No calibrated stow/home pose exists yet (§20.6) -- both alias to center_all() as a
             # known-safe placeholder position until real per-joint poses are bench-calibrated.

@@ -32,6 +32,7 @@ def fb(shutdown_pending=False):
         _shutdown_pending=shutdown_pending,
         _roam_ask_pending=False,   # roam-permission ask (2026-09-09); not what this test exercises
         _state="ROAM",
+        _motion_enabled=True,_init_fail_reason="",
         voice=types.SimpleNamespace(pending_commands=queue.Queue(),available=True,
                                     speak=lambda t,**k:said.append(t)),
         adc=types.SimpleNamespace(battery_volts=11.5,battery_pct=82),
