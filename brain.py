@@ -184,6 +184,8 @@ class RoverBrain:
         self._stuck_alert_t=0.0; self._stuck_alert_count=0
         # Motor-power-loss detection (2026-08-24) -- see _check_motor_rail().
         self._motor_rail_low_since=None; self._motor_rail_lost=False
+        # Encoder-rail (R5) warning, 2026-10-01 -- see _check_r5(). Warn only, never a stop.
+        self._r5_low_since=None; self._r5_low=False
         # Battery sense cross-check (2026-09-15) -- see _check_battery_crosscheck().
         self._bat_xcheck_since=None; self._bat_xcheck_flagged=False
         self._bat_tier='normal'; self._health={}; self._fault_since={}; self._stall_since={}
@@ -626,6 +628,8 @@ class RoverBrain:
         # Runs every tick regardless of FSM state so a cut is noticed while parked, not just
         # while driving.
         motor_rail_msg=self._check_motor_rail()
+        # Encoder rail (detection only -- see _check_r5); feeds _upd's prefix and _stall_reason.
+        self._check_r5()
         # Second opinion on the pack reading (detection only -- see _check_battery_crosscheck).
         self._check_battery_crosscheck()
         # Only advance the battery tier on a reading we actually got. A stale value must not
@@ -701,18 +705,20 @@ class RoverBrain:
         # table's own ordering.
         stalled_wheels=self._check_stall()
         if stalled_wheels:
-            if self.retrieval.active: self.retrieval.abort(f'wheel stall: {stalled_wheels}')
-            if self.mapping.active: self.mapping.abort(f'wheel stall: {stalled_wheels}')
-            if self.navigator.active: self.navigator.abort(f'wheel stall: {stalled_wheels}')
-            if self.pursuit.active: self.pursuit.abort(f'wheel stall: {stalled_wheels}')
+            why=self._stall_reason(stalled_wheels)
+            if self.retrieval.active: self.retrieval.abort(why)
+            if self.mapping.active: self.mapping.abort(why)
+            if self.navigator.active: self.navigator.abort(why)
+            if self.pursuit.active: self.pursuit.abort(why)
             self._abandon_stuck_if_active()
             if self._state!='STALL_FAULT':
                 log_event(log,'MOTOR_STALL',severity='warning',subsystem='motors',
-                          status='stalled',wheels=','.join(stalled_wheels))
-                log.warning(f'  {self._state}->STALL_FAULT ({stalled_wheels})')
-            self.safety.emergency_stop(f'wheel stall: {stalled_wheels}')
+                          status='stalled',wheels=','.join(stalled_wheels),r5_low=self._r5_low)
+                log.warning(f'  {self._state}->STALL_FAULT ({why})')
+            self.safety.emergency_stop(why)
             self._state='STALL_FAULT'
-            self._upd('fault',f'STALL {stalled_wheels} STOP',d,tilt); return
+            label='ENCODER RAIL LOW' if self._r5_low else f'STALL {stalled_wheels}'
+            self._upd('fault',f'{label} STOP',d,tilt); return
         if self._state=='STALL_FAULT':
             if not self._await_reset_or_resume('wheel stall',d,tilt,
                     'STALL CLEARED — tap screen to resume'): return
@@ -1188,6 +1194,41 @@ class RoverBrain:
                       f'Motion commands will have no effect until power returns.')
         return f'MOTOR POWER LOST ({v:.2f}V)'
 
+    def _check_r5(self):
+        """Encoder rail (R5) below Pico A's warning threshold. DETECTION ONLY -- owner decision
+        2026-10-01: warn and name the cause, never a stop. Returns a status string or ''.
+
+        R5 powers the six Hall encoders and nothing else. When it sags they stop counting, and
+        what the rover sees is six wheels reporting zero -- the 2026-08-25 failure looked exactly
+        like dead channels. _check_stall() and _check_health() still stop motion if that
+        happens; this exists so the stop says "encoder rail" instead of blaming the wheels."""
+        low=bool(self.encoders.r5_low)
+        if not low:
+            if self._r5_low:
+                log.info(f'Encoder rail R5 recovered ({self.encoders.r5_millivolts} mV)')
+            self._r5_low_since=None; self._r5_low=False
+            return ''
+        now=time.time()
+        if self._r5_low_since is None:
+            self._r5_low_since=now; return ''
+        if now-self._r5_low_since<config.ENCODER_R5_GRACE_S:
+            return ''
+        mv=self.encoders.r5_millivolts
+        if not self._r5_low:
+            self._r5_low=True
+            log_event(log,'R5_LOW',severity='warning',subsystem='encoders',status='low',mv=mv)
+            log.warning(f'Encoder rail R5 LOW ({mv} mV) -- encoder counts, stall detection and '
+                        f'odometry are suspect until it recovers')
+        return f'R5 LOW ({mv} mV)'
+
+    def _stall_reason(self,wheels):
+        """The stop reason for a stall. Names R5 when the encoder rail is low, because then
+        "these wheels read zero" is most likely the rail, not the wheels."""
+        if self._r5_low:
+            return (f'encoder rail R5 low ({self.encoders.r5_millivolts} mV) -- '
+                    f'{wheels} reading zero is likely the rail, not the wheels')
+        return f'wheel stall: {wheels}'
+
     def _check_battery_crosscheck(self):
         """Compare the ADS1115 pack reading against the +12V bus INA260. DETECTION ONLY.
 
@@ -1280,6 +1321,7 @@ class RoverBrain:
         # It rides in front because a pack reading you cannot trust colours everything else
         # on the face -- the percentage, the tier, the range estimate.
         if self._bat_xcheck_flagged: st=f'⚠BATTERY SENSE SUSPECT — {st}'
+        if self._r5_low: st=f'⚠ENCODER RAIL LOW — {st}'
         self.display.update_state(state=fs,status=st,distances=d,tilt=tilt,speed=spd,
                                    awaiting_reset=awaiting_reset,offer_override=offer_override)
 

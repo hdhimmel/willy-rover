@@ -519,6 +519,18 @@ class Encoders:
         except (IndexError, ValueError):
             return None
 
+    _F_R5_LOW = 0x02          # firmware/pico_a.py F_R5_LOW, set below its R5_WARN_MV
+
+    @property
+    def r5_low(self):
+        """Pico A says R5 is below its warning threshold. False when no fresh frame: nothing is
+        known about R5 then, and the link's own staleness is what is_healthy reports."""
+        f = self._link.fresh('E', config.ENCODER_STALE_S)
+        try:
+            return bool(int(f[10]) & self._F_R5_LOW) if f else False
+        except (IndexError, ValueError):
+            return False
+
     @property
     def flags(self):
         """Pico A's flag byte. Bit 0 = at least one Phase B pin has transitioned since

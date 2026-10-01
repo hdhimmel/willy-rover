@@ -285,6 +285,12 @@ PICO_B_UID='ad25bbf0f1e1f160'
 # $E arrives at 50 Hz. Ten missed frames before the encoders are considered unknown --
 # at which point every wheel reads as stalled, which is the safe direction.
 ENCODER_STALE_S=0.20
+# R5 (the encoders' 3.3V rail) below Pico A's R5_WARN_MV (3000) for this long -> warn and name it.
+# WARN ONLY, owner decision 2026-10-01: no stop on this. Nobody has measured the voltage these
+# encoders quit at, and if they do quit, the stall and health checks already stop motion -- this
+# makes the status and the stop reason say "encoder rail" instead of blaming six wheels, which is
+# what the 2026-08-25 sag looked like. Grace so one low ADC sample does not raise it.
+ENCODER_R5_GRACE_S=0.5
 ENCODER_POLL_HZ=50.0
 # MEASURED 2026-09-18 (E-1) -- LEFT AND RIGHT WERE TRANSPOSED, the same swap found on the
 # motor boards the same day (see MOTOR_PORT above). The encoders were landed at the same time

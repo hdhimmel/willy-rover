@@ -169,6 +169,9 @@ Order of operations within `_tick()`:
    reset it did not cause — and after `IMU_RESET_AFTER_FAILS` failures pulses the
    chip's hardware `RST` through Pico B (`SonarArray.reset_imu`, acknowledged
    `$R,ok`) and rebuilds the driver, at most once per `IMU_RESET_MIN_INTERVAL_S`.
+   Alongside it, `_check_r5()` watches Pico A's R5-low flag (the encoders' 3.3 V
+   rail): past `ENCODER_R5_GRACE_S` it prefixes the status `⚠ENCODER RAIL LOW`
+   and makes any stall stop name the rail. Detection only — no stop of its own.
 4. **Directive checks** — tilt, then battery tier, in that order.
 5. **Safety context update** — cached into `SafetyController`.
 6. **State dispatch** — the Directive 6 layer.

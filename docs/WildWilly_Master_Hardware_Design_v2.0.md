@@ -3366,7 +3366,7 @@ subsections below is a leftover and should be read as "this device's drop".
 | ADDR | GND rail row 4 — selects 0x48 |
 | A0 | Battery divider midpoint |
 | A1 | Gripper force — signal board `P1-16` (§6.6) |
-| A2, A3, ALRT | unconnected. **A2 is the spare to use for R5 rail sense** — 10k/10k divider, never direct: A2 at 3.3V sits at VDD with no margin, and would exceed it if R5 is ever raised to 5V |
+| A2, A3, ALRT | unconnected. A2 was earmarked for R5 rail sense; **superseded by §4.7** — Pico A measures R5 on GP28 (ADC2) through its own 10k/10k divider, reports it in every `$E` frame and flags it below 3.0 V, and since 2026-10-01 `brain.py` warns on that flag. A2 is simply spare |
 
 ### 16.3 INA260 × 3
 

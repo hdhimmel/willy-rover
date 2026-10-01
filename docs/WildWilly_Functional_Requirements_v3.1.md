@@ -1383,7 +1383,12 @@ those wires are metered — one wiring pattern, not six faults.
     change within the stall window triggers stop-and-report, not increased
     drive. This is Directive 5 --- the failure mode being prevented is
     continued force application into a blocked wheel. Also covers the inverse:
-    counts changing with no command issued.
+    counts changing with no command issued. **Cause naming (2026-10-01):** when
+    Pico A reports the encoder rail R5 below its 3.0 V warning threshold, the
+    stop reason and status say "encoder rail R5 low" rather than blaming the
+    wheels — on 2026-08-25 a sagging R5 looked exactly like six dead channels.
+    R5 low is a WARNING only (owner decision): it never stops the rover by
+    itself, since nobody has measured the voltage these encoders quit at.
 
 -   **FR-500-004 (closed-loop speed).** Commanded speed is held across a
     surface change without oscillation or sustained offset.
