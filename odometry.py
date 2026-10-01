@@ -9,7 +9,7 @@ log=logsetup.setup('odometry')
 # heading. WHEEL_DIAMETER_M is owner-measured as of 2026-08-25 (4.00 in / 0.1016 m), but
 # TRACK_WIDTH_M is the owner-measured GEOMETRIC track (0.310) -- a six-wheel skid-steer's effective
 # turning track is wider and has not been calibrated -- and ENCODER_COUNTS_PER_REV, though measured
-# 2026-10-01, is from one wheel driven free on a block, with no slip and no sign -- do not treat
+# 2026-10-01, is from one wheel driven free on a block, with no slip -- do not treat
 # x/y/heading as accurate localization, only as a rough relative-motion estimate (§8's own
 # instruction: "Do not claim localization accuracy beyond what the sensors support").
 
