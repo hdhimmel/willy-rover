@@ -286,6 +286,8 @@ settled, since it changes what "E-stop fired" actually means in the wiring.
 **G-2 --- FR-500-002/004, encoder counts ARE under-sampled at speed.
 RECOMPUTED 2026-09-13.**
 
+⛔ **Superseded 2026-10-01: `ENCODER_COUNTS_PER_REV` measured = 382** on the fitted 170 RPM motors (see *Resolution* below). That is ×1 — Phase A rising edges only (Pico A firmware; Phase B dead since 2026-09-18), not ×4 quadrature, so 752, 422 and 1562 below are all wrong for the current transport. The 752 arithmetic is kept as the reasoning trail.
+
 With the measured values:
 
 -   `ENCODER_COUNTS_PER_REV` = **752**, not 3292 --- 11 PPR × 4 quadrature × **17.1:1**
@@ -310,7 +312,7 @@ to 8.5 kHz, not the few hundred Hz a lower counts-per-rev figure would imply.
 
 ⚠ **Reverted 2026-09-27 — this note flipped twice; here is the arithmetic.** The JGA25-370 family runs **one ~6,000 RPM motor** behind every gearbox (multiply any row's no-load speed by its ratio and you get ~6,000 every time), so the bare speed does not change across the swap. Fitted: **9.6:1, 422 counts/rev, 620 RPM → 4,365 counts/s per wheel.** On order: **35.5:1, 1562 counts/rev, 170 RPM → 4,426.** Within 1.5%. Yesterday's "it falls 1.78×" was computed from an assumed 10,600 RPM bare motor — the same inference that produced the wrong 17.1:1 ratio. **The original claim was right: a slower rover is not a slower encoder.** Still ~4× the ~1 kHz poll ceiling, so PIO decode is required either way.
 
-⛔ **And 752 is wrong for the motors fitted right now** — the table makes them 9.6:1, so it should be **422**, and `odometry.py` is under-reporting distance by 1.78×. See Master Hardware Design §7.1.
+⛔ **And 752 is wrong for the motors fitted right now** — the table makes them 9.6:1, so it should be **422**, and `odometry.py` is under-reporting distance by 1.78×. See Master Hardware Design §7.1. **Superseded 2026-10-01: the 9.6:1 motors are out; the 170 RPM replacements measured 382 (×1).**
 
 **Resolution:** bench test, not more arithmetic --- drive one wheel a known number of
 turns **under power** and read the counts. ⚠ **Not by jogging or hand-turning:** the
@@ -320,9 +322,18 @@ distinct pin state on 2026-08-25; 3s of driving gave seven), and
 here. This settles counts/rev and the gearbox ratio together, and is the same bench
 session already needed to confirm `WHEEL_DIAMETER_M`. ⚠ **Wait for the 170 RPM motors**, delivered 2026-09-26 — calibrating the 17.1:1
 motors measures hardware that is being removed. The part number `JGA25-370-35.5K` gives **35.5:1**, so the target is **1562
-counts/rev**. ⛔ **Run the counts-per-rev step on the FITTED motors first** — it is the
+counts/rev** (assumes ×4 — superseded, see below). ⛔ **Run the counts-per-rev step on the FITTED motors first** — it is the
 only chance to test whether they really are 422 rather than the recorded 752. `WHEEL_DIAMETER_M` and `TRACK_WIDTH_M` are independent of the swap
 and can be settled now.
+
+✅ **RESOLVED 2026-10-01: `ENCODER_COUNTS_PER_REV` = 382, MEASURED** (owner + Claude, on the rover).
+Left-front wheel driven at 0.35 duty until Pico A counted 3905 Phase-A edges, hard-braked;
+3911 final (6 coast) over **10.25** tape-marked turns = 381.6, ±~5 from judging the stop.
+This is **×1** (Phase A rising edges only), so **1562 was wrong** — it assumed ×4 quadrature.
+It is 2.3% under the 11 × 35.5 = 390.5 prediction (effective ratio ≈ 34.7:1). One wheel only.
+⚠ **Hand-turning failed again** (459, then 0, counts for 10 turns while powered driving counted
+normally) — the hub likely slips on the shaft when back-driven. Measure under power only.
+**Re-measure once Phase B is repaired** and firmware decodes ×4: expect ≈1526.
 
 **If polling does turn out to be too slow: raise the I²C bus speed, not
 interrupt-driven decode.** `dtparam=i2c_arm_baudrate=400000` (~4x the
@@ -1378,6 +1389,9 @@ those wires are metered — one wiring pattern, not six faults.
     before.** Note the failure mode the swap creates: 3292 would be only ~20% wrong
     for these motors, and a 20% fixed offset is readable as slip — the one thing this
     criterion is meant to distinguish it from.
+
+    ✅ **Unblocked 2026-10-01: `ENCODER_COUNTS_PER_REV` measured 382** (×1, lf wheel, under
+    power; G-2 *Resolution*). The straight-line check can now be run.
 
 -   **FR-500-003 (stall detection).** A commanded motor showing no count
     change within the stall window triggers stop-and-report, not increased

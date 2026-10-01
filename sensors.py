@@ -427,10 +427,9 @@ class Encoders:
       a decoder and the counts gain a sign, and **this docstring is the thing to delete
       that day.**
 
-    ⚠ `config.ENCODER_COUNTS_PER_REV` is wrong for these counts. 752 assumes ×4
-      quadrature on a 17.1:1 gearbox; the fitted motors are 35.5:1 and this transport is
-      ×1, so the real figure is near 11 × 35.5 ≈ 390. `odometry.py` scales every distance
-      by it. Measure it with `scripts/encoder_calibration.py` before trusting a distance.
+    `config.ENCODER_COUNTS_PER_REV` = 382 is MEASURED for these counts (2026-10-01, ×1 on
+      the 35.5:1 motors). It quadruples the day Phase B is repaired and decoded -- see the
+      config.py note; nothing here will notice on its own.
 
     The wheel order comes from the frame, and the frame's order is the as-built landing
     proved on hardware one wheel at a time on 2026-09-29: lf, lm, rf, rm, lr, rr.

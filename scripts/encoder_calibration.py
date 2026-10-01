@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """Measure ENCODER_COUNTS_PER_REV by hand-turning a wheel, reading Pico A over uart4-pi5.
 
+⚠ SUPERSEDED AS A METHOD, 2026-10-01. On this rover hand-turning does not turn the motor
+shaft reliably: ten turns of lf counted 459, then 0, while the same encoder counted ~475/s
+under power -- back-driving the 35.5:1 gearbox slips the hub. The value was measured under
+power instead (382, config.py). Kept because it still answers "which channel moved".
+
 WHY THIS EXISTS: odometry.py computes distance as counts x circumference /
 ENCODER_COUNTS_PER_REV, so that one constant scales every distance, speed and closed-loop
 correction on the rover. It has been wrong twice by deriving it from an assumed gear ratio

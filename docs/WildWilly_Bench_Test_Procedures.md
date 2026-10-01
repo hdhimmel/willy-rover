@@ -113,6 +113,9 @@ another.
 
 ## E-1 — Encoder supply and output
 
+✅ **Counts/rev MEASURED 2026-10-01: 382** (×1, Phase A only — see C-1 Phase 5). Every 752
+below is the old-motor figure and is superseded.
+
 **Why:** `ENCODER_COUNTS_PER_REV=752` (11 PPR × 4 quadrature × 17.1:1) is arithmetic, not a
 measurement, and the A/B assignment is flagged unverified. FRD G-2 separately computes that
 at 620 RPM output the edge rate is ~7,770 Hz against a ~1 kHz polling ceiling — roughly 8×
@@ -160,6 +163,7 @@ back-drive).
 being replaced with 170 RPM variants.** `ENCODER_COUNTS_PER_REV` is 11 × 4 × the gearbox
 ratio, so calibrating it against the 17.1:1 motors measures hardware that is about to come
 out. **Do step 1 and step 2 now; leave step 3 until the new motors are fitted.**
+**Done 2026-10-01: 382** — under power, not with step 3's script (C-1 Phase 5).
 
 Two things to carry into that session:
 
@@ -172,11 +176,12 @@ Two things to carry into that session:
   reads as wheel slip, which is exactly what FR-500-002 is supposed to distinguish it
   from. Measure the value; do not adopt either recorded figure.
 | Channels responding per wheel | | |
-| Observed counts/rev vs 752 | | |
+| Observed counts/rev vs 382 | | ×1; was "vs 752" before 2026-10-01 |
 | Counts plausible at speed, or systematically low? | | bears on FRD G-2 |
 
 **Pass:** supply holds within tolerance under load, every wheel produces distinct A/B
-activity, and observed counts/rev are within a few percent of 752.
+activity, and observed counts/rev are within a few percent of **382** (×1; ≈1526 once Phase B
+decodes ×4). Was 752 before 2026-10-01.
 
 ---
 
@@ -479,6 +484,9 @@ counts-per-rev on the fitted motors, and once they are out it can never be run. 
 
 ## C-0 — counts-per-rev on the FITTED motors ⛔ DO THIS BEFORE ANYTHING ELSE
 
+⚠ **Overtaken 2026-10-01:** the cutover is done and these motors are out; the table below
+was never filled. The 170 RPM replacements measured **382** (C-1 Phase 5).
+
 **Why:** the vendor parameter table (2026-09-27) makes the fitted motors
 `JGA25-370-9.6K`, i.e. **9.6:1**, which puts `ENCODER_COUNTS_PER_REV` at **422** rather
 than the **752** in `config.py`. If that is right, `odometry.py` is under-reporting
@@ -561,7 +569,8 @@ motor ports and on the encoder channels.
 
 ### Phase 3 — software
 
-- [ ] `config.py`: `ENCODER_COUNTS_PER_REV` → **1562**; `ENCODER_ADDR` and `ENCODER_PINS`
+- [x] `config.py`: `ENCODER_COUNTS_PER_REV` → **382, measured 2026-10-01** (this line said
+      **1562**, which assumed ×4 quadrature — wrong for Pico A's ×1 Phase-A count); `ENCODER_ADDR` and `ENCODER_PINS`
       retire; re-measure `MOTOR_PORT` before trusting it (see Phase 5).
 - [x] `config.py`: re-measure breakaway duty before keeping `SPEED_SLOW=0.55`. **Done
       2026-10-01 with `scripts/breakaway_sweep.py`: SLOW raised to 0.60, not lowered.**
@@ -603,8 +612,14 @@ ten.
 - [ ] **Green wires**: Phase B has read dead on all six since 2026-09-18. Meter them
       during the re-land — the connectors are open anyway, and it is the cheapest this
       check will ever be.
-- [ ] **Counts/rev on the new motors**: expect **1562**. If it comes out otherwise, the
+- [x] **Counts/rev on the new motors**: expect **1562**. If it comes out otherwise, the
       11 PPR figure is wrong, since the ratio is fixed by the part number.
+      **MEASURED 2026-10-01: 382.** Left-front, 0.35 duty to 3905 Phase-A edges, hard brake,
+      3911 final (6 coast) over 10.25 tape-marked turns = 381.6, ±~5. **×1, not ×4** — 1562
+      was the wrong expectation for this transport. 2.3% under 11 × 35.5 = 390.5 (effective
+      ≈ 34.7:1). One wheel only. ⚠ Hand-turning failed (459, then 0, for 10 turns) — hub
+      likely slips when back-driven; measure under power. Re-measure (≈1526) once Phase B
+      decodes ×4.
 - [ ] Only then: rails under load, and a drive test.
 
 ## Recording results

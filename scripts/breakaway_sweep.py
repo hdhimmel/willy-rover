@@ -28,7 +28,7 @@ import os,sys,time
 _HERE=os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0,os.path.dirname(_HERE)); sys.path.insert(0,_HERE)
 import config
-from encoder_calibration import PicoEncoders,_delta,_PHASE_A_ONLY_EXPECTED
+from encoder_calibration import PicoEncoders,_delta
 from wheel_current_test import _mean_amps,_RAIL,_BUS,_SETTLE_S
 
 _DUTIES=[round(0.10+0.05*i,2) for i in range(11)]     # 0.10 .. 0.60
@@ -39,7 +39,7 @@ _MARGIN=0.10         # suggested SPEED_SLOW = worst breakaway + this
 
 
 def _rpm(cps):
-    return cps*60.0/_PHASE_A_ONLY_EXPECTED
+    return cps*60.0/config.ENCODER_COUNTS_PER_REV     # measured 2026-10-01
 
 
 def main():
@@ -69,7 +69,7 @@ def main():
         for m in motors.values(): m.throttle=None
 
     print(f'rail 0x{_RAIL:02x}  moving > {_MOVING_CPS} counts/s  RPM at '
-          f'{_PHASE_A_ONLY_EXPECTED:.1f} counts/rev (nominal, Phase A only)\n')
+          f'{config.ENCODER_COUNTS_PER_REV} counts/rev (measured, Phase A only)\n')
     breakaway={}; top={}
     try:
         with SMBus(_BUS) as bus:

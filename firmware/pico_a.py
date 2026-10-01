@@ -28,9 +28,9 @@ every gearbox, so the bare speed does not change: 4,365 counts/s per wheel fitte
 (9.6:1, 422 counts/rev, 620 RPM) against 4,426 after (35.5:1, 1562, 170 RPM) --
 within 1.5%. PIO is required either way.
 
-NOTE the fitted-motor figures there: the table makes them 9.6:1 and 422 counts/rev
-where config.py records 17.1:1 and 752. Unresolved -- section 7.1 -- and it wants
-measuring before those motors come out.
+Those old-motor figures were never measured; the motors came out first. On the
+fitted 35.5:1 motors the count is MEASURED: 382 Phase A edges per wheel revolution
+(2026-10-01, config.py), i.e. an effective ~34.7:1.
 
 WHY EDGE COUNTING AND NOT QUADRATURE, FOR NOW. Phase B (green) reads dead on
 all six channels (config.py:222) and may have been destroyed by the reversed

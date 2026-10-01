@@ -195,6 +195,9 @@ once the UART is carrying real traffic.
    **under power** — never by hand, the 17.1:1 gearbox does not back-drive — and
    compare against `ENCODER_COUNTS_PER_REV`. `scripts/encoder_map_check.py` is
    the equivalent check on the old path.
+   ✅ **Done 2026-10-01: 382 counts/rev** — ×1, Phase A rising edges only (lf wheel,
+   3911 counts / 10.25 turns). Hand-turning also fails on the new motors (hub likely
+   slips). Re-measure (≈1526) once Phase B decodes ×4.
 2. **`machine.WDT` on RP2350** — confirm the 2 s timeout behaves as expected, and
    that it does not fire during `time_pulse_us`'s 25 ms worst case.
 3. **Slot timing.** 30 ms per sensor assumes an HC-SR04 needs ~60 ms between its

@@ -326,38 +326,25 @@ ENCODER_POLL_HZ=50.0
 # on GP4/GP5, lm on GP2/GP3, rm on GP6/GP7, rr on GP10/GP11 -- the as-built table, five
 # for five. The order now lives in ONE place, firmware/pico_a.py's WHEELS, and reaches
 # the Pi in the frame itself.
-# !! 752 IS PROBABLY WRONG FOR THE MOTORS FITTED RIGHT NOW. The vendor parameter
-# table (2026-09-27) lists the JGA25-370 family by part suffix, and the suffix IS the
-# reduction ratio -- every row's no-load speed times its suffix gives the same ~6,000
-# RPM bare motor. The 12V 620 RPM row is the -9.6K, i.e. 9.6:1, so counts/rev should
-# be 11 x 4 x 9.6 = 422. There is no 17.1 anywhere in the family. If that is right,
-# odometry.py is UNDER-REPORTING every distance by 752/422 = 1.78x today.
+# MEASURED 2026-10-01: 382 counts per wheel revolution, on the fitted 170 RPM motors
+# (JGA25-370-35.5K) and the CURRENT transport -- Pico A counting Phase A rising edges only (x1).
+# Method: drove lf at 0.35 until Pico A had counted 3905, hard-braked (final 3911, 6 of coast);
+# a tape mark on the tyre made 10.25 turns. 3911 / 10.25 = 381.6, +/- ~5 from judging the stop
+# to an eighth of a turn. 2.3% under the 11 PPR x 35.5 = 390.5 prediction: the effective
+# reduction is ~34.7:1, not the nominal 35.5. One wheel; the other five are the same part.
 #
-# NOT CHANGED on the strength of a table: this file's own history is a chain of
-# ratios inferred from other inferences. Measure it with E-1's counts-per-rev step
-# BEFORE the motors are swapped out -- that is the last chance to test the fitted
-# hardware. Master Hardware Design 7.1.
+# MEASURE UNDER POWER, NOT BY HAND. Hand-turning lf ten times counted 459, then 0, while the
+# same encoder counted ~475/s driven -- back-driving the gearbox slips the hub on the shaft.
+# scripts/encoder_calibration.py's hand-turn method is not valid on this rover.
 #
-# AFTER THE SWAP: the replacements are JGA25-370-35.5K, so 11 x 4 x 35.5 = 1562.
-# Set it in the same session the motors go in, not after.
-ENCODER_COUNTS_PER_REV_170RPM=1562   # not active; see above
-ENCODER_COUNTS_PER_REV=752   # 11 PPR (motor shaft) x4 quadrature x 17.1:1 reduction.
-                             # WAS 3292, derived as "823.1 PPR x4". 823.1/11 implies a 74.8:1
-                             # gearbox -- the ratio matching the STALE "6V, 100-200 RPM" motor
-                             # spec corrected 2026-08-25. Owner gave the real reduction as
-                             # 17.1:1 (consistent with 620 RPM from a ~10.6k RPM bare motor),
-                             # making the old value 4.375x too high.
-                             # odometry.py divides by this, so distances were reported at ~23%
-                             # of actual from the encoder side alone. Together with the wheel
-                             # diameter error fixed the same day (0.065 vs 0.1016, 1.56x), dead
-                             # reckoning under-reported by roughly 6.8x before 2026-08-25.
-                             # STILL DERIVED, NOT MEASURED: the 11 PPR figure comes from the
-                             # same doc section that had the motor spec wrong. Confirm with
-                             # scripts/encoder_calibration.py before trusting odometry -- see
-                             # G-2 (FRD v3.1). Interrupt-driven decode (2026-08-18) is retracted
-                             # (2026-08-23): would not have reduced I2C transaction count anyway,
-                             # and is moot under Master Hardware Design 4.7. Polling is the real
-                             # mechanism -- see sensors.py::Encoders._loop().
+# THE CHAIN THIS ENDS, every link derived and none measured: 3292 ("823.1 PPR x4", a 74.8:1
+# gearbox that never existed) -> 752 (11 x4 x 17.1, 2026-08-25) -> 422 (11 x4 x 9.6 from the
+# vendor table, never set) -> 1562 (11 x4 x 35.5, assumed x4 quadrature this transport does
+# not do). odometry.py divides by this, so at 752 every distance read 752/382 = 1.97x short.
+#
+# WHEN PHASE B IS REPAIRED and pico_a.py decodes quadrature, counts quadruple (~1526). The
+# frame format does not change, so nothing will fail loudly -- re-measure that day.
+ENCODER_COUNTS_PER_REV=382
 
 # Odometry (§8, WildWilly_Claude_Fix_Implementation_Plan.md). This comment used to cite a
 # "430x330x220mm chassis envelope (§2)" — that figure appears ONLY in

@@ -884,6 +884,11 @@ logic off-hardware; the touchscreen's own tap detection needs the physical
 **S-2 — Encoder polling under-samples at speed. RECOMPUTED 2026-09-13, and the
 answer got worse.**
 
+⛔ **Superseded 2026-10-01: `ENCODER_COUNTS_PER_REV` measured = 382** on the fitted 170 RPM motors
+(lf wheel, under power, 3911 counts / 10.25 turns, ±~5). That is ×1 — Phase A rising edges only (Pico A firmware; Phase B dead since 2026-09-18), not ×4 quadrature,
+so 752, 422 and 1562 below are all wrong for the current transport. Kept as the reasoning trail.
+Re-measure (≈1526) once Phase B decodes ×4.
+
 With the measured values:
 
 - `ENCODER_COUNTS_PER_REV` = **752**, not 3292 — 11 PPR × 4 quadrature × **17.1:1**,
@@ -902,7 +907,7 @@ So the per-channel edge rate at full speed is:
 
 > ⚠ **Reverted 2026-09-27 — this note flipped twice; here is the arithmetic.** The JGA25-370 family runs **one ~6,000 RPM motor** behind every gearbox (multiply any row's no-load speed by its ratio and you get ~6,000 every time), so the bare speed does not change across the swap. Fitted: **9.6:1, 422 counts/rev, 620 RPM → 4,365 counts/s per wheel.** On order: **35.5:1, 1562 counts/rev, 170 RPM → 4,426.** Within 1.5%. Yesterday's "it falls 1.78×" was computed from an assumed 10,600 RPM bare motor — the same inference that produced the wrong 17.1:1 ratio. **The original claim was right: a slower rover is not a slower encoder.** Still ~4× the ~1 kHz poll ceiling, so PIO decode is required either way.
 >
-> ⛔ **And 752 is wrong for the motors fitted right now** — the table makes them 9.6:1, so it should be **422**, and `odometry.py` is under-reporting every distance by 1.78× today. Measure it with E-1 **before** those motors come out. After the swap: **1562**.
+> ⛔ **And 752 is wrong for the motors fitted right now** — the table makes them 9.6:1, so it should be **422**, and `odometry.py` is under-reporting every distance by 1.78× today. Measure it with E-1 **before** those motors come out. After the swap: **1562**. **Superseded 2026-10-01: measured 382** — ×1, not ×4.
 
 This does not change what to do — a bench test still settles it, and arithmetic is not
 a substitute for one. It changes the expectation you should carry into that test: plan
@@ -952,6 +957,9 @@ parameter table (2026-09-27) makes the fitted motors **9.6:1**, so
 changed on the strength of a table alone — measure it with E-1 **before the motors are
 swapped out**, which is the last opportunity to test the fitted hardware. After the swap
 it becomes **1562** (11 × 4 × 35.5, part number `JGA25-370-35.5K`).
+**Superseded 2026-10-01: measured 382** on the fitted 170 RPM motors — ×1 (Phase A only), so
+1562's ×4 was wrong; 2.3% under the 390.5 that 11 × 35.5 predicts. One wheel (lf). The third
+constant is now measured; `WHEEL_DIAMETER_M` and `TRACK_WIDTH_M` remain.
 
 **S-4 — No inverse kinematics for the arm.** No per-joint calibration exists,
 so there is no reach-envelope model to plan against. Grasp is a fixed primitive
@@ -1199,7 +1207,8 @@ wants it.
    given a caller 2026-08-18 (see S-7), not yet live-verified; the overcurrent
    half has no trip threshold defined.
 4. **Bench-confirm `ENCODER_COUNTS_PER_REV`, `WHEEL_DIAMETER_M`,
-   `TRACK_WIDTH_M` (S-2, S-3).** ⚠ **The counts-per-rev half is blocked until the
+   `TRACK_WIDTH_M` (S-2, S-3).** ✅ **Counts-per-rev MEASURED 2026-10-01: 382** (×1, lf wheel,
+   under power) — the blocking note that follows is superseded. ⚠ **The counts-per-rev half is blocked until the
    170 RPM motors are fitted** (owner, 2026-09-24) — calibrating it against the
    17.1:1 motors would measure hardware that is being removed. The wheel and track
    constants are independent of the swap and can be settled now. The channel-to-wheel

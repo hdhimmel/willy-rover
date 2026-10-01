@@ -2243,6 +2243,10 @@ the table. **The stall-current difference is the one that matters** — see belo
 **`ENCODER_COUNTS_PER_REV` = 11 × 4 × 35.5 = 1562.** The part number settles the
 ratio, so there is no ambiguity left to calibrate away — only the 11 PPR figure, which
 is still vendor-stated rather than measured.
+**Superseded 2026-10-01: measured 382** — ×1 — Phase A rising edges only (Pico A firmware; Phase B dead since 2026-09-18), not ×4 quadrature. Left-front wheel, 0.35 duty,
+3911 counts over 10.25 tape-marked turns, ±~5. It is also 2.3% under 11 × 35.5 = 390.5
+(effective ratio ≈ 34.7:1), so the part number did *not* leave nothing to calibrate.
+One wheel only; re-measure (≈1526) once Phase B decodes ×4.
 
 **The bare motor is the SAME one.** 170 × 35.5 = **6,035 RPM**, and the fitted 620 RPM
 at 9.6:1 is **5,952 RPM**. One motor, two gearboxes — which is the whole design of this
@@ -2251,14 +2255,15 @@ family and the reason several conclusions below revert to what they were.
 **Encoder calibration stays OPEN until they land.** Calibrating counts-per-rev
 against the 17.1:1 motors now would measure hardware that is about to be removed.
 E-1's counts-per-rev step should wait; its channel-attribution step will have to be
-re-run regardless — see the connector warning below.
+re-run regardless — see the connector warning below. **Counts-per-rev closed
+2026-10-01: 382.**
 
 An earlier line here said "the only downstream change is ENCODER_COUNTS_PER_REV".
 **That is wrong.** What actually moves:
 
 | Quantity | How it changes at 170 RPM |
 |---|---|
-| `ENCODER_COUNTS_PER_REV` | **1562** (11 × 4 × 35.5), from 422 today |
+| `ENCODER_COUNTS_PER_REV` | ~~1562 (11 × 4 × 35.5)~~ **382, measured 2026-10-01** (×1; 1562 assumed ×4), from 422 |
 | Top speed | **0.90 m/s** no-load, **0.70 m/s** rated, against 3.30 / 2.54 m/s today |
 | Torque at the wheel | reduction goes 9.6 → 35.5, i.e. **3.70×**; measured rated torque rises **3.45×** (0.20 → 0.69 kg·cm). The 3–5× this section speculated was **right** — it was yesterday's 2.05× that was wrong. Rated **1.33 N per wheel, 8.0 N over six**, against 0.39 N and 2.3 N today |
 | **Stall current** | **1.8 A per motor**, 10.8 A if all six stall — see the warning below |
@@ -2274,7 +2279,7 @@ An earlier line here said "the only downstream change is ENCODER_COUNTS_PER_REV"
 RPM bare motor is ~142 RPM output, not 170. So after the swap 3292 is wrong by
 roughly 1.2× instead of 4.4× — **which makes it more dangerous, not less.** A 20%
 odometry error does not announce itself the way a 4× error does; it looks like wheel
-slip. Neither 752 nor 3292 is the value for these motors.
+slip. Neither 752 nor 3292 is the value for these motors — **382 is, measured 2026-10-01.**
 
 ⚠ **G-2's polling shortfall is not changed by the swap — and this note has now
 flipped twice, so here is the arithmetic rather than the conclusion.** The 11 PPR
@@ -2286,6 +2291,8 @@ behind every gearbox, so the bare speed does not change either:
 |---|---|---|---|---|
 | Fitted | 9.6:1 | 422 | 620 RPM | **4,365** |
 | On order | 35.5:1 | 1562 | 170 RPM | **4,426** |
+
+*(2026-10-01: counts/rev here are ×4. Pico A counts ×1 — measured **382** — so it sees a quarter of these rates.)*
 
 **Within 1.5% — the swap changes nothing here.** On 2026-09-26 this was "corrected"
 to say the rate would fall 1.78×; that was computed from an assumed 10,600 RPM bare
@@ -2340,13 +2347,16 @@ document traceable to an inferred bare-motor speed.
 ⚠ **`config.py` still has 752 and it has NOT been changed**, because this document's
 own rule is that a ratio inferred from a table is no better than a ratio inferred from
 a speed — *"measure it instead of deriving it from another assumed gear ratio, which
-is exactly how the wrong number got there in the first place"*. If 422 is right,
+is exactly how the wrong number got there in the first place"*. **Superseded 2026-10-01:**
+the 9.6:1 motors are out, and the value for the fitted 170 RPM motors is **measured at 382**
+(×1). The rest of this paragraph is history. If 422 is right,
 `odometry.py` is **under-reporting distance by 1.78×** today. **Bench Test Procedures **C-0** exists for exactly this** — it is the first thing in
 the cutover and the only step that cannot be redone afterwards.
 
 The vendor part number should still be read off the motor body and recorded here.
 
 That ratio sets `config.ENCODER_COUNTS_PER_REV` = 11 PPR × 4 × 17.1 = **752**.
+*(Old motors. Superseded 2026-10-01: measured **382** on the 170 RPM motors, ×1.)*
 A figure of 3292 ("823.1 PPR ×4") implies a 74.8:1 gearbox, which belongs to the
 100–200 RPM variants, not these motors — it is 4.375× too high. Since
 `odometry.py` divides by it, that error reports distances at ~23% of actual from the
@@ -2362,6 +2372,9 @@ time, and it settles the unverified A/B channel column in §7.2 in the same pass
 ⚠ **`scripts/encoder_calibration.py` is built on hand-turning and is invalid on this
 hardware** — its own docstring says "by hand-turning a wheel". An earlier revision of
 this paragraph described it as driving under power. It does not. Corrected 2026-09-24.
+Confirmed again 2026-10-01 on the 170 RPM motors: 10 hand turns gave 459, then 0, counts
+while powered driving counted normally — likely the hub slipping on the shaft when
+back-driven. **382 was measured under power.**
 
 | Wire | Function | Lands on |
 |------|----------|----------|
@@ -3090,12 +3103,12 @@ measurement work rather than wiring.
 
 18. ⚠ **Motor swap to the 12V 170 RPM variant — delivered 2026-09-26, not fitted**
     (§7.1, *Motor change pending*). **Part number is `JGA25-370-35.5K`**, so the ratio is
-    **35.5:1** and `ENCODER_COUNTS_PER_REV` = **1562**. ⛔ **The same table says the
+    **35.5:1** and `ENCODER_COUNTS_PER_REV` = ~~1562~~ **382, measured 2026-10-01** (×1 — 1562 assumed ×4). ⛔ **The same table says the
     FITTED motors are 9.6:1, not 17.1:1 — so today's 752 should be 422 and odometry
     is under-reporting by 1.78×. Measure it with E-1 BEFORE the motors come out.** Note the supplied PDF is a generic *DC Motor User
     Manual* — precautions and a choking warning, no part number, no ratio, no
     torque; the figures above came from the owner, not that document.
-    **Encoder counts-per-rev calibration is blocked until they land** — calibrating
+    **Encoder counts-per-rev calibration is blocked until they land** (**done 2026-10-01: 382**) — calibrating
     the 17.1:1 motors measures hardware that is being removed. `WHEEL_DIAMETER_M`
     and `TRACK_WIDTH_M` are independent and can be settled now. After the swap,
     re-run **both** the M-1 per-wheel drive check and
