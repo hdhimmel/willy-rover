@@ -28,8 +28,8 @@ class FakeSafety:
     def emergency_stop(self,reason): self.calls.append(reason)
 
 def fb(tapped):
-    # _motor_rail_lost and _bat_xcheck_flagged are read by _upd() (the motor-rail and
-    # battery-sense banners, both added after this test was written). Unrelated to the reset
+    # _motor_rail_lost, _bat_xcheck_flagged and _r5_low are read by _upd() (the motor-rail,
+    # battery-sense and encoder-rail banners, all added after this test was written). Unrelated to the reset
     # gate, but the fake has to carry them or _upd() raises.
     ns=types.SimpleNamespace(_state="SENSOR_FAULT",_motor_rail_lost=False,_bat_xcheck_flagged=False,_r5_low=False)
     ns.display=FakeDisplay(tapped); ns.safety=FakeSafety()
