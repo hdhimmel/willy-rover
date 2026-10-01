@@ -49,6 +49,23 @@ def _readme_order():
     return tuple(re.findall(r'<([a-z]{2})>', m.group(1)))
 
 
+def _firmware_dict(name):
+    src = open(_FIRMWARE, 'r', encoding='utf-8').read()
+    m = re.search(r'^' + name + r'\s*=\s*\{([^}]*)\}', src, re.M)
+    assert m, f'firmware/pico_a.py has no {name} dict'
+    return {k: int(v) for k, v in re.findall(r'"([a-z]{2})":\s*(\d+)', m.group(1))}
+
+
+def test_each_frame_slot_reads_its_physical_pins():
+    """The label tuples agreeing is not enough. On 2026-09-29 WHEELS was reordered and the
+    pin dicts were not, so slot "lf" read GP4 -- the right front -- and the two tests above
+    still passed. Measured over USB 2026-10-01: lf GP0/1, lm GP2/3, rf GP4/5, rm GP6/7,
+    lr GP8/9, rr GP10/11, which is slot i on GP 2i (A) and 2i+1 (B)."""
+    a, b = _firmware_dict('PHASE_A'), _firmware_dict('PHASE_B')
+    for i, w in enumerate(_firmware_order()):
+        assert (a[w], b[w]) == (2 * i, 2 * i + 1), f'{w} in slot {i} reads GP{a[w]}/GP{b[w]}'
+
+
 def test_the_pi_reads_the_order_the_firmware_writes():
     assert sensors.Encoders._ORDER == _firmware_order()
 

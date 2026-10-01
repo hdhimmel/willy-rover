@@ -12,7 +12,9 @@ with its own UID, so the Pi -> Pico direction works here (it does not on B); the
 divider read 3.392 V; the LED lights and winks; and all six channels counted under
 real edge load with one wheel driven at a time on blocks.
 
-⚠ COUNTS HAVE NO DIRECTION and will not until the greens are repaired. A wheel
+⚠ PHASE B IS ALIVE ON ALL SIX, proven 2026-10-01 on the new motors (see PHASE_A below).
+This firmware still counts Phase A only, so counts have no direction until it decodes
+quadrature -- the paragraph below describes today's firmware, not a dead wire. A wheel
 driven backwards counts up exactly like one driven forwards -- lf was found running
 in reverse on 2026-09-29 and this telemetry could not see it.
 
@@ -64,8 +66,18 @@ WHEELS = ("lf", "lm", "rf", "rm", "lr", "rr")
 # one wheel at a time on blocks: driving lf counted on GP0/GP1, rf on GP4/GP5, lm on
 # GP2/GP3, rr on GP10/GP11 -- the as-built table, every time. The HARNESS was never
 # wrong; this label was. Do not "fix" it by re-landing twelve wires.
-PHASE_A = {"rf": 0, "rm": 2, "lf": 4, "lm": 6, "rr": 8, "lr": 10}
-PHASE_B = {"rf": 1, "rm": 3, "lf": 5, "lm": 7, "rr": 9, "lr": 11}
+#
+# ⚠ THAT CORRECTION WAS HALF DONE, found 2026-10-01. It reordered WHEELS but left these two
+# dicts keyed the old way (rf: 0, lf: 4 ...), so WHEELS[0]="lf" read GP4 -- the RIGHT front.
+# This file was never flashed in that state: the board still runs the 2026-09-29 copy whose
+# WHEELS is ("rf","rm","lf","lm","rr","lr"), wrong labels but GP0,2,4,6,8,10 in slot order,
+# which the Pi relabels correctly. Flashing this file before today's fix would have swapped
+# every wheel left/right, and test_encoder_order passed throughout because it compared only
+# label tuples. Measured on Pico A over USB the same day, each wheel driven alone at 0.5:
+# lf GP0/1, lm GP2/3, rf GP4/5, rm GP6/7, lr GP8/9, rr GP10/11 -- A and B toggling in step
+# on all six. Slot i is GP 2i (A) and 2i+1 (B); tests/test_encoder_order.py now pins that.
+PHASE_A = {"lf": 0, "lm": 2, "rf": 4, "rm": 6, "lr": 8, "rr": 10}
+PHASE_B = {"lf": 1, "lm": 3, "rf": 5, "rm": 7, "lr": 9, "rr": 11}
 
 UART_ID = 0
 UART_TX = 12          # -> Pi GP13, phys 33
