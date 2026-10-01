@@ -61,6 +61,14 @@ MOTORKIT_LEFT_ADDR=0x61; MOTORKIT_RIGHT_ADDR=0x60
 # The encoder A/B channel assignment in Master Hardware Design section 7.2 is
 # unverified for the same reason and is NOT settled by settling this one. It has its
 # own bench test (E-1) and its own swap risk.
+#
+# MIRRORED MOTORS (owner-stated 2026-10-01): the left and right motors face opposite
+# ways, so to drive forward or backward the two sides' SHAFTS must spin in OPPOSITE
+# directions. motors._set() gives both sides the SAME sign for forward/reverse, which
+# is only correct if one side's motor leads are crossed at the terminals to cancel the
+# mirroring. If they are not, forward() spins him in place and turn_left()/turn_right()
+# drive him straight. Phase-A-only encoder counts have no sign, so nothing in telemetry
+# can tell these apart -- watch the wheels.
 MOTOR_PORT={'lf':(MOTORKIT_LEFT_ADDR,3),'lm':(MOTORKIT_LEFT_ADDR,2),'lr':(MOTORKIT_LEFT_ADDR,1),
             'rf':(MOTORKIT_RIGHT_ADDR,3),'rm':(MOTORKIT_RIGHT_ADDR,2),'rr':(MOTORKIT_RIGHT_ADDR,1)}
 # Raised 2026-08-24. The previous set (ROAM .55 / TURN .50 / SLOW .35 / MAX .80)
