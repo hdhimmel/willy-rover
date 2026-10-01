@@ -90,3 +90,31 @@ def test_queries_are_answered_while_driving_but_task_intents_stay_idle_gated():
                           cwd=_REPO_ROOT,env=env,timeout=120)
     assert 'VOICE_DRAIN_OK' in result.stdout, (
         f'voice drain test failed\n{result.stdout}\n{result.stderr}')
+
+_ASK_SCRIPT='''
+import queue,time,types
+from brain import RoverBrain
+said=[]; replies=[]; ended=[]
+ns=types.SimpleNamespace(_shutdown_pending=False,_roam_ask_pending=True,_state="IDLE",
+    _motion_enabled=True,_init_fail_reason="",
+    voice=types.SimpleNamespace(pending_commands=queue.Queue(),available=True,speak=lambda t,**k:said.append(t)),
+    adc=types.SimpleNamespace(battery_volts=11.4,battery_pct=60),
+    _end_roam_ask=lambda ok:ended.append(ok))
+for m in ("_drain_voice_commands","_say"): setattr(ns,m,types.MethodType(getattr(RoverBrain,m),ns))
+ns.voice.pending_commands.put({"source":"remote","intent":"status","args":{},"text":"status",
+                               "ts":time.time(),"on_reply":replies.append})
+ns._drain_voice_commands(speech_only=True)
+assert ended==[], "a remote command must not answer the roam ask"
+assert ns._roam_ask_pending is True
+assert replies and "battery at 11.4" in replies[0], replies
+# a spoken reply still answers it
+ns.voice.pending_commands.put({"source":"voice","intent":"chat","args":{},"text":"yes","ts":time.time()})
+ns._drain_voice_commands()
+assert ended==[True], ended
+print("ASK_OK")
+'''
+
+def test_remote_command_never_answers_a_pending_ask():
+    env=dict(os.environ,WILLY_SIMULATE='1',PYTHONPATH=_REPO_ROOT)
+    r=subprocess.run([sys.executable,'-c',_ASK_SCRIPT],capture_output=True,text=True,cwd=_REPO_ROOT,env=env,timeout=120)
+    assert 'ASK_OK' in r.stdout, r.stdout+r.stderr

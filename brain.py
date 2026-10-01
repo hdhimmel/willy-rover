@@ -822,12 +822,12 @@ class RoverBrain:
         # See _SELFTEST_FAULT_INTENTS. Peeks like the speech-only pass, but a disallowed intent
         # is popped and refused rather than left at the head, where it would block every query
         # queued behind it for as long as the fault lasts.
-        if self._shutdown_pending or self._roam_ask_pending:
-            self._drain_voice_commands(); return
         q=self.voice.pending_commands
         with q.mutex:
             if not q.queue: return
-            intent=q.queue[0].get('intent')
+            head=q.queue[0]; intent=head.get('intent')
+        if (self._shutdown_pending or self._roam_ask_pending) and head.get('source')!='remote':
+            self._drain_voice_commands(); return
         if not intent or intent in _SELFTEST_FAULT_INTENTS:
             self._drain_voice_commands(); return
         try: self._reply_to=q.get_nowait().get('on_reply')
@@ -842,20 +842,27 @@ class RoverBrain:
             # A pending shutdown confirmation claims the NEXT queued command as its yes/no
             # answer (see the _shutdown_pending branch below). Draining anything here while
             # that is outstanding would silently eat the user's reply.
-            if self._shutdown_pending or self._roam_ask_pending: return
+            # A REMOTE command (remote_cmd.py) is never that answer (see answers_ask below),
+            # so it may pass.
             q=self.voice.pending_commands
             # Peek rather than pop-and-requeue: putting a non-matching command back would send
             # it to the tail and reorder the queue, so a task intent could be overtaken by
             # everything queued after it.
             with q.mutex:
                 if not q.queue: return
-                if q.queue[0].get('intent') not in _SPEECH_ONLY_INTENTS: return
+                head=q.queue[0]
+            if (self._shutdown_pending or self._roam_ask_pending) and head.get('source')!='remote': return
+            if head.get('intent') not in _SPEECH_ONLY_INTENTS: return
         try:
             cmd=self.voice.pending_commands.get_nowait()
         except Exception:
             return
         self._reply_to=cmd.get('on_reply')  # remote_cmd.py: the HA caller waiting for the answer
-        if self._shutdown_pending:
+        # Only something the person SAID can answer a pending yes/no ask. A remote command
+        # arriving mid-ask is a command in its own right: found live 2026-10-01, when an HA
+        # "status" landed while Willie was asking to explore and was taken as a "no".
+        answers_ask=cmd.get('source')!='remote'
+        if self._shutdown_pending and answers_ask:
             # First queued command after a 'shutdown' intent is treated as the yes/no answer to
             # that confirmation, not dispatched normally below -- see the 'shutdown' branch and
             # _tick()'s timeout check for the other two ways out of this pending state.
@@ -867,7 +874,7 @@ class RoverBrain:
                 log.info('Voice shutdown declined.')
                 self._say("Okay, I won't shut down.")
             return
-        if self._roam_ask_pending:
+        if self._roam_ask_pending and answers_ask:
             # Same contract as the shutdown confirmation above: the first queued command after the
             # ask is its answer, not a command in its own right. Anything that is not recognisably
             # a yes counts as a no -- and a no costs only a cooldown, so reading an ambiguous reply
