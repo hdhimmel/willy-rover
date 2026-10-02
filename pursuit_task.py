@@ -21,7 +21,7 @@ class PursuitTask:
     def __init__(self,safety,detector,display=None,voice=None):
         self.safety=safety; self.detector=detector; self.display=display; self.voice=voice
         self.state='IDLE'; self._mode='come_here'; self._dist_cm=999.0; self._bearing_deg=0.0
-        self._lost_count=0; self._fail_reason=''
+        self._lost_count=0; self._fail_reason=''; self._search_steps=0
 
     @property
     def active(self): return self.state in _MOTION_STATES
@@ -29,6 +29,7 @@ class PursuitTask:
     def start(self,mode='come_here'):
         if self.active: return False,'pursuit already in progress'
         self.state='LOCALIZE'; self._mode=mode; self._lost_count=0; self._fail_reason=''
+        self._search_steps=0
         log.info(f'Pursuit task started: target=person mode={mode}')
         return True,'started'
 
@@ -51,11 +52,20 @@ class PursuitTask:
         return max(dets,key=lambda x:x['conf']) if dets else None
 
     def _localize(self,d,tilt):
+        # FR-1000-006 search sweep (2026-10-02): if nobody is in view, look around in
+        # PURSUIT_SEARCH_STEPS timed turns before giving up, instead of failing on the spot.
+        # Turns are skid turns of fixed duration (steering is uncalibrated), so a "full circle"
+        # is approximate.
+        if self.safety.timed_move_active: return
         det=self._best(self.detector.detect(classes=['person']))
         if det is None:
             self._lost_count+=1
-            if self._lost_count>20:
-                self.state='FAILED'; self._fail_reason='no one found'
+            if self._lost_count>config.PURSUIT_LOOK_TICKS:
+                if self._search_steps<config.PURSUIT_SEARCH_STEPS:
+                    self._search_steps+=1; self._lost_count=0
+                    self.safety.turn_left_for(config.PURSUIT_SEARCH_TURN_S,config.SPEED_TURN*0.6)
+                else:
+                    self.state='FAILED'; self._fail_reason='no one found after looking around'
             return
         self._dist_cm,self._bearing_deg=self.detector.localize(det)
         self._lost_count=0; self.state='APPROACH'

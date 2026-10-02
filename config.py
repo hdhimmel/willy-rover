@@ -560,6 +560,11 @@ BAT_HYSTERESIS_V=0.2
 # to, so it runs FR-200-005's proactive graceful shutdown instead of driving DOCK. Flip this
 # only when a dock and a route to it exist.
 ENABLE_DOCKING=False
+# FR-1000-006 search sweep: look for PURSUIT_LOOK_TICKS ticks, then turn PURSUIT_SEARCH_TURN_S,
+# up to PURSUIT_SEARCH_STEPS times. Skid-turn timing is uncalibrated -- tune on the floor.
+PURSUIT_LOOK_TICKS=10
+PURSUIT_SEARCH_STEPS=8
+PURSUIT_SEARCH_TURN_S=0.4
 # FR-1200-005/006 stairs (2026-10-02). Owner decision 2026-09-11: in floor mode Willie holds
 # STAIR_STANDOFF_M clear of a mapped stair edge. Stairs are labelled by voice ("stairs ahead")
 # with Willie facing them; the edge is placed STAIR_LABEL_AHEAD_M in front of his centre.

@@ -54,3 +54,39 @@ def test_sensor_gap_closures():
     env=dict(os.environ,WILLY_SIMULATE='1',PYTHONPATH=_REPO_ROOT)
     r=subprocess.run([sys.executable,'-c',_SCRIPT],capture_output=True,text=True,cwd=_REPO_ROOT,env=env,timeout=120)
     assert 'SENSOR_GAPS_OK' in r.stdout, r.stdout+r.stderr
+
+def test_vision_range_uses_per_class_width():
+    # FR-1000-006 / FR-1700-008: a person is ranged with ~45 cm, not the 8 cm fallback.
+    env=dict(os.environ,WILLY_SIMULATE='1',PYTHONPATH=_REPO_ROOT)
+    code=('import vision\n'
+          'D=vision.ObjectDetector.__new__(vision.ObjectDetector)\n'
+          'p,_=D.localize({"bbox":(270,0,370,10),"frame_w":640,"class":"person"})\n'
+          'c,_=D.localize({"bbox":(270,0,370,10),"frame_w":640,"class":"cup"})\n'
+          'u,_=D.localize({"bbox":(270,0,370,10),"frame_w":640,"class":"unicorn"})\n'
+          'assert abs(p/c-45/8)<1e-6 and u==c, (p,c,u)\n'
+          'print("WIDTH_OK")\n')
+    r=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True,cwd=_REPO_ROOT,env=env,timeout=120)
+    assert 'WIDTH_OK' in r.stdout, r.stdout+r.stderr
+
+def test_come_here_searches_before_giving_up():
+    # FR-1000-006: nobody in view -> PURSUIT_SEARCH_STEPS turns, then FAILED; a person found
+    # mid-sweep moves straight to APPROACH.
+    env=dict(os.environ,WILLY_SIMULATE='1',PYTHONPATH=_REPO_ROOT)
+    code=('import types,config\n'
+          'from pursuit_task import PursuitTask\n'
+          'turns=[]\n'
+          'safety=types.SimpleNamespace(timed_move_active=False,stop=lambda:None,'
+          'turn_left_for=lambda t,s: turns.append(t))\n'
+          'seen=[False]\n'
+          'det=types.SimpleNamespace(detect=lambda classes=None: [{"conf":0.9,"class":"person","bbox":(0,0,1,1),"frame_w":640}] if seen[0] else [],'
+          'localize=lambda d:(300.0,0.0))\n'
+          'p=PursuitTask(safety,det); p.start("come_here")\n'
+          'for _ in range((config.PURSUIT_LOOK_TICKS+1)*(config.PURSUIT_SEARCH_STEPS+1)+5): p.tick({},0)\n'
+          'assert len(turns)==config.PURSUIT_SEARCH_STEPS and p.state=="FAILED", (len(turns),p.state)\n'
+          'turns.clear(); p.reset(); p.start("come_here")\n'
+          'for _ in range(config.PURSUIT_LOOK_TICKS+2): p.tick({},0)\n'
+          'seen[0]=True; p.tick({},0)\n'
+          'assert len(turns)==1 and p.state=="APPROACH", (turns,p.state)\n'
+          'print("SWEEP_OK")\n')
+    r=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True,cwd=_REPO_ROOT,env=env,timeout=120)
+    assert 'SWEEP_OK' in r.stdout, r.stdout+r.stderr

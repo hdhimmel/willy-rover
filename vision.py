@@ -34,7 +34,17 @@ log=logsetup.setup('vision')
 # and no camera tilt, so it is wrong for floor geometry regardless of how accurate its ranging
 # gets. ENABLE_TOF is currently False (no working sensor -- unit #1 faulty, replacement ordered
 # 2026-09-15), which changes none of this.
-_ASSUMED_OBJECT_WIDTH_CM=8.0   # generic small handheld object — no real per-class size table
+_ASSUMED_OBJECT_WIDTH_CM=8.0   # fallback for a class not in _CLASS_WIDTH_CM
+# FR-1000-006 / FR-1700-008 (2026-10-02): nominal real-world widths per COCO class, in cm. One
+# 8 cm width for everything put a person (~45 cm across the shoulders) at about a sixth of their
+# true range, so the 150 cm person gate let the rover close right in. Nominal sizes, not
+# measured; the focal length below is still an estimate, so range stays a heuristic.
+_CLASS_WIDTH_CM={'person':45.0,'cat':20.0,'dog':30.0,'chair':45.0,'couch':180.0,'bed':150.0,
+                 'dining table':120.0,'tv':100.0,'laptop':33.0,'cell phone':7.5,'remote':5.0,
+                 'book':15.0,'bottle':7.0,'cup':8.0,'wine glass':8.0,'bowl':15.0,'sports ball':20.0,
+                 'teddy bear':25.0,'backpack':30.0,'handbag':30.0,'umbrella':10.0,'potted plant':30.0,
+                 'clock':25.0,'vase':12.0,'scissors':8.0,'toothbrush':2.0,'banana':18.0,'apple':8.0,
+                 'orange':8.0,'mouse':6.0,'keyboard':44.0,'shoe':10.0}
 _ASSUMED_HFOV_DEG=70.0         # typical USB webcam-class FOV, not bench-measured for the OV9281
 _FOCAL_PX_ESTIMATE=600.0       # rough: focal_px = (frame_w/2) / tan(HFOV/2) at 640px width
 _CAMERA_ID='front'             # §12: accurate for the Hailo/CSI backend (imx708, front-facing).
@@ -159,7 +169,8 @@ class ObjectDetector:
         # FR-1700-002. See module docstring — heuristic, not calibrated.
         x1,y1,x2,y2=detection['bbox']; w=detection['frame_w']
         bbox_w=max(1.0,x2-x1)
-        distance_cm=(_ASSUMED_OBJECT_WIDTH_CM*_FOCAL_PX_ESTIMATE)/bbox_w
+        width_cm=_CLASS_WIDTH_CM.get(detection.get('class'),_ASSUMED_OBJECT_WIDTH_CM)
+        distance_cm=(width_cm*_FOCAL_PX_ESTIMATE)/bbox_w
         center_x=(x1+x2)/2.0; offset=(center_x-w/2.0)/(w/2.0)  # -1..1
         bearing_deg=offset*(_ASSUMED_HFOV_DEG/2.0)
         return distance_cm,bearing_deg
