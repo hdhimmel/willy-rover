@@ -1,4 +1,4 @@
-import json,time,socket,os,subprocess,config,logsetup,storage
+import json,time,socket,os,subprocess,threading,config,logsetup,storage
 from logsetup import log_event
 if not config.SIMULATE_HARDWARE: import board,busio
 from motors import DriveBase,Steering
@@ -223,6 +223,9 @@ class RoverBrain:
         # Encoder-rail (R5) warning, 2026-10-01 -- see _check_r5(). Warn only, never a stop.
         self._r5_low_since=None; self._r5_low=False
         self._bat_halt_since=None   # battery-tier halt confirmation clock, see _battery_halt()
+        self._retention_t=0.0       # FR-1800-004: last retention sweep, see _retention_sweep()
+        self._arm_over_since=None   # FR-700-001: arm over-current clock, see _check_arm_current()
+        self._oc_since={}           # FR-200-002: per-rail overcurrent clocks, see _check_overcurrent()
         self._bat_warned=False      # FR-200-003: warn tier announced once per descent
         # Battery sense cross-check (2026-09-15) -- see _check_battery_crosscheck().
         self._bat_xcheck_since=None; self._bat_xcheck_flagged=False
@@ -685,6 +688,7 @@ class RoverBrain:
         motor_rail_msg=self._check_motor_rail()
         # Encoder rail (detection only -- see _check_r5); feeds _upd's prefix and _stall_reason.
         self._check_r5()
+        self._check_arm_current()
         # Second opinion on the pack reading (detection only -- see _check_battery_crosscheck).
         self._check_battery_crosscheck()
         # Only advance the battery tier on a reading we actually got. A stale value must not
@@ -809,6 +813,22 @@ class RoverBrain:
             if not self._await_reset_or_resume('wheel stall',d,tilt,
                     'STALL CLEARED — tap screen to resume'): return
 
+        # FR-200-002: overcurrent latches like a stall -- stop, then wait for an operator reset.
+        oc=self._check_overcurrent()
+        if oc:
+            if self.retrieval.active: self.retrieval.abort(oc)
+            if self.mapping.active: self.mapping.abort(oc)
+            if self.navigator.active: self.navigator.abort(oc)
+            if self.pursuit.active: self.pursuit.abort(oc)
+            self._abandon_stuck_if_active()
+            self.safety.emergency_stop(oc)
+            if self._state!='OVERCURRENT_FAULT': log.warning(f'  {self._state}->OVERCURRENT_FAULT ({oc})')
+            self._state='OVERCURRENT_FAULT'
+            self._upd('fault',f'{oc.upper()} — STOP',d,tilt); return
+        if self._state=='OVERCURRENT_FAULT':
+            if not self._await_reset_or_resume('overcurrent',d,tilt,
+                    'Current back to normal — tap screen to resume'): return
+
         self.safety.tick()  # services any in-flight timed move's deadline/obstacle re-check —
                              # must run every tick regardless of which state started the move
                              # (AVOID's reverse/turn or STUCK's Claude-issued action alike).
@@ -838,7 +858,7 @@ class RoverBrain:
          'STUCK':self._stuck,'DOCK':self._dock,'WARN':self._warn,'RETRIEVE':self._retrieve,
          'NAVIGATE':self._navigate,'MANUAL':self._manual,'PURSUE':self._pursue,'WAVE':self._wave,
          'TILT_FAULT':lambda d,t:None,'SAFE_MODE':lambda d,t:None,'SHUTDOWN':lambda d,t:None,
-         'LOW_BATTERY':lambda d,t:None,
+         'LOW_BATTERY':lambda d,t:None,'OVERCURRENT_FAULT':lambda d,t:None,
         }.get(self._state,lambda d,t:None)(d,tilt)
 
     def _say(self,text):
@@ -1118,6 +1138,7 @@ class RoverBrain:
 
     def _idle(self,d,tilt):
         self.safety.stop(); self._idle_t+=0.05
+        self._retention_sweep()
         self._upd('idle',f'Waiting... bat={self.adc.battery_pct}%',d,tilt)
         summaries=self.email.get_new_summaries() if self.email.available else []
         for s in summaries:
@@ -1248,6 +1269,10 @@ class RoverBrain:
         """Hand self._last_stuck_prompt to the cloud provider's worker thread. Split out of
         _stuck() 2026-09-07 so the on-device-poll branch and the fresh-episode branch reach the
         fallback by the same path instead of duplicating the request/flag/_upd trio."""
+        # FR-1800-003: say so whenever data leaves the device. The voice path did; this one
+        # sent sonar/pose/history to the cloud with no notice at all.
+        import privacy as _p; _p.note_cloud_send(self.display,self.voice if self.voice.available else None,
+                                                  'my situation')
         self.cloud_ai.request_async(self._last_stuck_prompt,system=_MOTION_SYSTEM,
                                      schema=_MOTION_SCHEMA,history=self._stuck_history)
         self._claude_pending=True
@@ -1322,6 +1347,47 @@ class RoverBrain:
                       f'Motion commands will have no effect until power returns.')
         return f'MOTOR POWER LOST ({v:.2f}V)'
 
+    def _check_arm_current(self):
+        """FR-700-001: release the arm when the 6V arm rail stays above ARM_CURRENT_LIMIT_A for
+        ARM_CURRENT_LIMIT_S. config.py has asked for this since 2026-09-17 -- a servo stalled
+        against Willy's top held ~8A and was destroyed -- and nothing read the limit.
+
+        Runs every tick, so it covers every arm motion (wave, grasp, stow) rather than living
+        inside one movement loop. A released arm goes limp and can fall: that is the lesser harm
+        than a cooked servo, and it is what config.py specifies."""
+        if self.arm.released: self._arm_over_since=None; return
+        try: amps=self.current.rail('arm_6v')['current_a']
+        except Exception: return
+        if amps<=config.ARM_CURRENT_LIMIT_A:
+            self._arm_over_since=None; return
+        now=time.time()
+        if self._arm_over_since is None:
+            self._arm_over_since=now; return
+        if now-self._arm_over_since>=config.ARM_CURRENT_LIMIT_S:
+            self._arm_over_since=None
+            self.arm.release()
+            log_event(log,'ARM_OVERCURRENT',severity='error',subsystem='arm',status='released',
+                      amps=f'{amps:.2f}',limit_a=config.ARM_CURRENT_LIMIT_A,
+                      limit_s=config.ARM_CURRENT_LIMIT_S)
+            if self.voice.available: self.voice.speak('My arm was straining, so I let it go limp.')
+
+    def _check_overcurrent(self):
+        """FR-200-002: returns a reason when a rail has held above OVERCURRENT_LIMIT_A for
+        OVERCURRENT_S, else ''. Undervoltage had the battery ladder; overcurrent had nothing."""
+        now=time.time()
+        for rail,limit in config.OVERCURRENT_LIMIT_A.items():
+            try: amps=self.current.rail(rail)['current_a']
+            except Exception: continue
+            if amps<=limit:
+                self._oc_since.pop(rail,None); continue
+            t0=self._oc_since.setdefault(rail,now)
+            if now-t0>=config.OVERCURRENT_S:
+                self._oc_since.pop(rail,None)
+                log_event(log,'OVERCURRENT',severity='error',subsystem=rail,status='stopped',
+                          amps=f'{amps:.2f}',limit_a=limit,hold_s=config.OVERCURRENT_S)
+                return f'overcurrent on {rail}: {amps:.1f}A > {limit}A'
+        return ''
+
     def _check_r5(self):
         """Encoder rail (R5) below Pico A's warning threshold. DETECTION ONLY -- owner decision
         2026-10-01: warn and name the cause, never a stop. Returns a status string or ''.
@@ -1356,6 +1422,16 @@ class RoverBrain:
             return (f'encoder rail R5 low ({self.encoders.r5_millivolts} mV) -- '
                     f'{wheels} reading zero is likely the rail, not the wheels')
         return f'wheel stall: {wheels}'
+
+    def _retention_sweep(self):
+        """FR-1800-004 / FR-1900-010: enforce DATA_RETENTION_DAYS. Both purge functions existed
+        and nothing called them. Runs from IDLE, at most once a day; the first run is at the
+        first IDLE tick after start."""
+        now=time.time()
+        if now-self._retention_t<86400: return
+        self._retention_t=now
+        try: self.memory.purge_expired()
+        except Exception: log.warning('Retention purge of memory.db failed',exc_info=True)
 
     def _battery_reading_disputed(self):
         """True when the +12V bus monitor is live and disagrees with the ADC right now.
@@ -1455,22 +1531,31 @@ class RoverBrain:
         if self._stuck_alert_count>=config.STUCK_ALERT_MAX_PER_SESSION:
             return
         self._stuck_alert_t=now; self._stuck_alert_count+=1
+        # FR-2000-008: the camera capture and the SMTP send (15 s timeout) run on their own
+        # thread. They used to run here, on the tick thread, inside _go() -- so every fault and
+        # obstacle check stalled for as long as the mail server took. Only cheap cached state is
+        # read here; the slow part never touches the control loop.
         try:
-            photo=self.detector.capture_still()  # None if disabled/privacy-off/failed
-            pose=self.world_model.get_robot_pose()
-            d=self.sonars.distances
-            body=(f"I'm stuck and can't work out how to get free.\n\n"
-                  f"Pose: x={pose.x:.2f}m y={pose.y:.2f}m heading={pose.heading:.0f}deg\n"
-                  f"Sonar: front={d.get('front',999):.0f}cm left={d.get('left',999):.0f}cm "
-                  f"right={d.get('right',999):.0f}cm\n"
-                  f"Battery: {self.adc.battery_volts:.2f}V\n"
-                  f"Stuck episodes this run: {self._stuck_count}\n"
-                  f"Alert {self._stuck_alert_count} of {config.STUCK_ALERT_MAX_PER_SESSION} this session.\n\n"
-                  f"{'Photo attached from my front camera.' if photo else 'No photo — camera unavailable or privacy-disabled.'}\n\n-- Willie")
-            self.email.send_alert('Willie is stuck and needs help',body,image_bytes=photo,
-                                   image_name='willy_stuck.jpg')
+            pose=self.world_model.get_robot_pose(); d=dict(self.sonars.distances)
+            bat=self.adc.battery_volts; episodes=self._stuck_count; n=self._stuck_alert_count
         except Exception:
-            log.warning('STUCK alert email failed',exc_info=True)
+            log.warning('STUCK alert: could not read state',exc_info=True); return
+        def send():
+            try:
+                photo=self.detector.capture_still()  # None if disabled/privacy-off/failed
+                body=(f"I'm stuck and can't work out how to get free.\n\n"
+                      f"Pose: x={pose.x:.2f}m y={pose.y:.2f}m heading={pose.heading:.0f}deg\n"
+                      f"Sonar: front={d.get('front',999):.0f}cm left={d.get('left',999):.0f}cm "
+                      f"right={d.get('right',999):.0f}cm\n"
+                      f"Battery: {bat:.2f}V\n"
+                      f"Stuck episodes this run: {episodes}\n"
+                      f"Alert {n} of {config.STUCK_ALERT_MAX_PER_SESSION} this session.\n\n"
+                      f"{'Photo attached from my front camera.' if photo else 'No photo — camera unavailable or privacy-disabled.'}\n\n-- Willie")
+                self.email.send_alert('Willie is stuck and needs help',body,image_bytes=photo,
+                                       image_name='willy_stuck.jpg')
+            except Exception:
+                log.warning('STUCK alert email failed',exc_info=True)
+        threading.Thread(target=send,name='stuck-alert',daemon=True).start()
 
     def _upd(self,fs,st,d,tilt,spd=0.0,awaiting_reset=False,offer_override=False):
         # Motor-power loss is prepended to whatever status the caller wanted, rather than given

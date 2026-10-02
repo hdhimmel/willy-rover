@@ -270,6 +270,12 @@ ARM_WAVE_APPROACH_STEP_US=50    # shoulder step size travelling to the pose
 # first elbow servo was destroyed. The check must run inside the movement loop.
 ARM_CURRENT_LIMIT_A=2.5
 ARM_CURRENT_LIMIT_S=0.4
+# FR-200-002 overcurrent, per INA260 rail (2026-10-02). Limits are 90% of the branch fuse
+# (MHD §2.1: F2 10A motors, F4 10A DROK-5V), so software stops the load before the fuse goes.
+# Held for OVERCURRENT_S, so a motor start or a steering slew does not trip it. The arm rail
+# has its own, tighter limit above (servo protection, releases the arm).
+OVERCURRENT_LIMIT_A={'bus_12v':9.0,'steering_5v':9.0}
+OVERCURRENT_S=1.0
 
 # Wheel encoders — Pico A over uart4-pi5, Phase A edges only (§4.7). Not quadrature: all six
 # Phase B greens have read dead since 2026-09-18, so the counts have magnitude and NO
