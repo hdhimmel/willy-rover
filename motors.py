@@ -7,6 +7,35 @@ if not config.SIMULATE_HARDWARE:
     from adafruit_pca9685 import PCA9685
     _i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
 
+import math as _math
+
+def cap_rpm():
+    """Wheel RPM at SPEED_MAX (the mph cap)."""
+    return config.SPEED_MAX_MPH*0.44704/(_math.pi*config.WHEEL_DIAMETER_M)*60.0
+
+def wheel_duty(w,target_rpm,meas_rpm,integ,dt):
+    """FR-500-004 (2026-10-02): (duty, new_integ) for one wheel, in the command frame
+    (+ = this wheel's forward command). Pure, so it is tested directly.
+
+    Feed-forward from WHEEL_FF does most of the work; a PI on the encoder error trims it,
+    bounded to +-WHEEL_TRIM_MAX so a blocked wheel only gets a limited extra push. meas_rpm
+    None (no healthy encoder) -> feed-forward only. Never drives against the target's sign,
+    and stops integrating while saturated (anti-windup)."""
+    if target_rpm==0: return 0.0,0.0
+    d0,slope=config.WHEEL_FF.get(w,(0.22,225.0))
+    sgn=1.0 if target_rpm>0 else -1.0
+    ff=sgn*(d0+abs(target_rpm)/slope)
+    if meas_rpm is None or not config.WHEEL_SPEED_CONTROL:
+        return max(-1.0,min(1.0,ff)),0.0
+    err=target_rpm-meas_rpm
+    new_i=max(-config.WHEEL_TRIM_MAX,min(config.WHEEL_TRIM_MAX,integ+config.WHEEL_KI*err*dt))
+    trim=max(-config.WHEEL_TRIM_MAX,min(config.WHEEL_TRIM_MAX,config.WHEEL_KP*err+new_i))
+    duty=ff+trim
+    if abs(duty)>1.0:
+        duty=max(-1.0,min(1.0,duty)); new_i=integ        # saturated: hold the integrator
+    if duty*sgn<0: duty=0.0                              # never drive against the target
+    return duty,new_i
+
 class DriveBase:
     _WHEELS=('lf','lm','lr','rf','rm','rr')
     def __init__(self):
@@ -21,6 +50,7 @@ class DriveBase:
         self._lock=threading.Lock(); self.current_speed=0.0
         self._coasting=False; self._idle_since=time.monotonic()
         self._write_fail_t=None; self._write_fail_logged_t=0.0   # see _write()
+        self._encoders=None; self._integ=dict.fromkeys(self._WHEELS,0.0)   # FR-500-004
         self._running=True
         self._thread=threading.Thread(target=self._ramp_loop,daemon=True); self._thread.start()
     # FR-500-004 (closed-loop speed) -- NOT implemented as closed-loop: this ramps the
@@ -31,6 +61,24 @@ class DriveBase:
     # +12V motor branch: 0.019A doing nothing. Once every wheel is commanded to zero AND has
     # finished ramping, release the bridges (throttle=None coasts) and sleep both MotorKit
     # PCA9685s. Any non-zero command wakes them first. brake() never comes through here.
+    def attach_encoders(self,encoders):
+        """FR-500-004: give the ramp loop encoder feedback. Without it, feed-forward only."""
+        self._encoders=encoders
+
+    def _measured_rpm(self):
+        """Per-wheel RPM in the command frame, or None when there is no healthy feedback."""
+        e=self._encoders
+        if e is None: return None
+        try:
+            if not e.is_healthy: return None
+            cps=e.counts_per_sec
+        except Exception:
+            return None
+        k=60.0/config.ENCODER_COUNTS_PER_REV
+        # counts follow the actual throttle sign (Pico A a-0.3), and the written throttle is
+        # command*MOTOR_SIGN, so the command-frame speed is counts*MOTOR_SIGN.
+        return {w:cps.get(w,0.0)*config.MOTOR_SIGN[w]*k for w in self._WHEELS}
+
     def _coast(self):
         for m in self._motors.values(): m.throttle=None
         for p in self._pcas:
@@ -56,12 +104,18 @@ class DriveBase:
                 if commanded:
                     if self._coasting: self._wake()
                     self._idle_since=None
+                meas=self._measured_rpm() if commanded else None
+                crpm=cap_rpm()
                 for w in self._WHEELS:
                     tgt=self._target[w]; cur=self._actual[w]
                     cur = tgt if abs(tgt-cur)<=step else cur+(step if tgt>cur else -step)
                     self._actual[w]=cur
+                    # FR-500-004: the ramped command is a fraction of the mph cap; turn it into
+                    # a wheel RPM and let wheel_duty() find the duty that holds it.
+                    duty,self._integ[w]=wheel_duty(w,cur*crpm,None if meas is None else meas[w],
+                                                   self._integ[w],dt)
                     if not self._coasting:      # MOTOR_SIGN: the right side is mounted mirrored
-                        self._write(w,max(-1.0,min(1.0,cur))*config.MOTOR_SIGN[w])
+                        self._write(w,duty*config.MOTOR_SIGN[w])
                 self.current_speed=(self._actual['lf']+self._actual['rf'])/2
                 if not commanded and not self._coasting and                         all(self._actual[w]==0.0 for w in self._WHEELS):
                     now=time.monotonic()

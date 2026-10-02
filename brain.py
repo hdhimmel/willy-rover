@@ -185,6 +185,8 @@ class RoverBrain:
         self.imu=_init_device(lambda:IMU(reset=self.sonars.reset_imu),'imu')
         self.adc=_init_device(ADC,'adc')
         self.encoders=_init_device(Encoders,'encoders')
+        try: self.motors.attach_encoders(self.encoders)   # FR-500-004 closed-loop wheel speed
+        except Exception: log.warning('Wheel speed control: could not attach encoders',exc_info=True)
         self.current=_init_device(CurrentMonitor,'current')
         self.arm=_init_device(Arm,'arm')
         self.odometry=Odometry(self.encoders,

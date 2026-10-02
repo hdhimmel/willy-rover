@@ -88,14 +88,34 @@ MOTOR_SIGN={'lf':1,'lm':1,'lr':1,'rf':-1,'rm':-1,'rr':-1}
 # choices cut force at the ground. Raising these numbers spends headroom; it does
 # not create torque, and full duty is already full duty. If more torque is needed
 # it is a motor change -- see Master Hardware Design v2.0 section 7.1.
-# SLOW 0.55 -> 0.60 on 2026-10-01, after the 170 RPM / 35.5:1 motors went in. The
+# HISTORY, from when these were PWM duty -- SLOW 0.55 -> 0.60 on 2026-10-01, after the 170 RPM / 35.5:1 motors went in. The
 # prediction that more reduction would drop breakaway well below 0.5 did not hold for
 # every wheel: scripts/breakaway_sweep.py, wheels free, found 0.15-0.35 on four wheels
 # but lm at 0.40-0.50 and rf at 0.45-0.55 from rest (rf failed to move at 0.50 twice
 # across five sweeps). Owner accepted the motors as-is, expecting break-in, so SLOW
 # carries margin over rf on the block -- loaded on the floor needs more, not less.
 # Re-run the sweep after some hours of use; this should come down.
-SPEED_ROAM=0.75; SPEED_TURN=0.70; SPEED_SLOW=0.60; SPEED_MAX=1.00
+# SPEEDS IN MPH (owner, 2026-10-02): slow 0.5, cruise 1.0, cap 1.5. Since closed-loop wheel
+# speed control (FR-500-004, motors.wheel_duty) the SPEED_* values below are FRACTIONS OF THE
+# CAP, not PWM duty: 1.0 = SPEED_MAX_MPH. The motors top out near 147 RPM free (~1.8 mph), so
+# the 1.5 mph cap leaves headroom for the loop; 3 mph would need ~250 RPM (different motors).
+SPEED_MAX_MPH=1.5; SPEED_ROAM_MPH=1.0; SPEED_SLOW_MPH=0.5; SPEED_TURN_MPH=1.0
+SPEED_MAX=1.0
+SPEED_ROAM=SPEED_ROAM_MPH/SPEED_MAX_MPH; SPEED_SLOW=SPEED_SLOW_MPH/SPEED_MAX_MPH
+SPEED_TURN=SPEED_TURN_MPH/SPEED_MAX_MPH
+# FR-500-004 closed-loop wheel speed (2026-10-02). Each wheel's duty = feed-forward from its
+# measured duty->RPM line + a PI trim from its encoder. Off -> feed-forward only (open loop).
+WHEEL_SPEED_CONTROL=True
+# Feed-forward per wheel: RPM ~= slope*(duty-d0), fitted to scripts/breakaway_sweep.py,
+# wheels free, 2026-10-02 (rf was disconnected -> default). Loaded on the floor reads lower;
+# the PI trim makes that up, and a re-fit after break-in keeps the trim small.
+WHEEL_FF={'lf':(0.163,225.0),'lm':(0.229,195.0),'lr':(0.192,231.0),
+          'rf':(0.22,225.0),'rm':(0.271,211.0),'rr':(0.285,273.0)}
+WHEEL_KP=0.002        # duty per RPM of error
+WHEEL_KI=0.008        # duty per RPM-second of error
+WHEEL_TRIM_MAX=0.30   # the PI may move duty at most this far from feed-forward: a blocked
+                      # wheel gets a bounded push, and stall detection still stops it at
+                      # STALL_GRACE_S (Directive 5)
 # Seconds of being stopped AND fully ramped down before the bridges are released and the
 # two MotorKit PCA9685s are put to sleep. Measured 2026-09-30: the +12V motor branch idles
 # at 0.019A holding six stopped wheels in adafruit_motor's hard-brake -- about 0.2W spent
