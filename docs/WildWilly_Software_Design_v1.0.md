@@ -717,10 +717,10 @@ constant the standoff reads; there is still no `stair` mode and no selector.)*
 voice (*"stairs ahead"*, intent `mark_stairs`) as a `world_model.Stair` **edge** — centre
 `STAIR_LABEL_AHEAD_M` (0.30 m) ahead of the rover, running across its heading,
 `STAIR_DEFAULT_WIDTH_M` (0.9 m) wide — persisted in `world_model.db`'s `stairs` table.
-Each tick, `brain.py::_apply_stair_standoff(d, pose)` casts a ray along the odometry
-heading (`world_model.ray_to_segment()`); the nearest edge hit at distance *t* becomes a
-virtual front reading `(t − STAIR_STANDOFF_M) × 100 + DIST_STOP` cm, substituted into
-`d['front']` when it is nearer than the sonar. Forward only.
+When ROAM / SLOW / AVOID decide, `brain.py::_stair_planning_front(d)` casts a ray along the
+odometry heading (`world_model.ray_to_segment()`); the nearest edge hit at distance *t*
+becomes a planning front `(t − STAIR_STANDOFF_M) × 100 + DIST_STOP` cm, used in place of
+the sonar front for that decision only -- `d` itself is never changed. Forward only.
 
 **This lives in the deliberative layer, and that is deliberate.** The standoff is
 arithmetic on a mapped position against an estimated pose — both of which can be
