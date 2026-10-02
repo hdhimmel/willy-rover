@@ -77,7 +77,7 @@ disagreement, fix the loser.
 - Boots from the SanDisk Extreme PRO USB SSD (`/dev/sda`, label `willyssd`); EEPROM
   `BOOT_ORDER=0xf14`, USB first. The SD card is a bootable fallback, re-cloned from the SSD
   every Sunday 04:00 by `willie-sd-refresh.timer` (`rpi-clone`).
-- Nightly 03:00 `willie-backup.timer`: restic to `\MYCLOUD\heaven\willieestic` (mounted at
+- Nightly 03:00 `willie-backup.timer`: restic to `\\MYCLOUD\heaven\willie\restic` (mounted at
   `/mnt/heaven`, root-only). The repository password is `/root/.restic-pass` -- keep a copy off
   the rover.
 
