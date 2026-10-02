@@ -226,6 +226,8 @@ class RoverBrain:
         self._retention_t=0.0       # FR-1800-004: last retention sweep, see _retention_sweep()
         self._arm_over_since=None   # FR-700-001: arm over-current clock, see _check_arm_current()
         self._oc_since={}           # FR-200-002: per-rail overcurrent clocks, see _check_overcurrent()
+        self._sonar_failed={}       # FR-800-004: channels currently reported failed
+        self._uncmd_since=None; self._uncmd_reported=False  # FR-500-003 inverse case
         self._bat_warned=False      # FR-200-003: warn tier announced once per descent
         # Battery sense cross-check (2026-09-15) -- see _check_battery_crosscheck().
         self._bat_xcheck_since=None; self._bat_xcheck_flagged=False
@@ -499,7 +501,10 @@ class RoverBrain:
         for name,healthy in checks.items():
             was=self._health.get(name,True)
             if was and not healthy:
-                log_event(log,f'{name.upper()}_FAULT',severity='warning',subsystem=name,status='fault')
+                # FR-1100-002: say what was seen and what was expected, not just the name.
+                value,expected=self._fault_context(name)
+                log_event(log,f'{name.upper()}_FAULT',severity='warning',subsystem=name,status='fault',
+                          value=value,expected=expected)
             elif not was and healthy: log.info(f'{name} recovered'); self._fault_since.pop(name,None)
             self._health[name]=healthy
             if not healthy:
@@ -523,6 +528,48 @@ class RoverBrain:
             else:
                 self._stall_since.pop(wheel,None)
         return sustained
+
+    def _fault_context(self,name):
+        """FR-1100-002: (observed value, expected range) for a subsystem health fault."""
+        try:
+            if name=='battery_adc':
+                return (f'{self.adc.battery_volts:.2f}V held (read failing or implausible)',
+                        f'fresh plausible read, pack {config.BAT_SHUTDOWN_V}-12.6V')
+            if name=='imu':
+                return (f'tilt {self.imu.tilt:.1f}deg held, no fresh quaternion',
+                        f'quaternion changing within {config.IMU_STALE_S}s')
+            if name=='encoders':
+                return ('no fresh $E frame from Pico A',f'$E frames within {config.ENCODER_STALE_S}s')
+            if name=='sonars':
+                return ('no fresh $S frame from Pico B',f'$S frames within {config.SONAR_STALE_S}s')
+            if name=='current':
+                return ('no INA260 read for >1s','reads from 0x40/0x44/0x45 within 1s')
+            if name=='motors':
+                return ('DriveBase ramp thread not running','ramp thread alive')
+        except Exception:
+            pass
+        return ('unhealthy','is_healthy True')
+
+    def _check_uncommanded_motion(self):
+        """FR-500-003, inverse: counts changing with no command issued. Reported once per
+        episode; not braked, because an idle rover coasts deliberately (motors.py)."""
+        try:
+            if any(self.motors.commanded.values()) or not self.encoders.is_healthy:
+                self._uncmd_since=None; self._uncmd_reported=False; return
+            rates=self.encoders.counts_per_sec
+        except Exception:
+            return
+        moving=sorted(w for w,r in rates.items() if abs(r)>config.UNCOMMANDED_COUNTS_PER_S)
+        if not moving:
+            self._uncmd_since=None; self._uncmd_reported=False; return
+        now=time.time()
+        if self._uncmd_since is None: self._uncmd_since=now; return
+        if not self._uncmd_reported and now-self._uncmd_since>=config.UNCOMMANDED_GRACE_S:
+            self._uncmd_reported=True
+            log_event(log,'UNCOMMANDED_MOTION',severity='warning',subsystem='encoders',
+                      status='moving_without_command',wheels=','.join(moving),
+                      max_counts_per_s=f'{max(abs(rates[w]) for w in moving):.0f}',
+                      threshold=config.UNCOMMANDED_COUNTS_PER_S)
 
     def _abandon_stuck_if_active(self):
         # Called alongside every retrieval.abort() at a Directive 1-4 preemption point (tilt,
@@ -689,6 +736,8 @@ class RoverBrain:
         # Encoder rail (detection only -- see _check_r5); feeds _upd's prefix and _stall_reason.
         self._check_r5()
         self._check_arm_current()
+        self._check_sonar_channels()
+        self._check_uncommanded_motion()
         # Second opinion on the pack reading (detection only -- see _check_battery_crosscheck).
         self._check_battery_crosscheck()
         # Only advance the battery tier on a reading we actually got. A stale value must not
@@ -1371,6 +1420,20 @@ class RoverBrain:
                       limit_s=config.ARM_CURRENT_LIMIT_S)
             if self.voice.available: self.voice.speak('My arm was straining, so I let it go limp.')
 
+    def _check_sonar_channels(self):
+        """FR-800-004: report a dead sonar channel instead of letting it sit silently at 0.0.
+        Logs on change only; the status prefix in _upd() keeps it visible while it lasts."""
+        try: now_failed=dict(self.sonars.failed_channels)
+        except Exception: return
+        for name,why in now_failed.items():
+            if name not in self._sonar_failed:
+                log_event(log,'SONAR_FAULT',severity='error',subsystem=f'sonar_{name}',
+                          status='failed',reason=why)
+        for name in self._sonar_failed:
+            if name not in now_failed:
+                log.info(f'Sonar {name} ranging again')
+        self._sonar_failed=now_failed
+
     def _check_overcurrent(self):
         """FR-200-002: returns a reason when a rail has held above OVERCURRENT_LIMIT_A for
         OVERCURRENT_S, else ''. Undervoltage had the battery ladder; overcurrent had nothing."""
@@ -1567,6 +1630,8 @@ class RoverBrain:
         # on the face -- the percentage, the tier, the range estimate.
         if self._bat_xcheck_flagged: st=f'⚠BATTERY SENSE SUSPECT — {st}'
         if self._r5_low: st=f'⚠ENCODER RAIL LOW — {st}'
+        failed=getattr(self,'_sonar_failed',{})
+        if failed: st=f'⚠SONAR {"/".join(sorted(failed)).upper()} FAILED — {st}'
         # FR-1600-004: the 'warn' tier keeps driving, so it is a prefix, not a face state.
         if getattr(self,'_bat_tier','normal')=='warn':
             st=f'🔋BATTERY LOW {self.adc.battery_volts:.1f}V — {st}'

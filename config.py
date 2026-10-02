@@ -678,6 +678,11 @@ STALL_GRACE_S=1.0           # FR-500-003 (Directive 5): how long a commanded whe
                             # time (0.5s, full range) and Encoders' own 0.2s rate-sampling window —
                             # 1.0s matches SENSOR_FAULT_GRACE_S's precedent with comfortable margin
                             # over both. Unconfirmed against real hardware (no live drive test yet).
+# FR-500-003, inverse case (2026-10-02): wheels turning with NO wheel commanded -- being pushed,
+# rolling down a slope, or a driver fault. Reported, not braked (an idle rover coasts on purpose,
+# see motors.py). Grace covers the coast-down after a stop.
+UNCOMMANDED_COUNTS_PER_S=50.0   # ~2 cm/s at 763 counts/rev on a 0.1016 m wheel
+UNCOMMANDED_GRACE_S=2.0
 
 # ============================================================================
 # v2.2 subsystems (docs/archive/WildWilly_Functional_Requirements_Document_v2.2.md,

@@ -119,6 +119,29 @@ class SonarArray:
         return out
 
     @property
+    def failed_channels(self):
+        """FR-800-004: sonar channels that are not ranging, as {name: why}. A dead channel
+        already reads 0.0 (= stop), which is safe but was SILENT -- this names it. Two causes:
+        Pico B's stuck-ECHO flag (a destroyed sensor) and per-channel staleness inside a fresh
+        frame. A whole stale link is is_healthy's job, not this."""
+        if config.SIMULATE_HARDWARE: return {}
+        f = self._link.fresh('S', config.SONAR_STALE_S)
+        if f is None: return {}
+        out = {}
+        try: fl = int(f[9])
+        except (IndexError, ValueError): fl = 0
+        for i, name in enumerate(self._ORDER):
+            if fl & (1 << i):
+                out[name] = 'ECHO stuck high (sensor likely destroyed)'; continue
+            try:
+                age_ms = int(f[4 + i * 2])
+            except (IndexError, ValueError):
+                out[name] = 'unreadable field'; continue
+            if age_ms > config.SONAR_STALE_S * 1000:
+                out[name] = f'not updated for {age_ms} ms'
+        return out
+
+    @property
     def flags(self):
         """Pico B's flag byte. Bit 0/1/2 = front/left/right ECHO stuck high, which is the
         signature of a DESTROYED sensor rather than a timeout -- four have died on this
@@ -206,7 +229,7 @@ class IMU:
             # recovery (_poll_once), proven on the rover 2026-10-01 once the Pi -> Pico B
             # wire was resoldered.
             self._bno=self._make_bno()
-        self._pitch=0.0; self._roll=0.0
+        self._pitch=0.0; self._roll=0.0; self._yaw=0.0
         self._lock=threading.Lock(); self._last_ok=0.0
         self._running=False; self._thread=None
     def _make_bno(self):
@@ -246,7 +269,7 @@ class IMU:
             log.warning('BNO085 rebuild failed; will retry after the rate limit', exc_info=True)
     def _update(self):
         if config.SIMULATE_HARDWARE:
-            with self._lock: self._pitch=0.0; self._roll=0.0  # simulated level chassis
+            with self._lock: self._pitch=0.0; self._roll=0.0; self._yaw=0.0  # simulated level chassis
             self._last_ok=time.perf_counter(); return
         q=self._bno.quaternion; now=time.monotonic()
         if q!=self._last_q:
@@ -256,8 +279,9 @@ class IMU:
         i,j,k,w=q
         roll=math.degrees(math.atan2(2*(w*i+j*k),1-2*(i*i+j*j)))
         pitch=math.degrees(math.asin(max(-1.0,min(1.0,2*(w*j-k*i)))))
+        yaw=math.degrees(math.atan2(2*(w*k+i*j),1-2*(j*j+k*k)))
         with self._lock:
-            self._pitch=pitch; self._roll=roll
+            self._pitch=pitch; self._roll=roll; self._yaw=yaw
         self._last_ok=time.perf_counter()
     def start(self):
         self._running=True
@@ -273,6 +297,12 @@ class IMU:
     @property
     def pitch(self):
         with self._lock: return self._pitch
+    @property
+    def heading(self):
+        """FR-800-001: yaw in degrees (-180..180) from the fused quaternion. With the
+        ROTATION_VECTOR report this is magnetometer-referenced; anything magnetic on the chassis
+        biases it."""
+        with self._lock: return self._yaw
     @property
     def roll(self):
         with self._lock: return self._roll
