@@ -290,14 +290,27 @@ class CloudAIProvider(AIProvider):
     def available(self): return self._enabled and bool(self._key)
 
     def _post_anthropic(self,system,messages):
+        # Sonnet 5.5 (2026-10-02): thinking can no longer be disabled ({type:'disabled'} is a
+        # 400), so it runs adaptive at CLAUDE_EFFORT with max_tokens headroom, and the reply is
+        # the first TEXT block -- a thinking block may come first. fallbacks:'default' (beta)
+        # re-routes a safety refusal server-side; a refusal that still comes back is a failure,
+        # handled like any other by _call().
         payload={'model':config.CLAUDE_MODEL,'max_tokens':config.CLAUDE_MAX_TOKENS,
-                  'thinking':{'type':'disabled'},'messages':messages}
+                  'output_config':{'effort':config.CLAUDE_EFFORT},'fallbacks':'default',
+                  'messages':messages}
         if system: payload['system']=system
         req=urllib.request.Request(_ANTHROPIC_URL,data=json.dumps(payload).encode(),
-            headers={'x-api-key':self._key,'anthropic-version':'2023-06-01','content-type':'application/json'},
+            headers={'x-api-key':self._key,'anthropic-version':'2023-06-01','content-type':'application/json',
+                     'anthropic-beta':'server-side-fallback-2026-07-01'},
             method='POST')
         with urllib.request.urlopen(req,timeout=config.CLOUD_AI_TIMEOUT_S) as r:
-            return json.loads(r.read())['content'][0]['text'].strip()
+            body=json.loads(r.read())
+        if body.get('stop_reason')=='refusal':
+            cat=(body.get('stop_details') or {}).get('category')
+            raise RuntimeError(f'cloud model declined the request (refusal, category={cat})')
+        text=[b.get('text','') for b in body.get('content',[]) if b.get('type')=='text']
+        if not text: raise RuntimeError(f"no text in response (stop_reason={body.get('stop_reason')})")
+        return text[0].strip()
 
     def _call(self,prompt,system=None,schema=None,history=None):
         if not self.available:

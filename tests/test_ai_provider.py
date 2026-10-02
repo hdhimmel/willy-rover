@@ -221,3 +221,24 @@ def test_unparseable_response_logs_ai_rejected_not_ai_result(caplog):
     assert result.parse_success is False
     assert any('AI_REJECTED' in r.message for r in caplog.records)
     assert not any('AI_RESULT' in r.message for r in caplog.records)
+
+
+def test_post_anthropic_request_shape_and_reply_parsing(monkeypatch):
+    # 2026-10-02 move to claude-sonnet-5-5: no 'disabled' thinking (a 400 there), effort set,
+    # server-side fallback on, reply taken from the first TEXT block, refusal -> exception.
+    import io, json, ai_provider, config as _c
+    sent={}
+    def fake_urlopen(req,timeout=None):
+        sent['body']=json.loads(req.data); sent['headers']=dict(req.header_items())
+        return io.BytesIO(json.dumps(sent['reply']).encode())
+    monkeypatch.setattr(ai_provider.urllib.request,'urlopen',fake_urlopen)
+    p=CloudAIProvider.__new__(CloudAIProvider); p._key='k'
+    sent['reply']={'stop_reason':'end_turn','content':[{'type':'thinking','thinking':''},{'type':'text','text':' hi '}]}
+    assert p._post_anthropic('sys',[{'role':'user','content':'x'}])=='hi'
+    b=sent['body']
+    assert b['model']==_c.CLAUDE_MODEL=='claude-sonnet-5-5'
+    assert 'thinking' not in b and b['output_config']=={'effort':_c.CLAUDE_EFFORT} and b['fallbacks']=='default'
+    assert any(v=='server-side-fallback-2026-07-01' for v in sent['headers'].values())
+    sent['reply']={'stop_reason':'refusal','stop_details':{'category':'cyber'},'content':[]}
+    try: p._post_anthropic(None,[{'role':'user','content':'x'}]); assert False
+    except RuntimeError as e: assert 'refusal' in str(e)

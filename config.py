@@ -639,8 +639,9 @@ NAV_ARRIVAL_RADIUS_M=0.3       # how close counts as "reached" a waypoint
 NAV_HEADING_DEADBAND_DEG=15.0  # within this heading error, drive forward instead of turning first
 NAV_TURN_STEP_S=0.2            # duration of each incremental heading-correction turn while seeking
 
-CLAUDE_MODEL='claude-sonnet-5'
-CLAUDE_MAX_TOKENS=300; CLAUDE_ESCALATE_AFTER=5
+CLAUDE_MODEL='claude-sonnet-5-5'   # owner decision 2026-10-02: Claude (not Gemini) is the cloud provider
+CLAUDE_MAX_TOKENS=2000; CLAUDE_ESCALATE_AFTER=5   # headroom for adaptive thinking (Sonnet 5.5 cannot disable it)
+CLAUDE_EFFORT='low'   # short structured answers; low effort keeps thinking and latency small
 AI_NEARBY_RADIUS_M=3.0  # §14: how far counts as "nearby" when ai_provider.py's build_world_state()
                         # filters world_model.py objects/obstacles into the AI's world-state payload
 
