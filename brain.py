@@ -570,8 +570,8 @@ class RoverBrain:
                 return (f'{self.adc.battery_volts:.2f}V held (read failing or implausible)',
                         f'fresh plausible read, pack {config.BAT_SHUTDOWN_V}-12.6V')
             if name=='imu':
-                return (f'tilt {self.imu.tilt:.1f}deg held, no fresh quaternion',
-                        f'quaternion changing within {config.IMU_STALE_S}s')
+                return (f'tilt {self.imu.tilt:.1f}deg held, no fresh IMU report',
+                        f'quaternion or acceleration changing within {config.IMU_STALE_S}s')
             if name=='encoders':
                 return ('no fresh $E frame from Pico A',f'$E frames within {config.ENCODER_STALE_S}s')
             if name=='sonars':

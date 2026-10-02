@@ -278,7 +278,7 @@ class IMU:
         if sig!=self._last_q:
             self._last_q=sig; self._last_change=now
         elif now-self._last_change>config.IMU_STALE_S:
-            raise RuntimeError(f'BNO085 quaternion unchanged for {now-self._last_change:.1f}s')
+            raise RuntimeError(f'BNO085 quaternion+acceleration unchanged for {now-self._last_change:.1f}s')
         i,j,k,w=q
         roll=math.degrees(math.atan2(2*(w*i+j*k),1-2*(i*i+j*j)))
         pitch=math.degrees(math.asin(max(-1.0,min(1.0,2*(w*j-k*i)))))

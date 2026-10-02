@@ -54,7 +54,11 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   base-off is named:
                                                   built 2026-10-01/02,
                                                   not yet run on the
-                                                  rover.
+                                                  rover. No startup
+                                                  scan, 0x4A never
+                                                  probed (05bcddd):
+                                                  live-proven
+                                                  2026-10-02.
 
   FR-200 Power            PARTIAL --- rail        Pi rail 5.144V,
                           measurement, and the      throttled 0x0. Divider
@@ -92,7 +96,18 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   on five of six units; 170
                                                   RPM motors on order will
                                                   re-open M-1 and the speed
-                                                  tuning
+                                                  tuning. Fitted
+                                                  2026-10-01. Speeds in
+                                                  mph, 1.5 mph cap
+                                                  (FR-400-004): built
+                                                  2026-10-02, not yet
+                                                  run on the rover.
+                                                  Brake on a stopped,
+                                                  released drive is a
+                                                  no-op (6be1091) ---
+                                                  fixes a twitch seen
+                                                  live in a latched
+                                                  fault.
 
   FR-500 Encoders         PARTIAL --- counts and  All six count A and B
                           direction live          through Pico A a-0.3
@@ -110,6 +125,11 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   report built
                                                   2026-10-02, not yet run
                                                   on the rover.
+                                                  Closed-loop wheel speed
+                                                  (FR-500-004, feed-
+                                                  forward + bounded PI):
+                                                  built 2026-10-02, not
+                                                  yet run on the rover.
 
   FR-600 Steering         Not live-verified       Servo V+ current path
                                                   unconfirmed
@@ -127,6 +147,14 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   IMU.heading built
                                                   2026-10-02, not yet run
                                                   on the rover.
+                                                  SONAR_FAULT debounce
+                                                  (2 s): built 2026-10-02,
+                                                  not yet run. IMU
+                                                  freshness on quat +
+                                                  accel, IMU_STALE_S 3.0:
+                                                  live-proven 2026-10-02
+                                                  (53 false recoveries
+                                                  -> 0).
 
   FR-1500 Voice           PARTIAL --- live-       Wake word/STT/fast-path
                           verified repeatedly,    live-verified and
@@ -201,6 +229,15 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   (claude-sonnet-5-5).
                                                   FR-2100: identity.py
                                                   store/matcher only.
+                                                  Superseded 2026-10-02:
+                                                  faces built
+                                                  (recognition.py,
+                                                  enabled). FR-1900-001/
+                                                  002/003 demonstrations,
+                                                  FR-2000-011/012/013
+                                                  email commands, FR-2200
+                                                  feature requests: built
+                                                  2026-10-02.
                                                   FR-1400-001 intent gate,
                                                   FR-1900-005/007/008:
                                                   built 2026-10-02.
@@ -225,6 +262,11 @@ passing under `WILLY_SIMULATE=1`. ⚠ **Stale counts — 2026-10-02:** 33 module
 Later 2026-10-02: +5 test functions (`test_rooms_stairs_memory.py` new, 2;
 `test_sensor_gaps.py` +3), so **481 across 67 files** by count — not re-collected;
 ~8,720 lines.
+Recount 2026-10-02 after `80c074f`: **35 modules / ~9,700 lines; 403 `def test_`
+functions across 73 test files** (a plain count of `def test_`, which is lower than the
+collected figures above because parametrised cases collect as several items; the new
+2026-10-02 suites run one subprocess script per function with many assertions each).
+Not re-collected on the rover.
 Rows marked 2026-10-02 were added for this; the rest of the table dates from
 2026-08-18 (full module list: Software Design §1.1). Every requirement group below has an
 implementing module. Coverage here means unit tests exist and pass off
@@ -251,7 +293,11 @@ hardware; it is not evidence of live behaviour.
                           Controller
 
   FR-400/500/600 Motion   motors.py, odometry.py,  test_odometry.py,
-                          sensors.py::Encoders     test_tick_timing.py
+                          sensors.py::Encoders     test_tick_timing.py,
+                          (motors.wheel_duty,      test_wheel_speed_
+                          2026-10-02)              control.py,
+                                                   test_brake_no_twitch.py
+                                                   (2026-10-02)
 
   FR-700 Arm              arm.py, arm_jog.py,      test_current_limits.py
                           brain.py::_check_arm_    (2026-10-02)
@@ -297,13 +343,22 @@ hardware; it is not evidence of live behaviour.
                           world_model.py,          test_storage.py,
                           storage.py, voice.py     test_rooms_stairs_
                           (forget/recall/apply,    memory.py
-                          2026-10-02 row)          (2026-10-02 row)
+                          2026-10-02 row)          (2026-10-02 row),
+                                                   test_demonstrations.py
+                                                   (2026-10-02)
 
-  FR-2000 Email           email_client.py          ---
+  FR-2000 Email           email_client.py          test_email_commands.py
+                          (commands, 2026-10-02)   (2026-10-02)
 
   FR-2100 Recognition     identity.py (store and   test_identity_store.py
                           matcher only; nothing    (2026-10-02 row)
-                          imports it)
+                          imports it)              test_face_recognition_
+                          2026-10-02: +            flow.py (2026-10-02)
+                          recognition.py, wired
+                          in brain.py/voice.py
+
+  FR-2200 Feature         feature_requests.py      test_feature_requests.py
+  requests                (2026-10-02)             (2026-10-02)
   -----------------------------------------------------------------------
 
 ## V.2 Known gaps — requirements not currently satisfiable as written
@@ -1096,6 +1151,13 @@ signal conditioning board (Master Hardware Design §4.5). Pass conditions:
     SHTP error, and its Error List packet crashed `adafruit_bno08x` (`KeyError: 12`) —
     with the base off, every 30 s retry knocked the IMU over.
     `tests/test_selftest_i2c_probe.py`.
+    ⛔ **Superseded 2026-10-02 (`05bcddd`) — there is no full scan at all, and 0x4A is
+    never probed.** The one startup scan still quick-wrote 0x4A; on the first boot of
+    that code the SHTP error list stalled the BNO085 long enough to latch
+    `SENSOR_FAULT`, which would have recurred every boot. `_i2c_present()` now counts
+    0x4A as present by construction (the driver constructing proves it; `imu.is_healthy`
+    proves its health) and probes only the other expected addresses not yet seen.
+    **Live-proven on the rover 2026-10-02: boot no longer latches `SENSOR_FAULT`.**
 
 -   **FR-100-002, 0x70 is not a device.** A scan will also show 0x70. Per
     Master Engineering Package §5.2 this is the PCA9685 All-Call broadcast
@@ -1286,6 +1348,12 @@ conditions:
     halt confirms, it returns to `IDLE`. The `DOCK` path survives only behind
     `ENABLE_DOCKING=True`.
 
+    ✅ **First real run 2026-10-02 (owner-stated):** the low-battery graceful halt fired
+    live at **~10 V** and the rover powered itself off. Which tier triggered it was not
+    recorded — ~10 V is below both `BAT_RTH_V` (10.8) and `BAT_SHUTDOWN_V` (10.2), on a
+    one-point divider scale. The packs had **never been fully charged** (Master
+    Hardware Design §6.2): the 11.4 V treated as "full" was storage level.
+
 # FR-300 Safety and Emergency Stop
 
   -----------------------------------------------------------------------
@@ -1475,6 +1543,14 @@ see Master Hardware Design §14 item 18.
     not refused silently and not passed through. This is Directive 4 and is a
     hard cap, not a default.
 
+    ✅ **Speeds in mph — built 2026-10-02 (`5f74df7`), not yet run on the rover.** Owner
+    decision 2026-10-02: **cap `SPEED_MAX_MPH` = 1.5**, cruise `SPEED_ROAM_MPH` 1.0, slow
+    `SPEED_SLOW_MPH` 0.5, turn `SPEED_TURN_MPH` 1.0. `SPEED_*` are now **fractions of the
+    cap, not PWM duty** (`SPEED_MAX` = 1.0 = 1.5 mph; ROAM 0.667, SLOW 0.333, TURN
+    0.667), and every `DriveBase` method still clamps to `SPEED_MAX`. The motors top out
+    near **147 RPM free (~1.8 mph)**, so **3 mph is not achievable** on these motors
+    (~250 RPM needed); the 1.5 mph cap leaves the speed loop headroom.
+
 -   **Precondition.** Motor crimps must be metered against the as-built colour
     scheme before first motion. Five of six remain unverified.
 
@@ -1571,6 +1647,16 @@ Pico A a-0.3 reports signed counts.
 
 -   **FR-500-004 (closed-loop speed).** Commanded speed is held across a
     surface change without oscillation or sustained offset.
+
+    ✅ **Built 2026-10-02 (`5f74df7`), not yet run on the rover.** `motors.wheel_duty()`:
+    each wheel's duty = **feed-forward** from its own duty→RPM line (`WHEEL_FF`, fitted to
+    the 2026-10-02 `scripts/breakaway_sweep.py` run, wheels free; rf was disconnected and
+    carries the default) **+ a PI trim** on its encoder (`WHEEL_KP` 0.002, `WHEEL_KI`
+    0.008), bounded to **±`WHEEL_TRIM_MAX` (0.30)** so a blocked wheel gets only a limited
+    extra push and FR-500-003's stall stop still fires at `STALL_GRACE_S` (Directive 5).
+    Anti-windup while saturated; never drives against the target's sign. Encoders
+    unhealthy or `WHEEL_SPEED_CONTROL=False` → feed-forward only (open loop).
+    `tests/test_wheel_speed_control.py`. The surface-change criterion above is untested.
 
 -   **Signal note.** Encoder lines land directly on MCP23017 GPIO with no
     filtering. If spurious counts appear under motor load, the correct
@@ -1778,6 +1864,13 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     stopped meanwhile. If initialisation succeeds but
     reads fail intermittently, the cause is I²C clock stretching rather than
     wiring.
+    ✅ **Freshness re-based 2026-10-02 (`c23cbeb`), live-proven on the rover.** "Frozen"
+    now means the quaternion **and** the raw accelerometer (`BNO_REPORT_ACCELEROMETER`,
+    enabled for this) both unchanged, and `IMU_STALE_S` is **3.0 s** (was 1.5). Perfectly
+    still on the blocks, the fused quaternion stayed bit-identical for up to 3.7 s, so the
+    quaternion-only check latched a false `SENSOR_FAULT` every ~15 s: **53 false
+    recoveries in 30 min before, 0 after.** ⚠ The BNO085's report rate fell from ~10 Hz
+    (2026-10-01) to **~5 Hz** (2026-10-02); cause unknown.
 
 -   **FR-800-002 (sonar).** ✅ **Re-proven 2026-09-29 through Pico B** — all three
     ranging over `uart2-pi5` at 33.3 Hz, 0 sequence gaps, 0 bad checksums, and `-1`
@@ -1826,6 +1919,12 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     status `⚠SONAR <NAME> FAILED` while it lasts. A dead channel already reads 0.0
     (= stop); this makes it **named** rather than silent. A whole stale link remains
     `is_healthy`'s job (SENSOR_FAULT).
+    ✅ **Debounced 2026-10-02 (`780b32a`), after the first live run** logged 46
+    `SONAR_FAULT` events in two minutes from one flapping channel: a channel is reported
+    failed only after `SONAR_FAULT_DEBOUNCE_S` (2.0 s) of continuous failure and cleared
+    after the same of continuous health; the status prefix shows the confirmed set. The
+    debounce is reporting only — a failed channel's 0.0 still stops him at once. Built
+    2026-10-02, not yet run on the rover.
 
 # FR-900 Manual Operations
 
@@ -2314,6 +2413,38 @@ no longer spoofing but compromise of the owner's Gmail account --- which would g
 an attacker the ability to drive a robot around an occupied house. That risk is
 accepted by the owner. It is also why `ENABLE_EMAIL_COMMANDS` exists as a single
 switch: if the account is ever suspected compromised, set it `False` and redeploy.
+
+✅ **Built 2026-10-02 (`351f26e`), not yet run on the rover**
+(`tests/test_email_commands.py`). The subject carries the command —
+**`Willie: <command>`** (`EMAIL_COMMAND_PREFIX`, `:` or `,` after, a leading `Re:`
+tolerated); the body is never interpreted.
+
+-   **FR-2000-013.** `email_client.dkim_verified()` trusts **only the topmost
+    `Authentication-Results` header stamped by `EMAIL_AUTHSERV_ID` (`mx.google.com`)**
+    and needs `dkim=pass` for a signing domain aligned with the From domain; anything
+    else fails closed. Only `OWNER_EMAIL` is considered at all. A failure is logged
+    `EMAIL_COMMAND status=refused_dkim` and surfaced as "someone claiming to be …", never
+    acted on. SPF and DMARC are not checked — DKIM alone gates.
+-   **FR-2000-012.** Freshness against `EMAIL_COMMAND_MAX_AGE_S` (600 s) from the `Date`
+    header (missing → refused); a stale command is logged, surfaced aloud with the
+    other inbox summaries, and answered by reply. An accepted one is interpreted by
+    `voice.interpret_text()` (same instruction substitution, fast path and FR-1400-001
+    local-model gate as speech), announced aloud (*"Howard emailed: …"*,
+    `OWNER_NAME`), logged `EMAIL_COMMAND`, and queued on `pending_commands` with
+    `source='email'` — Directives 1–5 gate it at drain. Only intents in brain's
+    `_EMAIL_QUEUEABLE` set queue; `stop` acts at once. The spoken answer is mailed back
+    (`send_owner_reply()`, owner-only, off the tick thread). **One command per poll**:
+    messages are fetched with `BODY.PEEK[]`, so a second command stays unread for the
+    next poll. An email command **never answers a pending yes/no ask** (shutdown
+    confirmation, roam permission). `ENABLE_EMAIL_COMMANDS` is **True**.
+-   **FR-2000-011.** `allow|add|remove|block sender <addr>` on this path is the
+    **only** caller of `add_allowed_sender()`/`remove_allowed_sender()` with
+    `owner_confirmed=True`. Guard 3 above (`_sender_allowed()` is not authentication)
+    still describes the surfacing path; the `email_client.py` header comment it quotes
+    was rewritten in this change.
+-   **Approval codes.** `Willie: approve <code>` on the same path is dispatched to the
+    registered approval handlers — FR-2200-002 feature requests and FR-2100-006
+    enrolments.
 
 # FR-1300 Smart Home Integration (Google Home)
 
@@ -3113,8 +3244,24 @@ guaranteed-save requirement in particular had none anywhere in the document.
     instruction whose key, value, trigger or action contains X, and says how many;
     *"what do you remember (about X)"* reads back up to four. Matching is a plain
     substring, so a short X matches broadly.
--   **Still not built:** FR-1900-001/002 (capture and replay a demonstration) and
-    FR-1900-003 (replay mismatch).
+-   ~~**Still not built:** FR-1900-001/002 (capture and replay a demonstration) and
+    FR-1900-003 (replay mismatch).~~ ✅ **Built 2026-10-02 (`c770c40`), not yet run on
+    the rover** (`tests/test_demonstrations.py`):
+    -   **FR-1900-001, capture.** *"Watch me, learn the way to the kitchen"* starts a
+        recording: with the camera available he follows the person (`PursuitTask`
+        follow mode), otherwise he records while driven. The odometry pose is sampled
+        every `DEMO_POINT_SPACING_M` (0.30 m), stale poses skipped; *"that's it"* saves
+        it (at least `DEMO_MIN_POINTS`, 3) as a demonstration in `memory.db` **and** a
+        route in `world_model.db`. What is captured is a **path**, not an action
+        sequence — no arm or object steps.
+    -   **FR-1900-002, replay.** *"Do the way to the kitchen"* replays it through the
+        navigator (`Mission(route=...)`). There is **no adaptation** to a changed
+        position: he replays only from near the original start.
+    -   **FR-1900-003, mismatch.** Similarity for a demonstration is **positional**:
+        1.0 within `DEMO_START_NEAR_M` (0.5 m) of the recorded start, falling linearly
+        to 0 at `DEMO_START_FAR_M` (2.5 m), so the 0.6 floor refuses beyond ~1.3 m and
+        he says so. An unknown name is reported separately ("I haven't learned a way
+        to…"); `replay_demonstration()` now returns `(None, None)` for it.
 
 # FR-2000 Email Account and Management
 
@@ -3296,6 +3443,19 @@ recognised / uncertain / unknown (FR-2100-003), **pending-is-inert** enrolment w
 introduction dialogue, and the email-confirmation wiring for enrolment. **No runtime
 module imports it**, so no FR-2100 behaviour exists on the rover.
 
+⛔ **Superseded 2026-10-02 — faces BUILT (`80c074f`), not yet run on the rover**
+(`tests/test_face_recognition_flow.py`). `recognition.py` is the embedding source:
+OpenCV **YuNet** detection + **SFace** 128-d embedding on the **CPU** (not
+ArcFace/SCRFD), models in `models/` — **gitignored, not in the repo**; missing models
+or no camera → recognition disables itself and nothing else changes. Its own thread,
+single-slot result queue, one frame every `FACE_SCAN_S` (2 s) **from `IDLE` only**.
+`brain.py` and `voice.py` now import and wire it; `config.ENABLE_FACE_RECOGNITION` is
+**True**. Distance bands re-based for SFace: **`FACE_MATCH_MAX_DISTANCE` 0.55,
+`FACE_STRANGER_MIN_DISTANCE` 0.78** (was 0.40/0.60) — **provisional**, to be tuned on real
+enrolments. `scripts/enrol_identity.py` bootstraps the first identities over SSH,
+stored ACTIVE (physical/SSH access is the root of trust); it refuses if anyone is
+already enrolled unless `--force`. **Pets are not built.** Per-criterion notes below.
+
   -----------------------------------------------------------------------
   Requirement ID    Requirement                  Priority     Verification
   ----------------- ---------------------------- ------------ ------------
@@ -3329,9 +3489,17 @@ module imports it**, so no FR-2100 behaviour exists on the rover.
     completes, never during it, since an arm in frame can occlude the face being
     learned.
 
+    ✅ **Built 2026-10-02:** *"This is Carolyn"* (a capitalised name; *"this is the
+    kitchen"* stays a room) → `FACE_ENROL_FRAMES` (6) frames over `FACE_ENROL_S` (2 s),
+    off the tick thread, exactly one face each; at least half must yield a face. Stored
+    **PENDING**, then *"Nice to meet you … Howard will confirm you by email"* and a wave
+    from the next `IDLE` tick.
+
 -   **FR-2100-002 (greeting).** A recognised person is greeted by name once per
     session (`FACE_GREET_SESSION_S`). Verified by walking in and out of frame and
     confirming a single greeting.
+    ✅ **Built 2026-10-02:** *"Hi, <name>!"* via `identity.greeting_due()`; only a frame
+    with exactly one face is matched.
 
 -   **FR-2100-003 (strangers).** Matching resolves into **three bands**, not two:
     recognised (greet), uncertain (**silent**, recorded present but unnamed), and
@@ -3341,6 +3509,15 @@ module imports it**, so no FR-2100 behaviour exists on the rover.
     without that, an enrolled person in poor light gets accused of breaking in.
     Verified by enrolling a person, degrading the lighting, and confirming he asks
     rather than accuses.
+
+    ✅ **Built 2026-10-02.** Confidently unknown on `FACE_STRANGER_CONFIRM_N` (3)
+    consecutive scans → *"Hello! Who are you?"* and a **prompted listen** — one utterance
+    without the wake word (`voice.prompt_listen()`, `FACE_ASK_TIMEOUT_S` 8 s), the wake
+    gate itself unchanged. At most once per `FACE_GREET_SESSION_S`, and never while
+    nobody is enrolled. A spoken name may only **resolve an active identity**, never
+    create one; a vector is added only from the uncertain band. Anything else →
+    *"Stranger danger!"*, with no log, photo or alert. ⚠ **Differs from the text above:**
+    the uncertain band is silent but **not recorded present** — nothing is stored for it.
 
     **This is personality, not security.** He takes no action on a stranger: no alert,
     no event log, no photograph, no behaviour change. It must not be described
@@ -3352,6 +3529,11 @@ module imports it**, so no FR-2100 behaviour exists on the rover.
     capability, and scoping it would let identity silently determine what the rover
     will do --- permissions by the back door, which the design excludes precisely to
     keep a misidentification embarrassing rather than dangerous.
+    ✅ **Built 2026-10-02:** *"remember that …"* keys the fact `[<Name>] …` when a face
+    was recognised within `FACE_SPEAKER_WINDOW_S` (120 s) — last face seen, not a voice
+    match; `memory.get_context_for(text, person)` offers scoped facts only to that person,
+    unscoped facts to everyone. Instructions are never scoped. *"Forget everyone"* wipes
+    the identity store.
 
 -   **FR-2100-005 (biometric retention).** Enrolment images are converted to vectors
     and **deleted immediately**; an embedding cannot be viewed as a face. Storage is
@@ -3383,12 +3565,22 @@ module imports it**, so no FR-2100 behaviour exists on the rover.
     only confirm an action initiated in person at the rover, and may never cause
     physical action.
 
+    ✅ **Built 2026-10-02.** Soft gate: `FACE_ENROL_AUTHORISED` (Howard, Carolyn) seen
+    within `FACE_ENROL_SEEN_WINDOW_S` (600 s), skipped while nobody is enrolled. The
+    owner is emailed a one-time code (`FACE_ENROL_CODE_TTL_S`, 1 day, held in
+    `secrets/pending_enrolments.json`); `Willie: approve <code>` over the FR-2000-013
+    DKIM path flips **only that pending identity** to active (`_approve_enrolment()`).
+
 # FR-2200 Willie-Initiated Feature Requests
 
 Added v3.3 (2026-09-14). Design:
 `docs/superpowers/specs/2026-09-11-willie-feature-requests-design.md`.
 
 **NOT IMPLEMENTED.** No `feature_requests.py`, no `docs/feature-requests/` queue.
+⛔ **Superseded 2026-10-02 — BUILT (`55c5596`), not yet run on the rover**
+(`tests/test_feature_requests.py`). `feature_requests.py`, to the approved design, on its
+own low-frequency thread (first look 10 min after start, then every 6 h);
+`ENABLE_FEATURE_REQUESTS` True.
 
   -----------------------------------------------------------------------
   Requirement ID    Requirement                  Priority     Verification
@@ -3415,6 +3607,13 @@ Added v3.3 (2026-09-14). Design:
     on what is proposed. Composed by the cloud provider, not the on-device LLM --- G-6
     has the latter at 0% on intent parsing, and composing a coherent request is harder
     than parsing an intent, not easier.
+    ✅ **Built 2026-10-02:** `collect_evidence()` scans his own rotating log for
+    `MOTOR_STALL` (per wheel set), `TICK_OVERRUN`, any `*_FAULT`, `OVERCURRENT`,
+    `UNCOMMANDED_MOTION`, `BATTERY_HALT`, unmatched voice and failed tasks; a category
+    counts at **≥ `FEATURE_REQUEST_MIN_EVENTS` (5) in `FEATURE_REQUEST_WINDOW_DAYS` (7)**.
+    One per day; the same problem is not re-proposed within 30 days. Composed by the
+    cloud model with the evidence wrapped as untrusted data — **never on-device**: no
+    cloud, no request.
 
 -   **FR-2200-002 (approval before recording).** An approved request becomes a file in
     `docs/feature-requests/`, committed and pushed by Willie **staging that file
@@ -3424,11 +3623,19 @@ Added v3.3 (2026-09-14). Design:
     agreed to rather than suggestions to triage. Each file records its own provenance:
     proposed and approved timestamps, channel and DKIM status, and the evidence it was
     built from.
+    ✅ **Built 2026-10-02:** the email carries a one-time code; `Willie: approve <code>`
+    (FR-2000-013 path only) writes `docs/feature-requests/<date>-<slug>.md` with that
+    front matter, then `git add -- <path>` and `git commit --only … -- <path>`, then
+    pushes to `origin main` (one `pull --rebase` retry; a failed push is retried on the
+    next pass). Unapproved requests expire after `FEATURE_REQUEST_EXPIRE_DAYS` (7) in
+    `secrets/`.
 
 -   **FR-2200-003 (text only).** Nothing in this subsystem generates, edits or executes
     Python, and nothing changes `config.py`. **Approval is not a specification** ---
     anything non-trivial still goes through design before implementation. Verified by
     confirming the only artefact produced is a Markdown file.
+    ✅ **Built 2026-10-02:** the module writes that Markdown file and its `secrets/`
+    state JSON, and nothing else.
 
 # Mission-Level Functional Requirements (M-001--M-012)
 

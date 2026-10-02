@@ -646,6 +646,14 @@ Charge to 12.6V (4.20V/cell). Storage charge 11.4V (3.8V/cell). Packs must be
 within 0.05V per cell of each other before paralleling — connect the main Y
 first, the balance Y a minute later.
 
+⚠ **2026-10-02 (owner-stated): the packs had never been fully charged.** The iMAX B6's
+capacity cut-off was set to **5000 mAh**, which ended every charge early; the ~11.4 V
+treated as "full" until now was **storage level**. Every pack voltage recorded before
+this date — the 11.36–11.37 V calibration points in §6.2, the "11.4V bus" in §7.1 — is a
+part-charged pack, not a full one. Note that `BAT_WARN_V` is 11.4, so a storage-level pack
+sits at the warn tier. The low-battery graceful halt (FRD FR-200-005) **fired live for the
+first time on 2026-10-02 at ~10 V**; which tier triggered it was not recorded.
+
 ---
 
 ## 3. I²C Bus
@@ -1285,7 +1293,8 @@ end to end — **cold solder joints**, resoldered. All three now answer (`$P`, `
 `$X,unknown`), so `RST` can reach the BNO085 — **and does, proven the same day**: `RST` →
 `$R,ok,<count>`, then the chip reboots (SHTP advertisement, then EXE reset-complete `0x01`).
 `sensors.IMU` uses it for recovery only: after `IMU_RESET_AFTER_FAILS` consecutive failed
-reads — or a quaternion frozen past `IMU_STALE_S` — it pulses `RST` and **rebuilds the
+reads — or a quaternion frozen past `IMU_STALE_S` (quaternion **and** acceleration since
+2026-10-02, 3.0 s; §6.3) — it pulses `RST` and **rebuilds the
 driver**, at most once per `IMU_RESET_MIN_INTERVAL_S`. The rebuild is not optional: across a
 reset the live driver raised twice and then returned its cached quaternion forever, silently.
 
@@ -1672,6 +1681,19 @@ with no trip thresholds). There is no hardware supervisor either.
 `bus_12v`/`steering_5v`, `ARM_CURRENT_LIMIT_A` on the arm rail — built, not yet run on
 the rover. Brownout protection for the Pi is still not implemented.)*
 
+**Boot and storage (2026-10-02, done on the rover / owner-stated).**
+
+| Item | As set up 2026-10-02 |
+|------|----------------------|
+| Boot device | **SanDisk Extreme USB SSD** — `sda`, 931 GB, filesystem label `willyssd`. Willie now boots **from** it |
+| Boot order | EEPROM `BOOT_ORDER=0xf14` — USB first, SD card fallback |
+| SD card | A bootable **fallback**, refreshed weekly by `rpi-clone` from the `willie-sd-refresh` systemd timer |
+| Backup | Nightly **restic** to the NAS, `\\MYCLOUD\heaven\willie\restic`, from the `willie-backup` timer. First snapshot 27 GB |
+
+None of this is in the repository — the timers and the EEPROM setting live on willie
+itself. The data roots (`WILLY_*_ROOT`, Software Design §5) still resolve to one volume,
+now the SSD.
+
 ### 5.2 AI HAT+ 2
 
 Hailo-10H with 8GB dedicated on-board RAM. Attaches by PCIe FFC, not the
@@ -1892,6 +1914,9 @@ healthy 11.37V pack as **8.53V** and walked the tier ladder to an unordered
 SHUTDOWN on 2026-10-01. At 0.2432 the ±4.096V PGA represents up to 16.8V, so a full
 or on-charger pack no longer clips. §14 item 12 tracks the second point.
 
+*(2026-10-02: the 11.37V pack above was a storage-level, never-fully-charged pack — §2.5.
+A fully charged pack now gives the near-12.6V second point §14 item 12 asks for.)*
+
 **Calibrate rather than trusting the nominal**, even after the powered check.
 Resistor tolerance alone shifts this by ~5%, which is 600mV at the pack —
 larger than the gap between adjacent tiers in the ladder. Verify at two points
@@ -1936,6 +1961,15 @@ before the IMU can be reset — an ordering dependency in software
 > output, and reset exposed as an explicit acknowledged command in the UART
 > protocol. Otherwise the ordering dependency above does not go away, it just
 > becomes harder to see.
+
+**Report rate and freshness (2026-10-02).** The BNO085's reports arrived at ~10 Hz on
+2026-10-01 and **~5 Hz on 2026-10-02 — cause unknown.** At that rate, perfectly still,
+the fused quaternion stayed bit-identical for up to 3.7 s and the 1.5 s staleness check
+latched a false `SENSOR_FAULT` every ~15 s. `c23cbeb` judges freshness on quaternion
+**plus** raw accelerometer (whose noise moves on every report) with `IMU_STALE_S` = 3.0:
+**live-proven, 53 false recoveries in 30 min → 0.** The rate drop itself is open.
+Separately, `05bcddd` means the self-test **never probes 0x4A** — any I²C quick-write to
+it produces an SHTP error list (§11.2).
 
 The BNO085 uses I²C clock stretching, which the Pi handles poorly at default
 speed. If initialisation succeeds but reads fail intermittently, adjust
@@ -2219,6 +2253,10 @@ per motor.
 ⚠ **These are being replaced by 170 RPM variants** — on order as of 2026-09-24, not
 fitted. Everything in this section describes the 620 RPM motors in the rover today;
 see **Motor change pending** below for what moves when they land.
+*(Superseded 2026-10-01: the 170 RPM / 35.5:1 motors are fitted. They top out near
+**147 RPM free (~1.8 mph)** on the 101.6 mm wheels, so **3 mph is not achievable**
+— it would need ~250 RPM, a different motor. Speeds are set in mph since 2026-10-02,
+1.5 mph cap — see the table below and Software Design §2.3a.)*
 
 These are **12V motors on a 12V rail, running at their rated voltage** — they are
 not being over-driven by the 11.4V bus. The 100–200 RPM variants of this family are
@@ -2298,8 +2336,8 @@ An earlier line here said "the only downstream change is ENCODER_COUNTS_PER_REV"
 | Top speed | **0.90 m/s** no-load, **0.70 m/s** rated, against 3.30 / 2.54 m/s today |
 | Torque at the wheel | reduction goes 9.6 → 35.5, i.e. **3.70×**; measured rated torque rises **3.45×** (0.20 → 0.69 kg·cm). The 3–5× this section speculated was **right** — it was yesterday's 2.05× that was wrong. Rated **1.33 N per wheel, 8.0 N over six**, against 0.39 N and 2.3 N today |
 | **Stall current** | **1.8 A per motor**, 10.8 A if all six stall — see the warning below |
-| Breakaway duty | Predicted to fall well below the ~0.5 measured 2026-08-24. **Measured 2026-10-01 (wheels free, `scripts/breakaway_sweep.py`): only partly true** — rm 0.15, lr 0.20, lf 0.30, rr 0.35, but lm 0.40–0.50 and rf 0.45–0.55. `SPEED_SLOW` raised 0.55→**0.60** to clear rf; motors accepted as-is pending break-in, re-sweep after use |
-| `SPEED_*`, `SPEED_RAMP_PER_S` | the same duty now buys ~1/3.6 of the ground speed. Re-tune against the measured top speed; do not scale the old values |
+| Breakaway duty | Predicted to fall well below the ~0.5 measured 2026-08-24. **Measured 2026-10-01 (wheels free, `scripts/breakaway_sweep.py`): only partly true** — rm 0.15, lr 0.20, lf 0.30, rr 0.35, but lm 0.40–0.50 and rf 0.45–0.55. `SPEED_SLOW` raised 0.55→**0.60** to clear rf; motors accepted as-is pending break-in, re-sweep after use. **Re-swept 2026-10-02** (rf disconnected): each wheel's duty→RPM line is now `config.WHEEL_FF`, the feed-forward of the closed-loop speed control (FRD FR-500-004; built, not yet run on the rover). Breakaway no longer sets `SPEED_SLOW` |
+| `SPEED_*`, `SPEED_RAMP_PER_S` | the same duty now buys ~1/3.6 of the ground speed. Re-tune against the measured top speed; do not scale the old values. **Done 2026-10-02 by changing units:** `SPEED_*` are fractions of a **1.5 mph** cap (`SPEED_MAX_MPH`; cruise 1.0, slow 0.5, turn 1.0 mph), not duty; a per-wheel feed-forward + bounded PI finds the duty. `SPEED_RAMP_PER_S` unchanged (2.0/s). Built, not yet run on the rover |
 | `STALL_GRACE_S` | counts-per-second at a given duty scale with the ratio; re-check the window still clears `SPEED_RAMP_PER_S`'s worst-case ramp |
 | Odometry | inherits `ENCODER_COUNTS_PER_REV` directly (`odometry.py`) |
 | **FRD G-2 under-sampling** | **does NOT improve** — see below |
@@ -2814,6 +2852,11 @@ run on the rover: the bus is fully scanned **once**, and a retry probes only the
 addresses still missing — a full scan's quick-writes make the BNO085 emit an SHTP Error
 List that crashed its driver (`KeyError: 12`); and when only base-fed subsystems fail
 with 0x45 reading ~0V, the self-test says "base power appears OFF".
+⛔ **Superseded 2026-10-02 (`05bcddd`), live-proven on the rover:** no full scan at all,
+and **0x4A is never probed** — the one startup scan's quick-write stalled the BNO085 into
+`SENSOR_FAULT` on the first boot. 0x4A counts as present when its driver constructs;
+only the other expected addresses not yet seen are probed. Boot no longer latches
+`SENSOR_FAULT`.
 
 ⚠ **Corrected 2026-09-24.** This step previously read "confirm all six encoder
 channels change count under manual rotation", which was unachievable twice over.
@@ -3083,6 +3126,11 @@ measurement work rather than wiring.
     is precisely its job. Not yet investigated. Low urgency, but it will re-inject a wrong
     date at every boot until corrected, and it silently corrupts the timeline of every
     future diagnosis.
+    ⚠ **Still open 2026-10-02 (owner-stated):** the boot-time clock is still about a week
+    ahead until NTP syncs; the Witty Pi RTC is still the suspect. It now matters to more
+    than logs: `feature_requests.py` windows its evidence by log timestamp (it drops lines
+    more than a day in the future, but a week-ahead boot stretch is exactly that), and the
+    `willie-backup` / `willie-sd-refresh` timers run on the system clock.
 
 11. ✅ **INA260 rail identities settled 2026-09-15 — owner supplied them and every
     reading fits.** Three readings had disagreed with `config.py`'s recorded
@@ -3183,6 +3231,8 @@ measurement work rather than wiring.
     2026-09-18 came from landing motors and encoders in one pass, and six new
     motors is that pass again. Breakaway was re-measured 2026-10-01 and
     `SPEED_SLOW` went UP to 0.60, not down: lm and rf still need 0.45–0.55 from rest.
+    *(Superseded 2026-10-02: `SPEED_SLOW` is now 0.5 mph, a fraction of the 1.5 mph
+    cap, and per-wheel feed-forward fitted to the 2026-10-02 sweep covers breakaway.)*
 
 ---
 
@@ -3205,7 +3255,7 @@ Current components only.
 | **DFRobot SEN0628** — VL53L7CX + RP2040, 8×8 ToF | Front obstacle sensing ALONGSIDE sonar, not replacing it (§6.5). UART or I²C | 1 | **Ordered 2026-09-13.** Replaces the MusRock breakout ordered 2026-09-10, which did not arrive |
 | Raspberry Pi Active Cooler | Pi 5 blower + heatsink | 1 | Installed |
 | 5V case fan, 30–40mm | Head assembly exhaust | 1 | Installed |
-| SanDisk Extreme PRO SSD **1TB** | Boot drive | 1 | **Installed** — owner-confirmed 2026-09-14. This row said 500GB; Software Design §1's 1TB was right |
+| SanDisk Extreme PRO SSD **1TB** | Boot drive | 1 | **Installed** — owner-confirmed 2026-09-14. This row said 500GB; Software Design §1's 1TB was right. **2026-10-02: Willie boots from it** (USB, `sda`, 931 GB, label `willyssd`; §5.1). Named "SanDisk Extreme USB SSD" in the 2026-10-02 setup — PRO or not is unconfirmed |
 
 ### 15.2 Drive and steering
 

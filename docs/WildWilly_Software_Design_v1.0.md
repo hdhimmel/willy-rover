@@ -25,7 +25,8 @@ it is recorded as such rather than described as if complete.
 
 **What "as-built" means here.** Every module listed exists and imports. The
 off-hardware suite — **476 tests** collected under `WILLY_SIMULATE=1` as of
-2026-10-02 (it said 144) — runs without the rover. Some of the code has since been
+2026-10-02 (it said 144; **403 `def test_` functions across 73 files** by count after
+`80c074f`) — runs without the rover. Some of the code has since been
 proven on the assembled rover (Pico links, encoders, sonar, IMU reset, voice); much
 has not — in particular everything built 2026-10-01/02 and listed below as such has
 run in simulation only. Those are three different claims and this document keeps
@@ -38,12 +39,12 @@ them separate.
 | Property | Value |
 |----------|-------|
 | Host | Raspberry Pi 5 (8GB), Debian 13 Trixie, Python 3.13.5 |
-| Boot | **1TB SSD** (owner-confirmed 2026-09-14) |
+| Boot | **1TB SSD** (owner-confirmed 2026-09-14). ✅ **2026-10-02: boots FROM the SanDisk Extreme USB SSD** (`sda`, 931 GB, label `willyssd`), EEPROM `BOOT_ORDER=0xf14` (USB first, SD fallback); the SD card is a weekly-refreshed bootable fallback. See Master Hardware Design §5.1 |
 | Entry point | `main.py` → `RoverBrain().run()` |
 | Process management | systemd unit `willy-rover.service`, `Restart=on-failure` |
-| Modules | 33 Python files at repository root (was 26; recounted 2026-10-02) |
-| Source size | ~8,490 lines (was ~4,160) |
-| Tests | **476** collected across 66 files under `WILLY_SIMULATE=1` (2026-10-02; was 144 across 17). Later 2026-10-02: +5 functions, **481 across 67** by count, not re-collected |
+| Modules | 33 Python files at repository root (was 26; recounted 2026-10-02). **35** after `80c074f` (+`feature_requests.py`, `recognition.py`) |
+| Source size | ~8,490 lines (was ~4,160); **~9,700** after `80c074f` |
+| Tests | **476** collected across 66 files under `WILLY_SIMULATE=1` (2026-10-02; was 144 across 17). Later 2026-10-02: +5 functions, **481 across 67** by count, not re-collected. After `80c074f`: **403 `def test_` functions across 73 files** (a plain count, lower than the collected figure because parametrised cases collect as several items) |
 | Simulation mode | `WILLY_SIMULATE=1` gates every real I²C and GPIO open |
 
 ### 1.1 Module inventory
@@ -57,25 +58,27 @@ refresh; treat those as approximate.
 | Module | Lines | Responsibility |
 |--------|-------|----------------|
 | `brain.py` | 849 | Top-level FSM, tick loop, directive arbitration |
-| `voice.py` | 507 | Wake word, STT, intent parsing, TTS, fast-path matching. Since 2026-10-02 (not yet run on the rover): `name_room`/`mark_stairs` fast-path intents, "forget X" / "what do you remember" / "what do I usually ask", stored instructions applied by one exact-match substitution, unknown-intent → confidence 0.0 |
+| `voice.py` | 507 | Wake word, STT, intent parsing, TTS, fast-path matching. Since 2026-10-02 (not yet run on the rover): `name_room`/`mark_stairs` fast-path intents, "forget X" / "what do you remember" / "what do I usually ask", stored instructions applied by one exact-match substitution, unknown-intent → confidence 0.0. Later 2026-10-02: demonstration intents (`demo_start`/`demo_stop`/`demo_replay`), `enrol` (*"this is <Name>"*), `forget_everyone`; `interpret_text()` (email commands); `prompt_listen()` (one utterance without the wake word, FR-2100-003); `set_current_person()`/`current_person()` scoping *"remember that"* facts |
 | `config.py` | 482 | All tunables, addresses, pin maps; `validate()` self-check |
 | `sensors.py` | 320 | Sonar, IMU, ADC, encoders, current monitors |
 | `world_model.py` | 282 | Persistent spatial model — obstacles, rooms, objects, routes; stair edges (`Stair`, `stairs` table, `ray_to_segment()`) since 2026-10-02 |
 | `ai_provider.py` | 272 | Unified cloud/local LLM abstraction |
 | `display.py` | 197 | Face rendering and status overlay |
-| `email_client.py` | 184 | IMAP/SMTP with allowlist and confirm gates |
+| `email_client.py` | 184 | IMAP/SMTP with allowlist and confirm gates. Since 2026-10-02 (`351f26e`, 352 lines, not yet run on the rover): owner email commands (`command_text()`, `dkim_verified()`, `message_age_s()`, `_handle_command()`), `remove_allowed_sender()`, approval-handler list for `approve <code>`, `send_owner_reply()` |
 | `retrieval_task.py` | 181 | Object retrieval sub-FSM |
-| `vision.py` | 162 | Object detection (CPU + Hailo NPU backends) and bearing/range heuristics |
-| `memory_store.py` | 173 | Conversational and episodic memory (SQLite). `note_routine()` has a caller since 2026-10-02 (`brain.py`, every queued request as `"<intent> around HH:00"`); `top_routines()` added |
+| `vision.py` | 162 | Object detection (CPU + Hailo NPU backends) and bearing/range heuristics. `capture_frame()` (BGR frame for face recognition, same privacy gate) since 2026-10-02 |
+| `memory_store.py` | 173 | Conversational and episodic memory (SQLite). `note_routine()` has a caller since 2026-10-02 (`brain.py`, every queued request as `"<intent> around HH:00"`); `top_routines()` added. Later 2026-10-02: demonstration similarity is positional (`DEMO_START_NEAR_M`/`FAR_M`); unknown demonstration returns `(None, None)`; `get_context_for(text, person)` scopes `[Name] …` facts (FR-2100-004) |
 | `navigation.py` | 165 | Route resolution and local planning |
 | `safety.py` | 124 | The motion authority — sole gate to the motors |
 | `pursuit_task.py` | 101 | Come-here and follow-me sub-FSM |
 | `hailo_llm.py` | 116 | Hailo NPU intent-parsing LLM. **`ENABLE_HAILO_LLM=True`** (since 2026-09-01; this row said "not currently enabled" — see §7) |
-| `identity.py` | 273 | FR-2100 store and matcher only — separate SQLite file, three-band cosine match, pending-is-inert enrolment, `approve()`, `forget_all()`, greeting debounce. No camera, no embeddings, no greeting/email wiring; **no runtime module imports it**. Added to this table 2026-10-02 |
+| `identity.py` | 273 | FR-2100 store and matcher only — separate SQLite file, three-band cosine match, pending-is-inert enrolment, `approve()`, `forget_all()`, greeting debounce. No camera, no embeddings, no greeting/email wiring; **no runtime module imports it**. Added to this table 2026-10-02. ⛔ **Superseded later 2026-10-02 (`80c074f`):** `brain.py` imports it and `recognition.py` feeds it |
+| `recognition.py` | 97 | FR-2100 embedding source (`80c074f`, not yet run on the rover): OpenCV YuNet detection + SFace 128-d embedding on the CPU, models in `models/` (gitignored); own thread, single-slot result, `IDLE`-only scans every `FACE_SCAN_S`; `capture_for_enrolment()`. Frames are embedded and dropped. Disables itself if models or camera are missing. Added 2026-10-02 |
+| `feature_requests.py` | 239 | FR-2200 (`55c5596`, not yet run on the rover): `collect_evidence()` from his own log, cloud-composed request emailed with a one-time code, `approve()` writes `docs/feature-requests/<date>-<slug>.md` and commits that file alone, then pushes. Own low-frequency thread. Added 2026-10-02 |
 | `pico_link.py` | 214 | One framed-UART reader per Pico (`$<body>*<XX>`), newest frame plus its age; never invents a value (S-9). Used by `sensors.py` for Pico A encoders and Pico B sonar/IMU-RST. Added 2026-10-02 |
 | `tof.py` | 211 | SEN0628 (VL53L7CX 8×8) floor-profile subtraction and obstacle/drop classification, frame source injected. **Not imported by any runtime module**; `ENABLE_TOF=False` (sensor not fitted). Added 2026-10-02 |
 | `remote_cmd.py` | 90 | Inbound commands from Home Assistant: `POST :8765/command`, Bearer token from `secrets/remote_cmd_token.txt`, intents `status`/`battery`/`stop`/`come_here`. Stop → `stop_requested`; the rest queue like voice; replies via `brain._say()`. Owner decision 2026-10-01, see S-8. Added 2026-10-02 |
-| `motors.py` | 94 | Drive base and steering primitives. Applies `config.MOTOR_SIGN` at the throttle write — the sides are mounted mirrored, so the right side is negated |
+| `motors.py` | 94 | Drive base and steering primitives. Applies `config.MOTOR_SIGN` at the throttle write — the sides are mounted mirrored, so the right side is negated. Since 2026-10-02 (271 lines): `brake()` on a stopped, released drive is a no-op (`6be1091`); `wheel_duty()` closed-loop wheel speed (`5f74df7`, §2.3a) |
 | `smart_home.py` | 82 | Home Assistant REST client |
 | `odometry.py` | 74 | Dead-reckoning pose integration. Since 2026-10-02 can take each tick's rotation from the IMU yaw delta (`heading_source`, `ODOM_USE_IMU_HEADING`, **off** until the sign is checked); distance stays on the wheels |
 | `mapping.py` | 68 | Learning-mode map recording session |
@@ -174,7 +177,11 @@ Order of operations within `_tick()`:
    a stale IMU reading cannot mask a real tilt fault. The IMU's own read thread
    also treats a quaternion frozen past `IMU_STALE_S` as a failed read — the
    BNO085 driver returns its cached value forever, without error, after a chip
-   reset it did not cause — and after `IMU_RESET_AFTER_FAILS` failures pulses the
+   reset it did not cause. ✅ **Since `c23cbeb` (2026-10-02, live-proven):** "frozen"
+   means quaternion **and** raw accelerometer unchanged, and `IMU_STALE_S` is 3.0 s
+   (was 1.5): perfectly still, the fused quaternion stayed identical for up to 3.7 s
+   and latched a false `SENSOR_FAULT` every ~15 s (53 recoveries in 30 min → 0). The
+   report rate has fallen from ~10 Hz (2026-10-01) to ~5 Hz, cause unknown. And after `IMU_RESET_AFTER_FAILS` failures pulses the
    chip's hardware `RST` through Pico B (`SonarArray.reset_imu`, acknowledged
    `$R,ok`) and rebuilds the driver, at most once per `IMU_RESET_MIN_INTERVAL_S`.
    Alongside it, `_check_r5()` watches Pico A's R5-low flag (the encoders' 3.3 V
@@ -184,7 +191,10 @@ Order of operations within `_tick()`:
    between the tilt check and the battery tier, step 4):
    `_check_arm_current()` (6V arm rail above `ARM_CURRENT_LIMIT_A` 2.5 A for 0.4 s →
    `arm.release()`, `ARM_OVERCURRENT`), `_check_sonar_channels()` (per-channel
-   `SONAR_FAULT` from `SonarArray.failed_channels`, status prefix) and
+   `SONAR_FAULT` from `SonarArray.failed_channels`, status prefix; **debounced**
+   since `780b32a` — reported after `SONAR_FAULT_DEBOUNCE_S` (2 s) of continuous
+   failure, cleared after 2 s of health, after one flapping channel logged 46 events in
+   two minutes live) and
    `_check_uncommanded_motion()` (wheels turning with nothing commanded →
    `UNCOMMANDED_MOTION`, once per episode, not braked). Health-fault events now carry
    `value=`/`expected=` (`_fault_context()`).
@@ -201,6 +211,29 @@ Order of operations within `_tick()`:
 Tick duration is recorded and an overrun past `TICK_OVERRUN_THRESHOLD_S`
 (0.15s) is logged as a `TICK_OVERRUN` event with a running count. See §8 for
 the inconsistency between this threshold and the systemd watchdog interval.
+
+### 2.3a Wheel speed and braking (2026-10-02)
+
+**Built 2026-10-02, not yet run on the rover** unless stated.
+
+- **Speeds are mph** (`5f74df7`, FRD FR-400-004). `SPEED_MAX_MPH` 1.5 is the cap;
+  `SPEED_ROAM`/`SLOW`/`TURN` are **fractions of that cap** (0.667 / 0.333 / 0.667), not
+  PWM duty, and `SPEED_MAX` = 1.0. `SafetyController` and `DriveBase` still clamp to
+  `SPEED_MAX`. The motors top out near 147 RPM free (~1.8 mph); 3 mph is not reachable.
+- **Closed-loop wheel speed** (`5f74df7`, FRD FR-500-004). The ramp thread turns each
+  wheel's ramped command into a target RPM (`cur × cap_rpm()`) and asks the pure
+  `motors.wheel_duty()` for a duty: feed-forward from `WHEEL_FF` (per-wheel duty→RPM
+  line, 2026-10-02 breakaway sweep) plus a PI trim on the encoder (`WHEEL_KP`,
+  `WHEEL_KI`) bounded to ±`WHEEL_TRIM_MAX` (0.30), so a blocked wheel gets a limited push
+  and the stall stop still fires. Encoders reach it through
+  `DriveBase.attach_encoders()` (called in `RoverBrain.__init__`); unhealthy encoders or
+  `WHEEL_SPEED_CONTROL=False` → feed-forward only. `tests/test_wheel_speed_control.py`.
+- **No brake on a stopped, released drive** (`6be1091`). In a latched fault
+  `emergency_stop()` runs every tick; each call woke the sleeping PCA9685s and wrote
+  brake, the ramp loop released them again after `MOTOR_COAST_AFTER_S`, and waking +
+  braking briefly drives each motor between its two direction-pin writes — **all six
+  wheels twitched, seen live**. `brake()` now returns at once when the drive is
+  coasting and every target and actual is zero. `tests/test_brake_no_twitch.py`.
 
 ---
 
@@ -408,6 +441,12 @@ legitimately needs one where passive observation does not.
      the BNO085 logs each as SHTP error 2 and its Error List packet crashed
      `adafruit_bno08x` (`KeyError: 12`), so with the base off every retry knocked the
      IMU over. `tests/test_selftest_i2c_probe.py`.
+     ⛔ **Superseded 2026-10-02 (`05bcddd`), live-proven:** there is **no full scan**, and
+     **0x4A is never probed** — the one startup scan still quick-wrote it, and on the
+     first boot the SHTP error list stalled the BNO085 into `SENSOR_FAULT`.
+     `_i2c_present(seen, probe)` counts 0x4A present (its driver constructing proves it;
+     `imu.is_healthy` is its health check) and probes only the other expected addresses
+     not yet seen. Boot no longer latches `SENSOR_FAULT`.
    - **Base-off is named** (`fa7a683`). If every critical failure is base-fed (battery
      ADC, encoders, motor drivers) and the +12V bus monitor reads below
      `MOTOR_RAIL_MIN_V`, the failure reads "base power appears OFF (12V bus X V)".
@@ -515,7 +554,11 @@ blocks motion the same way a missing sensor does.
 `brain.py::_retention_sweep()` calls `memory.purge_expired()` from `IDLE` at most once
 a day (FR-1800-004 / FR-1900-010). `world_model.db` and files on disk
 (`privacy.purge_expired()`) are not swept. `identity.py` would add a third SQLite file;
-nothing opens it at runtime yet.
+nothing opens it at runtime yet. ⛔ **Superseded 2026-10-02 (`80c074f`):** `RoverBrain`
+opens `identities.db` (`IDENTITY_DB_PATH`) at startup. Small JSON state lives in
+`secrets/` (never in git): pending enrolment codes, the pending feature request, its
+history and push-retry flag. Demonstrations are stored in `memory.db` **and** as a
+route in `world_model.db` (`c770c40`).
 
 ---
 
@@ -567,6 +610,13 @@ clamped to `SPEED_MAX` and duration to `MAX_COMMAND_DURATION_S`.
 
 Everywhere else the AI is advisory: voice intent interpretation, free-text
 response, world-state summarisation.
+
+**Added 2026-10-02, not yet run on the rover.** An owner email command (`351f26e`)
+reaches the same interpreter through `voice.interpret_text()` and is queued with
+`source='email'`, so it is gated exactly like a spoken command; only DKIM-verified,
+fresh owner mail gets that far (FRD FR-2000-012/013). FR-2200's feature requests
+(`55c5596`) use the cloud model to **compose text** only — the result is an email and,
+on approval, one Markdown file; nothing it produces reaches an intent or the motors.
 
 **Voice front-end changes, 2026-10-01/02 — simulated only, not yet run on the rover.**
 A transcript that is only the wake phrase (`_BARE_ADDRESS`) never reaches the model —
@@ -1234,6 +1284,10 @@ Tagged events currently emitted:
 | `UNCOMMANDED_MOTION` | `_check_uncommanded_motion()` — 2026-10-02 |
 | `STAIR_LABELLED` | `brain.py` `mark_stairs` intent — 2026-10-02 |
 | `COMMANDED_SHUTDOWN` | `stop()` tail, before `shutdown -h now` |
+| `EMAIL_COMMAND` | `email_client._handle_command()` (refused_dkim / refused_stale / approve_* / allowlist_* / accepted), `brain._email_command()` (queued) — 2026-10-02 |
+| `FEATURE_REQUEST` | `feature_requests.py` (proposed / approved) — 2026-10-02 |
+| `IDENTITY` | `brain.py` enrolment, approval, forget-everyone — 2026-10-02. Strangers are never logged |
+| `DEMO` | `brain.py` demonstration record / save / replay — 2026-10-02 |
 
 *Rows dated 2026-10-02 are simulated only, not yet run on the rover. `_check_health()`
 fault events carry `value=` and `expected=` since the same day (FR-1100-002).*
@@ -1265,6 +1319,11 @@ Added 2026-10-01/02, all simulated: `test_selftest_i2c_probe.py`,
 `test_brain_voice_selftest_fault.py`, `test_remote_cmd.py`, `test_battery_halt.py`,
 `test_retrieve_gate.py`, `test_current_limits.py`, `test_sensor_gaps.py`,
 `test_voice_tone.py`, plus additions to `test_brain_voice_drain.py`.
+Later 2026-10-02, also simulated: `test_brake_no_twitch.py`, `test_wheel_speed_control.py`,
+`test_email_commands.py`, `test_feature_requests.py`, `test_demonstrations.py`,
+`test_face_recognition_flow.py`, plus additions to `test_sensor_gaps.py` and
+`test_selftest_i2c_probe.py`. Count after `80c074f`: **403 `def test_` functions across 73
+files**.
 
 Off-hardware execution requires `WILLY_SIMULATE=1` plus `pygame` and
 `networkx`. `config.SIMULATE_HARDWARE` gates every real I²C and GPIO open in
@@ -1350,6 +1409,12 @@ currently checks battery ladder ordering (`SHUTDOWN < SAFE < RTH < WARN`),
 
 Two feature flags default on and were explicitly confirmed by the owner rather
 than left as accidental defaults: `ENABLE_CLOUD_AI` and `ENABLE_EMAIL`.
+
+**Flags turned on 2026-10-02 (built, not yet run on the rover):**
+`ENABLE_EMAIL_COMMANDS` (FR-2000-012, owner decision 2026-09-11; the kill switch if the
+owner's Gmail is ever suspected compromised), `ENABLE_FEATURE_REQUESTS` (FR-2200),
+`ENABLE_FACE_RECOGNITION` (FR-2100; inert if `models/` lacks the YuNet/SFace files) and
+`WHEEL_SPEED_CONTROL` (FR-500-004; False leaves feed-forward only).
 
 `ENABLE_AUTONOMOUS_ROAM=True` no longer means "roams unattended". Since
 2026-09-09 it means "allowed to *ask*"; the session grant described in §3.1.1 is

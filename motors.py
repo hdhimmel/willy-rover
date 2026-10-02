@@ -53,9 +53,9 @@ class DriveBase:
         self._encoders=None; self._integ=dict.fromkeys(self._WHEELS,0.0)   # FR-500-004
         self._running=True
         self._thread=threading.Thread(target=self._ramp_loop,daemon=True); self._thread.start()
-    # FR-500-004 (closed-loop speed) -- NOT implemented as closed-loop: this ramps the
-    # commanded target by a fixed rate/time step (open-loop), it does not read encoder
-    # counts_per_sec() to correct for a surface change. See sensors.py's Encoders class.
+    # FR-500-004 (closed-loop speed): BUILT 2026-10-02. This loop ramps the commanded fraction
+    # of the mph cap, then wheel_duty() turns it into a per-wheel duty from feed-forward plus a
+    # bounded PI trim on the encoder RPM (feed-forward only when the encoders are unhealthy).
     # Idle power, added 2026-09-30. throttle=0.0 is adafruit_motor's HARD BRAKE -- both legs
     # driven -- so a stopped rover was holding six bridges on at 50Hz forever. Measured on the
     # +12V motor branch: 0.019A doing nothing. Once every wheel is commanded to zero AND has
