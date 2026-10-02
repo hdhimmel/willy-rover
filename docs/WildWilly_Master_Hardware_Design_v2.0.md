@@ -184,7 +184,7 @@ Two identical 50 × 40 boards on standoffs:
 - **LOWER — battery entry and protection.** Battery in, **Q1** (FQP27P06 reverse-polarity
   FET, §2.3), +12 V out. Live whenever the pack is connected and the main switch closed.
 - **UPPER — regulated output side.** 9 V / 5 V / 6 V / 3.3 V back up from the power level,
-  out to loads. Contents are from the drawing and unconfirmed (§14).
+  out to loads: the voltage rails (owner-confirmed 2026-10-02).
 
 #### Stacking
 
@@ -315,7 +315,7 @@ later.
 ### 3.1 Topology
 
 One non-isolated segment on the Pi's `/dev/i2c-1` (GP2 SDA1, GP3 SCL1), fanned out through
-passive GODIY hubs (§14 item 24: one hub or two daisy-chained — confirm). Device logic
+passive GODIY hubs, two daisy-chained. Device logic
 runs from R4 (Pi header pin 1). Clock 100 kHz (`dtparam=i2c_arm_baudrate` in
 `config.txt` is authoritative; `config.I2C_BAUDRATE` mirrors it). Any device holding SDA
 or SCL low takes the whole bus down, so a single missing address is diagnosed as a
@@ -879,7 +879,7 @@ rail has its own current guard (Software Design §2.3).
 
 | Item | As set up |
 |------|-----------|
-| Boot device | SanDisk Extreme USB SSD — `sda`, 931 GB, filesystem label `willyssd` |
+| Boot device | SanDisk Extreme PRO USB SSD — `sda`, 931 GB, filesystem label `willyssd` |
 | Boot order | EEPROM `BOOT_ORDER=0xf14` — USB first, SD card fallback |
 | SD card | Bootable fallback, refreshed weekly by `rpi-clone` from the `willie-sd-refresh` systemd timer |
 | Backup | Nightly restic to the NAS, `\\MYCLOUD\heaven\willie\restic`, from the `willie-backup` timer |
@@ -929,7 +929,7 @@ match the UARTs on them; SPI0 must stay disabled (`dtparam=spi=off`).
 
 The ECHO dividers stay on the sensor side (signal board); nothing at 5 V reaches a Pi or
 Pico GPIO. The breakout must stay passive — anything it adds to GP2/GP3 counts against
-the bus budget. Whether it carries per-pin LEDs is unconfirmed (§14).
+the bus budget. It has no per-pin LEDs.
 
 ### 5.4 Vision and display
 
@@ -937,7 +937,7 @@ the bus budget. Whether it carries per-pin LEDs is unconfirmed (§14).
 |--------|-----------|
 | Front camera — imx708 (CSI) | CSI FFC, mounted 15° downward |
 | Rear camera — USB | USB, mounted 15° downward; not used by software (CPU vision backend disabled) |
-| Display — 5" DSI touch, 800×480 | DSI ribbon + 3-pin power tap on the 40-pin header (pins unrecorded, §14) |
+| Display — 5" DSI touch, 800×480 | DSI ribbon; powered from the Pi's 5 V header |
 | AI HAT+ 2 | PCIe FFC |
 
 Camera mount height is unrecorded. `vision.py::localize()` does not model the 15° tilt;
@@ -967,7 +967,7 @@ default sink; card indices are never pinned. `voice.py` captures at 48 kHz and d
 
 3 × HC-SR04 — front (centre), left, right — read by Pico B (§4.7) through the signal
 board's dividers (§4). Sonar VCC is R2 5 V. Harness: **white VCC, blue GND, grey TRIG,
-purple ECHO.** Replacement sensors are on order (§14 item 21).
+purple ECHO.** All three are working.
 
 | Position | TRIG (Pico B) | ECHO (Pico B, ÷) | Bearing |
 |----------|------|------|------|
@@ -1086,7 +1086,7 @@ command protocol with the DIP set to UART.
   surfaces; the ToF looks through glass.
 - R4 has no monitor; if it goes tight the symptom will be I²C flakiness.
 
-One spare SEN0628 is on hand. No scanning lidar is fitted or planned.
+There is no spare SEN0628. No scanning lidar is fitted or planned.
 
 ---
 
@@ -1382,7 +1382,7 @@ Standing rules.
 
 3. Bus pull-ups metered, not assumed: SDA↔VCC and SCL↔VCC, power off. Expect ~1.8 kΩ or
    lower with breakout pull-ups; below ~1.3 kΩ check the sink budget. Do not add a 4.7 kΩ
-   pair (§3.2). Confirm the LTC4311 is fitted (§16.4).
+   pair (§3.2). The LTC4311 is fitted (§16.4).
 4. Star-ground bond present and the board ground bus continuous to the star (§10).
 5. ADS1115 A0 metered in the 2.76–3.06 V window. A reading near 12 V means the divider is
    open and the ADC will be destroyed.
@@ -1500,10 +1500,12 @@ Item numbers are stable; closed items are removed, not renumbered.
     stow pose and a safe elbow centre.
 23. **Odometry and IMU** — drive a measured straight line (rolling diameter, other five
     wheels' scale); check the IMU yaw sign; BNO085 report rate ~5 Hz, cause unknown.
-24. **Unconfirmed as-built details** — one GODIY hub or two daisy-chained; the EPLZON power
-    stack's upper-board contents; which header pins the display tap uses and what it draws;
-    whether the GeeekPi breakout has per-pin LEDs; the INA260 boards' physical positions (§16.3); camera mount height; the rear
-    USB camera's model.
+24. **Unconfirmed as-built details** — which header pins the display's 5 V tap uses and what
+    it draws; camera mount height; whether the BNO085 INT wire is on the Pi (GP15, phys 10) as
+    recorded (it is unused by software; the BNO085 RST goes to Pico B GP15). Confirmed
+    2026-10-02: two GODIY hubs daisy-chained; the EPLZON upper power board carries the voltage
+    rails; INA260s on the power tray; no LEDs on the GeeekPi breakout; LTC4311 fitted; rear
+    USB camera is a Microdia "Webcam Vitade AF" by lsusb (check the label).
 
 ---
 
@@ -1519,7 +1521,7 @@ Current components only.
 | AI HAT+ 2 (Hailo-10H, 8 GB) | NPU — vision, intent model | 1 | Installed |
 | 5" DSI touch display, 800×480 | Face / UI | 1 | Installed |
 | imx708 camera module (CSI) | Front camera | 1 | Installed |
-| USB camera | Rear camera (model to confirm) | 1 | Installed, unused by software |
+| USB camera — Microdia "Webcam Vitade AF" (`0c45:6366`, by lsusb) | Rear camera | 1 | Installed, unused by software |
 | USB PnP **Audio** Device puck (`0c76:1203`) | Speaker; its mic unused | 1 | Installed |
 | USB PnP **Sound** Device (`08bb:2902`) | Microphone, 48 kHz | 1 | Installed |
 | GeeekPi Micro GPIO Terminal Block breakout | Passive 40-pin breakout, 12 lines (§5.3) | 1 | Installed |
@@ -1527,7 +1529,7 @@ Current components only.
 | EPLZON 30-column breadboard carrier | Pico carriers (§4.8) | 2 | Installed |
 | Raspberry Pi Active Cooler | Pi 5 blower + heatsink | 1 | Installed |
 | 5 V case fan, 30–40 mm | Head assembly exhaust | 1 | Installed |
-| SanDisk Extreme USB SSD, 1 TB | Boot drive | 1 | Installed |
+| SanDisk Extreme PRO USB SSD, 1 TB | Boot drive | 1 | Installed |
 
 ### 15.2 Drive and steering
 
@@ -1552,7 +1554,7 @@ Current components only.
 
 | Component | Role | Qty | Status |
 |-----------|------|-----|--------|
-| GODIY passive I²C hub | Fan-out | 1–2 (§14 item 24) | Installed |
+| GODIY passive I²C hub | Fan-out, two daisy-chained | 2 | Installed |
 | Adafruit LTC4311 | I²C accelerator — no address | 1 | Installed |
 | ADS1115 | ADC, 0x48 — A0 battery, A1 FSR | 1 | Installed |
 | INA260 | 0x40 = R2 5 V, 0x44 = R3 6 V arm, 0x45 = +12 V bus | 3 | Installed |
