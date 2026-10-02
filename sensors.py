@@ -400,7 +400,24 @@ class ADC:
     @property
     def battery_raw(self): return self._bat_raw
     @property
-    def battery_volts(self): return self._bat_raw*self._LSB/config.BATTERY_DIVIDER_SCALE
+    def divider_volts(self):
+        """The ADS1115 A0 divider reading alone (cross-check and fallback only)."""
+        return self._bat_raw*self._LSB/config.BATTERY_DIVIDER_SCALE
+    # 2026-10-02: the pack voltage comes from the +12V bus INA260 (0x45) whenever that rail is
+    # live. The A0 divider read 7.19 V on an 11.98 V pack while 0x45 read 11.90 V; the bus
+    # monitor is the trustworthy one. The divider is only used when the bus is switched off
+    # (SW-M / base off), where 0x45 has nothing to measure. brain.py sets bus_source.
+    bus_source=None
+    @property
+    def battery_volts(self):
+        src=self.bus_source
+        if src is not None:
+            try:
+                bus=src()
+                if bus>=config.MOTOR_RAIL_MIN_V: return bus+config.BUS_TO_PACK_DROP_V
+            except Exception:
+                pass
+        return self.divider_volts
     @property
     def battery_pct(self):
         # Display-only (HUD/voice) — a linear map between under-load thresholds, not a true

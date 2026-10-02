@@ -735,6 +735,7 @@ SELFTEST_OVERRIDE_AFTER=3
 # then decide about escalation. Threshold is well below any real operating voltage (the bus
 # measured 11.3-11.4V) but above the ~0V a genuine cut produces.
 MOTOR_RAIL_MIN_V=6.0
+BUS_TO_PACK_DROP_V=0.08   # F1 + SW-MAIN + Q1 between the pack and the 0x45 bus monitor (11.98 vs 11.90)
 MOTOR_RAIL_GRACE_S=1.0            # sustained below threshold before it's reported, not a blip
 ENABLE_STUCK_ALERT_EMAIL=True
 STUCK_ALERT_COOLDOWN_S=600.0      # min seconds between stuck alerts (10 min)

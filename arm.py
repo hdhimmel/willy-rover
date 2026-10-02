@@ -26,6 +26,17 @@ if not config.SIMULATE_HARDWARE:
 # non-blocking, tick-serviced step machine (_start_wave()/_wave()) the same day, once it became
 # clear the "IDLE-only, low risk" reasoning for leaving it alone assumed no systemd watchdog was
 # configured, which turned out to be wrong (WatchdogSec=500ms is real -- see FRD v3.1 G-5).
+def _all_outputs_off(addr):
+    """Raw write, before the driver exists: ALL_LED_ON_H (0xFB)=0, ALL_LED_OFF_H (0xFD)=0x10
+    (full-off bit) -- every channel to no pulse. Failure is logged, never fatal."""
+    try:
+        while not _i2c.try_lock(): pass
+        try:
+            _i2c.writeto(addr,bytes([0xFB,0x00])); _i2c.writeto(addr,bytes([0xFD,0x10]))
+        finally: _i2c.unlock()
+    except Exception as e:
+        import logging; logging.getLogger('arm').warning(f'arm outputs-off at start failed: {e}')
+
 class Arm:
     # PCA9685 @0x43, CH0-6 -- the hardware-verified 2026-09-17 map is in config.py (ARM_BASE=6
     # ... ARM_WRIST_PITCH=0), not the old base->gripper CH1-7 order. No per-joint safe limits
@@ -40,6 +51,12 @@ class Arm:
              'gripper':config.ARM_GRIPPER}
     _PERIOD_US=1_000_000/config.SERVO_PWM_FREQ
     def __init__(self):
+        # NO JUMP AT STARTUP (2026-10-02, seen on the rover). Releasing only SLEEPs the PCA9685,
+        # and the chip keeps the last pulse widths; PCA9685()'s reset() writes MODE1=0, which
+        # wakes it, so the shoulder jumped back to the previous run's pulse before any of our
+        # code ran. Set ALL_LED_OFF_H full-off at register level FIRST: every channel then
+        # outputs no pulse (servos limp) until something deliberately drives a joint.
+        if not config.SIMULATE_HARDWARE: _all_outputs_off(config.ARM_PCA_ADDR)
         self._pca=hw_sim.SimServoBank() if config.SIMULATE_HARDWARE else PCA9685(_i2c,address=config.ARM_PCA_ADDR)
         self._pca.frequency=config.SERVO_PWM_FREQ
         self._pulse=dict.fromkeys(self._JOINTS,config.ARM_SERVO_CENTER_US)
@@ -61,7 +78,12 @@ class Arm:
                     and time.monotonic()-self._idle_since>=config.ARM_RELEASE_AFTER_S):
                 self.release()
     def release(self):
-        """Stop driving every joint. The arm goes limp and will move under gravity."""
+        """Stop driving every joint. The arm goes limp and will move under gravity.
+        Outputs are zeroed before the chip sleeps, so nothing that later wakes it -- a restart,
+        a single-joint move -- can replay an old pulse on the other joints."""
+        for ch in self._JOINTS.values():
+            try: self._pca.channels[ch].duty_cycle=0
+            except Exception: pass
         try: self._pca.mode1_reg=self._pca.mode1_reg|0x10      # MODE1 bit4 SLEEP
         except Exception: pass
         self._asleep=True

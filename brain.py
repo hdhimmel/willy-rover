@@ -209,6 +209,8 @@ class RoverBrain:
         try: self.motors.attach_encoders(self.encoders)   # FR-500-004 closed-loop wheel speed
         except Exception: log.warning('Wheel speed control: could not attach encoders',exc_info=True)
         self.current=_init_device(CurrentMonitor,'current')
+        # Battery voltage from the +12V bus monitor when the bus is live (see ADC.battery_volts).
+        self.adc.bus_source=lambda: self.current.rail('bus_12v')['voltage_v']
         self.arm=_init_device(Arm,'arm')
         self.odometry=Odometry(self.encoders,
                                heading_source=lambda: self.imu.heading if self.imu.is_healthy else None)
@@ -1930,7 +1932,7 @@ class RoverBrain:
         if bus<config.MOTOR_RAIL_MIN_V:
             self._bat_xcheck_since=None
             return ''   # cut thrown or bus dead: not comparable, see the docstring
-        adc=self.adc.battery_volts
+        adc=getattr(self.adc,'divider_volts',self.adc.battery_volts)
         diff=abs(adc-bus)
         now=time.time()
         if diff<=config.BAT_CROSSCHECK_MAX_DIFF_V:
