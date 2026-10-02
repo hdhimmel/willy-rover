@@ -382,9 +382,13 @@ class VoicePipeline:
         # THE rate boundary. Everything downstream of this -- wake scoring, the noise floor, the
         # endpointer's fps math, Whisper -- assumes 16kHz/1280, and this is what keeps that true
         # no matter what the mic's native rate is. Both capture paths go through it.
-        raw,overflowed=stream.read(self._blocksize)
-        if overflowed: self._hb['overflows']+=1
-        return downsample_to_16k(raw.flatten(),self._rate_factor)
+        # 2026-10-02: blocks come from the PortAudio CALLBACK via a queue (see _loop), not from a
+        # blocking read. The blocking read dropped ~55 blocks a minute (~20% of the audio) when
+        # scoring or anything else on this thread ran late, and a wake word missing chunks is a
+        # wake word that fails at distance. The queue holds AUDIO_QUEUE_BLOCKS (~4 s) of slack.
+        try: raw=self._audio_q.get(timeout=2.0)
+        except queue.Empty: raise RuntimeError('no audio from the capture callback for 2 s')
+        return downsample_to_16k(raw,self._rate_factor)
 
     def _loop(self):
         import sounddevice as sd
@@ -394,8 +398,14 @@ class VoicePipeline:
         self._rate_factor=int(config.AUDIO_INPUT_RATE)//16000
         self._blocksize=frame_len*self._rate_factor
         try:
+            self._audio_q=queue.Queue(maxsize=config.AUDIO_QUEUE_BLOCKS)
+            def _cb(indata,frames,t,status):
+                if status.input_overflow: self._hb['overflows']+=1
+                try: self._audio_q.put_nowait(indata[:,0].copy())
+                except queue.Full: self._hb['overflows']+=1   # consumer 4 s behind: drop
             with sd.InputStream(samplerate=int(config.AUDIO_INPUT_RATE),channels=1,dtype='int16',
-                                 device=config.AUDIO_INPUT_DEVICE,blocksize=self._blocksize) as stream:
+                                 device=config.AUDIO_INPUT_DEVICE,blocksize=self._blocksize,
+                                 latency='high',callback=_cb) as stream:
                 # Logged once, by resolved name: picking the wrong mic is otherwise invisible and
                 # presents as "the wake word just doesn't work" -- see the 2026-08-21 hunt.
                 try:

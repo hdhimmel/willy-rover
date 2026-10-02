@@ -925,6 +925,7 @@ AUDIO_INPUT_DEVICE='USB PnP Sound Device'
 # 16000 -- validate() enforces it. A future 16kHz-native mic sets this to 16000 and the conversion
 # becomes a passthrough.
 AUDIO_INPUT_RATE=48000
+AUDIO_QUEUE_BLOCKS=50   # ~4 s of 80 ms blocks between the capture callback and the wake loop
 # NOT USED. Kept only to document that it is inert: all three playback sites in voice.py call
 # `pw-play`, which routes to PipeWire's default sink, and nothing anywhere reads this value.
 # Setting it does nothing. To change the output device, change PipeWire's default sink.
