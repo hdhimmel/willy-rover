@@ -19,6 +19,18 @@ WILLY_DATA_ROOT=storage.resolve_root('WILLY_DATA_ROOT','.')      # operational/w
 WILLY_MAP_ROOT=storage.resolve_root('WILLY_MAP_ROOT','.')        # world_model.db lives here (§9)
 WILLY_MEMORY_ROOT=storage.resolve_root('WILLY_MEMORY_ROOT','.')  # memory.db lives here (§FR-1900)
 WILLY_LOG_ROOT=storage.resolve_root('WILLY_LOG_ROOT','logs')     # logsetup.py's rotating file dir
+# SIMULATION NEVER WRITES THE REAL STORES (2026-10-02). Running the test suite on the rover wrote
+# simulated BATTERY_HALT events into the real logs/willy.log -- which feature_requests.py reads as
+# evidence -- and full-sim brain tests open memory.db/world_model.db in the repo. Under
+# WILLY_SIMULATE, any root not set explicitly goes to a throwaway directory instead.
+if SIMULATE_HARDWARE:
+    import tempfile as _tf
+    _SIM_ROOT=os.path.join(_tf.gettempdir(),'willy-sim')
+    for _env,_name in (('WILLY_DATA_ROOT','WILLY_DATA_ROOT'),('WILLY_MAP_ROOT','WILLY_MAP_ROOT'),
+                       ('WILLY_MEMORY_ROOT','WILLY_MEMORY_ROOT'),('WILLY_LOG_ROOT','WILLY_LOG_ROOT')):
+        if not os.environ.get(_env):
+            globals()[_name]=os.path.join(_SIM_ROOT,'logs' if _name=='WILLY_LOG_ROOT' else '')
+    os.makedirs(os.path.join(_SIM_ROOT,'logs'),exist_ok=True)
 
 DISPLAY_W=800; DISPLAY_H=480; DISPLAY_FPS=30; DISPLAY_ROTATE=0
 
