@@ -265,9 +265,11 @@ ARM_POSE_REST={'elbow':2610,'shoulder':2010,'wrist_pitch':2450}
 ARM_WAVE_WRIST_US=(1380,1620)   # oscillate the wrist between these, ~0.35s per leg, 4 cycles
 ARM_WAVE_APPROACH_STEP_US=50    # shoulder step size travelling to the pose
 #
-# Any arm motion should watch INA260 ARM_6V current and release a channel that stays above this
+# Any arm motion should watch INA260 ARM_6V current and release the arm when it stays above this
 # for this long. A threshold checked only AFTER a move completes is useless -- that is how the
-# first elbow servo was destroyed. The check must run inside the movement loop.
+# first elbow servo was destroyed. ENFORCED since 2026-10-02 by brain._check_arm_current(), every
+# tick (~20 Hz) rather than inside each movement loop, so it covers every arm motion. Arm.release()
+# sleeps the whole PCA9685: EVERY arm channel goes limp, not just the straining one.
 ARM_CURRENT_LIMIT_A=2.5
 ARM_CURRENT_LIMIT_S=0.4
 # FR-200-002 overcurrent, per INA260 rail (2026-10-02). Limits are 90% of the branch fuse
@@ -277,10 +279,9 @@ ARM_CURRENT_LIMIT_S=0.4
 OVERCURRENT_LIMIT_A={'bus_12v':9.0,'steering_5v':9.0}
 OVERCURRENT_S=1.0
 
-# Wheel encoders — Pico A over uart4-pi5, Phase A edges only (§4.7). Not quadrature: all six
-# Phase B greens have read dead since 2026-09-18, so the counts have magnitude and NO
-# DIRECTION. counts/rev below is still a listing-derived guess and is wrong for this
-# transport; it has never been bench-confirmed.
+# Wheel encoders — Pico A over uart4-pi5 (§4.7). SIGNED x2 quadrature since firmware a-0.3
+# (2026-10-01): both Phase A edges counted, Phase B sampled for direction; Phase B is alive on
+# all six. ENCODER_COUNTS_PER_REV=763 is measured (one wheel, under power) -- see its own note.
 # ENCODER_ADDR REMOVED 2026-09-30. The MCP23017 is off the bus; a live scan returns ten
 # devices and none of them is 0x27. Encoder decode is Pico A's job now, over uart4-pi5.
 PICO_A_DEVICE='/dev/ttyAMA4'   # uart4-pi5, Pi GP12/GP13 -- encoders + R5 rail sense
@@ -551,7 +552,7 @@ BAT_FULL_V=11.58      # display-only 100% anchor for battery_pct (post-fuse volt
 # raising this above the shutdown threshold would disable the protection the ladder exists for.
 BAT_IMPLAUSIBLE_V=5.0
 BAT_WARN_V=11.4       # -> warn
-BAT_RTH_V=10.8        # -> return-to-home / DOCK
+BAT_RTH_V=10.8        # -> graceful halt while ENABLE_DOCKING=False; return-to-home / DOCK otherwise
 BAT_SAFE_V=10.5        # -> SAFE_MODE (motion stop, arm holds)
 BAT_SHUTDOWN_V=10.2   # -> controlled shutdown; also the 0% anchor for battery_pct
 BAT_HYSTERESIS_V=0.2
@@ -902,9 +903,9 @@ IDLE_PERSONALITY_CYCLE_S=90  # FR-1600-007: how often the idle 'silly' animation
 # IS now wired to use it — see ENABLE_HAILO_VISION below (2026-08-21). The flags in this block
 # describe only the older CPU/Arducam fallback path, which that swap left untouched.
 # The RETRIEVE TASK itself (voice 'fetch the X'), separate from the camera backend flags around
-# it. Off until FR-1700 is safe: the grasp drives the elbow to its forbidden centre, the arm
-# current limit is not enforced, and hand-off releases on a timer because nothing reads the
-# FSR (2026-10-02 FRD audit). A misheard bare "Hey Willie" was classified as 'retrieve' on
+# it. Off until FR-1700 is safe: the grasp drives the elbow to its forbidden centre and
+# hand-off releases on a timer because nothing reads the FSR (2026-10-02 FRD audit). The arm
+# current limit IS enforced (brain._check_arm_current), but it only limits the damage. A misheard bare "Hey Willie" was classified as 'retrieve' on
 # 2026-10-01 -- with this off, that is answered, not acted on.
 ENABLE_RETRIEVAL_TASK=False
 ENABLE_OBJECT_RETRIEVAL=False  # 2026-08-20: briefly flipped True and live-verified the capture/

@@ -147,13 +147,20 @@ matches §3.3's table.
      the pack metered at 11.37V; nominal 0.242. One point only — see §6.2 and §14 item 12.
    - **The software gap stands regardless** — `sensors.py` still cannot tell a real zero
      from a broken sensor, so a *future* divider fault would repeat this silently. See
-     Software Design §12 item 7.
+     Software Design §12 item 7. ✅ **Closed 2026-09-14** (`ADC.accept_battery_raw()`
+     refuses anything below `BAT_IMPLAUSIBLE_V` = 5.0V — Software Design §12 item 8), and
+     since 2026-10-02 a battery halt is also blocked while 0x45 disagrees with the ADC
+     (§14 item 2; built, not yet run on the rover).
 
 2. **Encoders unverified.** MCP23017 `0x27` is confirmed healthy (registers
    read/write, internal pull-ups engage, both ports read cleanly). Whether the
    Hall channels actually count is untested — all 16 bits read high at rest,
    which is the pull-ups holding idle lines with nothing driving them. Use
    `~/enctest 20` on the rover and turn each wheel.
+   ✅ **Superseded 2026-10-01:** the MCP23017 is gone (2026-09-30); all six encoders
+   count A and B through Pico A **a-0.3** (signed x2), Phase B alive on all six,
+   direction verified per wheel, `ENCODER_COUNTS_PER_REV` = **763** (one wheel, lf,
+   measured under power).
 3. §14 item 7 — Hall output drive type (push-pull vs open-collector) still
    unknown, and it decides whether 5V encoders would need level shifting at all.
 4. ✅ **Bus node board redesign — CLOSED 2026-09-16.** Replaced by the passive
@@ -162,6 +169,7 @@ matches §3.3's table.
    is no longer on a board at all — the two GODIY hubs are the whole fan-out.
    **The divider it carries is NOT the one that was calibrated**, so
    `BATTERY_DIVIDER_SCALE` is wrong until re-metered — see §6.2 and §14.
+   ✅ **Re-metered 2026-10-01: 0.2432** (one point; second open, §14 item 12).
 ---
 
 ## 1. System Overview
@@ -1660,6 +1668,9 @@ bypasses the Pi's onboard input protection, so brownout protection is
 claimed it was "firmware-only, via the INA260 at 0x44"; no such code exists
 (`safety.py` has no INA260 logic; `config.py:177` — monitors are log-only
 with no trip thresholds). There is no hardware supervisor either.
+*(2026-10-02: overcurrent trips now exist in `brain.py` — `OVERCURRENT_LIMIT_A` on
+`bus_12v`/`steering_5v`, `ARM_CURRENT_LIMIT_A` on the arm rail — built, not yet run on
+the rover. Brownout protection for the Pi is still not implemented.)*
 
 ### 5.2 AI HAT+ 2
 
@@ -2672,6 +2683,9 @@ and release a channel that stays above ~2.5A for 0.4s (`ARM_CURRENT_LIMIT_A` /
 `ARM_CURRENT_LIMIT_S`). A threshold checked only after a move completes is useless —
 that is precisely how the first elbow servo was destroyed. With the guard in place,
 no subsequent test on any joint tripped it.
+✅ **In the rover code 2026-10-02, not yet run on the rover:** `brain.py` checks the
+0x44 arm rail every tick and, past 2.5 A for 0.4 s, sleeps the PCA9685 — the whole
+arm goes limp, not one channel.
 
 The arm connects through a bulkhead connector so it detaches without
 desoldering.
@@ -2783,6 +2797,15 @@ under power with `scripts/encoder_map_check.py`, one wheel at a time, rover on b
 > leaves the bus, and the encoder check stops being an I²C read at all: it becomes
 > a query to Pico A over `uart4-pi5`, which can also report R5 from its own ADC.
 
+✅ **As built (corrected 2026-10-02):** ten addresses since 2026-09-30; encoder
+liveness is Pico A over `uart4-pi5`. **There is no BNO085 INT check** — INT (Pi GP15,
+header pin 10) is wired but no code reads it; the self-test checks `imu.is_healthy`.
+(Pico B's GP15 is a different pin: the BNO085 **RST**.) Built 2026-10-01/02, not yet
+run on the rover: the bus is fully scanned **once**, and a retry probes only the
+addresses still missing — a full scan's quick-writes make the BNO085 emit an SHTP Error
+List that crashed its driver (`KeyError: 12`); and when only base-fed subsystems fail
+with 0x45 reading ~0V, the self-test says "base power appears OFF".
+
 ⚠ **Corrected 2026-09-24.** This step previously read "confirm all six encoder
 channels change count under manual rotation", which was unachievable twice over.
 **First**, the encoder sits behind the 17.1:1 gearbox and does not back-drive (§2.2,
@@ -2800,12 +2823,18 @@ the entire device bus and **a blank scan is a genuine fault in either case**. Th
 self-test needs no such distinction for *enumeration*; what it cannot infer from a
 clean roll-call is whether the 12V rails are up, since every device answers regardless.
 `_check_motor_rail()` (INA260 0x44) is the signal for that, not the scan.
+*(0x45 since 2026-09-15 — 0x44 is the 6V arm rail.)*
 
 ### 11.3 Shutdown
 
 `shutdown -h now` completes with the rail still powered; Switch 2 then
 de-powers the Pi and the 3V3 bus. Low-battery shutdown triggers proactively
 from calibrated pack voltage, ahead of the 10.2V cutoff.
+✅ **Built 2026-10-02, not yet run on the rover:** below `BAT_RTH_V` (10.8V) the rover
+stops, saves, and runs `shutdown -h now` (docking is deferred, so there is no
+return-home); `BAT_SHUTDOWN_V` (10.2V) does the same. Either halt needs 10 s under
+threshold with the rover stopped, and is blocked while the 0x45 bus monitor disagrees
+with the ADC by more than 1.5V.
 
 Bulk capacitance cannot hold a Pi 5 up through a hard power cut — that would
 require farads, not microfarads. A cut at the main switch or E-stop with the
@@ -2930,11 +2959,11 @@ Status as of **2026-09-11**.
 | Signal conditioning board built | **PASS 2026-09-16** | Rev 15.1, full resistance matrix (§4.5). **Powered divider check still outstanding**, and it is what yields the battery calibration constant |
 | Breakout connections verified | **PARTIAL — a GROUND FAULT was found and fixed 2026-09-17** | The GeeekPi board as installed had a ground defect (owner-found and corrected). It is the leading explanation for the two destroyed sonars: with its GND return open, a sensor's return current flows through the TRIG/ECHO lines and the Pi's protection diodes, which floats the sensor's reference, holds ECHO high, and cooks the part — matching every symptom seen. Front channel verified working since. Original note follows: GeeekPi Micro GPIO Terminal Block fitted; connections not re-verified. Re-run the §16.12 checks, in particular check 6 — the three ECHO divider junctions at 3.2–3.4V. **If this board has no per-pin LEDs** (the "Micro" line generally does not, unlike GeeekPi's LED variant) then it is electrically passive and adds no load, which removes the LED concerns that applied to the HDO040 candidate. **Confirm that before skipping the re-meter** |
 | AI accelerator PCIe bond | PASS | `/dev/hailo0`; firmware 5.1.1, HAILO10H |
-| Pi-rail INA260 address | **PASS — 0x45** | `config.py:212` `INA260_PI_ADDR=0x45` ("VERIFIED 9.068V"); `config.py:210` `INA260_MOTOR_ADDR=0x44` is the +12V bus. |
+| Pi-rail INA260 address | **PASS — 0x45** | `config.py:212` `INA260_PI_ADDR=0x45` ("VERIFIED 9.068V"); `config.py:210` `INA260_MOTOR_ADDR=0x44` is the +12V bus. ⚠ **Superseded 2026-09-15 (corrected here 2026-10-02):** live reads put **0x45 on the +12V bus** (`INA260_BUS_12V_ADDR`, 11.174V) and **0x44 on the 6V arm rail** (`INA260_ARM_6V_ADDR`); no INA260 monitors the Pi rail (§14 item 11). |
 | Sonars connected | ✅ **ALL THREE RANGE-TESTED AND WORKING AGAIN 2026-09-29, now through Pico B** — 33.3 Hz over `uart2-pi5`, rail 5.004V @ 0.031A. ⚠ **Four sonars have now been destroyed in total** (two on 2026-09-17, one in the 2026-09-28 smoke event, and a spare that proved dead when fitted) — the stuck-high ECHO signature identifies them in one frame. Previous entry: **ALL THREE RANGE-TESTED AND WORKING, 2026-09-17** — first time since the build | Front 49.7cm, left 91.1cm, right 30.9cm, each stable to ±0.4cm over 8 samples and each reading its own direction (three distinct distances, so no cross-talk). **All three ECHO lines idle LOW and go low against a pull-down** — the healthy signature on every channel. Rail 4.990V @ **0.026A**, against 0.101A with one sensor and the 0.348A that flagged a short earlier the same day: no sensor is drawing fault current. Getting here took finding a reversed crimp pin that had not clicked home, a ground fault on the GeeekPi breakout (§5.3), and replacing two sensors destroyed by reverse polarity (§16.12) |
-| Encoder counts on all six channels | Not tested | ⚠ **Blocked twice over.** Counts-per-rev waits for the 170 RPM motors (§7.1, §14 item 17); the MCP23017 path is then replaced by Pico A (§4.7) and the bus drops to ten devices when 0x27 leaves. Channel attribution must be re-run **after** the motor swap either way. **Superseded 2026-10-01:** all six count A and B through Pico A, signed x2 (a-0.3), direction verified per wheel; 763 counts/rev |
-| BNO085 interrupt and fusion output | Not tested | INT on GP15 is unused by the driver; library polls over I²C |
-| Battery divider calibration | **RE-TRIMMED 2026-09-17** | `BATTERY_DIVIDER_SCALE` 0.2386 → **0.3237**, from AIN0 = 3.7229V (raw 29783) against a bench supply metered at 11.5V. The old value belonged to the pre-2026-09-02 divider and was reporting **15.60V from an 11.5V input** — impossible for a 3S pack, and it passed every guard because the guards only catch readings that are too LOW. **Two open items:** the implied ratio (~10k/4.7k) does not match the 10k/3.197k described in §16, so meter the fitted parts; and at PGA ±4.096V this scale saturates at **12.65V**, ~50mV above a rested 3S pack, so full-charge readings are untrustworthy without moving to PGA ±6.144V |
+| Encoder counts on all six channels | **PASS 2026-10-01** (counts and direction; scale from one wheel) | ⚠ **Blocked twice over.** Counts-per-rev waits for the 170 RPM motors (§7.1, §14 item 17); the MCP23017 path is then replaced by Pico A (§4.7) and the bus drops to ten devices when 0x27 leaves. Channel attribution must be re-run **after** the motor swap either way. **Superseded 2026-10-01:** all six count A and B through Pico A, signed x2 (a-0.3), direction verified per wheel; 763 counts/rev |
+| BNO085 interrupt and fusion output | Not tested | INT on GP15 is unused by the driver; library polls over I²C. *(2026-10-02: no code reads INT and none is required — FRD FR-100-003 corrected. Pico B's GP15 is the BNO085 RST, proven 2026-10-01. `IMU.heading` (yaw) added 2026-10-02, not yet run on the rover.)* |
+| Battery divider calibration | **RE-TRIMMED 2026-10-01 — 0.2432, ONE POINT** | ✅ **Current (2026-10-01):** `BATTERY_DIVIDER_SCALE` = **0.2432**, A0 2.7653V against 11.37V metered, within 0.4% of the rev 15.1 nominal 0.242; second point open (§6.2, §14 item 12). The 2026-09-17 entry below belonged to the old board — 0.3237 read a healthy 11.37V pack as 8.53V on 2026-10-01 — and both of its open items are answered by §6.2. History: `BATTERY_DIVIDER_SCALE` 0.2386 → **0.3237**, from AIN0 = 3.7229V (raw 29783) against a bench supply metered at 11.5V. The old value belonged to the pre-2026-09-02 divider and was reporting **15.60V from an 11.5V input** — impossible for a 3S pack, and it passed every guard because the guards only catch readings that are too LOW. **Two open items:** the implied ratio (~10k/4.7k) does not match the 10k/3.197k described in §16, so meter the fitted parts; and at PGA ±4.096V this scale saturates at **12.65V**, ~50mV above a rested 3S pack, so full-charge readings are untrustworthy without moving to PGA ±6.144V |
 | Steering servo sweep | Not tested | — |
 | Arm servo range and per-joint limits | **MEASURED 2026-09-17** — channel map corrected; formal per-joint limits still undefined | Every channel identified on hardware (§11.1). Elbow traversed 1400→2500µs with no binding (~200°); shoulder 750→2010µs; wrist 1500→2500µs, free below ~2300µs and holding a sustained 0.9A above it; gripper direction and grip-by-current established. One elbow servo was destroyed during this work (§11.1). §20.6 calibration remains the route to formal limits; `arm_jog.py` is the tool |
 | Motor direction and mapping | Not tested | — |
@@ -2943,7 +2972,9 @@ Status as of **2026-09-11**.
 **What remains is verification, not construction.** Still outstanding:
 
 - **Encoder signal path** — no edges on any of six channels since 2026-08-25. Must be
-  tested under power; hand-turning produces nothing (§16.9).
+  tested under power; hand-turning produces nothing (§16.9). ✅ **Superseded 2026-10-01:**
+  all six count A and B through Pico A a-0.3 (signed x2), 763 counts/rev from one wheel.
+  Still open: a straight-line distance check and the other five wheels' scale.
 - **Motor mapping** — `MOTOR_PORT` unverified since 2026-09-04, bench test needed.
 - **`arm_jog.py`** — per-joint limits still "Not tested"; now unblocked by the
   connector repair.
@@ -2980,6 +3011,10 @@ measurement work rather than wiring.
    `0x45` is a usable proxy for pack voltage whenever the divider is suspect,
    allowing ~0.19V for the fuse-and-switch drop.
 
+   **2026-10-02 (built, not yet run on the rover):** the cross-check now also **blocks**
+   a battery-tier halt while 0x45 is live and differs from the ADC by more than
+   `BAT_CROSSCHECK_MAX_DIFF_V` (1.5V). It can only prevent a shutdown, never cause one.
+
    **The calibration constant itself is item 12** — re-trimmed to the fitted board
    2026-10-01.
 
@@ -2987,6 +3022,10 @@ measurement work rather than wiring.
    V+ terminal, PCB trace and channel headers rather than signal current
    only. Worst-case steering draw is near 9A. Confirm against the board's
    ratings before running all six servos under load simultaneously.
+   ⚠ **2026-10-02:** software now trips `steering_5v` at **9.0A held 1.0s**
+   (`OVERCURRENT_LIMIT_A`, 90% of F4) — right at that worst case, so a legitimate
+   six-servo slew could latch `OVERCURRENT_FAULT`. Measure the real peak (item 5)
+   before trusting either number. Not yet run on the rover.
 4. **AI HAT+ 2 power budget** — draws from the 5V rail, which is already the
    tightest in the design.
 5. **Runtime measurement** — log the three INA260s through a representative
@@ -3094,7 +3133,9 @@ measurement work rather than wiring.
     (c) the UART framing contract that replaces the 999cm sentinel (Software Design
     S-9); and (d) C-1 Phase 3, the `sensors.py` / `brain.py` / `config.py` swap —
     until that runs, the Picos are fitted and unread, and `_EXPECTED_I2C` still
-    expects the MCP23017.
+    expects the MCP23017. **(c) and (d) closed 2026-09-30:** the Pi reads both Picos
+    through `pico_link.py`, `safety.py` defaults front range to 0.0 not 999, and
+    `_EXPECTED_I2C` is the ten devices without 0x27.
 16. ⚠ **P8 has no recorded fuse and no recorded gauge** (§2.1). Every other +12V
     branch takes a numbered fuse, F2–F5. **Confirm whether a fuse exists, fit one
     if not, and record the gauge.** Nothing monitors R5 either — no INA260 — and
@@ -3107,7 +3148,9 @@ measurement work rather than wiring.
     the DOCK-state logic at `:708`, and **a `safety.stop()` at `:1121` that can
     therefore never fire.** A hardcoded False is the safe default, not a bug, but
     a stop that is unreachable should be recorded as such rather than left to be
-    discovered.
+    discovered. *(2026-10-02: docking is DEFERRED — `ENABLE_DOCKING=False` — so `DOCK`
+    is never entered and both reads are dormant; the low-battery tier now halts the
+    Pi instead, §11.3.)*
 
     ⚠ **The archived checklist names the wrong channel.** It says AIN1, which was
     true when it was written; **A1 is now the FSR** (§4.2, P1-16) and A0 is the

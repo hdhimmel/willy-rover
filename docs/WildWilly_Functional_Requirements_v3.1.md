@@ -23,7 +23,8 @@ Version 3.1**
 
   -----------------------------------------------------------------------
 
-**This document carries 117 requirement IDs.** §V is the verification-status
+**This document carries 128 requirement IDs** (distinct FR-xxx-yyy rows, recounted
+2026-10-02; it said 117). §V is the verification-status
 register; §V.1 records which requirement groups have implementing modules and test
 coverage, and §V.2 lists the known gaps where a requirement cannot currently be
 satisfied as written.
@@ -46,33 +47,37 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   zero errors, 2026-09-08.
                                                   Encoder and IMU checks
                                                   outstanding.
+                                                  Roll-call is TEN since
+                                                  2026-09-30 (0x27 gone).
+                                                  Self-test retry probes
+                                                  only missing addresses,
+                                                  base-off is named:
+                                                  built 2026-10-01/02,
+                                                  not yet run on the
+                                                  rover.
 
   FR-200 Power            PARTIAL --- rail        Pi rail 5.144V,
                           measurement, and the      throttled 0x0. Divider
-                          BATTERY DIVIDER IS       fed and in spec; the
-                          READING (2026-09-14)     ADS1115 reports real pack
-                                                  voltage (owner, 2026-09-14).
-                                                  Scale factor still wants a
-                                                  re-trim against a meter.
-                                                  Prior note, retained:
-                          LIVE-VERIFIED           this row read "battery
-                                                  divider live-verified,
-                                                  calibrated 2026-08-16".
-                                                  FALSE. That calibration
-                                                  was of an EARLIER
-                                                  divider; the one fitted
-                                                  is new as of 2026-09-02
-                                                  and has no +12V feed ---
-                                                  A0 reads 0.0146V. No
-                                                  pack-voltage path
-                                                  exists, so FR-200-001/
-                                                  003/004 are NOT proven.
+                          BATTERY DIVIDER IS       fed and in spec since
+                          READING (2026-09-14);     2026-09-14.
+                          scale trimmed           `BATTERY_DIVIDER_SCALE`
+                          2026-10-01               = 0.2432, ONE-POINT trim
+                                                  2026-10-01 (A0 2.7653V
+                                                  vs 11.37V metered);
+                                                  second point open. The
+                                                  unfed-divider (0.0146V,
+                                                  2026-09-02..14) and
+                                                  0.3237-scale states
+                                                  recorded here earlier
+                                                  are both over.
+                                                  Ladder halts (rth and
+                                                  shutdown tiers) and
+                                                  per-rail overcurrent:
+                                                  built 2026-10-02, not
+                                                  yet run on the rover.
                                                   See Master Hardware
-                                                  Design rev 2.2 §0 and
-                                                  open item 2, and
-                                                  Software Design §12
-                                                  item 7 for the
-                                                  software consequence.
+                                                  Design §6.2 / §14 item
+                                                  12.
 
   FR-300 Safety / E-stop  SATISFIED by hardware   Owner decision 2026-08-24:
                           (owner decision          the latching mushroom switch
@@ -89,20 +94,39 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   re-open M-1 and the speed
                                                   tuning
 
-  FR-500 Encoders         Not live-verified       Requires under-power drive
-                                                  test (E-1); hand-turning
-                                                  produces no counts.
-                                                  Counts-per-rev BLOCKED
-                                                  until the 170 RPM motors
-                                                  are fitted
+  FR-500 Encoders         PARTIAL --- counts and  All six count A and B
+                          direction live          through Pico A a-0.3
+                          2026-10-01              (signed x2); Phase B
+                                                  alive on all six.
+                                                  ENCODER_COUNTS_PER_REV
+                                                  = 763, measured
+                                                  2026-10-01 on ONE wheel
+                                                  (lf), under power.
+                                                  Straight-line distance,
+                                                  stall stop and
+                                                  closed-loop speed not
+                                                  live-verified.
+                                                  Uncommanded-motion
+                                                  report built
+                                                  2026-10-02, not yet run
+                                                  on the rover.
 
   FR-600 Steering         Not live-verified       Servo V+ current path
                                                   unconfirmed
 
-  FR-700 Arm              Not live-verified       
+  FR-700 Arm              Not live-verified       Arm current limit
+                                                  (release) built
+                                                  2026-10-02, not yet run
+                                                  on the rover.
 
-  FR-800 Sensors          PARTIAL --- sonars      Range test and IMU
-                          connected               output outstanding
+  FR-800 Sensors          PARTIAL --- sonars      Sonar re-proven through
+                          connected               Pico B 2026-09-29; IMU
+                                                  RST recovery proven
+                                                  2026-10-01. Per-channel
+                                                  SONAR_FAULT and
+                                                  IMU.heading built
+                                                  2026-10-02, not yet run
+                                                  on the rover.
 
   FR-1500 Voice           PARTIAL --- live-       Wake word/STT/fast-path
                           verified repeatedly,    live-verified and
@@ -152,9 +176,23 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   layer is dead. Added to
                                                   this register 2026-09-13;
                                                   it had no row at all.
+                                                  Superseded 2026-10-01:
+                                                  encoders count, signed
+                                                  (a-0.3, 763/rev, one-
+                                                  wheel scale); odometry
+                                                  unproven on the floor.
 
-  FR-900 through FR-1400, Implemented, off-       
-  FR-1800 onwards         hardware tested only    
+  FR-900 through FR-1400, Implemented, off-       FR-1300: inbound
+  FR-1800 onwards         hardware tested only    remote_cmd.py added
+                                                  2026-10-01. FR-1400:
+                                                  code uses Claude, FRD
+                                                  says Gemini --- OPEN
+                                                  owner decision.
+                                                  FR-2100: identity.py
+                                                  store/matcher only.
+                                                  Everything dated
+                                                  2026-10-01/02 below is
+                                                  simulated tests only.
   -----------------------------------------------------------------------
 
 Motion-related groups (FR-400 through FR-700) were gated behind FR-300 passing
@@ -168,7 +206,10 @@ units (FR-400), and the steering servo V+ current path (~9A worst case against a
 ## V.1 Implementation and test coverage (2026-08-18)
 
 The software is 26 modules / ~4,160 lines with 144 off-hardware tests, all
-passing under `WILLY_SIMULATE=1`. Every requirement group below has an
+passing under `WILLY_SIMULATE=1`. ⚠ **Stale counts — 2026-10-02:** 33 modules /
+~8,490 lines; **476 tests** collected across 66 files under `WILLY_SIMULATE=1`.
+Rows marked 2026-10-02 were added for this; the rest of the table dates from
+2026-08-18 (full module list: Software Design §1.1). Every requirement group below has an
 implementing module. Coverage here means unit tests exist and pass off
 hardware; it is not evidence of live behaviour.
 
@@ -184,8 +225,10 @@ hardware; it is not evidence of live behaviour.
                           config.py::validate
 
   FR-200 Power            brain.py::_update_bat_   test_brain_battery.py
-                          tier, sensors.py::ADC,
-                          CurrentMonitor
+                          tier, sensors.py::ADC,   (2026-10-02:
+                          CurrentMonitor           test_battery_halt.py,
+                                                   test_battery_crosscheck.py,
+                                                   test_current_limits.py)
 
   FR-300 Safety           safety.py::Safety        test_safety_controller.py
                           Controller
@@ -193,9 +236,14 @@ hardware; it is not evidence of live behaviour.
   FR-400/500/600 Motion   motors.py, odometry.py,  test_odometry.py,
                           sensors.py::Encoders     test_tick_timing.py
 
-  FR-700 Arm              arm.py, arm_jog.py       ---
+  FR-700 Arm              arm.py, arm_jog.py,      test_current_limits.py
+                          brain.py::_check_arm_    (2026-10-02)
+                          current
 
-  FR-800 Sensors          sensors.py               test_sim_hardware.py
+  FR-800 Sensors          sensors.py, pico_link.py test_sim_hardware.py,
+                          (2026-10-02 row),        test_pico_link.py,
+                          tof.py (not wired in)    test_sensor_gaps.py,
+                                                   test_tof.py
 
   FR-900 Manual           brain.py::_manual,       test_brain_manual_drive.py
                           voice.py
@@ -208,11 +256,16 @@ hardware; it is not evidence of live behaviour.
   FR-1100 Diagnostics     diagnostics.py,          test_logsetup.py
                           logsetup.py::log_event
 
-  FR-1300 Smart home      smart_home.py            ---
+  FR-1300 Smart home      smart_home.py,           test_remote_cmd.py
+                          remote_cmd.py            (2026-10-02 row)
+                          (inbound, 2026-10-01)
 
   FR-1400 Cloud AI        ai_provider.py           test_ai_provider.py
 
-  FR-1500 Voice           voice.py                 ---
+  FR-1500 Voice           voice.py                 test_voice_*.py,
+                                                   test_brain_voice_*.py,
+                                                   test_retrieve_gate.py
+                                                   (2026-10-02 row)
 
   FR-1600 Display         display.py               ---
 
@@ -225,6 +278,10 @@ hardware; it is not evidence of live behaviour.
                           storage.py
 
   FR-2000 Email           email_client.py          ---
+
+  FR-2100 Recognition     identity.py (store and   test_identity_store.py
+                          matcher only; nothing    (2026-10-02 row)
+                          imports it)
   -----------------------------------------------------------------------
 
 ## V.2 Known gaps — requirements not currently satisfiable as written
@@ -1003,6 +1060,15 @@ signal conditioning board (Master Hardware Design §4.5). Pass conditions:
     when encoder decode moves to Pico A over `uart4-pi5`. `_EXPECTED_I2C` in
     `brain.py` and this criterion both have to drop it in the same change, or the
     gate fails on a correctly built rover.
+    ✅ **Done 2026-09-30:** `_EXPECTED_I2C` is the ten — 0x40 0x42 0x43 0x44 0x45 0x48
+    0x4A 0x51 0x60 0x61 — matching a live scan the same day.
+
+    ✅ **Built 2026-10-01 (`f6d722e`), not yet run on the rover:** the bus is fully
+    scanned **once**, at startup; a self-test retry probes only the expected addresses
+    still missing. A full scan quick-writes every address, the BNO085 logs each as an
+    SHTP error, and its Error List packet crashed `adafruit_bno08x` (`KeyError: 12`) —
+    with the base off, every 30 s retry knocked the IMU over.
+    `tests/test_selftest_i2c_probe.py`.
 
 -   **FR-100-002, 0x70 is not a device.** A scan will also show 0x70. Per
     Master Engineering Package §5.2 this is the PCA9685 All-Call broadcast
@@ -1024,7 +1090,18 @@ signal conditioning board (Master Hardware Design §4.5). Pass conditions:
     still distinguish "base off" from "bus fault" before reporting a failure,
     or every dev-only session raises a spurious critical.
 
--   **FR-100-003 (startup self-test).** The self-test additionally confirms the
+    ✅ **Built 2026-10-02 (`fa7a683`), not yet run on the rover:** when the only
+    failures are base-fed ones (battery ADC, encoders, motor drivers) and the +12V bus
+    monitor (0x45) reads below `MOTOR_RAIL_MIN_V`, the self-test reports **"base power
+    appears OFF (12V bus X V)"** ahead of the individual items. Motion stays inhibited
+    either way.
+
+-   **FR-100-003 (startup self-test).** ⚠ **Corrected 2026-10-02: no BNO085 INT
+    check exists or is required.** The driver polls over I²C and no code reads INT
+    (it is wired to Pi GP15, header pin 10, unused — Master Hardware Design §6.3). Not
+    to be confused with **Pico B GP15**, which is now the BNO085 **RST** line
+    (FR-800-001). The self-test checks `imu.is_healthy` instead. Original text: the
+    self-test additionally confirms the
     BNO085 interrupt is live on GP15 and that all six wheels' encoder channels
     (twelve A/B lines, per FR-500) are **reporting** --- `Encoders.is_healthy`,
     which is the check `brain.py:_self_test()` performs. Address enumeration
@@ -1051,6 +1128,11 @@ signal conditioning board (Master Hardware Design §4.5). Pass conditions:
 -   **FR-100-004 (motion inhibit).** Motion stays inhibited unless the two
     preceding checks both pass. This is Directive 2 in FR-000; a release of
     motion following a failed or skipped self-test is a critical defect.
+
+    ✅ **Built 2026-10-01 (`5f21108`), not yet run on the rover:** while the self-test
+    is failing, voice is still answered — `status`, `battery`, `where_are_you`,
+    `diagnostics` and `shutdown` run; anything else is refused **aloud with the
+    failure reason** instead of silently waiting. Motion stays inhibited.
 
 Pre-power hardware conditions that gate the first execution of this test are
 Master Hardware Design §12's **Before power-up** rules. Two bear on this test
@@ -1126,9 +1208,12 @@ conditions:
     read, while the monitors had been physically relocated in between — **verify a
     monitor by reading its rail, never by reading a constant.**
 
-    ⚠ **The voltage half of FR-200-001 cannot currently be verified at all.** The
-    divider fitted on 2026-09-02 has no +12V feed and A0 reads 0.0146V, so there is no
-    pack-voltage path to compare against a meter. See §V's FR-200 row.
+    ✅ **Superseded — the divider is fed (2026-09-14) and trimmed (2026-10-01).** This
+    said the 2026-09-02 divider had no +12V feed and A0 read 0.0146V; both were true
+    then and are not now. `BATTERY_DIVIDER_SCALE` = **0.2432** from A0 2.7653V against
+    11.37V metered — **one point**; the 0.05V-across-range criterion above needs the
+    second point (near 12.6V or 10.5V), still open. See §V's FR-200 row and Master
+    Hardware Design §6.2.
 
 -   **FR-200-001, pre-power safety condition.** A0 must be metered before the
     ADS1115 is first energised and must sit in the 2.76--3.06V window. A
@@ -1144,10 +1229,35 @@ conditions:
     calibrated volts so that a divider or scale-factor error cannot silently
     move the cutoff.
 
+    ✅ **Built 2026-10-02, not yet run on the rover:**
+    - **FR-200-002, overcurrent** (`15bfc77`). A rail above `OVERCURRENT_LIMIT_A`
+      (`bus_12v` 9.0 A, `steering_5v` 9.0 A) for `OVERCURRENT_S` (1.0 s) stops the
+      rover and latches **`OVERCURRENT_FAULT`** until an operator reset, like a stall.
+      The arm rail has its own limit (FR-700-001).
+    - **FR-200-003, warn** (`a8077b9`). The warn tier (`BAT_WARN_V`) logs and announces
+      **once per descent**, re-armed only on return to `normal`; the status line carries
+      a `BATTERY LOW` prefix while it lasts (FR-1600-004).
+    - **FR-200-004, critical** (`a8077b9`). The shutdown tier now runs the FR-900-005
+      graceful halt (`shutdown -h now`), not just a parked `SHUTDOWN` state.
+    - **Both halts are guarded.** The reading must stay under the tier's threshold for
+      `BAT_HALT_CONFIRM_S` (10 s) **with the rover stopped**, and the halt is **blocked**
+      while a live +12V bus monitor (0x45) disagrees with the ADC by more than
+      `BAT_CROSSCHECK_MAX_DIFF_V` (1.5 V). On 2026-10-01 the stale 0.3237 scale read a
+      healthy 11.37V pack as 8.53V and walked the rover to SHUTDOWN on the ADC alone.
+      `tests/test_battery_halt.py`.
+
 -   **FR-200-005 (proactive graceful shutdown).** Verified by driving the
     reported voltage across the low-battery threshold on the bench and
     confirming the same shutdown sequence executes as for the critical case,
     ahead of the RTH threshold.
+
+    ✅ **Built 2026-10-02 (`a8077b9`), not yet run on the rover.** **Docking is
+    DEFERRED** (owner, 2026-10-01): `ENABLE_DOCKING=False`. With no dock, the rth tier
+    (`BAT_RTH_V`) no longer drives `DOCK`; it aborts tasks, stops, saves memory
+    (FR-1900-011), announces, enters state **`LOW_BATTERY`**, then runs the guarded
+    FR-900-005 halt above. If the pack recovers past the hysteresis band before the
+    halt confirms, it returns to `IDLE`. The `DOCK` path survives only behind
+    `ENABLE_DOCKING=True`.
 
 # FR-300 Safety and Emergency Stop
 
@@ -1326,11 +1436,13 @@ see Master Hardware Design §14 item 18.
     consistently rather than fighting each other.
 
 -   **FR-400-003 (smooth ramping).** A step command produces a ramped current
-    profile rather than an inrush spike. Verified against **INA260 0x44**, which
-    since 2026-08-28 sits on the **+12V main input**, not the motor branch — so the
-    reading includes every 12V consumer, not the motors alone. An unramped six-motor
-    start is still one of the larger transients on that rail and remains visible, but
-    read it as total system draw.
+    profile rather than an inrush spike. Verified against **INA260 0x45**
+    (`INA260_BUS_12V_ADDR`, rail key `bus_12v`), on the **+12V bus feeding both
+    FeatherWing VINs**. ⚠ **Corrected 2026-10-02:** this named 0x44, which is the **6V
+    arm rail** (R3) since 2026-09-15 and sees no motor current at all. The bus
+    reading includes every 12V consumer downstream of it, not the motors alone; an
+    unramped six-motor start is still one of the larger transients there, but read
+    it as total draw.
 
 -   **FR-400-004 (speed limits).** A command above the software cap is clamped,
     not refused silently and not passed through. This is Directive 4 and is a
@@ -1423,6 +1535,12 @@ Pico A a-0.3 reports signed counts.
     wheels — on 2026-08-25 a sagging R5 looked exactly like six dead channels.
     R5 low is a WARNING only (owner decision): it never stops the rover by
     itself, since nobody has measured the voltage these encoders quit at.
+
+    ✅ **Inverse case built 2026-10-02 (`20fc3ab`), not yet run on the rover.** With
+    no wheel commanded and encoders healthy, any wheel above
+    `UNCOMMANDED_COUNTS_PER_S` (50, ~2 cm/s) for `UNCOMMANDED_GRACE_S` (2 s) logs one
+    `UNCOMMANDED_MOTION` event per episode. **Reported, not braked** — an idle rover
+    coasts on purpose (`motors.py`), and the grace covers coast-down after a stop.
 
 -   **FR-500-004 (closed-loop speed).** Commanded speed is held across a
     surface change without oscillation or sustained offset.
@@ -1540,6 +1658,14 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     motor is doing, never what the joint is doing --- confirm a joint physically
     moved before interpreting its current curve.**
 
+    ✅ **Built 2026-10-02 (`15bfc77`), not yet run on the rover:**
+    `brain.py::_check_arm_current()` reads the `arm_6v` rail (0x44) **every tick** and
+    calls `arm.release()` once it stays above `ARM_CURRENT_LIMIT_A` (2.5 A) for
+    `ARM_CURRENT_LIMIT_S` (0.4 s), logs `ARM_OVERCURRENT` and says so aloud. Per-tick
+    (~20 Hz) covers every arm motion — wave, grasp, stow — rather than living inside
+    one movement loop; it is rail-level, not per-joint. A released arm goes limp and
+    can fold: the lesser harm than a cooked servo.
+
     ⚠ **`ARM_SERVO_CENTER_US` must never be applied to the elbow.** That position
     drew 8A indefinitely on the destroyed servo; `arm.py`'s `center_all()` now skips
     CH1. The replacement settles at 0.388A there, so the position itself is sound,
@@ -1548,6 +1674,15 @@ and Master Hardware Design §8 / §16.11 carry the same table.
 -   **FR-700-002 (preset positions).** Named poses are repeatable to within
     the mechanical backlash of the joint, and a stow pose is reachable from
     any starting configuration without self-collision.
+
+    ⚠ **Corrected 2026-10-02: these poses exist only as `config.py` constants — no code
+    applies either one.** Nothing references `ARM_POSE_WAVE_HELLO` or `ARM_POSE_REST`.
+    The voice `wave` is `brain.py`'s `_WAVE_OFFSETS_US` step machine, swinging
+    **wrist rotate** ±300 µs around 1500 µs and recentring; `arm_stow`, `arm_home` and
+    the FR-900-005 shutdown "stow" all call `center_all()`, which drives every joint to
+    1500 µs **except the elbow** (left where it is). So no named pose is reachable from
+    software and FR-700-002 is **not met**. What follows records the hand-verified
+    pulse values only.
 
     **Two poses exist as of 2026-09-17**, both owner-designated and verified on
     hardware: `ARM_POSE_WAVE_HELLO` (elbow 1000µs, shoulder 750µs, wrist 1500µs
@@ -1639,6 +1774,11 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     equivalent failure is a *stale* frame over UART, which is why the 999cm
     sentinel has to go before sonar sits behind a serial link.
 
+-   **FR-800-001, heading.** ✅ **Built 2026-10-02 (`20fc3ab`), not yet run on the
+    rover:** `sensors.IMU.heading` exposes yaw (−180..180°) from the fused quaternion.
+    With the ROTATION_VECTOR report it is magnetometer-referenced, so anything
+    magnetic on the chassis biases it. Nothing steers by it yet.
+
 -   **FR-800-003 (tilt detection).** Excessive tilt is detected from IMU
     output and halts motion. Verify the threshold against the rover's actual
     tipping angle with the arm extended, which is its least stable
@@ -1649,6 +1789,14 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     values. Verified by disconnecting each sensor in turn during operation.
     Silent staleness on a ranging sensor is more dangerous than a reported
     fault.
+
+    ✅ **Per-channel sonar built 2026-10-02 (`20fc3ab`), not yet run on the rover.**
+    `SonarArray.failed_channels` names a channel whose Pico B stuck-ECHO flag is set
+    (destroyed sensor) or whose per-channel age exceeds `SONAR_STALE_S` inside an
+    otherwise fresh frame. `brain.py` logs `SONAR_FAULT` on change and prefixes the
+    status `⚠SONAR <NAME> FAILED` while it lasts. A dead channel already reads 0.0
+    (= stop); this makes it **named** rather than silent. A whole stale link remains
+    `is_healthy`'s job (SENSOR_FAULT).
 
 # FR-900 Manual Operations
 
@@ -1679,6 +1827,15 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     every one remains subject to Directives 1--5. A remote command cannot
     bypass the E-stop, the startup gate, or the speed limits.
 
+    ✅ **Remote command channel built 2026-10-01 (`8d1147f`, `f1aab10`)** — see FR-1300.
+    `remote_cmd.py` takes four fixed intents over authenticated HTTP. `stop` takes the
+    same immediate `stop_requested` path as a spoken stop; the other three are queued
+    exactly like voice commands, so every Directive gate and the self-test refusal
+    apply unchanged. A remote command is **never** taken as the answer to a pending
+    yes/no ask (shutdown or roam permission) — found live 2026-10-01, when a Home
+    Assistant `status` landed mid-ask and was read as "no". The fix is simulated
+    tests only, not yet run on the rover.
+
 -   **FR-900-002 (status display).** Rover state, battery level and fault
     conditions are visible to the operator. Battery must be shown in
     calibrated volts, not raw ADC counts.
@@ -1695,6 +1852,10 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     states untouched); `tests/test_brain_voice_stop.py` drives it through
     `_tick()`. Still open: the battery return-home tier re-enters DOCK every
     tick, so "stop" cannot hold the rover while that tier is active.
+    ✅ **Closed in code 2026-10-02 (`a8077b9`), not yet run on the rover:** with
+    `ENABLE_DOCKING=False` the rth tier stops and halts (FR-200-005) and never enters
+    DOCK, so nothing re-drives the rover under a stop. The re-entry remains only behind
+    `ENABLE_DOCKING=True`.
 
 -   **FR-900-005 (commanded shutdown).** A voice or manual shutdown runs the
     graceful sequence with the rail still powered: motion halts, the arm
@@ -1702,6 +1863,10 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     FR-200-004 critical-battery path in trigger only --- both end in the same
     clean halt. Power is removed afterwards by the operator, so no hold-up
     energy is required or available.
+    ⚠ **2026-10-02:** "the arm stows" is `center_all()` — every joint to 1500 µs except
+    the elbow — because no stow pose is applied anywhere (FR-700-002). Both battery
+    tiers now reach this same halt (FR-200-004/005), built 2026-10-02, not yet run on
+    the rover.
 
 # FR-1000 Autonomous Navigation
 
@@ -1795,7 +1960,9 @@ separately under FR-1200.
     A rail-level monitor sees *aggregate* current across all arm servos, not per-joint stall, so
     it is a poor contact detector: one servo pressing a door is a small fraction of a 9A
     worst-case draw, and §14's open item 3 records that no overcurrent trip threshold exists
-    anywhere in the documentation to compare against. Keep the knock bounded and timed. If
+    anywhere in the documentation to compare against (*2026-10-02: one now exists —
+    `ARM_CURRENT_LIMIT_A` 2.5 A / 0.4 s releases the arm, FR-700-001 — but it is a
+    protection limit, not a contact detector*). Keep the knock bounded and timed. If
     contact sensing is ever wanted, this monitor is a starting point that now exists --- it is
     not, by itself, sufficient.
 
@@ -1855,6 +2022,10 @@ separately under FR-1200.
 -   **FR-1100-002 (warnings and faults).** Faults are recorded with enough
     context to diagnose after the fact: which subsystem, what value, what the
     expected range was.
+    ✅ **Built 2026-10-02 (`20fc3ab`), not yet run on the rover:** subsystem fault
+    events from `_check_health()` now carry `value=` and `expected=`
+    (`brain.py::_fault_context()`), e.g. battery ADC held value vs fresh plausible
+    read, IMU tilt held vs quaternion changing within `IMU_STALE_S`.
 
 -   **FR-1100-003 (timestamped logs).** Logs survive a graceful shutdown and
     are timestamped consistently.
@@ -1872,7 +2043,8 @@ separately under FR-1200.
 
 -   **Roll-call note.** The expected count is **eleven** devices as of
     2026-09-08 — the ten on the device bus plus the Witty Pi 5 HAT+ at `0x51`.
-    **Ten under §4.7**, when `0x27` leaves the bus.
+    **Ten under §4.7**, when `0x27` leaves the bus. ✅ **Ten since 2026-09-30** — 0x27
+    is gone and `_EXPECTED_I2C` matches.
     Verified across 20 consecutive scans with zero bus errors. The All-Call
     broadcast address also answers whenever either servo controller is alive
     and must not be counted toward the total --- doing so lets a scan pass
@@ -1931,7 +2103,9 @@ independent of whether climbing is ever built.
     per-wheel stall and IMU tilt are sampled every control cycle, and either a stall
     or a tilt beyond `IMU_TILT_LIMIT` aborts the climb and reverses to level ground.
     **Blocked**: per-wheel stall detection requires encoders, which have produced no
-    edges since 2026-08-25.
+    edges since 2026-08-25. **Superseded 2026-10-01:** the encoders count on all six,
+    signed x2 via Pico A a-0.3, 763 counts/rev (one wheel measured), Phase B alive —
+    no longer the blocker. `stair` mode itself is still unbuilt (FR-1200-002).
 
 -   **FR-1200-004 (multi-floor navigation).** The world model represents more than
     one floor level and a route may traverse between them. **Not designed.** Recorded
@@ -1965,7 +2139,8 @@ independent of whether climbing is ever built.
     encoders* as the reflex layer, but the encoders have produced no edges since
     2026-08-25, so stall detection contributes nothing and avoidance rests on three
     HC-SR04s alone until the VL53L7CX is fitted. This register did not record that
-    anywhere; noted 2026-09-13.
+    anywhere; noted 2026-09-13. **Superseded 2026-10-01:** encoders count again (a-0.3,
+    signed x2, 763/rev), so stall detection has a signal; it is not yet live-verified.
 
     Three sources contribute, and they do different jobs. **Mapping** records
     where the stairs are. **Vision** (both cameras are mounted 15° downward, so
@@ -1984,7 +2159,9 @@ independent of whether climbing is ever built.
     error once lidar SLAM is running and widen the standoff if it exceeds the
     margin. Until then, pose is dead-reckoned from encoders that have produced
     nothing since 2026-08-25, so the standoff is *arithmetic without a position
-    to apply it to* and must not be relied on. A physical stair gate is the
+    to apply it to* and must not be relied on. (*2026-10-01: the encoders now count —
+    a-0.3, 763/rev — but odometry rests on a one-wheel scale with no slip model and is
+    unproven on the floor, so the conclusion stands.*) A physical stair gate is the
     backstop until this is measured on the real rover.
 
     The reflex-layer drop detector is the VL53L7CX (Master Hardware Design
@@ -2065,6 +2242,34 @@ account's devices) --- that choice is now confirmed correct, not a guess.
 Still disabled (`ENABLE_SMART_HOME=False`) pending Willie's own Google
 account credentials, unrelated to this decision.
 
+⚠ **REVERSED IN PART — owner decision 2026-10-01.** Commands now also come **IN**,
+from Home Assistant, for a fixed set of intents. The outbound direction above is
+unchanged (and still disabled). As built (`remote_cmd.py`, `8d1147f`/`f1aab10`,
+`ENABLE_REMOTE_CMD=True`):
+
+-   **Endpoint.** `POST /command` on port **8765** (`REMOTE_CMD_PORT`), body
+    `{"intent": ...}`, header `Authorization: Bearer <token>`. The token lives in
+    `secrets/remote_cmd_token.txt` (`REMOTE_CMD_TOKEN_PATH`, gitignored); with no token
+    file the server does not start, and it is never opened unauthenticated.
+-   **Fixed intents only:** `status`, `battery`, `stop`, `come_here`. Google gave up
+    free-text third-party Actions in 2023, so there is no free text.
+-   **Same gating as voice, by construction.** `stop` sets `voice.stop_requested` — the
+    immediate path a spoken stop takes. The other three are queued on
+    `voice.pending_commands` exactly like a spoken command, so Directives 1--5, the
+    self-test refusal, IDLE gating and command expiry all apply. A remote command never
+    answers a pending yes/no ask (FR-900-001).
+-   **Replies.** Answers go through `brain._say()`, which speaks them and hands the text
+    back as the HTTP response (timeout `REMOTE_CMD_REPLY_TIMEOUT_S` = 8 s) for Home
+    Assistant to speak on a Nest. A queued task intent that is not answered in time
+    replies "busy" rather than claiming success.
+-   **Deployment (owner-stated, not in the repo):** Home Assistant runs in Docker **on
+    willie**; Tailscale Funnel exposes **Home Assistant only**, not port 8765. The
+    Google Assistant → Home Assistant link is **not finished**.
+
+Status: `tests/test_remote_cmd.py` plus the voice-drain tests, simulated. An HA
+`status` reached the rover live on 2026-10-01 (that is how the yes/no bug was found);
+the fix and the end-to-end Google path have not been run on the rover.
+
   -----------------------------------------------------------------------
   Requirement ID    Requirement       Priority          Verification
   ----------------- ----------------- ----------------- -----------------
@@ -2122,6 +2327,15 @@ account credentials, unrelated to this decision.
     unsatisfied.
 
 # FR-1400 Cloud AI Assistance (Gemini Fallback)
+
+⚠ **OPEN OWNER DECISION — the code does not use Gemini (recorded 2026-10-02).**
+`ai_provider.py::CloudAIProvider` calls **Anthropic's Claude API** with
+`ANTHROPIC_API_KEY` from the environment. Per `config.py`, Willie's account's Gemini key
+hit a zero free-tier quota even with billing linked (2026-08-06) and the provider was
+swapped. FR-1400-002 and FR-1400-005 (Gemini, via Willie's Google account) are therefore
+**not satisfied as written**; FR-1800-003 and FR-2000-001 name Gemini too. Neither
+"amend the FRD to Claude" nor "return to Gemini" has been decided — this section is
+not to be read as recording either.
 
 ASSUMPTION (flag for review): Gemini is a FALLBACK path used only when
 the onboard Llama 3.2 3B cannot adequately handle a request --- not a
@@ -2292,6 +2506,27 @@ section behind it until now. Added 2026-08-02, v1.4.
 -   Recognition failures are reported rather than silently ignored, so an
     unheard command is never mistaken for a refused one.
 
+✅ **Built 2026-10-01/02, simulated tests only — not yet run on the rover:**
+
+-   **FR-1500-005, bare wake phrase** (`a8077b9`). A transcript that is only the wake
+    phrase ("Hey Willie", "Willie.") is not sent for interpretation; he answers "How can
+    I help?". On 2026-10-01 the LLM turned a bare "Hey, Willie" into `retrieve`.
+-   **FR-1500-005/007, retrieve gated** (`a8077b9`). `retrieve` is refused aloud unless
+    `ENABLE_RETRIEVAL_TASK` (new, **False**) — FR-1700 is not safe yet (grasp drives the
+    elbow toward its forbidden centre; hand-off releases on a timer, G-4).
+    `tests/test_retrieve_gate.py`.
+-   **FR-1500-007, self-test failing** (`5f21108`). See FR-100-004: queries are still
+    answered; everything else is refused aloud with the reason.
+-   **FR-1500-008/009, tone reaches the voice** (`fa7a683`). The reply tone maps to
+    Piper `--length_scale` (funny 0.92, silly 0.85, bashful 1.18, neutral 1.0); a Piper
+    build that rejects the flag falls back to neutral rather than going silent. Only
+    conversational replies take a tone; `brain.py`'s spoken answers and safety speech
+    stay neutral (FR-1500-010). `tests/test_voice_tone.py`.
+-   **FR-1500-009, bashful trigger** (`fa7a683`). Compliments and personal questions
+    ("good boy", "you're so smart", ...) set the bashful tone and face (FR-1600-006).
+-   **Diagnostics** (`099d77d`). The wake loop logs a once-a-minute heartbeat, so a
+    silently dead voice thread shows up in the log.
+
 **Capture hardware changed 2026-09-09.** Voice input moved off the Waveshare
 mic+speaker puck's microphone and onto a dedicated capture-only USB mic. The
 puck is retained as the speaker (owner decision) --- it is the only non-HDMI
@@ -2372,6 +2607,12 @@ anywhere in the FRD or master doc. Added 2026-08-02, v1.4.
                     always take immediate                        
                     visual priority                              
   --------------------------------------------------------------------------------
+
+✅ **Built 2026-10-02, simulated tests only — not yet run on the rover:**
+**FR-1600-004** — the warn tier keeps driving, so it is a status prefix
+(`🔋BATTERY LOW <V>`), not a face state; rth/critical show the `lowbatt` face with the
+halt countdown (FR-200-004/005). **FR-1600-006** — the bashful trigger
+(FR-1500-009) sets the `bashful` expression (look away and down).
 
 # FR-1700 Object Detection and Retrieval Task
 
@@ -2484,6 +2725,10 @@ capability in the spec and was not previously captured anywhere. Added
 -   The arm stows before any drive motion resumes, so the rover never
     translates with the arm extended --- that is its least stable
     configuration and the basis of the FR-800-003 tilt threshold.
+-   ⚠ **Task disabled 2026-10-02 (`a8077b9`):** a queued `retrieve` intent (voice) is
+    refused aloud while `ENABLE_RETRIEVAL_TASK=False` (new flag, default False), because
+    this section is not safe yet — the grasp drives the elbow toward its forbidden
+    centre and hand-off releases on a timer (G-4). Flip it only when those are fixed.
 
 # FR-1800 Privacy and Data Handling
 
@@ -2552,6 +2797,24 @@ v1.6.
                     independent of                       
                     E-stop                               
   ------------------------------------------------------------------------
+
+⚠ **FR-1800-002 owner exception — the STUCK help photo (owner request 2026-08-24,
+recorded here 2026-10-02).** On entering `STUCK`, `brain.py::_send_stuck_alert()`
+captures one still from the front camera and emails it, with pose, sonar ranges and
+battery, to the owner — a camera frame leaving the device with no task need. It is
+gated by `ENABLE_STUCK_ALERT_EMAIL` (**True**), throttled by `STUCK_ALERT_COOLDOWN_S`
+(600 s) and `STUCK_ALERT_MAX_PER_SESSION` (5), sends only to FR-2000-009's single
+recipient, and omits the photo when the camera is disabled or privacy-off. It is the
+same deliberate, visible kind of exception as FR-2100-005, not a reading of
+FR-1800-002's "diagnostic logging" clause. See FR-2000-004 for the email side.
+
+✅ **Built 2026-10-02 (`15bfc77`), not yet run on the rover:**
+**FR-1800-003** — the STUCK escalation to the cloud model now calls
+`privacy.note_cloud_send()` (spoken/displayed notice) before sending sonar, pose and
+history off-device; previously only the voice path did. **FR-1800-004 / FR-1900-010**
+— `brain.py::_retention_sweep()` runs from `IDLE` at most once a day (first at the
+first IDLE tick after start) and calls `memory.purge_expired()` on `memory.db`.
+Nothing yet calls `privacy.purge_expired()` for files on disk.
 
 # FR-1900 Learning from Observation and Instruction
 
@@ -2729,6 +2992,12 @@ guaranteed-save requirement in particular had none anywhere in the document.
 
 -   **Retention.** FR-1900 content is subject to FR-1800's retention rules, and
     `forget everyone` / a `memory.db` delete are the operator-facing wipes.
+    ✅ **FR-1900-010 built 2026-10-02 (`15bfc77`), not yet run on the rover:** a daily
+    `memory.purge_expired()` from `IDLE` (see FR-1800). `world_model.db` has no
+    retention purge.
+-   **FR-1900-011, battery path (2026-10-02).** With docking deferred, the rth tier
+    calls `memory.save_all_now()` once on entering `LOW_BATTERY`, before the guarded
+    halt (FR-200-005). Built, not yet run on the rover.
 
 # FR-2000 Email Account and Management
 
@@ -2874,6 +3143,19 @@ expand who\'s trusted enough to be read.
     and for any message failing FR-2000-013's DKIM check. Restated: **email
     originating from anyone but the authenticated owner never initiates motion or any
     physical action.**
+-   ⚠ **FR-2000-004 owner exception — STUCK alert email (owner request 2026-08-24,
+    recorded here 2026-10-02).** `email_client.send_alert()` is the one send path with
+    **no real-time confirmation**: on entering `STUCK`, `brain._send_stuck_alert()`
+    mails the owner a status report and front-camera photo (FR-1800 exception).
+    Bounded so it cannot become autonomous correspondence: it sends only to
+    `EMAIL_OUTBOUND_ALLOWLIST[0]` (FR-2000-009), only from Willie's own fault state,
+    never in response to anything inbound, at most once per `STUCK_ALERT_COOLDOWN_S`
+    and `STUCK_ALERT_MAX_PER_SESSION` times per run, and only while
+    `ENABLE_STUCK_ALERT_EMAIL` is True. It reports; it never acts on the world.
+-   **FR-2000-008 (never block Directives).** ✅ **Built 2026-10-02 (`15bfc77`), not yet
+    run on the rover:** the STUCK alert's camera capture and SMTP send (15 s timeout)
+    run on their own thread. They used to run on the tick thread inside `_go()`, so
+    every fault and obstacle check stalled for as long as the mail server took.
 -   Credentials are held outside the repository and are not present in any
     committed file or commit history.
 -   Failures degrade gracefully --- loss of email connectivity does not affect
@@ -2885,8 +3167,17 @@ Added v3.3 (2026-09-14). Design approved 2026-08-25 and extended through 2026-09
 but carried **no requirement at all** until now --- the same gap FR-1500 records for
 itself. Design: `docs/superpowers/specs/2026-08-25-person-pet-recognition-design.md`.
 
-**NOT IMPLEMENTED.** No `identity.py`, no `recognition.py`, no
-`ENABLE_FACE_RECOGNITION` flag. Zero lines written as of 2026-09-14.
+**PARTIALLY BUILT — store and matcher only (corrected 2026-10-02; this said "zero
+lines written").** `identity.py` exists (commit `c65afa2`), with
+`tests/test_identity_store.py` (16 tests), and `config.ENABLE_FACE_RECOGNITION`
+exists (**False**). What it has: a separate SQLite store (FR-2100-005's file boundary),
+multiple vectors per identity, cosine matching into **three bands** —
+recognised / uncertain / unknown (FR-2100-003), **pending-is-inert** enrolment with
+`approve()` (FR-2100-006's data side), `forget_all()`, a presence record and a
+`greeting_due()` debounce (FR-2100-002's timing). What it does **not** have:
+`recognition.py`, any camera capture or face embeddings, any greeting or
+introduction dialogue, and the email-confirmation wiring for enrolment. **No runtime
+module imports it**, so no FR-2100 behaviour exists on the rover.
 
   -----------------------------------------------------------------------
   Requirement ID    Requirement                  Priority     Verification

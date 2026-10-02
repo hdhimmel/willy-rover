@@ -24,9 +24,12 @@ intent, not aspiration. Where a subsystem is stubbed, disabled or approximate,
 it is recorded as such rather than described as if complete.
 
 **What "as-built" means here.** Every module listed exists and imports. The
-144-test suite passes off hardware. None of it has been proven against the
-assembled rover. Those are three different claims and this document keeps them
-separate.
+off-hardware suite — **476 tests** collected under `WILLY_SIMULATE=1` as of
+2026-10-02 (it said 144) — runs without the rover. Some of the code has since been
+proven on the assembled rover (Pico links, encoders, sonar, IMU reset, voice); much
+has not — in particular everything built 2026-10-01/02 and listed below as such has
+run in simulation only. Those are three different claims and this document keeps
+them separate.
 
 ---
 
@@ -38,9 +41,9 @@ separate.
 | Boot | **1TB SSD** (owner-confirmed 2026-09-14) |
 | Entry point | `main.py` → `RoverBrain().run()` |
 | Process management | systemd unit `willy-rover.service`, `Restart=on-failure` |
-| Modules | 26 Python files at repository root |
-| Source size | ~4,160 lines |
-| Tests | 144, across 17 files, all passing off hardware |
+| Modules | 33 Python files at repository root (was 26; recounted 2026-10-02) |
+| Source size | ~8,490 lines (was ~4,160) |
+| Tests | **476** collected across 66 files under `WILLY_SIMULATE=1` (2026-10-02; was 144 across 17) |
 | Simulation mode | `WILLY_SIMULATE=1` gates every real I²C and GPIO open |
 
 ### 1.1 Module inventory
@@ -67,7 +70,11 @@ refresh; treat those as approximate.
 | `navigation.py` | 165 | Route resolution and local planning |
 | `safety.py` | 124 | The motion authority — sole gate to the motors |
 | `pursuit_task.py` | 101 | Come-here and follow-me sub-FSM |
-| `hailo_llm.py` | 88 | Hailo NPU intent-parsing LLM (`ENABLE_HAILO_LLM`, not currently enabled — see §7) |
+| `hailo_llm.py` | 116 | Hailo NPU intent-parsing LLM. **`ENABLE_HAILO_LLM=True`** (since 2026-09-01; this row said "not currently enabled" — see §7) |
+| `identity.py` | 273 | FR-2100 store and matcher only — separate SQLite file, three-band cosine match, pending-is-inert enrolment, `approve()`, `forget_all()`, greeting debounce. No camera, no embeddings, no greeting/email wiring; **no runtime module imports it**. Added to this table 2026-10-02 |
+| `pico_link.py` | 214 | One framed-UART reader per Pico (`$<body>*<XX>`), newest frame plus its age; never invents a value (S-9). Used by `sensors.py` for Pico A encoders and Pico B sonar/IMU-RST. Added 2026-10-02 |
+| `tof.py` | 211 | SEN0628 (VL53L7CX 8×8) floor-profile subtraction and obstacle/drop classification, frame source injected. **Not imported by any runtime module**; `ENABLE_TOF=False` (sensor not fitted). Added 2026-10-02 |
+| `remote_cmd.py` | 90 | Inbound commands from Home Assistant: `POST :8765/command`, Bearer token from `secrets/remote_cmd_token.txt`, intents `status`/`battery`/`stop`/`come_here`. Stop → `stop_requested`; the rest queue like voice; replies via `brain._say()`. Owner decision 2026-10-01, see S-8. Added 2026-10-02 |
 | `motors.py` | 94 | Drive base and steering primitives. Applies `config.MOTOR_SIGN` at the throttle write — the sides are mounted mirrored, so the right side is negated |
 | `smart_home.py` | 82 | Home Assistant REST client |
 | `odometry.py` | 74 | Dead-reckoning pose integration |
@@ -173,7 +180,19 @@ Order of operations within `_tick()`:
    Alongside it, `_check_r5()` watches Pico A's R5-low flag (the encoders' 3.3 V
    rail): past `ENCODER_R5_GRACE_S` it prefixes the status `⚠ENCODER RAIL LOW`
    and makes any stall stop name the rail. Detection only — no stop of its own.
-4. **Directive checks** — tilt, then battery tier, in that order.
+   **Added 2026-10-02, simulated only — not yet run on the rover** (called each tick
+   between the tilt check and the battery tier, step 4):
+   `_check_arm_current()` (6V arm rail above `ARM_CURRENT_LIMIT_A` 2.5 A for 0.4 s →
+   `arm.release()`, `ARM_OVERCURRENT`), `_check_sonar_channels()` (per-channel
+   `SONAR_FAULT` from `SonarArray.failed_channels`, status prefix) and
+   `_check_uncommanded_motion()` (wheels turning with nothing commanded →
+   `UNCOMMANDED_MOTION`, once per episode, not braked). Health-fault events now carry
+   `value=`/`expected=` (`_fault_context()`).
+4. **Directive checks** — tilt, then battery tier, in that order. Since 2026-10-02
+   the battery tier ends in a real halt (see §4.2), and after the stall check an
+   overcurrent check (`_check_overcurrent()`: a rail in `OVERCURRENT_LIMIT_A` —
+   `bus_12v` 9.0 A, `steering_5v` 9.0 A — held for `OVERCURRENT_S` 1.0 s) stops and
+   latches `OVERCURRENT_FAULT` until an operator reset. Not yet run on the rover.
 5. **Safety context update** — cached into `SafetyController`.
 6. **State dispatch** — the Directive 6 layer.
 
@@ -187,9 +206,10 @@ the inconsistency between this threshold and the systemd watchdog interval.
 
 ### 3.1 Top-level states
 
-`brain.py`'s dispatch table in `_tick()` has **fifteen entries**. The full state set is
-**seventeen**: `INIT` and `SENSOR_FAULT` are real states handled outside that table, and
-the table below lists all of them.
+`brain.py`'s dispatch table in `_tick()` has **seventeen entries** (fifteen until
+2026-10-02, when `LOW_BATTERY` and `OVERCURRENT_FAULT` joined). The full state set is
+**twenty**: `INIT`, `SENSOR_FAULT` and `STALL_FAULT` are real states handled outside that
+table, and the table below lists all of them.
 
 | State | Class | Entered when |
 |-------|-------|--------------|
@@ -203,8 +223,11 @@ the table below lists all of them.
 | `TILT_FAULT` | Fault | Tilt past `IMU_TILT_LIMIT` |
 | `SENSOR_FAULT` | Fault | Sustained subsystem fault past grace period |
 | `SAFE_MODE` | Fault | Battery below `BAT_SAFE_V` |
-| `SHUTDOWN` | Terminal | Battery below `BAT_SHUTDOWN_V`, or voice-confirmed |
-| `DOCK` | Task | Battery below `BAT_RTH_V` |
+| `STALL_FAULT` | Fault | Commanded wheel showing no counts past `STALL_GRACE_S` (S-7). Was missing from this table until 2026-10-02 |
+| `OVERCURRENT_FAULT` | Fault | A rail above `OVERCURRENT_LIMIT_A` for `OVERCURRENT_S`; latched until operator reset. Added 2026-10-02, not yet run on the rover |
+| `SHUTDOWN` | Terminal | Battery below `BAT_SHUTDOWN_V` (then the guarded halt, §4.2), or voice-confirmed |
+| `LOW_BATTERY` | Terminal | Battery below `BAT_RTH_V` with `ENABLE_DOCKING=False` (the default): stopped, memory saved, guarded halt pending; back to `IDLE` if the pack recovers first. Added 2026-10-02, not yet run on the rover |
+| `DOCK` | Task | Battery below `BAT_RTH_V` **only when `ENABLE_DOCKING=True`**. Docking is DEFERRED (owner, 2026-10-01), so unreachable today |
 | `MANUAL` | Task | Voice-issued manual drive command |
 | `NAVIGATE` | Task | `go_to` intent, delegates to `navigation.py` |
 | `RETRIEVE` | Task | `retrieve` intent, delegates to `retrieval_task.py` |
@@ -215,7 +238,7 @@ the table below lists all of them.
 
 Owner decision 2026-09-09. Two transitions into `ROAM` are unprompted — the
 `IDLE_TIMEOUT` wander in `_idle()`, and the charged-to-95% resume in `_tick()`'s
-`DOCK` handling. Both now call `brain.py::_roam_allowed()`, which returns True
+`DOCK` handling (dormant since 2026-10-02 — docking deferred, `ENABLE_DOCKING=False`). Both now call `brain.py::_roam_allowed()`, which returns True
 only once `self._roam_permission` has been granted for this session, and
 otherwise opens a permission request as a side effect and returns False. Every
 other transition into `ROAM` — including `AVOID`/`SLOW` returning to it once the
@@ -370,7 +393,24 @@ legitimately needs one where passive observation does not.
 3. `_self_test()` runs the I²C scan against `_EXPECTED_I2C` (**eleven** addresses —
    ten plus 0x51, conditional on `ENABLE_WITTY_PI`, which is now True,
    0x70 deliberately excluded), plus `config.validate()` and
-   `storage.check_storage()`.
+   `storage.check_storage()`. ✅ **Ten since 2026-09-30** — `0x27` left the set with
+   the MCP23017; encoder liveness is Pico A over `uart4-pi5`.
+
+   ✅ **Built 2026-10-01/02, not yet run on the rover:**
+   - **Scan once, then probe** (`f6d722e`, `_i2c_present()`). The full scan runs only on
+     the first self-test; a retry (every `SELFTEST_RETRY_S`) probes only the expected
+     addresses still missing, one at a time. Blinka's scan quick-writes every address;
+     the BNO085 logs each as SHTP error 2 and its Error List packet crashed
+     `adafruit_bno08x` (`KeyError: 12`), so with the base off every retry knocked the
+     IMU over. `tests/test_selftest_i2c_probe.py`.
+   - **Base-off is named** (`fa7a683`). If every critical failure is base-fed (battery
+     ADC, encoders, motor drivers) and the +12V bus monitor reads below
+     `MOTOR_RAIL_MIN_V`, the failure reads "base power appears OFF (12V bus X V)".
+   - **Voice keeps answering** (`5f21108`). While the self-test fails, `_tick()` drains
+     voice through `_drain_voice_in_selftest_fault()`: `_SELFTEST_FAULT_INTENTS`
+     (`status`, `battery`, `where_are_you`, `diagnostics`, `shutdown`) run; anything
+     else is popped and refused aloud with the failure reason, so it cannot block the
+     queue. `tests/test_brain_voice_selftest_fault.py`.
 
    > ⚠ **Ten under Master Hardware Design §4.7.** When encoder decode moves to
    > Pico A, `0x27` leaves the bus and `_EXPECTED_I2C` must drop it in the same
@@ -411,6 +451,27 @@ model, and stops every background thread.
 Voice-commanded shutdown (FR-900-005) is confirm-gated: a pending flag with a
 deadline, dispatched outside the normal state table.
 
+**Battery halts (FR-200-004/005) — built 2026-10-02 (`a8077b9`), not yet run on the
+rover.** Both the `rth` tier (with `ENABLE_DOCKING=False`, the default — docking is
+DEFERRED, owner 2026-10-01) and the `shutdown` tier end in `_battery_halt()`, which
+calls the same `_begin_shutdown()` as a voice shutdown: emergency stop, `center_all()`
+on the arm (no stow pose exists), "Shutting down now", then `stop()`'s tail runs
+`sudo shutdown -h now`. `rth` first stops, saves memory once, announces, and enters
+`LOW_BATTERY`. Two guards, because a halt powers the Pi off:
+
+- **Confirm time.** The reading must stay under the tier's threshold for
+  `BAT_HALT_CONFIRM_S` (10 s) with the rover already stopped; a recovery above the
+  threshold restarts the clock, and recovery past the hysteresis band returns to `IDLE`.
+- **Cross-check veto.** `_battery_reading_disputed()`: while the +12V bus monitor
+  (0x45) is live (≥ `MOTOR_RAIL_MIN_V`) and differs from the ADC by more than
+  `BAT_CROSSCHECK_MAX_DIFF_V` (1.5 V), the halt is **blocked** and the face says so.
+  On 2026-10-01 a stale divider scale read 11.37V as 8.53V and walked the rover to
+  `SHUTDOWN` on the ADC alone. With the bus down there is nothing to compare, and the
+  ADC stays the authority. This is the one place the otherwise detection-only
+  cross-check changes behaviour — it can only *prevent* a halt, never cause one.
+
+`tests/test_battery_halt.py`.
+
 `display.py` sets `SDL_NO_SIGNAL_HANDLERS=1` because SDL otherwise installs
 process-wide SIGINT/SIGTERM handlers that translate signals into an `SDL_QUIT`
 event consumed only by its own event loop — which silently ate shutdown signals
@@ -445,6 +506,12 @@ verified against a real garbage file, not only unit tests.
 `storage.check_storage()` is folded into the startup self-test, so a bad mount
 blocks motion the same way a missing sensor does.
 
+**Retention (2026-10-02, `15bfc77`, not yet run on the rover).**
+`brain.py::_retention_sweep()` calls `memory.purge_expired()` from `IDLE` at most once
+a day (FR-1800-004 / FR-1900-010). `world_model.db` and files on disk
+(`privacy.purge_expired()`) are not swept. `identity.py` would add a third SQLite file;
+nothing opens it at runtime yet.
+
 ---
 
 ## 6. AI Integration
@@ -461,6 +528,11 @@ motion decisions and `voice.py`'s free-text fallback. Conversation history is
 **caller-owned** and threaded through each call rather than held by the
 provider, so one shared instance cannot leak STUCK's motion turns into voice's
 unrelated turns.
+
+`CloudAIProvider` calls Anthropic's Claude API with `ANTHROPIC_API_KEY`. FRD FR-1400
+specifies Gemini on Willie's Google account; which one the requirement should name is
+an **open owner decision** (recorded 2026-10-02 in FRD FR-1400). Since 2026-10-02 the
+STUCK escalation calls `privacy.note_cloud_send()` before sending (FR-1800-003).
 
 ### 6.2 Confidence is four separate signals
 
@@ -487,6 +559,15 @@ clamped to `SPEED_MAX` and duration to `MAX_COMMAND_DURATION_S`.
 
 Everywhere else the AI is advisory: voice intent interpretation, free-text
 response, world-state summarisation.
+
+**Voice front-end changes, 2026-10-01/02 — simulated only, not yet run on the rover.**
+A transcript that is only the wake phrase (`_BARE_ADDRESS`) never reaches the model —
+he asks "How can I help?" (a bare "Hey, Willie" had been classified `retrieve`).
+`retrieve` is refused unless `ENABLE_RETRIEVAL_TASK` (False). Compliments and personal
+questions (`_BASHFUL_TRIGGER`) set the bashful tone and face; the reply tone reaches
+Piper as `--length_scale` (`_TONE_LENGTH_SCALE`), falling back to neutral if Piper
+rejects the flag; safety speech is always neutral. The wake loop logs a heartbeat once
+a minute (`099d77d`).
 
 ---
 
@@ -744,7 +825,7 @@ is not the next move.
 of rover actions.** It is buying a 5× latency improvement, which matters for conversation and
 does not matter for a STUCK episode where the rover is already stationary.
 
-`ENABLE_HAILO_LLM` is deliberately left as-is pending the owner's decision, now that both
+`ENABLE_HAILO_LLM` (**True** in `config.py`, since 2026-09-01) is deliberately left as-is pending the owner's decision, now that both
 sides of the trade have real numbers. The honest summary: Hailo is a good local
 conversational and intent assistant, and is not trusted as the sole classifier for
 safety-critical physical commands.
@@ -793,8 +874,10 @@ sensor" until 2026-09-15.) Per Master Hardware Design §12 rule 15: perception
 feeds `world_model.py` for planning and classification only. It does not gate
 a stop.
 
-**Voice LLM — attempted, not enabled.** `hailo_llm.py::HailoIntentModel`
-(gated on `config.ENABLE_HAILO_LLM`, default `False`) is a drop-in
+**Voice LLM — attempted; ENABLED.** *(Heading corrected 2026-10-02: `config.py` has
+`ENABLE_HAILO_LLM=True` since 2026-09-01, as the paragraph further down already said.)*
+`hailo_llm.py::HailoIntentModel`
+(gated on `config.ENABLE_HAILO_LLM`, the flag's original default was `False`) is a drop-in
 `AIProvider` alternative to `LocalAIProvider`, sharing the NPU with vision the
 same way (`Hailo.TARGET`). It loads and runs (`hailo_platform.genai.LLM`,
 model `qwen2:1.5b` — Phi-2 is not obtainable on this rover's delivery path),
@@ -1012,7 +1095,12 @@ that name was always meant to cover both stall and overcurrent generically;
 this only implements the stall half). Directive 5 is enforced by code now;
 not yet live-verified, since it has never run against a real motor. There is
 still no overcurrent trip threshold defined — that half of the original
-`MOTOR_FAULT` concept remains open.
+`MOTOR_FAULT` concept remains open. ✅ **Built 2026-10-02 (`15bfc77`), not yet run on
+the rover:** `_check_overcurrent()` trips per rail on `OVERCURRENT_LIMIT_A`
+(`bus_12v` 9.0 A, `steering_5v` 9.0 A) held for `OVERCURRENT_S` (1.0 s) → event
+`OVERCURRENT`, latched `OVERCURRENT_FAULT`; the arm rail has `ARM_CURRENT_LIMIT_A`
+(2.5 A / 0.4 s → release). Rail-level, not per-motor. The inverse of a stall — counts
+with nothing commanded — is reported as `UNCOMMANDED_MOTION` (§2.3).
 
 **S-8 — Smart home direction.** *Confirmed with owner 2026-08-18: outbound is
 correct.* `smart_home.py` implements Willie sending commands *out* to devices
@@ -1024,9 +1112,26 @@ Home Assistant is the backend; the `discover`/`send_command` interface is
 written so the backend can be swapped without touching callers. Still
 disabled (`ENABLE_SMART_HOME=False`) pending Willie's own Google account
 credentials — unrelated to this decision.
+⚠ **Reversed in part 2026-10-01 (owner decision): the inbound direction now exists**,
+narrowly. `remote_cmd.py` (`ENABLE_REMOTE_CMD=True`) serves `POST /command` on
+`REMOTE_CMD_PORT` 8765 with a Bearer token read from `secrets/remote_cmd_token.txt`
+(no file → no server). Fixed intents `status`, `battery`, `stop`, `come_here`. `stop`
+sets `voice.stop_requested`; the others are put on `voice.pending_commands` with
+`source='remote'` and an `on_reply` callback, so all Directive gating applies and
+`brain._say()` returns the answer as the HTTP reply (≤ `REMOTE_CMD_REPLY_TIMEOUT_S`)
+for Home Assistant to speak on a Nest. A remote command is never claimed as the answer
+to a pending shutdown/roam ask (`f1aab10`). Owner-stated deployment: Home Assistant in
+Docker on willie, Tailscale Funnel exposing HA only; the Google Assistant link is not
+finished. `tests/test_remote_cmd.py`; the `f1aab10` fix is not yet run on the rover.
 
 **S-9 — The sonar failure value is "clear path", which does not survive moving to
 a UART.** *Recorded 2026-09-24, on the arrival of the Pico 2 W boards.*
+> ✅ **Pi half done 2026-09-30 (cutover):** `sensors.py` reads Pico B through
+> `pico_link.py`, which never invents a value for a missing frame, and
+> `safety.py`'s `front_cm` defaults to **0.0**, not 999.0. Per-channel failure is named
+> since 2026-10-02 (`SonarArray.failed_channels` → `SONAR_FAULT`, not yet run on the
+> rover). The status note below is history.
+>
 > **Status 2026-09-29: the firmware half is DONE, the Pi half is not.** Pico B emits
 > `-1` for unmeasurable and never a distance, carries a per-channel age in ms and a
 > sequence number per frame — verified live, 0 gaps in 200 frames. `sensors.py:43,46`
@@ -1045,6 +1150,10 @@ gates the hardware change, not the other way round. See also §6.5's warning tha
 the ToF's "unavailability is not a fault" rule does **not** extend to Pico B.
 
 **S-10 — The encoder transport changes and `Encoders` has no seam for it.**
+> ✅ **CLOSED 2026-09-30:** `sensors.Encoders` reads Pico A over `uart4-pi5` via
+> `pico_link.py`, and `_EXPECTED_I2C` no longer contains `0x27`. The status note below
+> is history.
+>
 > **Status 2026-09-29: both Picos now run their firmware and Pico B is proven.**
 > Nothing in the rover code has moved. `_EXPECTED_I2C` still contains `0x27`, which a
 > live scan confirms is absent, so `_motion_enabled` stays false on a correctly built
@@ -1084,12 +1193,21 @@ Tagged events currently emitted:
 | `AI_TIMEOUT` | `ai_provider.py`, only on a real `TimeoutError` |
 | `TICK_OVERRUN` | `brain.py::_record_tick_duration()` |
 | `MOTOR_STALL` | `brain.py::_tick()`, via `_check_stall()` — added 2026-08-18, see S-7 |
+| `LOW_BATTERY` `low_battery_halt`, `BATTERY_HALT` | `brain.py` rth tier / `_battery_halt()` — 2026-10-02 |
+| `OVERCURRENT`, `ARM_OVERCURRENT` | `_check_overcurrent()`, `_check_arm_current()` — 2026-10-02 |
+| `SONAR_FAULT` | `_check_sonar_channels()` — 2026-10-02 |
+| `UNCOMMANDED_MOTION` | `_check_uncommanded_motion()` — 2026-10-02 |
+| `COMMANDED_SHUTDOWN` | `stop()` tail, before `shutdown -h now` |
+
+*Rows dated 2026-10-02 are simulated only, not yet run on the rover. `_check_health()`
+fault events carry `value=` and `expected=` since the same day (FR-1100-002).*
 
 Deliberately untagged: `ESTOP_ACTIVE` (no sense pin to observe), and
 `WATCHDOG_FAULT` (by the time systemd's watchdog fires the process is being
 killed, so it cannot self-log). `MOTOR_FAULT`'s overcurrent half still has no
 call site (no trip threshold defined) — see S-7; its stall half is now
-`MOTOR_STALL` above.
+`MOTOR_STALL` above. *(2026-10-02: overcurrent now logs as `OVERCURRENT` per rail,
+not as `MOTOR_FAULT`.)*
 
 `diagnostics.py` is a standalone read-only self-test. It never imports
 `motors`, `steering` or `arm`, so it is safe to run at any time including
@@ -1100,7 +1218,16 @@ a pass/fail string, and can run without starting the tick loop.
 
 ## 10. Testing
 
-144 tests across 17 files, all off-hardware, all passing.
+144 tests across 17 files, all off-hardware, all passing. ⚠ **Stale — 2026-10-02:
+476 tests across 66 files** are collected under `WILLY_SIMULATE=1`. On the Windows
+dev box 435 pass and 40 fail or error, all for environment reasons (no `board`
+module, Windows file locking on temp SQLite files, no `socket.AF_UNIX`, no real
+`picamera2` Hailo class) — the suite's home is willie.
+
+Added 2026-10-01/02, all simulated: `test_selftest_i2c_probe.py`,
+`test_brain_voice_selftest_fault.py`, `test_remote_cmd.py`, `test_battery_halt.py`,
+`test_retrieve_gate.py`, `test_current_limits.py`, `test_sensor_gaps.py`,
+`test_voice_tone.py`, plus additions to `test_brain_voice_drain.py`.
 
 Off-hardware execution requires `WILLY_SIMULATE=1` plus `pygame` and
 `networkx`. `config.SIMULATE_HARDWARE` gates every real I²C and GPIO open in
@@ -1214,7 +1341,10 @@ wants it.
    unblocks retrieval.
 3. **`Encoders.stalled()` — overcurrent half still open.** The stall half was
    given a caller 2026-08-18 (see S-7), not yet live-verified; the overcurrent
-   half has no trip threshold defined.
+   half has no trip threshold defined. ✅ **Thresholds defined and enforced in code
+   2026-10-02** (S-7: `OVERCURRENT_LIMIT_A`, `ARM_CURRENT_LIMIT_A`); not yet run on the
+   rover; the 9.0 A rail values are 90% of the 10 A F2/F4 branch fuses, not measured
+   against real motor load.
 4. **Bench-confirm `ENCODER_COUNTS_PER_REV`, `WHEEL_DIAMETER_M`,
    `TRACK_WIDTH_M` (S-2, S-3).** ✅ **Counts-per-rev MEASURED 2026-10-01: 382** (×1, lf wheel,
    under power; **763** since a-0.3's x2 the same day) — the blocking note that follows is superseded. ⚠ **The counts-per-rev half is blocked until the
@@ -1235,7 +1365,9 @@ wants it.
     returns `fetch` for `retrieve` and `halt` for `stop`, understanding the
     request correctly but labelling it with a synonym, at confidence 0.8–1.0. A
     confidence floor cannot help with that. `ENABLE_HAILO_LLM` stays off until
-    it is addressed.
+    it is addressed. ⚠ **Not what the code says (2026-10-02):** `config.py` has
+    `ENABLE_HAILO_LLM=True` (since 2026-09-01). Whether to turn it off is the owner's
+    call (§6.7.3, §7).
 7. **`ADC.is_charging` is hardcoded `False`, and one of its two callers is a
    safety stop.** *Recorded 2026-09-24, carried from
    `docs/archive/WildWilly_ADS1115_Bringup_Checklist.md` as it was archived.* `sensors.py:260`
@@ -1245,7 +1377,9 @@ wants it.
    stop that can never execute.** Either wire the divider (Master Hardware Design
    §14 item 17 — note the free ADS1115 channel is A2 or A3, not the A1 the old
    checklist names) or make the unreachable branch explicit, so nobody reads it as
-   live protection.
+   live protection. *(2026-10-02: with `ENABLE_DOCKING=False` the `DOCK` state is not
+   entered at all, so both callers — and the charged-to-95% roam resume of §3.1.1 — are
+   dormant until docking returns.)*
 
 8. **`sensors.py` cannot tell a broken sensor from a real zero.**
     **The hardware fault is FIXED as of 2026-09-14** — the divider is fed, in spec,
@@ -1320,6 +1454,18 @@ Peak current says nothing about whether holding is safe. **Settled current is th
 number that matters:** a joint that reaches position relaxes to 0.05--0.4A; one that
 stays above that is still fighting and will cook. With the guard in place, no
 subsequent test on any joint tripped it.
+
+✅ **In the rover code since 2026-10-02 (`15bfc77`), not yet run on the rover.** The
+guard above was a bench-script practice; `brain.py::_check_arm_current()` now applies
+it every tick (~20 Hz) to the `arm_6v` rail, and on a trip calls `arm.release()` —
+PCA9685 SLEEP, so **every** arm channel goes limp, not just the offending one — logs
+`ARM_OVERCURRENT` and says so aloud. Per tick rather than inside each movement loop,
+so it covers wave, grasp and stow alike.
+
+**Presets (2026-10-02):** `ARM_POSE_WAVE_HELLO` and `ARM_POSE_REST` exist only in
+`config.py` — nothing applies them. The `wave` intent swings wrist rotate ±300 µs about
+1500 µs (`_WAVE_OFFSETS_US`); `arm_stow`, `arm_home` and shutdown call `center_all()`.
+See FRD FR-700-002.
 
 ### The diagnostic lesson
 
