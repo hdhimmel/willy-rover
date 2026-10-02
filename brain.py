@@ -1425,11 +1425,35 @@ class RoverBrain:
     # is a real reliability bug once voice is enabled (ENABLE_VOICE=True since 2026-08-15/16),
     # not an accepted tradeoff. Converted to the same non-blocking, tick-serviced step pattern as
     # _grasp() — see 'WAVE' in the state dispatch table above.
-    _WAVE_OFFSETS_US=(-300,300,-300,300,-300,300,0)  # 3 swings then recenter; last step needs no delay
-    _WAVE_DELAY_S=0.25
+    # 2026-10-02: the wave now uses the pose verified on hardware 2026-09-17
+    # (config.ARM_POSE_WAVE_HELLO). It used to twitch the wrist ROTATION +-300us from wherever
+    # the arm sat, which is not the wave the owner saw. Order is the hardware rule from config:
+    # open the elbow BEFORE moving the shoulder (or the arm strikes the top of Willy), shoulder in
+    # ARM_WAVE_APPROACH_STEP_US steps (a single jump slams the joint), wave the wrist PITCH, then
+    # come back in reverse: shoulder down first, elbow last. FR-700-002.
+    @staticmethod
+    def _wave_plan(shoulder_from):
+        p=config.ARM_POSE_WAVE_HELLO; r=config.ARM_POSE_REST; step=config.ARM_WAVE_APPROACH_STEP_US
+        def ramp(a,b):
+            d=step if b>a else -step
+            return [('shoulder',v,config.ARM_WAVE_STEP_S) for v in range(a+d,b,d)]+[('shoulder',b,0.3)]
+        plan=[('elbow',p['elbow'],0.6)]
+        plan+=ramp(shoulder_from,p['shoulder'])
+        plan+=[('wrist_pitch',p['wrist_pitch'],0.3)]
+        lo,hi=config.ARM_WAVE_WRIST_US
+        for _ in range(config.ARM_WAVE_CYCLES):
+            plan+=[('wrist_pitch',lo,config.ARM_WAVE_LEG_S),('wrist_pitch',hi,config.ARM_WAVE_LEG_S)]
+        plan+=[('wrist_pitch',p['wrist_pitch'],0.3)]
+        plan+=ramp(p['shoulder'],r['shoulder'])
+        plan+=[('elbow',min(r['elbow'],config.ARM_SERVO_MAX_US),0.6),('wrist_pitch',config.ARM_REST_WRIST_US,0.0)]
+        return plan
 
     def _start_wave(self):
         if self.voice.available: self.voice.speak('Hello!')
+        # Step the shoulder from where it really is; if it has not been driven this boot its
+        # pulse is a placeholder, so assume it is resting.
+        s0=self.arm.pulse('shoulder') if self.arm.was_driven('shoulder') else config.ARM_POSE_REST['shoulder']
+        self._wave_seq=self._wave_plan(int(s0))
         self._wave_step=0; self._wave_deadline=None; self._go('WAVE')
 
     def _wave(self,d,tilt):
@@ -1437,11 +1461,11 @@ class RoverBrain:
         if self._wave_deadline is not None:
             if now<self._wave_deadline: return
             self._wave_deadline=None
-        center=config.ARM_SERVO_CENTER_US
-        self.arm.set_pulse('wrist_rot',center+self._WAVE_OFFSETS_US[self._wave_step])
+        joint,us,delay=self._wave_seq[self._wave_step]
+        self.arm.set_pulse(joint,us)
         self._wave_step+=1
-        if self._wave_step>=len(self._WAVE_OFFSETS_US): self._go('IDLE')
-        else: self._wave_deadline=now+self._WAVE_DELAY_S
+        if self._wave_step>=len(self._wave_seq): self._go('IDLE')
+        else: self._wave_deadline=now+delay
 
     def _begin_shutdown(self,reason='voice command'):
         # FR-900-005: halt motion, stow arm, persist state, then `shutdown -h now`. Reuses

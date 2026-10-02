@@ -44,6 +44,7 @@ class Arm:
         self._pca.frequency=config.SERVO_PWM_FREQ
         self._pulse=dict.fromkeys(self._JOINTS,config.ARM_SERVO_CENTER_US)
         self._asleep=False; self._idle_since=time.monotonic(); self._running=True
+        self._driven=set()   # joints commanded since boot -- pulse() is only real for these
         if config.ARM_RELEASE_WHEN_IDLE:
             self._thread=threading.Thread(target=self._idle_loop,daemon=True); self._thread.start()
     # Idle release, added 2026-09-30. THIS IS SERVO PROTECTION, not power saving. The servo
@@ -78,7 +79,7 @@ class Arm:
         self._wake(); self._idle_since=time.monotonic()
         us=max(config.ARM_SERVO_MIN_US,min(config.ARM_SERVO_MAX_US,us))
         self._pca.channels[self._JOINTS[joint]].duty_cycle=int(us/self._PERIOD_US*65535)
-        self._pulse[joint]=us
+        self._pulse[joint]=us; self._driven.add(joint)
         return us
     # FR-700-001 (control all arm joints): each joint on its own channel.
     #
@@ -92,6 +93,10 @@ class Arm:
     def set_pulse(self,joint,us):
         return self._drive(joint,us)
     def pulse(self,joint): return self._pulse[joint]
+    def was_driven(self,joint):
+        """False until the joint has been commanded this boot: pulse() then holds a placeholder
+        (centre), not the servo's real position -- never step FROM it."""
+        return joint in self._driven
     @property
     def joints(self): return list(self._JOINTS)
     # THE ELBOW IS EXCLUDED, DELIBERATELY. ARM_SERVO_CENTER_US drives CH1 into the top of Willy:

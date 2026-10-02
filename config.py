@@ -300,6 +300,12 @@ ARM_POSE_WAVE_HELLO={'elbow':1000,'shoulder':750,'wrist_pitch':1500}
 ARM_POSE_REST={'elbow':2610,'shoulder':2010,'wrist_pitch':2450}
 ARM_WAVE_WRIST_US=(1380,1620)   # oscillate the wrist between these, ~0.35s per leg, 4 cycles
 ARM_WAVE_APPROACH_STEP_US=50    # shoulder step size travelling to the pose
+ARM_WAVE_STEP_S=0.06            # time between shoulder steps (2026-10-02, brain._wave)
+ARM_WAVE_CYCLES=4
+ARM_WAVE_LEG_S=0.35
+# Where the wave returns to: ARM_POSE_REST with the wrist at 2300us, the low-current variant noted
+# under ARM_POSE_REST (0.23A vs 0.87A at 2450). The elbow is clamped to ARM_SERVO_MAX_US by arm.py.
+ARM_REST_WRIST_US=2300
 #
 # Any arm motion should watch INA260 ARM_6V current and release the arm when it stays above this
 # for this long. A threshold checked only AFTER a move completes is useless -- that is how the
