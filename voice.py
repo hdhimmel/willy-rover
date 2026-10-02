@@ -76,6 +76,10 @@ _BASHFUL_TRIGGER=re.compile(r"\b(good (boy|job|robot)|well done|(you'?re|you are
 # FR-1000-001 / FR-1200-006 labelling, matched before the LLM (2026-10-02).
 _NAME_ROOM=re.compile(r"(?:this is|this room is|we(?:'re| are) in|you(?:'re| are) in) the ([a-z][a-z ]{1,30})",re.I)
 _MARK_STAIRS=re.compile(r"(?:there are |these are )?(?:the )?(?:stairs|steps)(?: are)? (?:here|ahead|in front of you)",re.I)
+# FR-1900-001/002 demonstrations.
+_DEMO_START=re.compile(r"(?:watch me|follow me)?[\s,]*(?:and )?learn (?:the |this )?(?:way|route|path) (?:to )?(?:the )?([a-z][a-z ]{1,30})",re.I)
+_DEMO_STOP=re.compile(r"(?:that's it|that is it|stop learning|done learning|finished|we're here|we are here)",re.I)
+_DEMO_REPLAY=re.compile(r"(?:do|take|repeat|replay|show me) (?:the )?(?:way|route|path) (?:to )?(?:the )?([a-z][a-z ]{1,30})",re.I)
 _FORGET=re.compile(r"(?:please )?forget (?:about |that )?(.+)",re.I)
 _ROUTINES=re.compile(r"what do i usually (?:ask|do|ask for)|what are my routines",re.I)
 _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
@@ -86,7 +90,7 @@ _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
 _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve',
     'confirm_receipt','map','stop_map','shutdown','status','battery','arm_stow','arm_home','wave',
     'come_here','follow','diagnostics','where_are_you','what_do_you_see','name_room','mark_stairs',
-    'stop','smart_home','chat','time','date'})
+    'demo_start','demo_stop','demo_replay','stop','smart_home','chat','time','date'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
 def _fp(core):
@@ -663,6 +667,11 @@ class VoicePipeline:
         m=_NAME_ROOM.fullmatch(norm)
         if m: return {'intent':'name_room','args':{'room':m.group(1).strip().lower()},'reply':''}
         if _MARK_STAIRS.fullmatch(norm): return {'intent':'mark_stairs','args':{},'reply':''}
+        m=_DEMO_START.fullmatch(norm)
+        if m: return {'intent':'demo_start','args':{'name':m.group(1).strip().lower()},'reply':''}
+        if _DEMO_STOP.fullmatch(norm): return {'intent':'demo_stop','args':{},'reply':''}
+        m=_DEMO_REPLAY.fullmatch(norm)
+        if m: return {'intent':'demo_replay','args':{'name':m.group(1).strip().lower()},'reply':''}
         if _TIME_PATTERN.fullmatch(norm):
             return {'intent':'time','args':{},'reply':f"It's {time.strftime('%I:%M %p').lstrip('0')}."}
         if _DATE_PATTERN.fullmatch(norm):
@@ -743,7 +752,8 @@ class VoicePipeline:
         motion_intents={'forward','reverse','turn_left','turn_right','go_to','retrieve',
                          'confirm_receipt','map','stop_map','shutdown','status','battery',
                          'arm_stow','arm_home','wave','come_here','follow','diagnostics',
-                         'where_are_you','what_do_you_see','name_room','mark_stairs'}
+                         'where_are_you','what_do_you_see','name_room','mark_stairs',
+                         'demo_start','demo_stop','demo_replay'}
         if name in motion_intents:
             # FR-1500-007: queued only — brain.py applies full Directive 1-5 gating before this
             # is ever executed.

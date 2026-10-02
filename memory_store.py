@@ -76,7 +76,7 @@ class MemoryStore:
             'SELECT context_json,waypoints_json FROM demonstrations WHERE name=?',(name,)).fetchone()
         if row is None:
             log.warning(f'Replay requested for unknown demonstration: {name}')
-            return None,0.0
+            return None,None   # unknown, as distinct from known-but-too-different (0.0..floor)
         stored_ctx=json.loads(row[0]); waypoints=json.loads(row[1])
         sim=_context_similarity(stored_ctx,current_context or {})
         if sim<config.MEMORY_REPLAY_SIMILARITY_FLOOR:
@@ -173,6 +173,13 @@ class MemoryStore:
 
 
 def _context_similarity(a,b):
+    # FR-1900-003 (2026-10-02): demonstrations carry a start position; that dominates, since
+    # replaying a recorded path from somewhere else drives it in the wrong place.
+    if all(k in a and k in b for k in ('start_x','start_y')):
+        import math
+        d=math.hypot(float(a['start_x'])-float(b['start_x']),float(a['start_y'])-float(b['start_y']))
+        near,far=config.DEMO_START_NEAR_M,config.DEMO_START_FAR_M
+        return 1.0 if d<=near else max(0.0,1.0-(d-near)/(far-near))
     if not a and not b: return 1.0
     keys=set(a)|set(b)
     if not keys: return 1.0

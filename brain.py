@@ -1,4 +1,4 @@
-import json,time,socket,os,subprocess,threading,config,logsetup,storage
+import json,math,time,socket,os,subprocess,threading,config,logsetup,storage
 from logsetup import log_event
 if not config.SIMULATE_HARDWARE: import board,busio
 from motors import DriveBase,Steering
@@ -51,7 +51,7 @@ _NON_SPOKEN_SOURCES=frozenset({'remote','email'})
 # What an email may queue: everything a spoken command could, through the same gating.
 _EMAIL_QUEUEABLE=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve','map',
     'stop_map','status','battery','arm_stow','arm_home','wave','come_here','follow','diagnostics',
-    'where_are_you','what_do_you_see','name_room','mark_stairs','shutdown'})
+    'where_are_you','what_do_you_see','name_room','mark_stairs','shutdown','demo_replay'})
 
 # Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
 # that state, before either drain pass, so Willie heard every command and answered none -- with
@@ -249,6 +249,7 @@ class RoverBrain:
         self._sonar_failed={}       # FR-800-004: channels currently reported failed
         self._sonar_edge={}         # FR-800-004: channel -> when its state started to differ
         self._uncmd_since=None; self._uncmd_reported=False  # FR-500-003 inverse case
+        self._demo=None             # FR-1900-001: demonstration being recorded, see _demo_sample()
         self._bat_warned=False      # FR-200-003: warn tier announced once per descent
         # Battery sense cross-check (2026-09-15) -- see _check_battery_crosscheck().
         self._bat_xcheck_since=None; self._bat_xcheck_flagged=False
@@ -604,6 +605,31 @@ class RoverBrain:
         # f < DIST_STOP  <=>  the edge is closer than the standoff
         return min(f,max(0.0,(best-config.STAIR_STANDOFF_M)*100.0+config.DIST_STOP)),True
 
+    def _demo_sample(self,pose):
+        """FR-1900-001: while a demonstration is recording, keep a waypoint every
+        DEMO_POINT_SPACING_M of travel. Stale odometry adds nothing (no guessed points)."""
+        if self._demo is None or getattr(pose,'stale',False): return
+        lx,ly=self._demo['points'][-1]
+        if math.hypot(pose.x-lx,pose.y-ly)>=config.DEMO_POINT_SPACING_M:
+            self._demo['points'].append((pose.x,pose.y))
+
+    def _finish_demo(self):
+        """FR-1900-001: stop recording; save the path as a demonstration and as a route."""
+        demo=self._demo; self._demo=None
+        if self.pursuit.active: self.pursuit.abort('demonstration finished'); self._go('IDLE')
+        if demo is None:
+            self._say("I wasn't learning a route."); return
+        pose=self.world_model.get_robot_pose()
+        pts=demo['points']+([(pose.x,pose.y)] if math.hypot(pose.x-demo['points'][-1][0],
+                                                            pose.y-demo['points'][-1][1])>0.05 else [])
+        if len(pts)<config.DEMO_MIN_POINTS:
+            self._say("We barely moved, so there's nothing to learn yet."); return
+        pts=[(round(x,2),round(y,2)) for x,y in pts]
+        self.memory.record_demonstration(demo['name'],pts,demo['context'])
+        self.world_model.add_route(demo['name'],pts); self.world_model.save()
+        log_event(log,'DEMO',subsystem='memory',status='saved',name=demo['name'],points=len(pts))
+        self._say(f"Got it. I've learned the way to the {demo['name']}.")
+
     def _check_uncommanded_motion(self):
         """FR-500-003, inverse: counts changing with no command issued. Reported once per
         episode; not braked, because an idle rover coasts deliberately (motors.py)."""
@@ -792,6 +818,7 @@ class RoverBrain:
         self._check_arm_current()
         self._check_sonar_channels()
         self._check_uncommanded_motion()
+        self._demo_sample(pose)
         # Second opinion on the pack reading (detection only -- see _check_battery_crosscheck).
         self._check_battery_crosscheck()
         # Only advance the battery tier on a reading we actually got. A stale value must not
@@ -1109,6 +1136,44 @@ class RoverBrain:
                 self.world_model.add_room(name,pose.x,pose.y); self.world_model.save()
                 log.info(f'Room labelled: {name} at ({pose.x:.2f},{pose.y:.2f})')
                 self._say(f'Got it, this is the {name}.')
+        elif cmd.get('intent')=='demo_start':
+            # FR-1900-001: record the path while following the person (camera) or while driven.
+            name=cmd.get('args',{}).get('name','').strip()
+            if not name: self._say('What should I call that route?')
+            else:
+                pose=self.world_model.get_robot_pose()
+                room=self.world_model.get_room(pose.x,pose.y)
+                self._demo={'name':name,'points':[(pose.x,pose.y)],'started':time.time(),
+                            'context':{'start_x':round(pose.x,2),'start_y':round(pose.y,2),
+                                       'start_room':room.name if room else ''}}
+                following=False
+                if self.detector.available and not self.pursuit.active:
+                    ok,_=self.pursuit.start(mode='follow')
+                    if ok: self._go('PURSUE'); following=True
+                log_event(log,'DEMO',subsystem='memory',status='recording',name=name,following=following)
+                self._say(f"Okay, I'm watching. {'Lead the way' if following else 'Drive me there'}, "
+                          f"and say that's it when we arrive.")
+        elif cmd.get('intent')=='demo_stop':
+            self._finish_demo()
+        elif cmd.get('intent')=='demo_replay':
+            # FR-1900-002/003: replay only from near where it started; otherwise say so.
+            name=cmd.get('args',{}).get('name','').strip()
+            pose=self.world_model.get_robot_pose()
+            wps,sim=self.memory.replay_demonstration(name,{'start_x':pose.x,'start_y':pose.y})
+            if sim is None:
+                self._say(f"I haven't learned a way to the {name}.")
+            elif wps is None:
+                log_event(log,'DEMO',subsystem='memory',status='replay_refused',name=name,similarity=f'{sim:.2f}')
+                self._say(f"I'm too far from where we started the {name} route to follow it. "
+                          f"Take me back to the start, or show me again from here.")
+            else:
+                if self.world_model.get_route(name) is None:
+                    self.world_model.add_route(name,[tuple(p) for p in wps])
+                ok,msg=self.navigator.start(Mission(route=name))
+                if ok: self._go('NAVIGATE')
+                log_event(log,'DEMO',subsystem='memory',status='replay' if ok else 'replay_failed',
+                          name=name,similarity=f'{sim:.2f}')
+                self._say(f'Following the way to the {name}.' if ok else f"I can't follow that route: {msg}")
         elif cmd.get('intent')=='mark_stairs':
             # FR-1200-006: the edge sits STAIR_LABEL_AHEAD_M in front, across his heading.
             pose=self.world_model.get_robot_pose()

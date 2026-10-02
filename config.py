@@ -1058,6 +1058,15 @@ FACE_MAX_VECTORS_PER_IDENTITY=12
 # coming back after lunch feels like being noticed.
 FACE_GREET_SESSION_S=1800
 MEMORY_REPLAY_SIMILARITY_FLOOR=0.6  # FR-1900-003: below this, report mismatch rather than replay
+# FR-1900-001/002 demonstrations (2026-10-02): "watch me, learn the way to the kitchen" follows
+# the person (camera) or records while driven, sampling the pose every DEMO_POINT_SPACING_M.
+# Replay similarity is positional: 1.0 within DEMO_START_NEAR_M of where the demonstration
+# began, falling linearly to 0 at DEMO_START_FAR_M -- so with the 0.6 floor he refuses to
+# replay a route from more than ~1.3 m away from its start.
+DEMO_POINT_SPACING_M=0.30
+DEMO_MIN_POINTS=3
+DEMO_START_NEAR_M=0.5
+DEMO_START_FAR_M=2.5
 STUCK_TIMEOUT=3.0; BACK_UP_TIME=0.8; TURN_TIME_90=1.2; IDLE_TIMEOUT=30.0
 
 # Owner decision 2026-08-20: autonomous ROAM relies on sonar alone for obstacle avoidance and was
