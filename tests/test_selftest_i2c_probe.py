@@ -4,7 +4,8 @@ sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # 2026-10-01: the self-test retry used to re-scan the whole I2C bus every SELFTEST_RETRY_S.
 # Each scan quick-writes 0x4A, the BNO085 logs "host write too short", and its Error List packet
 # crashes adafruit_bno08x (KeyError: 12). Pinned here: after the first full scan, a retry probes
-# ONLY the expected addresses still missing -- never one already seen, so never a healthy 0x4A.
+# ONLY the expected addresses still missing. Since 2026-10-02 there is no full scan at all and
+# 0x4A is never probed: the startup scan alone latched SENSOR_FAULT on the first boot.
 #
 # Subprocess under WILLY_SIMULATE=1, same reason as test_selftest_override_classification.py.
 
@@ -14,29 +15,24 @@ _SCRIPT='''
 import config
 from brain import _i2c_present,_EXPECTED_I2C
 
-scans=[]; probed=[]
-def scan(): scans.append(1); return sorted((_EXPECTED_I2C-{config.ADS_ADDR})|{0x70})
-def probe(a): probed.append(a); return True
+probed=[]
+def probe(a): probed.append(a); return a!=config.ADS_ADDR
 
-# 1. First run is a full scan; non-expected addresses (0x70) are dropped.
-seen=_i2c_present(None,scan,probe)
-assert scans==[1] and probed==[], (scans,probed)
+# 1. First run probes every expected address EXCEPT the IMU, which is never touched.
+seen=_i2c_present(None,probe)
+assert config.IMU_ADDR not in probed, probed
+assert set(probed)==_EXPECTED_I2C-{config.IMU_ADDR}, probed
 assert seen==_EXPECTED_I2C-{config.ADS_ADDR}
 
-# 2. Retry: no scan, and only the missing address is probed -- the IMU is left alone.
-seen=_i2c_present(seen,scan,probe)
-assert scans==[1], scans
+# 2. Retry probes only what is still missing.
+probed.clear()
+seen=_i2c_present(seen,lambda a: (probed.append(a),True)[1])
 assert probed==[config.ADS_ADDR], probed
-assert config.IMU_ADDR not in probed
 assert seen==_EXPECTED_I2C
 
-# 3. Once everything is seen, a retry touches the bus not at all.
+# 3. Everything seen: the bus is not touched at all.
 probed.clear()
-assert _i2c_present(seen,scan,probe)==_EXPECTED_I2C
-assert probed==[] and scans==[1]
-
-# 4. A probe that fails leaves the address missing.
-assert _i2c_present(set(),scan,lambda a: a!=config.IMU_ADDR)==_EXPECTED_I2C-{config.IMU_ADDR}
+assert _i2c_present(seen,probe)==_EXPECTED_I2C and probed==[]
 print("OK")
 '''
 

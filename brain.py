@@ -95,11 +95,17 @@ if config.ENABLE_WITTY_PI: _EXPECTED_I2C.add(config.WITTY_PI_ADDR)
 # base off the self-test retried every SELFTEST_RETRY_S, so the scan knocked the IMU over every
 # 30 s and the RST recovery picked it back up. A device seen once is not re-probed: each one
 # already has its own health check (IMU, ADC, encoders, current, motors) for dropping out later.
-def _i2c_present(seen,scan,probe):
-    """seen: addresses already found, or None before the first run. scan(): full-bus scan.
-    probe(addr): True if addr answers. Returns the updated set of expected addresses present."""
-    if seen is None: return set(scan())&_EXPECTED_I2C
-    return set(seen)|{a for a in _EXPECTED_I2C-set(seen) if probe(a)}
+# THE IMU IS NEVER PROBED (2026-10-02). The one full scan kept at startup still quick-wrote
+# 0x4A, and on the first boot with this code the resulting SHTP error list stalled the BNO085
+# long enough to latch SENSOR_FAULT -- every boot would have waited for an operator reset. The
+# IMU's presence is already proven by its driver constructing, and its health is the
+# self-test's separate 'IMU not reporting' check, so probing it adds nothing but the fault.
+def _i2c_present(seen,probe):
+    """seen: expected addresses already found (None before the first run). probe(addr): True if
+    addr answers. Probes only expected addresses not yet seen, never the IMU, never a full scan.
+    Returns the updated set of expected addresses present."""
+    seen=set(seen or ())|{config.IMU_ADDR}
+    return seen|{a for a in _EXPECTED_I2C-seen if probe(a)}
 
 def _i2c_probe(addr):
     # Same two-step probe as Blinka's generic_linux scan(), for one address.
@@ -362,12 +368,7 @@ class RoverBrain:
             pass  # no real bus to scan — every sim class already reports itself healthy below
         else:
             try:
-                def _full_scan():
-                    i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
-                    while not i2c.try_lock(): pass
-                    try: return i2c.scan()
-                    finally: i2c.unlock()
-                self._i2c_seen=_i2c_present(self._i2c_seen,_full_scan,_i2c_probe)
+                self._i2c_seen=_i2c_present(self._i2c_seen,_i2c_probe)
                 missing=_EXPECTED_I2C-self._i2c_seen
                 if missing: critical.append('I2C missing: '+','.join(hex(a) for a in sorted(missing)))
             except Exception as e:
