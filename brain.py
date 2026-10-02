@@ -407,7 +407,13 @@ class RoverBrain:
                 if missing: critical.append('I2C missing: '+','.join(hex(a) for a in sorted(missing)))
             except Exception as e:
                 critical.append(f'I2C scan failed: {e}')
-        time.sleep(0.5)  # let sensor threads take a first reading (current monitor is the slowest, 10Hz)
+        # Let the sensor threads take a first reading (current monitor is the slowest, 10 Hz) --
+        # at STARTUP only. Retries run on the tick thread every SELFTEST_RETRY_S, and the threads
+        # are long since running, so the sleep there was pure stall: 288 TICK_OVERRUNs of
+        # ~501 ms on 2026-10-01/02, found by Willie's own feature request
+        # (docs/feature-requests/2026-10-02-investigate-brain-control-loop-tick-overruns.md).
+        if not getattr(self,'_selftest_settled',False):
+            time.sleep(0.5); self._selftest_settled=True
         if not self.imu.is_healthy: critical.append('IMU not reporting')
         if self.adc.battery_volts<=0: critical.append('battery ADC not reporting')
         if not self.encoders.is_healthy: critical.append('encoders not reporting')
