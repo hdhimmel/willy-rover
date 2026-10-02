@@ -83,11 +83,10 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   Design §6.2 / §14 item
                                                   12.
 
-  FR-300 Safety / E-stop  SATISFIED by hardware   Owner decision 2026-08-24:
-                          (owner decision          the latching mushroom switch
-                          2026-08-24)              physically cuts motor+arm
-                                                  power; no Pi sense line
-                                                  required. NO LONGER BLOCKS
+  FR-300 Safety / E-stop  SATISFIED by hardware   The E-stop IS the main power
+                          (owner decision          switch: it cuts all power,
+                          2026-08-24)              the Pi included, so there is
+                                                  nothing to sense. NO LONGER BLOCKS
                                                   FR-400..700 live testing.
                                                   See FR-300 Acceptance
                                                   Criteria and G-1.
@@ -368,8 +367,8 @@ a real limitation of the current build, flagged in the implementing code
 itself rather than papered over.
 
 **G-1 --- CLOSED 2026-08-24 by owner decision, not by implementation.** The owner
-authorized that no Pi-side E-stop sense line is required: the latching mushroom
-switch physically cuts motor and arm power, and that cut is absolute and
+authorized that no Pi-side E-stop sense line is required: the E-stop is the main
+power switch, which cuts all power (the Pi included), so the cut is absolute and
 independent of software. FR-300-001/002/003 are therefore satisfied by hardware
 — see the FR-300 Acceptance Criteria section for the full rationale and for what
 this explicitly does NOT claim. **FR-300 no longer gates live testing of FR-400
@@ -398,10 +397,9 @@ reopening the motor side of G-1. ✅ **CLOSED — hardware
 an owner-metered pack of 11.36V) and `brain.py::_check_motor_rail()` reads it via the
 `'bus_12v'` key, pinned by `tests/test_motor_rail_identity.py`. The arm side (SW-A)
 still needs either a new INA260 or a direct switch-state sense.
-Relationship between SW-M/SW-A and the previously-documented latching
-mushroom E-stop is **not yet confirmed** -- whether these replace it, are
-driven by it, or are independent. Do not close this gap in code until that's
-settled, since it changes what "E-stop fired" actually means in the wiring.
+SW-M and SW-A are branch switches, not the E-stop. **There is no mushroom switch:
+the E-stop is the main power switch** (owner, 2026-10-02), which takes everything
+down, the Pi included.
 
 >
 > ✅ **RESOLVED 2026-09-15 by doing exactly what this note asked** — reading bus voltage at all
@@ -1389,54 +1387,31 @@ directly: *the Pi doesn't need this, the main power down is sufficient.*
 
 Rationale and scope, recorded so this is traceable rather than silently relaxed:
 
--   The E-stop is a **latching mushroom switch that physically cuts motor and
-    arm power** (Master Hardware Design rev 2.2 §2.3). That cut is absolute and
-    does not depend on software running, being responsive, or being correct.
-    Software awareness would add logging and a reset gate — it would not make
-    the stop itself any more reliable.
--   **FR-300-001** (continuous monitoring) is therefore met physically: the cut
-    is continuous by construction, not polled.
--   **FR-300-002** (immediate motion disable) is met physically and more
-    strongly than software could: removing power halts motors and arm
-    regardless of what any queued command intended.
--   **FR-300-003** (operator reset) is met by the latching switch itself —
-    motion cannot resume until a human physically releases it. The touchscreen
-    reset gate remains in force for `TILT_FAULT`/`SENSOR_FAULT`/`STALL_FAULT`,
-    which are software-detected and genuinely need it.
+-   **The E-stop is the main power switch** (there is no mushroom switch). It cuts
+    all power, the Pi included, so the stop is absolute and does not depend on
+    software running, being responsive, or being correct, and there is nothing
+    left running for software to observe it with.
+-   **FR-300-001** (continuous monitoring) is met physically: the cut is
+    continuous by construction, not polled.
+-   **FR-300-002** (immediate motion disable) is met physically: removing power
+    halts motors and arm regardless of any queued command.
+-   **FR-300-003** (operator reset) is met by the switch itself: nothing resumes
+    until a human turns power back on, and the rover then boots through the
+    self-test. The touchscreen reset gate remains for `TILT_FAULT` /
+    `SENSOR_FAULT` / `STALL_FAULT`, which are software-detected.
 
-**What this decision does NOT claim.** Software still cannot *observe* an E-stop,
-so it keeps issuing drive commands into unpowered controllers and logs nothing
-about the event. Two partial mitigations exist as of 2026-08-24:
-`brain.py::_check_motor_rail()` was written to detect motor-bus voltage
-collapse via INA260 0x44 while that monitor sat inline on the motor branch.
-✅ **WORKING AGAIN 2026-09-15.** It now reads **0x45** via the
-`'bus_12v'` rail key, and 0x45 sits on the +12V bus downstream of SW-M. Between
-2026-08-28 and 2026-09-15 it was worse than merely blind: 0x44 had moved to the **6V
-arm rail**, which idles at 6.043V against `MOTOR_RAIL_MIN_V=6.0`, so a genuine cut
-stayed invisible *and* 43mV of arm-servo droop could report a motor-power loss that
-had not happened. It surfaces in the log and on the face —
-detection only, no automatic stop — and SW-M/SW-A (§2.1/§2.3) give per-domain
-cuts. Neither is a sense line, and neither is claimed to be.
+**Motor-branch loss is a separate case.** SW-M (the motor-branch switch) or a blown F2
+can drop motor power while the Pi stays up; `brain.py::_check_motor_rail()` detects
+that on INA260 0x45 (`'bus_12v'`) and shows it on the face. That is not the E-stop.
 
 **Consequence:** FR-300 no longer blocks live testing of FR-400 through FR-700.
 Directive 2's gate is considered satisfied. G-1 in §V.2 is closed by this
 decision rather than by implementation.
 
--   ⚠ **FR-300-001 (continuous monitoring) --- VERIFICATION SUPERSEDED
-    2026-08-24, restated 2026-09-13.** The criterion below describes a software
-    polling test that **cannot be executed**: no sense line exists, nothing is
-    polled, and the owner decision immediately above accepts that. It survived the
-    decision unmarked.
+-   **FR-300-001 (continuous monitoring) --- verified by hardware.** Turn the main
+    power switch off and confirm everything, the Pi included, is dead. There is no
+    sense line and no software polling to test.
 
-    **Restated as hardware verification:** fire the latching mushroom switch and
-    confirm, with a meter, that motor and arm supply terminals are dead. That is
-    the whole requirement — the cut is physical, absolute and independent of
-    software, so there is no cycle period to detect within.
-
-    *Original text, retained only to describe what a future sense pin would enable:
-    "The E-stop state is polled or interrupt-driven on every control cycle, not
-    checked once at startup. Verified by triggering the E-stop mid-cycle and
-    confirming detection within one cycle period."*
 
 -   **FR-300-002 (immediate motion disable).** With all six drive motors running
     and the arm mid-trajectory, triggering the E-stop halts motor and arm output.

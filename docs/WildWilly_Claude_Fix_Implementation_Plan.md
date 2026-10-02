@@ -202,7 +202,9 @@ In each case, the robot must enter a safe state without waiting for the AI.
 
 ## Current issue
 
-The physical E-stop provides hardware safety, but software should also know that E-stop is active.
+**Not applicable (owner, 2026-10-02):** the E-stop is the main power switch, which cuts all
+power including the Pi, so there is no E-stop state for software to know. No sense input is
+planned. The rest of this section is kept only as the original proposal.
 
 ## Required design
 

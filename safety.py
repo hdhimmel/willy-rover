@@ -108,11 +108,9 @@ class SafetyController:
         # FR-300-002 (immediate motion disable): hard brake + clears any queued/in-flight
         # motion in the same call. brain.py's fault checks (sensor/tilt/battery) and voice
         # 'stop' all funnel through here -- see brain.py's _check_health()/_tick() call sites.
-        # FR-300-001 (continuous physical E-stop monitoring) is NOT implemented and is blocked
-        # on hardware: no physical E-stop GPIO is polled anywhere in this codebase (grep for
-        # ESTOP finds only the log-throttle constant below) because no sense pin is wired. See
-        # CLAUDE.md. The mushroom switch cuts motor and arm power directly, so the cut itself is
-        # absolute -- what is missing is software AWARENESS that it happened.
+        # FR-300-001: the E-stop is the MAIN POWER SWITCH (there is no mushroom switch). It
+        # cuts all power, the Pi included, so there is nothing for software to sense -- the
+        # requirement is met by hardware. This method is the SOFTWARE stop (faults, voice).
         #
         # FR-300-003 (explicit operator reset before resuming) IS implemented, in brain.py.
         # CORRECTED 2026-09-17: this comment used to say it was not, and claimed "every fault
