@@ -560,27 +560,34 @@ class RoverBrain:
             pass
         return ('unhealthy','is_healthy True')
 
-    def _apply_stair_standoff(self,d,pose):
-        """FR-1200-005: in floor mode, a mapped stair edge ahead acts as a virtual obstacle,
-        folded into 'front' so every existing forward-motion gate (ROAM/SLOW/AVOID,
-        approve_motion) holds STAIR_STANDOFF_M back from it. Forward only: there is no rear
-        sensing, and reverse moves are short and timed."""
-        if config.MOBILITY_MODE!='floor': return d
-        try: stairs=self.world_model.all_stairs()
-        except Exception: return d
-        if not stairs: return d
-        from world_model import ray_to_segment
-        best=None
-        for st in stairs:
-            a,b=st.endpoints()
-            t=ray_to_segment(pose.x,pose.y,pose.heading,a,b)
-            if t is not None and (best is None or t<best): best=t
-        if best is None: return d
-        # front < DIST_STOP  <=>  edge closer than the standoff
-        virtual_cm=(best-config.STAIR_STANDOFF_M)*100.0+config.DIST_STOP
-        if virtual_cm<d['front']:
-            d=dict(d); d['front']=max(0.0,virtual_cm)
-        return d
+    def _stair_planning_front(self,d):
+        """FR-1200-005, in the DELIBERATIVE layer (SWD §6.6): (front_cm for ROAM/SLOW/AVOID's
+        planning, ok). A mapped stair edge ahead, in floor mode, shows up here as a nearer front
+        so ROAM turns away STAIR_STANDOFF_M short of it. It never touches `d` -- the reflex
+        sonar reading that safety.approve_motion() and the world model see stays the sensor's own
+        -- so the map can steer the rover but is never what stops it.
+
+        Fails CLOSED: with stairs on the map and no fresh pose (or an error reading them),
+        ok=False and the caller refuses to roam. An uncomputable keep-out is not an absent one."""
+        f=d['front']
+        if config.MOBILITY_MODE!='floor': return f,True
+        try:
+            stairs=self.world_model.all_stairs()
+            if not stairs: return f,True
+            pose=self.world_model.get_robot_pose()
+            if getattr(pose,'stale',False): return f,False
+            from world_model import ray_to_segment
+            best=None
+            for st in stairs:
+                a,b=st.endpoints()
+                t=ray_to_segment(pose.x,pose.y,pose.heading,a,b)
+                if t is not None and (best is None or t<best): best=t
+        except Exception:
+            log.warning('Stair standoff could not be computed -- refusing to roam',exc_info=True)
+            return f,False
+        if best is None: return f,True
+        # f < DIST_STOP  <=>  the edge is closer than the standoff
+        return min(f,max(0.0,(best-config.STAIR_STANDOFF_M)*100.0+config.DIST_STOP)),True
 
     def _check_uncommanded_motion(self):
         """FR-500-003, inverse: counts changing with no command issued. Reported once per
@@ -720,7 +727,6 @@ class RoverBrain:
             self._drain_voice_in_selftest_fault()
             return
         d=self.sonars.distances; tilt=self.imu.tilt; bat_v=self.adc.battery_volts; bat=self.adc.battery_pct
-        d=self._apply_stair_standoff(d,pose)
         self.safety.update_context(front_cm=d['front'],tilt_deg=tilt,motion_enabled=self._motion_enabled)
         # §9: passive Layer-1 obstacle feed, same "no motor consequence, just keeps an estimate
         # current" spirit as the odometry pose logging above -- every real (non-timeout) sonar hit
@@ -1261,7 +1267,10 @@ class RoverBrain:
                 self._idle_t=0.0; self._go('ROAM')
 
     def _roam(self,d,tilt):
-        f=d['front']
+        f,ok=self._stair_planning_front(d)
+        if not ok:
+            self.safety.stop(); self._go('IDLE')
+            self._upd('idle','Not roaming: can\'t check the stair map (no fresh position)',d,tilt); return
         if tilt>config.IMU_TILT_WARN: self._go('WARN'); return
         if f<config.DIST_STOP: self._go('AVOID'); return
         if f<config.DIST_SLOW: self._go('SLOW'); return
@@ -1269,7 +1278,8 @@ class RoverBrain:
         self._upd('roam',f'Cruising f={f:.0f}cm bat={self.adc.battery_pct}%',d,tilt,config.SPEED_ROAM)
 
     def _slow(self,d,tilt):
-        f=d['front']
+        f,ok=self._stair_planning_front(d)
+        if not ok: self.safety.stop(); self._go('IDLE'); return
         if f>config.DIST_CLEAR: self._go('ROAM'); return
         if f<config.DIST_STOP: self._go('AVOID'); return
         self.safety.forward(config.SPEED_SLOW); self._upd('slow',f'Slowing f={f:.0f}cm',d,tilt,config.SPEED_SLOW)
@@ -1281,7 +1291,8 @@ class RoverBrain:
         # _tick()) services the deadline on every subsequent tick, and the timed_move_active guard
         # below keeps this state from issuing a second, overlapping command while one is in flight.
         # The old single-call "back up then turn" combo becomes two ticks via _avoid_phase.
-        f=d['front']; l=d['left']; r=d['right']
+        f,_ok=self._stair_planning_front(d); l=d['left']; r=d['right']
+        if not _ok: f=0.0   # fail closed: never treat an uncomputable keep-out as clear
         if self.safety.timed_move_active:
             self._upd('stop',f'Avoiding l={l:.0f} r={r:.0f}',d,tilt); return
         if self._avoid_phase=='turn_after_reverse':

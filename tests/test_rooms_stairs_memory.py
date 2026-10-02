@@ -30,16 +30,26 @@ wm2=WorldModel(odo,db_path=path)
 assert [s.name for s in wm2.all_stairs()]==["s1"] and wm2.all_stairs()[0].width_m==config.STAIR_DEFAULT_WIDTH_M
 assert wm2.get_room(0,0).name=="kitchen"
 
-# standoff: edge 1.0 m ahead -> front becomes 1.0-0.15 m past DIST_STOP; edge behind -> untouched
+# standoff (SWD 6.6): planning-only, never alters d, fails closed
+wm2.get_robot_pose=lambda: pose
 ns=types.SimpleNamespace(world_model=wm2)
-f=RoverBrain._apply_stair_standoff
-pose=types.SimpleNamespace(x=0,y=0,heading=0.0)
-out=f(ns,{"front":400.0,"left":400,"right":400},pose)
-assert abs(out["front"]-((1.0-config.STAIR_STANDOFF_M)*100+config.DIST_STOP))<1e-6, out
+f=lambda d: RoverBrain._stair_planning_front(ns,d)
+pose=types.SimpleNamespace(x=0,y=0,heading=0.0,stale=False)
+d={"front":400.0,"left":400,"right":400}
+pf,ok=f(d)
+assert ok and abs(pf-((1.0-config.STAIR_STANDOFF_M)*100+config.DIST_STOP))<1e-6, pf
+assert d["front"]==400.0                                            # the reflex reading is untouched
 pose.x=1.0-config.STAIR_STANDOFF_M+0.01
-assert f(ns,{"front":400.0},pose)["front"]<config.DIST_STOP          # inside the standoff -> stop
+assert f({"front":400.0})[0]<config.DIST_STOP                       # inside the standoff -> ROAM turns away
 pose.x=0; pose.heading=math.pi
-assert f(ns,{"front":400.0},pose)["front"]==400.0
+assert f({"front":400.0})==(400.0,True)                            # facing away
+pose.stale=True
+assert f({"front":400.0})[1] is False                              # stale pose with stairs mapped -> refuse
+def boom(): raise RuntimeError("db")
+ns2=types.SimpleNamespace(world_model=types.SimpleNamespace(all_stairs=boom))
+assert RoverBrain._stair_planning_front(ns2,{"front":400.0})[1] is False   # error -> fail closed
+ns3=types.SimpleNamespace(world_model=types.SimpleNamespace(all_stairs=lambda: []))
+assert RoverBrain._stair_planning_front(ns3,{"front":400.0})==(400.0,True)  # no stairs -> no effect
 
 # voice fast path
 v=voice.VoicePipeline.__new__(voice.VoicePipeline)
@@ -62,6 +72,8 @@ class Mem:
 v.memory=Mem(); v.speak=lambda t,**k: said.append(t)
 assert v._maybe_learn("what do you remember about cup") and "blue cup" in said[-1]
 v.memory=Mem(); assert v._maybe_learn("forget about cup") and v.memory.f=={} and "forgotten 1" in said[-1]
+v.memory=Mem(); assert v._maybe_learn("forget it") and v.memory.f!={} and "Tell me what" in said[-1]
+v.memory=Mem(); assert v._maybe_learn("forget the bl") and v.memory.f!={}     # too short, nothing deleted
 assert v._maybe_learn("forget about bananas") and "don't have anything" in said[-1]
 
 # instruction applied + unknown-intent gate

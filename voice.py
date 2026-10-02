@@ -600,10 +600,14 @@ class VoicePipeline:
         # spoken reached them.
         m=_FORGET.fullmatch(norm)
         if m:
-            what=m.group(1).strip().lower()
-            facts=[k for k,v in self.memory.all_facts().items() if what in k.lower() or what in str(v).lower()]
+            what=re.sub(r'^(?:the|a|an|my)\s+','',m.group(1).strip().lower())
+            if len(what)<3 or what in ('it','that','this','them','everything','all'):
+                # "forget it" must never become "delete everything containing 'it'".
+                self.speak('Tell me what to forget, for example: forget the blue cup.'); return True
+            hit=re.compile(r'\b'+re.escape(what)+r'\b',re.I).search
+            facts=[k for k,v in self.memory.all_facts().items() if hit(k) or hit(str(v))]
             instr=[i for i in self.memory.all_instructions()
-                   if what in i['trigger_phrase'].lower() or what in i['action_text'].lower()]
+                   if hit(i['trigger_phrase']) or hit(i['action_text'])]
             for k in facts: self.memory.delete_fact(k)
             for i in instr: self.memory.delete_instruction(i['id'])
             n=len(facts)+len(instr)
