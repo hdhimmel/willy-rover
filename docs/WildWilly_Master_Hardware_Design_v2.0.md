@@ -1501,11 +1501,11 @@ Item numbers are stable; closed items are removed, not renumbered.
 23. **Odometry and IMU** — drive a measured straight line (rolling diameter, other five
     wheels' scale); check the IMU yaw sign; BNO085 report rate ~5 Hz, cause unknown.
 24. **Unconfirmed as-built details** — which header pins the display's 5 V tap uses and what
-    it draws; camera mount height; whether the BNO085 INT wire is on the Pi (GP15, phys 10) as
-    recorded (it is unused by software; the BNO085 RST goes to Pico B GP15). Confirmed
+    it draws; camera mount height. Confirmed
     2026-10-02: two GODIY hubs daisy-chained; the EPLZON upper power board carries the voltage
     rails; INA260s on the power tray; no LEDs on the GeeekPi breakout; LTC4311 fitted; rear
-    USB camera is a Microdia "Webcam Vitade AF" by lsusb (check the label).
+    USB camera is a Microdia "Webcam Vitade AF" by lsusb (check the label); BNO085 INT is on
+    the Pi (GP15, phys 10, unused by software) and its RST on Pico B GP15.
 
 ---
 
