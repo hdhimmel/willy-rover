@@ -1179,7 +1179,7 @@ right −1) makes counts rover-forward in odometry.
 **A side swap is invisible to every gross motion** — `DriveBase._set()` commands a whole
 side at once. It shows only under per-wheel work (odometry attribution, stall tracing),
 so per-wheel claims need a one-wheel-at-a-time check after any rewiring
-(`scripts/encoder_map_check.py`, M-1).
+(`scripts/breakaway_sweep.py` drives one wheel at a time and reads its counts, M-1).
 
 **Reading motor current:** a stall reads higher than a healthy wheel; a near-zero reading
 means an open circuit — connector, crimp or screw terminal before the motor or driver. A
@@ -1345,7 +1345,7 @@ planning only. An obstacle stop never depends on a detection frame arriving.
   No full bus scan. 0x4A counts as present when its driver constructs and is **never
   probed**; only other expected addresses not yet seen are probed. 0x70 is not expected.
 - **Encoders:** Pico A's frames are fresh (`Encoders.is_healthy`). Liveness only; channel
-  attribution is a bench test (FR-500-001, `scripts/encoder_map_check.py`, one wheel at a
+  attribution is a bench test (FR-500-001, `scripts/breakaway_sweep.py`, one wheel at a
   time on blocks), because the motion gate cannot require motion.
 - **IMU:** `imu.is_healthy`. The INT line is not checked.
 - If only base-fed subsystems fail and 0x45 reads below 6.0 V, the failure reads "base
