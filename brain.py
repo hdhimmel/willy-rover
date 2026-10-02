@@ -378,6 +378,15 @@ class RoverBrain:
         if not self.current.is_healthy: critical.append('current monitors not reporting')
         if not self.sonars.is_healthy: critical.append('sonar link (Pico B) not reporting')
         if not self.motors.is_healthy: critical.append('motor drivers not responding')
+        # FR-100-002: tell "base power off" apart from real faults. With the base switched off
+        # the +12V bus monitor reads ~0V and exactly the base-fed subsystems drop out (battery
+        # divider, Pico A on R5). 2026-10-01 that read as two unrelated sensor failures.
+        base_fed={'battery ADC not reporting','encoders not reporting'}
+        if critical and set(critical)<=base_fed|{'motor drivers not responding'}:
+            try: bus=self.current.rail('bus_12v')['voltage_v']
+            except Exception: bus=None
+            if bus is not None and bus<config.MOTOR_RAIL_MIN_V:
+                critical=[f'base power appears OFF (12V bus {bus:.1f}V) -- '+'; '.join(critical)]
         # Recorded on self so the override offer can consult it. Set on EVERY self-test run,
         # pass or fail, so a retry that clears the critical fault also clears the block.
         self._selftest_critical=list(critical)

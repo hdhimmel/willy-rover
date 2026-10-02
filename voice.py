@@ -65,6 +65,14 @@ _SAFETY_PATTERN=re.compile(
 _ADDRESS=r'(?:(?:hey |ok |okay )?willie(?:[,]? )|please |can you |could you |would you |'\
           r'i want you to |go ahead and |lets |let\'s )*'
 _BARE_ADDRESS=re.compile(r'\s*(?:(?:hey|hi|ok|okay)[\s,]+)?willie[\s,.!?]*',re.I)
+# FR-1500-008/009 (2026-10-02): tone is carried through to synthesis as Piper's length scale
+# (speaking rate) -- the one prosody control a single Piper voice has. FR-1500-010's neutral
+# override for safety text still runs first, in speak().
+_TONE_LENGTH_SCALE={'neutral':1.0,'funny':0.92,'silly':0.85,'bashful':1.18}
+# FR-1500-009 / FR-1600-006 triggers: a compliment or a personal question.
+_BASHFUL_TRIGGER=re.compile(r"\b(good (boy|job|robot)|well done|(you'?re|you are) (so )?(cute|smart|clever|"
+                            r"great|awesome|amazing|adorable|sweet)|i love you|how old are you|"
+                            r"do you have (a )?(girlfriend|boyfriend|feelings)|are you (alive|happy|shy))\b",re.I)
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
 def _fp(core):
@@ -319,10 +327,10 @@ class VoicePipeline:
         # Sole consumer of _speak_queue — keeps every speak()/speak_safety() call (including
         # brain.py's, from the main tick thread) non-blocking regardless of caller.
         while self._running:
-            try: text,timing=self._speak_queue.get(timeout=0.5)
+            try: text,timing,tone=self._speak_queue.get(timeout=0.5)
             except queue.Empty: continue
             self._speaking.set()
-            try: self._synthesize_and_play(text,timing)
+            try: self._synthesize_and_play(text,timing,tone)
             finally:
                 self._play_done()  # owner-requested: signals Willie has finished and is listening
                 # 2026-08-23: was hardcoded 0.6s. Live symptom: 2-3 spurious wake-word triggers
@@ -524,6 +532,12 @@ class VoicePipeline:
         if not text:
             self.speak("How can I help?"); return
         log.info(f'Heard: "{text}"')
+        self._reply_tone=config.VOICE_TONE_DEFAULT
+        if _BASHFUL_TRIGGER.search(text):
+            self._reply_tone='bashful'
+            if self.display:
+                try: self.display.set_expression('bashful')
+                except Exception: pass
         if _BARE_ADDRESS.fullmatch(text):
             # Only the wake phrase was transcribed. 2026-10-01 the LLM turned a bare "Hey,
             # Willie" into a 'retrieve' intent; there is no command here to interpret.
@@ -551,7 +565,7 @@ class VoicePipeline:
                 import privacy as _p; _p.note_cloud_send(self.display,self,'your request')
                 result=self.cloud_ai.ask_sync(text)  # §14: schema=None -> free text, result.payload is the reply
                 if result.parse_success:
-                    self.speak(result.payload,tone=config.VOICE_TONE_DEFAULT); return
+                    self.speak(result.payload,tone=getattr(self,'_reply_tone',config.VOICE_TONE_DEFAULT)); return
             # FR-1500-005: never guess and act.
             self.speak("I'm not confident I understood that — could you rephrase it?"); return
         self._act_on_intent(intent,text)
@@ -632,7 +646,7 @@ class VoicePipeline:
             # thread picks this up and does the actual emergency_stop()/task-abort work; nothing
             # here touches SafetyController directly.
             self.stop_requested.set()
-            if reply: self.speak(reply,tone=config.VOICE_TONE_DEFAULT)
+            if reply: self.speak(reply,tone=getattr(self,'_reply_tone',config.VOICE_TONE_DEFAULT))
             return
         # confirm_receipt doesn't move/reply anything itself, but still has to cross to the tick
         # thread via this same queue — retrieval_task.py's AWAIT_CONFIRM state (and brain.py's
@@ -655,7 +669,7 @@ class VoicePipeline:
             ok,msg=self.smart_home.send_command(args.get('entity_id',''),args.get('command','on'),
                                                  **{k:v for k,v in args.items() if k not in('entity_id','command')})
             if not reply: reply=msg
-        if reply: self.speak(reply,tone=config.VOICE_TONE_DEFAULT)
+        if reply: self.speak(reply,tone=getattr(self,'_reply_tone',config.VOICE_TONE_DEFAULT))
 
     def speak(self,text,tone='neutral'):
         # FR-1500-004 + FR-1500-010: force neutral tone for anything safety-shaped, regardless
@@ -666,16 +680,16 @@ class VoicePipeline:
         if not self._enabled:
             log.info(f'(voice disabled) would say: {text}'); return
         timing=self._utterance_timing; self._utterance_timing=None
-        self._speak_queue.put((text,timing))
+        self._speak_queue.put((text,timing,tone))
 
     def speak_safety(self,text):
         # FR-1500-010: the only entry point brain.py's safety paths should use — always neutral,
         # never routed through personality logic at all. Also non-blocking, same as speak().
         if not self._enabled:
             log.info(f'(voice disabled) would say: {text}'); return
-        self._speak_queue.put((text,None))
+        self._speak_queue.put((text,None,'neutral'))
 
-    def _synthesize_and_play(self,text,timing=None):
+    def _synthesize_and_play(self,text,timing=None,tone='neutral'):
         # Only ever called from _speaker_loop's own thread — never call this directly.
         try:
             with tempfile.NamedTemporaryFile(suffix='.wav',delete=False) as f: wav_path=f.name
@@ -686,8 +700,16 @@ class VoicePipeline:
             # below, so it fails silent — no speech, no crash, no obvious clue why). Resolve it
             # next to the interpreter actually running this process instead of trusting PATH.
             piper_bin=os.path.join(os.path.dirname(sys.executable),'piper')
-            subprocess.run([piper_bin,'--model',model,'--output_file',wav_path],
-                            input=text.encode(),capture_output=True,timeout=10,check=True)
+            cmd=[piper_bin,'--model',model,'--output_file',wav_path]
+            scale=_TONE_LENGTH_SCALE.get(tone,1.0)
+            try:
+                subprocess.run(cmd+(['--length_scale',str(scale)] if scale!=1.0 else []),
+                               input=text.encode(),capture_output=True,timeout=10,check=True)
+            except subprocess.CalledProcessError:
+                if scale==1.0: raise
+                # A Piper build that rejects the flag must cost the tone, never the speech.
+                log.warning('piper rejected --length_scale; speaking in the neutral tone')
+                subprocess.run(cmd,input=text.encode(),capture_output=True,timeout=10,check=True)
             if timing is not None:
                 # Voice latency handoff 2026-08-15 Step 0: logged right after synthesis, before
                 # aplay/pw-play, so this bucket reflects piper compute cost rather than the
