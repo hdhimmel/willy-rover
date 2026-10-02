@@ -234,6 +234,7 @@ class RoverBrain:
         self._arm_over_since=None   # FR-700-001: arm over-current clock, see _check_arm_current()
         self._oc_since={}           # FR-200-002: per-rail overcurrent clocks, see _check_overcurrent()
         self._sonar_failed={}       # FR-800-004: channels currently reported failed
+        self._sonar_edge={}         # FR-800-004: channel -> when its state started to differ
         self._uncmd_since=None; self._uncmd_reported=False  # FR-500-003 inverse case
         self._bat_warned=False      # FR-200-003: warn tier announced once per descent
         # Battery sense cross-check (2026-09-15) -- see _check_battery_crosscheck().
@@ -1492,17 +1493,30 @@ class RoverBrain:
 
     def _check_sonar_channels(self):
         """FR-800-004: report a dead sonar channel instead of letting it sit silently at 0.0.
-        Logs on change only; the status prefix in _upd() keeps it visible while it lasts."""
+        Debounced (2026-10-02, after the first live run logged 46 events in two minutes from
+        one flapping channel): a channel is reported failed after SONAR_FAULT_DEBOUNCE_S of
+        continuous failure and cleared after the same of continuous health. Logs on those
+        transitions only; the status prefix in _upd() shows the confirmed set."""
         try: now_failed=dict(self.sonars.failed_channels)
         except Exception: return
-        for name,why in now_failed.items():
-            if name not in self._sonar_failed:
+        now=time.time(); deb=config.SONAR_FAULT_DEBOUNCE_S
+        for name in ('front','left','right'):
+            bad=name in now_failed
+            since=self._sonar_edge.get(name)
+            confirmed=name in self._sonar_failed
+            if bad==confirmed:
+                self._sonar_edge.pop(name,None); continue
+            if since is None:
+                self._sonar_edge[name]=now; continue
+            if now-since<deb: continue
+            self._sonar_edge.pop(name,None)
+            if bad:
+                self._sonar_failed[name]=now_failed[name]
                 log_event(log,'SONAR_FAULT',severity='error',subsystem=f'sonar_{name}',
-                          status='failed',reason=why)
-        for name in self._sonar_failed:
-            if name not in now_failed:
-                log.info(f'Sonar {name} ranging again')
-        self._sonar_failed=now_failed
+                          status='failed',reason=now_failed[name],held_s=deb)
+            else:
+                self._sonar_failed.pop(name,None)
+                log.info(f'Sonar {name} ranging again ({deb:.0f}s clean)')
 
     def _check_overcurrent(self):
         """FR-200-002: returns a reason when a rail has held above OVERCURRENT_LIMIT_A for

@@ -560,6 +560,7 @@ BAT_HYSTERESIS_V=0.2
 # to, so it runs FR-200-005's proactive graceful shutdown instead of driving DOCK. Flip this
 # only when a dock and a route to it exist.
 ENABLE_DOCKING=False
+SONAR_FAULT_DEBOUNCE_S=2.0   # FR-800-004: a sonar must fail (or recover) for this long to be reported
 # FR-1000-003 IMU heading in odometry (2026-10-02). OFF until checked on the rover: the BNO085's
 # mounting sets the sign of its yaw relative to odometry's (CCW-positive) heading. To enable:
 # turn left on the spot, confirm odometry heading and IMU.heading both increase (else set

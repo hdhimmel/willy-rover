@@ -110,3 +110,27 @@ def test_odometry_takes_rotation_from_the_imu_when_enabled():
           'print("ODOM_OK")\n')
     r=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True,cwd=_REPO_ROOT,env=env,timeout=120)
     assert 'ODOM_OK' in r.stdout, r.stdout+r.stderr
+
+def test_sonar_fault_reporting_is_debounced():
+    # 2026-10-02 live: one flapping channel logged 46 SONAR_FAULTs in two minutes.
+    env=dict(os.environ,WILLY_SIMULATE='1',PYTHONPATH=_REPO_ROOT)
+    code=('import types,config,brain\n'
+          'from brain import RoverBrain\n'
+          'clock=[0.0]; brain.time.time=lambda: clock[0]\n'
+          'ev=[]; brain.log_event=lambda lg,e,**k: ev.append(e)\n'
+          'fails=[{}]\n'
+          'ns=types.SimpleNamespace(_sonar_failed={},_sonar_edge={},sonars=types.SimpleNamespace())\n'
+          'ns.sonars=type("S",(),{"failed_channels":property(lambda s: fails[0])})()\n'
+          'chk=types.MethodType(RoverBrain._check_sonar_channels,ns)\n'
+          'for i in range(40):\n'
+          '    fails[0]={"left":"x"} if i%2 else {}; chk(); clock[0]+=0.5\n'
+          'assert ev==[], ev\n'
+          'fails[0]={"left":"stuck"}\n'
+          'for i in range(6): chk(); clock[0]+=0.5\n'
+          'assert ev==["SONAR_FAULT"] and "left" in ns._sonar_failed, (ev,ns._sonar_failed)\n'
+          'fails[0]={}\n'
+          'for i in range(6): chk(); clock[0]+=0.5\n'
+          'assert "left" not in ns._sonar_failed and ev==["SONAR_FAULT"]\n'
+          'print("DEBOUNCE_OK")\n')
+    r=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True,cwd=_REPO_ROOT,env=env,timeout=120)
+    assert 'DEBOUNCE_OK' in r.stdout, r.stdout+r.stderr
