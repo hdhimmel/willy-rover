@@ -207,7 +207,11 @@ IMU_RESET_AFTER_FAILS=10; IMU_RESET_MIN_INTERVAL_S=10.0
 # at rest: 101 distinct values in 10 s (~10 Hz reports), longest identical run 0.50 s. The case
 # it exists for: a reset the driver did not cause leaves it returning its cached value forever
 # with no error, so without this, tilt would freeze and nothing would notice.
-IMU_STALE_S=1.5
+# 2026-10-02: raised to 3.0 and judged on quaternion PLUS raw acceleration. On the blocks,
+# perfectly still, the fused quaternion stayed bit-identical for up to 3.7 s with the service
+# stopped (reports had dropped to ~5 Hz), so the 1.5 s quaternion-only check latched a false
+# SENSOR_FAULT every ~15 s. Accelerometer noise changes whenever a report actually arrives.
+IMU_STALE_S=3.0
 # RST: see the note below. It is no longer an expander pin.
 # IMU_RST_MCP_PIN REMOVED 2026-09-30 with the expander that hosted it. Section 4.7
 # consequence 1 moves the BNO085 reset to Pico B GP15, open-drain against R4, exposed as
