@@ -35,9 +35,39 @@ CREATE TABLE IF NOT EXISTS objects(
 CREATE TABLE IF NOT EXISTS routes(
     id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, waypoints_json TEXT NOT NULL,
     created_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS stairs(
+    id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, x REAL NOT NULL, y REAL NOT NULL,
+    heading REAL NOT NULL, width_m REAL NOT NULL, created_at REAL NOT NULL);
 """
 
 def _dist(x1,y1,x2,y2): return math.hypot(x2-x1,y2-y1)
+
+class Stair:
+    """FR-1200-006: a stair EDGE, not a point. (x,y) is the middle of the edge, heading
+    (radians, world frame) is the direction you face to go over it, and the edge runs
+    perpendicular to that heading for width_m. A position alone is enough to avoid and useless
+    for climbing; the heading is what a future stair mode lines up on."""
+    __slots__=('id','name','x','y','heading','width_m')
+    def __init__(self,name,x,y,heading,width_m,id=None):
+        self.id=id; self.name=name; self.x=x; self.y=y; self.heading=heading; self.width_m=width_m
+    def endpoints(self):
+        px,py=-math.sin(self.heading),math.cos(self.heading)   # unit vector along the edge
+        h=self.width_m/2
+        return (self.x-px*h,self.y-py*h),(self.x+px*h,self.y+py*h)
+    def __repr__(self): return f'Stair({self.name!r},x={self.x:.2f},y={self.y:.2f},w={self.width_m:.2f})'
+
+def ray_to_segment(px,py,heading,a,b):
+    """Distance from (px,py) along `heading` (radians) to segment a-b, or None if the ray
+    misses it. Pure function -- the stair standoff (FR-1200-005) uses it."""
+    dx,dy=math.cos(heading),math.sin(heading)
+    ex,ey=b[0]-a[0],b[1]-a[1]
+    den=dx*ey-dy*ex
+    if abs(den)<1e-9: return None                       # parallel to the edge
+    wx,wy=a[0]-px,a[1]-py
+    t=(wx*ey-wy*ex)/den                                  # along the ray
+    u=(wx*dy-wy*dx)/den                                  # along the segment
+    if t<0 or u<0 or u>1: return None
+    return t
 
 def project_point(pose,bearing_deg,distance_m):
     """Pure function, no hardware access: world (x,y) of a sensor hit at bearing_deg (degrees,
@@ -119,6 +149,7 @@ class WorldModel:
         self._landmarks={}           # name -> Landmark
         self._objects={}             # id -> Object
         self._routes={}              # name -> Route
+        self._stairs={}              # name -> Stair (FR-1200-006)
         self._object_seq=1
         self.load()  # §10 step 8: resume a later session automatically
 
@@ -206,6 +237,16 @@ class WorldModel:
         self._routes[name]=Route(name,waypoints)
         return self._routes[name]
 
+    # --- stairs (FR-1200-006) ---
+    def add_stair(self,name,x,y,heading,width_m=None):
+        width_m=config.STAIR_DEFAULT_WIDTH_M if width_m is None else width_m
+        self._stairs[name]=Stair(name,x,y,heading,width_m)
+        return self._stairs[name]
+    def all_stairs(self): return list(getattr(self,'_stairs',{}).values())
+    def delete_stair(self,name):
+        self._stairs.pop(name,None)
+        with self._lock: self._conn.execute('DELETE FROM stairs WHERE name=?',(name,)); self._conn.commit()
+
     def get_route(self,name): return self._routes.get(name)
     def all_routes(self): return list(self._routes.values())
 
@@ -251,6 +292,11 @@ class WorldModel:
                     'INSERT INTO routes(name,waypoints_json,created_at) VALUES(?,?,?) '
                     'ON CONFLICT(name) DO UPDATE SET waypoints_json=excluded.waypoints_json',
                     (rt.name,json.dumps(rt.waypoints),time.time()))
+            for st in getattr(self,'_stairs',{}).values():
+                self._conn.execute(
+                    'INSERT INTO stairs(name,x,y,heading,width_m,created_at) VALUES(?,?,?,?,?,?) '
+                    'ON CONFLICT(name) DO UPDATE SET x=excluded.x,y=excluded.y,heading=excluded.heading,'
+                    'width_m=excluded.width_m',(st.name,st.x,st.y,st.heading,st.width_m,time.time()))
             self._conn.commit()  # must commit before checkpointing -- an open write transaction
                                   # on this same connection blocks PRAGMA wal_checkpoint(FULL)
             self._conn.execute('PRAGMA wal_checkpoint(FULL)')
@@ -274,6 +320,10 @@ class WorldModel:
             routes={}
             for id,name,wp_json in self._conn.execute('SELECT id,name,waypoints_json FROM routes'):
                 routes[name]=Route(name,[tuple(p) for p in json.loads(wp_json)],id=id)
+            stairs={}
+            for id,name,x,y,hd,w in self._conn.execute('SELECT id,name,x,y,heading,width_m FROM stairs'):
+                stairs[name]=Stair(name,x,y,hd,w,id=id)
+        self._stairs=stairs
         self._rooms=rooms; self._doorways=doorways; self._landmarks=landmarks
         self._objects=objects; self._routes=routes; self._object_seq=max_id+1
         log.info(f'World model loaded: {len(rooms)} rooms, {len(landmarks)} landmarks, '

@@ -73,6 +73,19 @@ _TONE_LENGTH_SCALE={'neutral':1.0,'funny':0.92,'silly':0.85,'bashful':1.18}
 _BASHFUL_TRIGGER=re.compile(r"\b(good (boy|job|robot)|well done|(you'?re|you are) (so )?(cute|smart|clever|"
                             r"great|awesome|amazing|adorable|sweet)|i love you|how old are you|"
                             r"do you have (a )?(girlfriend|boyfriend|feelings)|are you (alive|happy|shy))\b",re.I)
+# FR-1000-001 / FR-1200-006 labelling, matched before the LLM (2026-10-02).
+_NAME_ROOM=re.compile(r"(?:this is|this room is|we(?:'re| are) in|you(?:'re| are) in) the ([a-z][a-z ]{1,30})",re.I)
+_MARK_STAIRS=re.compile(r"(?:there are |these are )?(?:the )?(?:stairs|steps)(?: are)? (?:here|ahead|in front of you)",re.I)
+_FORGET=re.compile(r"(?:please )?forget (?:about |that )?(.+)",re.I)
+_RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
+# FR-1400-001 (2026-10-02): intents the rest of the system can act on. Escalation no longer
+# rests on the model's self-reported confidence alone -- G-6 measured that number as carrying
+# no information. An answer that fails to parse, or names an intent outside this set, is a
+# deterministic "the local model did not understand" signal.
+_ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve',
+    'confirm_receipt','map','stop_map','shutdown','status','battery','arm_stow','arm_home','wave',
+    'come_here','follow','diagnostics','where_are_you','what_do_you_see','name_room','mark_stairs',
+    'stop','smart_home','chat','time','date'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
 def _fp(core):
@@ -547,6 +560,16 @@ class VoicePipeline:
         # FR-1900-006: explicit teaching commands short-circuit interpretation, handled locally.
         if self.memory and self._maybe_learn(text): return
 
+        # FR-1900-007: a stored "when I say X, do Y" instruction is APPLIED -- the trigger phrase
+        # is replaced by its action text, which then goes through the normal fast path / LLM and
+        # all of brain.py's gating, exactly as if the action had been spoken. One substitution
+        # only, so an instruction can never chain into a loop.
+        if self.memory:
+            spoken=re.sub(r'^(?:(?:hey|ok|okay)[\s,]+)?willie[\s,]+','',text.strip().rstrip('.!? '),flags=re.I).lower()
+            for ins in self.memory.all_instructions():
+                if spoken==ins['trigger_phrase'].strip().rstrip('.!? ').lower():
+                    log.info(f'Instruction applied: "{ins["trigger_phrase"]}" -> "{ins["action_text"]}"')
+                    text=ins['action_text']; break
         fast=self._fast_path(text)
         if fast is not None:
             t_intent=time.time()
@@ -571,6 +594,31 @@ class VoicePipeline:
         self._act_on_intent(intent,text)
 
     def _maybe_learn(self,text):
+        norm=text.strip().rstrip('.!? ')
+        # FR-1900-008: correction and deletion by voice. Both delete paths existed; nothing
+        # spoken reached them.
+        m=_FORGET.fullmatch(norm)
+        if m:
+            what=m.group(1).strip().lower()
+            facts=[k for k,v in self.memory.all_facts().items() if what in k.lower() or what in str(v).lower()]
+            instr=[i for i in self.memory.all_instructions()
+                   if what in i['trigger_phrase'].lower() or what in i['action_text'].lower()]
+            for k in facts: self.memory.delete_fact(k)
+            for i in instr: self.memory.delete_instruction(i['id'])
+            n=len(facts)+len(instr)
+            self.speak(f"Okay, I've forgotten {n} thing{'s' if n!=1 else ''} about {what}." if n
+                       else f"I don't have anything stored about {what}.")
+            return True
+        m=_RECALL.fullmatch(norm)
+        if m:
+            what=(m.group(1) or '').strip().lower()
+            facts=[v for k,v in self.memory.all_facts().items() if not what or what in k.lower() or what in str(v).lower()]
+            instr=[f"when you say {i['trigger_phrase']}, I {i['action_text']}" for i in self.memory.all_instructions()
+                   if not what or what in i['trigger_phrase'].lower() or what in i['action_text'].lower()]
+            items=(facts+instr)[:4]
+            self.speak(('I remember: '+'; '.join(str(x) for x in items)+'.') if items
+                       else "I don't have anything stored about that.")
+            return True
         m=re.match(r"remember that (.+)",text,re.I)
         if m: self.memory.add_fact(m.group(1)[:60],m.group(1)); self.speak(f"Got it, I'll remember that."); return True
         m=re.match(r"when i say (.+?), do (.+)",text,re.I)
@@ -583,6 +631,10 @@ class VoicePipeline:
         # fullmatch, not search -- a command embedded in a longer sentence falls through to the
         # LLM rather than risk matching on a fragment (e.g. "don't stop" must never hit 'stop').
         norm=text.strip().rstrip('.!? ')
+        norm=re.sub(r'^(?:(?:hey|ok|okay)[\s,]+)?willie[\s,]+','',norm,flags=re.I)
+        m=_NAME_ROOM.fullmatch(norm)
+        if m: return {'intent':'name_room','args':{'room':m.group(1).strip().lower()},'reply':''}
+        if _MARK_STAIRS.fullmatch(norm): return {'intent':'mark_stairs','args':{},'reply':''}
         if _TIME_PATTERN.fullmatch(norm):
             return {'intent':'time','args':{},'reply':f"It's {time.strftime('%I:%M %p').lstrip('0')}."}
         if _DATE_PATTERN.fullmatch(norm):
@@ -636,6 +688,11 @@ class VoicePipeline:
         result=self._local_ai.ask_sync(prompt,schema=_INTENT_SCHEMA)
         if not result.parse_success:
             log.info(f'Local interpretation low-confidence/failed: {result.reason}')
+            return result.payload,0.0
+        name=(result.payload or {}).get('intent','')
+        if name not in _ACTIONABLE_INTENTS:
+            log.info(f'Local interpretation named an unknown intent {name!r} -- treating as not understood')
+            return result.payload,0.0
         return result.payload,result.intent_confidence
 
     def _act_on_intent(self,intent,original_text):
@@ -658,7 +715,7 @@ class VoicePipeline:
         motion_intents={'forward','reverse','turn_left','turn_right','go_to','retrieve',
                          'confirm_receipt','map','stop_map','shutdown','status','battery',
                          'arm_stow','arm_home','wave','come_here','follow','diagnostics',
-                         'where_are_you','what_do_you_see'}
+                         'where_are_you','what_do_you_see','name_room','mark_stairs'}
         if name in motion_intents:
             # FR-1500-007: queued only — brain.py applies full Directive 1-5 gating before this
             # is ever executed.

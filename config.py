@@ -560,6 +560,14 @@ BAT_HYSTERESIS_V=0.2
 # to, so it runs FR-200-005's proactive graceful shutdown instead of driving DOCK. Flip this
 # only when a dock and a route to it exist.
 ENABLE_DOCKING=False
+# FR-1200-005/006 stairs (2026-10-02). Owner decision 2026-09-11: in floor mode Willie holds
+# STAIR_STANDOFF_M clear of a mapped stair edge. Stairs are labelled by voice ("stairs ahead")
+# with Willie facing them; the edge is placed STAIR_LABEL_AHEAD_M in front of his centre.
+# The standoff is only as good as odometry -- dead-reckoning drift moves the edge with it.
+STAIR_STANDOFF_M=0.15
+STAIR_DEFAULT_WIDTH_M=0.9
+STAIR_LABEL_AHEAD_M=0.30
+MOBILITY_MODE='floor'   # FR-1200-002: power-on default; 'stair' mode is not built
 # A battery-tier halt (FR-200-004/005) powers the Pi off, so it must not fire on a transient:
 # the reading has to stay below the tier's threshold, with the rover already stopped, for this
 # long. Motors stopped means load sag has recovered, so this is close to a resting reading.

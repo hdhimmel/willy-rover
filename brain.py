@@ -559,6 +559,28 @@ class RoverBrain:
             pass
         return ('unhealthy','is_healthy True')
 
+    def _apply_stair_standoff(self,d,pose):
+        """FR-1200-005: in floor mode, a mapped stair edge ahead acts as a virtual obstacle,
+        folded into 'front' so every existing forward-motion gate (ROAM/SLOW/AVOID,
+        approve_motion) holds STAIR_STANDOFF_M back from it. Forward only: there is no rear
+        sensing, and reverse moves are short and timed."""
+        if config.MOBILITY_MODE!='floor': return d
+        try: stairs=self.world_model.all_stairs()
+        except Exception: return d
+        if not stairs: return d
+        from world_model import ray_to_segment
+        best=None
+        for st in stairs:
+            a,b=st.endpoints()
+            t=ray_to_segment(pose.x,pose.y,pose.heading,a,b)
+            if t is not None and (best is None or t<best): best=t
+        if best is None: return d
+        # front < DIST_STOP  <=>  edge closer than the standoff
+        virtual_cm=(best-config.STAIR_STANDOFF_M)*100.0+config.DIST_STOP
+        if virtual_cm<d['front']:
+            d=dict(d); d['front']=max(0.0,virtual_cm)
+        return d
+
     def _check_uncommanded_motion(self):
         """FR-500-003, inverse: counts changing with no command issued. Reported once per
         episode; not braked, because an idle rover coasts deliberately (motors.py)."""
@@ -697,6 +719,7 @@ class RoverBrain:
             self._drain_voice_in_selftest_fault()
             return
         d=self.sonars.distances; tilt=self.imu.tilt; bat_v=self.adc.battery_volts; bat=self.adc.battery_pct
+        d=self._apply_stair_standoff(d,pose)
         self.safety.update_context(front_cm=d['front'],tilt_deg=tilt,motion_enabled=self._motion_enabled)
         # §9: passive Layer-1 obstacle feed, same "no motor consequence, just keeps an estimate
         # current" spirit as the odometry pose logging above -- every real (non-timeout) sonar hit
@@ -1029,6 +1052,25 @@ class RoverBrain:
             ok,msg=self.retrieval.start(target)
             if ok: self._go('RETRIEVE')
             log.info(f'Voice-triggered retrieval: {target} ({msg})')
+        elif cmd.get('intent')=='name_room':
+            # FR-1000-001: rooms were never added, so 'go to <room>' could not resolve. Labelled
+            # by voice at the robot's current position, saved at once.
+            name=cmd.get('args',{}).get('room','').strip()
+            if name:
+                pose=self.world_model.get_robot_pose()
+                self.world_model.add_room(name,pose.x,pose.y); self.world_model.save()
+                log.info(f'Room labelled: {name} at ({pose.x:.2f},{pose.y:.2f})')
+                self._say(f'Got it, this is the {name}.')
+        elif cmd.get('intent')=='mark_stairs':
+            # FR-1200-006: the edge sits STAIR_LABEL_AHEAD_M in front, across his heading.
+            pose=self.world_model.get_robot_pose()
+            import math as _m
+            x=pose.x+config.STAIR_LABEL_AHEAD_M*_m.cos(pose.heading)
+            y=pose.y+config.STAIR_LABEL_AHEAD_M*_m.sin(pose.heading)
+            name=f'stairs{len(self.world_model.all_stairs())+1}'
+            self.world_model.add_stair(name,x,y,pose.heading); self.world_model.save()
+            log_event(log,'STAIR_LABELLED',subsystem='world_model',status=name,x=f'{x:.2f}',y=f'{y:.2f}')
+            self._say(f"Got it, stairs marked. I'll keep {int(config.STAIR_STANDOFF_M*100)} centimetres back from them.")
         elif cmd.get('intent')=='map':
             ok,msg=self.mapping.start(); log.info(f'Voice-triggered mapping start: {msg}')
         elif cmd.get('intent')=='stop_map':
