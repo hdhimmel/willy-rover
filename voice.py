@@ -77,6 +77,7 @@ _BASHFUL_TRIGGER=re.compile(r"\b(good (boy|job|robot)|well done|(you'?re|you are
 _NAME_ROOM=re.compile(r"(?:this is|this room is|we(?:'re| are) in|you(?:'re| are) in) the ([a-z][a-z ]{1,30})",re.I)
 _MARK_STAIRS=re.compile(r"(?:there are |these are )?(?:the )?(?:stairs|steps)(?: are)? (?:here|ahead|in front of you)",re.I)
 _FORGET=re.compile(r"(?:please )?forget (?:about |that )?(.+)",re.I)
+_ROUTINES=re.compile(r"what do i usually (?:ask|do|ask for)|what are my routines",re.I)
 _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
 # FR-1400-001 (2026-10-02): intents the rest of the system can act on. Escalation no longer
 # rests on the model's self-reported confidence alone -- G-6 measured that number as carrying
@@ -608,6 +609,11 @@ class VoicePipeline:
             n=len(facts)+len(instr)
             self.speak(f"Okay, I've forgotten {n} thing{'s' if n!=1 else ''} about {what}." if n
                        else f"I don't have anything stored about {what}.")
+            return True
+        if _ROUTINES.fullmatch(norm):
+            tops=self.memory.top_routines()
+            self.speak(('You usually ask for '+'; '.join(f"{t['pattern']} ({t['count']} times)" for t in tops)+'.')
+                       if tops else "I haven't noticed any routines yet.")
             return True
         m=_RECALL.fullmatch(norm)
         if m:

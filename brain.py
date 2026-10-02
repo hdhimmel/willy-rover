@@ -995,6 +995,11 @@ class RoverBrain:
         except Exception:
             return
         self._reply_to=cmd.get('on_reply')  # remote_cmd.py: the HA caller waiting for the answer
+        # FR-1900-005: every request is noted with its hour, so repeated time-of-day patterns
+        # build up ("status around 07:00"). note_routine() existed and had no caller.
+        if cmd.get('intent') and cmd.get('intent')!='confirm_receipt':
+            try: self.memory.note_routine(f"{cmd['intent']} around {time.localtime().tm_hour:02d}:00")
+            except Exception: pass
         # Only something the person SAID can answer a pending yes/no ask. A remote command
         # arriving mid-ask is a command in its own right: found live 2026-10-01, when an HA
         # "status" landed while Willie was asking to explore and was taken as a "no".

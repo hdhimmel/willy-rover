@@ -83,3 +83,16 @@ def test_rooms_stairs_and_memory():
     env=dict(os.environ,WILLY_SIMULATE='1',PYTHONPATH=_REPO_ROOT)
     r=subprocess.run([sys.executable,'-c',_SCRIPT],capture_output=True,text=True,cwd=_REPO_ROOT,env=env,timeout=120)
     assert 'RSM_OK' in r.stdout, r.stdout+r.stderr
+
+def test_routines_are_noted_and_reported():
+    # FR-1900-005: repeated requests build up per hour; top_routines() reports them.
+    env=dict(os.environ,WILLY_SIMULATE='1',PYTHONPATH=_REPO_ROOT)
+    code=('import tempfile,os\n'
+          'from memory_store import MemoryStore\n'
+          'm=MemoryStore(os.path.join(tempfile.mkdtemp(),"m.db"))\n'
+          'for _ in range(4): m.note_routine("status around 07:00")\n'
+          'm.note_routine("battery around 09:00")\n'
+          'assert m.top_routines()==[{"pattern":"status around 07:00","count":4}], m.top_routines()\n'
+          'print("ROUTINE_OK")\n')
+    r=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True,cwd=_REPO_ROOT,env=env,timeout=120)
+    assert 'ROUTINE_OK' in r.stdout, r.stdout+r.stderr

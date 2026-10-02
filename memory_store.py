@@ -126,6 +126,13 @@ class MemoryStore:
                 (pattern_desc,now))
             self._conn.commit()
 
+    def top_routines(self,n=3,min_count=3):
+        """FR-1900-005 'for later reference': the most repeated patterns seen at least min_count
+        times, most frequent first."""
+        return [{'pattern':r[0],'count':r[1]} for r in self._conn.execute(
+            'SELECT pattern_desc,count FROM routines WHERE count>=? ORDER BY count DESC LIMIT ?',
+            (min_count,n))]
+
     # --- retrieval-augmented context (FR-1900-007) ---
     def get_context_for(self,query_text):
         q=query_text.lower()
