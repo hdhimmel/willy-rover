@@ -28,8 +28,8 @@ def fb():
     ns=types.SimpleNamespace(_state="IDLE",voice=types.SimpleNamespace(available=False))
     ns.arm=FakeArm()
     ns._go=lambda s: setattr(ns,"_state",s)
-    for m in ("_wave","_start_wave"): setattr(ns,m,types.MethodType(getattr(RoverBrain,m),ns))
-    ns._wave_plan=RoverBrain._wave_plan
+    for m in ("_wave","_start_wave","_shoulder_now","_start_arm_sequence"): setattr(ns,m,types.MethodType(getattr(RoverBrain,m),ns))
+    ns._wave_plan=RoverBrain._wave_plan; ns._rest_plan=RoverBrain._rest_plan
     return ns
 
 f=fb(); f._start_wave(); assert f._state=="WAVE"
@@ -61,6 +61,11 @@ assert ("elbow",config.ARM_SERVO_CENTER_US) not in P
 last_sh=max(i for i,(j,_) in enumerate(P) if j=="shoulder"); last_el=max(i for i,(j,_) in enumerate(P) if j=="elbow")
 assert P[last_sh]==("shoulder",R["shoulder"]) and last_sh<last_el
 assert P[-1]==("wrist_pitch",config.ARM_REST_WRIST_US)
+# stow: from a raised shoulder, step down to rest -- never a single jump
+plan=RoverBrain._rest_plan(750)
+sh=[p[1] for p in plan if p[0]=="shoulder"]
+assert max(abs(b-a) for a,b in zip([750]+sh,sh))<=config.ARM_WAVE_APPROACH_STEP_US and sh[-1]==R["shoulder"]
+assert [p[0] for p in plan][-2:]==["elbow","wrist_pitch"]
 print("WAVE_CHECK_OK")
 '''
 

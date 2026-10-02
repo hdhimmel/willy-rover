@@ -335,7 +335,11 @@ class RoverBrain:
         # and actuator subsystem is the whole point of start() below.
         self.display.start(); self.sonars.start(); self.imu.start(); self.adc.start()
         self.encoders.start(); self.current.start()
-        self.steering.center_all(); self.arm.center_all()
+        self.steering.center_all()
+        # The ARM IS NOT CENTRED AT STARTUP (2026-10-02, seen on the rover). centre_all() jumped
+        # the shoulder from rest to 1500 us in one step -- the slam config.py forbids -- and the
+        # idle release dropped it again 10 s later, on every boot. The arm stays as it is
+        # (released) until something asks it to move, and every arm motion steps the shoulder.
         # v2.2: voice/email run their own background threads regardless of self-test result —
         # neither can move the robot on its own (voice queues motion intents for _tick() to
         # gate; email never acts autonomously per FR-2000-004) — but both stay inert no-ops if
@@ -1378,10 +1382,11 @@ class RoverBrain:
             self._say("I can't read my battery right now." if bat_v<=0 else
                                  f"Battery is at {bat_v:.1f} volts, about {bat_pct} percent.")
         elif cmd.get('intent') in('arm_stow','arm_home'):
-            # No calibrated stow/home pose exists yet (§20.6) -- both alias to center_all() as a
-            # known-safe placeholder position until real per-joint poses are bench-calibrated.
-            self.arm.center_all()
-            self._say('Arm centered.')
+            # Stow/home = the REST pose, reached in steps (shoulder first, 50 us at a time, then
+            # elbow, then wrist) through the same tick-serviced sequence as the wave. Used to be
+            # center_all(), which jumped the shoulder to 1500 in one step.
+            self._start_arm_sequence(self._rest_plan(self._shoulder_now()))
+            self._say('Putting my arm away.')
         elif cmd.get('intent')=='wave':
             self._start_wave()
         elif cmd.get('intent')=='diagnostics':
@@ -1465,13 +1470,28 @@ class RoverBrain:
         plan+=[('elbow',min(r['elbow'],config.ARM_SERVO_MAX_US),0.6),('wrist_pitch',config.ARM_REST_WRIST_US,0.0)]
         return plan
 
+    @staticmethod
+    def _rest_plan(shoulder_from):
+        """Back to ARM_POSE_REST: shoulder in steps, then elbow, then the low-current wrist."""
+        r=config.ARM_POSE_REST; step=config.ARM_WAVE_APPROACH_STEP_US
+        d=step if r['shoulder']>shoulder_from else -step
+        plan=[('shoulder',v,config.ARM_WAVE_STEP_S) for v in range(shoulder_from+d,r['shoulder'],d)]
+        plan+=[('shoulder',r['shoulder'],0.3),
+               ('elbow',min(r['elbow'],config.ARM_SERVO_MAX_US),0.6),
+               ('wrist_pitch',config.ARM_REST_WRIST_US,0.0)]
+        return plan
+
+    def _shoulder_now(self):
+        # Step from where the shoulder really is; if it has not been driven this boot its pulse
+        # is a placeholder, so assume it is resting.
+        return int(self.arm.pulse('shoulder') if self.arm.was_driven('shoulder') else config.ARM_POSE_REST['shoulder'])
+
+    def _start_arm_sequence(self,plan):
+        self._wave_seq=plan; self._wave_step=0; self._wave_deadline=None; self._go('WAVE')
+
     def _start_wave(self):
         if self.voice.available: self.voice.speak('Hello!')
-        # Step the shoulder from where it really is; if it has not been driven this boot its
-        # pulse is a placeholder, so assume it is resting.
-        s0=self.arm.pulse('shoulder') if self.arm.was_driven('shoulder') else config.ARM_POSE_REST['shoulder']
-        self._wave_seq=self._wave_plan(int(s0))
-        self._wave_step=0; self._wave_deadline=None; self._go('WAVE')
+        self._start_arm_sequence(self._wave_plan(self._shoulder_now()))
 
     def _wave(self,d,tilt):
         now=time.time()
@@ -1493,7 +1513,7 @@ class RoverBrain:
         # restart/SIGTERM/Ctrl-C powering off the Pi.
         log.warning(f'Graceful shutdown: {reason}')
         self.safety.emergency_stop(f'shutdown: {reason}')
-        self.arm.center_all()  # stow placeholder -- no calibrated stow pose exists yet (§20.6)
+        self.arm.release()   # power is about to go; a centring jump first only stresses the joints
         if self.voice.available: self.voice.speak('Shutting down now. Goodbye.')
         self._shutdown_after_stop=True; self._running=False
 
