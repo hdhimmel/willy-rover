@@ -549,6 +549,14 @@ BAT_RTH_V=10.8        # -> return-to-home / DOCK
 BAT_SAFE_V=10.5        # -> SAFE_MODE (motion stop, arm holds)
 BAT_SHUTDOWN_V=10.2   # -> controlled shutdown; also the 0% anchor for battery_pct
 BAT_HYSTERESIS_V=0.2
+# DOCKING IS DEFERRED (owner, 2026-10-01). With no dock, the 'rth' tier has nowhere to return
+# to, so it runs FR-200-005's proactive graceful shutdown instead of driving DOCK. Flip this
+# only when a dock and a route to it exist.
+ENABLE_DOCKING=False
+# A battery-tier halt (FR-200-004/005) powers the Pi off, so it must not fire on a transient:
+# the reading has to stay below the tier's threshold, with the rover already stopped, for this
+# long. Motors stopped means load sag has recovered, so this is close to a resting reading.
+BAT_HALT_CONFIRM_S=10.0
 
 # --- Battery cross-check (added 2026-09-15) -------------------------------------------------
 # Two independent sources exist for pack voltage and until now nothing compared them:
@@ -882,6 +890,12 @@ IDLE_PERSONALITY_CYCLE_S=90  # FR-1600-007: how often the idle 'silly' animation
 # An AI HAT+2 (Hailo-10H) was installed and PCIe-bonded 2026-08-16 (see CLAUDE.md) and vision.py
 # IS now wired to use it — see ENABLE_HAILO_VISION below (2026-08-21). The flags in this block
 # describe only the older CPU/Arducam fallback path, which that swap left untouched.
+# The RETRIEVE TASK itself (voice 'fetch the X'), separate from the camera backend flags around
+# it. Off until FR-1700 is safe: the grasp drives the elbow to its forbidden centre, the arm
+# current limit is not enforced, and hand-off releases on a timer because nothing reads the
+# FSR (2026-10-02 FRD audit). A misheard bare "Hey Willie" was classified as 'retrieve' on
+# 2026-10-01 -- with this off, that is answered, not acted on.
+ENABLE_RETRIEVAL_TASK=False
 ENABLE_OBJECT_RETRIEVAL=False  # 2026-08-20: briefly flipped True and live-verified the capture/
                                # inference pipeline works end-to-end (model, cv2 5.0.0,
                                # ultralytics 8.4.115, Arducam all confirmed present + a real

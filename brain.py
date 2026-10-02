@@ -222,6 +222,8 @@ class RoverBrain:
         self._motor_rail_low_since=None; self._motor_rail_lost=False
         # Encoder-rail (R5) warning, 2026-10-01 -- see _check_r5(). Warn only, never a stop.
         self._r5_low_since=None; self._r5_low=False
+        self._bat_halt_since=None   # battery-tier halt confirmation clock, see _battery_halt()
+        self._bat_warned=False      # FR-200-003: warn tier announced once per descent
         # Battery sense cross-check (2026-09-15) -- see _check_battery_crosscheck().
         self._bat_xcheck_since=None; self._bat_xcheck_flagged=False
         self._bat_tier='normal'; self._health={}; self._fault_since={}; self._stall_since={}
@@ -710,7 +712,8 @@ class RoverBrain:
                 # threshold re-runs a full WAL checkpoint to disk, forever (found 2026-08-07 —
                 # spun at ~9Hz for over an hour with the base powered off, pinning CPU).
                 self._go('SHUTDOWN'); self.memory.save_all_now()
-            self._upd('lowbatt',f'BATTERY {bat_v:.2f}V — controlled shutdown, restart required',d,tilt); return
+            # FR-200-004: the same clean halt as FR-900-005, not just a parked state.
+            self._battery_halt('critical battery',bat_v,config.BAT_SHUTDOWN_V,d,tilt); return
         if tier=='safe':
             if self.retrieval.active: self.retrieval.abort(f'battery safe mode {bat_v:.2f}V')  # FR-1700-007
             if self.mapping.active: self.mapping.abort(f'battery safe mode {bat_v:.2f}V')
@@ -722,6 +725,24 @@ class RoverBrain:
                           status='safe_mode',volts=f'{bat_v:.2f}')
             self.safety.emergency_stop(f'battery safe mode {bat_v:.2f}V'); self._go('SAFE_MODE')
             self._upd('lowbatt',f'SAFE_MODE bat={bat_v:.2f}V',d,tilt); return  # FR-1600-004
+        if tier=='rth' and not config.ENABLE_DOCKING:
+            # FR-200-005 with docking deferred: stop, save, then the FR-900-005 graceful halt.
+            # This used to drive DOCK -- forward at 0.2 on sonar alone -- and re-enter it every
+            # tick, so a voice "stop" could not hold the rover (FR-900-004).
+            if self.retrieval.active: self.retrieval.abort(f'low battery {bat_v:.2f}V')
+            if self.mapping.active: self.mapping.abort(f'low battery {bat_v:.2f}V')
+            if self.navigator.active: self.navigator.abort(f'low battery {bat_v:.2f}V')
+            if self.pursuit.active: self.pursuit.abort(f'low battery {bat_v:.2f}V')
+            self._abandon_stuck_if_active()
+            self.safety.stop()
+            if self._state!='LOW_BATTERY':
+                self.memory.save_all_now()  # FR-1900-011 guaranteed save, while there is time
+                log_event(log,'LOW_BATTERY',severity='warning',subsystem='battery',
+                          status='low_battery_halt',volts=f'{bat_v:.2f}',threshold=config.BAT_RTH_V)
+                if self.voice.available:
+                    self.voice.speak(f'My battery is low, {bat_v:.1f} volts. I will shut down to protect it.')
+                self._go('LOW_BATTERY')
+            self._battery_halt('low battery',bat_v,config.BAT_RTH_V,d,tilt); return
         if tier=='rth':
             if self._state not in('DOCK','TILT_FAULT'):
                 if self.retrieval.active: self.retrieval.abort(f'return-to-home {bat_v:.2f}V')  # FR-1700-007
@@ -746,7 +767,19 @@ class RoverBrain:
             # Now it holds braked and waits for an explicit operator reset like every other fault.
             if not self._await_reset_or_resume('battery safe mode',d,tilt,
                                                'Battery recovered — tap or say reset'): return
-        elif self._state in('SHUTDOWN','DOCK'):
+        if tier=='warn' and not self._bat_warned:
+            # FR-200-003: warn BEFORE the critical level -- once per descent, not every tick.
+            self._bat_warned=True
+            log_event(log,'LOW_BATTERY',severity='warning',subsystem='battery',status='warn',
+                      volts=f'{bat_v:.2f}',threshold=config.BAT_WARN_V)
+            if self.voice.available:
+                self.voice.speak(f'Heads up, my battery is getting low: {bat_v:.1f} volts.')
+        elif tier=='normal':
+            self._bat_warned=False
+        if tier not in('shutdown','safe','rth'): self._bat_halt_since=None
+        if self._state=='LOW_BATTERY' and tier in('normal','warn'):
+            self._go('IDLE')   # recovered past the hysteresis band before the halt confirmed
+        elif self._state in('SHUTDOWN','DOCK') and tier!='rth':
             # Unchanged. SHUTDOWN is a terminal powering-off path and DOCK is an ordinary
             # return-to-home task, not an emergency_stop() latch -- neither is a fault to reset.
             # Recovery can skip straight from shutdown/safe to warn/normal in one hysteresis step
@@ -805,6 +838,7 @@ class RoverBrain:
          'STUCK':self._stuck,'DOCK':self._dock,'WARN':self._warn,'RETRIEVE':self._retrieve,
          'NAVIGATE':self._navigate,'MANUAL':self._manual,'PURSUE':self._pursue,'WAVE':self._wave,
          'TILT_FAULT':lambda d,t:None,'SAFE_MODE':lambda d,t:None,'SHUTDOWN':lambda d,t:None,
+         'LOW_BATTERY':lambda d,t:None,
         }.get(self._state,lambda d,t:None)(d,tilt)
 
     def _say(self,text):
@@ -908,7 +942,10 @@ class RoverBrain:
             log.info(f'Dropping stale voice command "{cmd.get("intent")}" '
                      f'({time.time()-ts:.1f}s old, limit {config.VOICE_COMMAND_MAX_AGE_S}s)')
             return
-        if cmd.get('intent')=='retrieve':
+        if cmd.get('intent')=='retrieve' and not config.ENABLE_RETRIEVAL_TASK:
+            log.info('Voice retrieve refused: ENABLE_RETRIEVAL_TASK is off')
+            self._say("I can't fetch things yet. My arm isn't safe for that.")
+        elif cmd.get('intent')=='retrieve':
             target=cmd.get('args',{}).get('object','object')
             ok,msg=self.retrieval.start(target)
             if ok: self._go('RETRIEVE')
@@ -1050,15 +1087,15 @@ class RoverBrain:
         if self._wave_step>=len(self._WAVE_OFFSETS_US): self._go('IDLE')
         else: self._wave_deadline=now+self._WAVE_DELAY_S
 
-    def _begin_shutdown(self):
+    def _begin_shutdown(self,reason='voice command'):
         # FR-900-005: halt motion, stow arm, persist state, then `shutdown -h now`. Reuses
         # stop()'s existing graceful-cleanup sequence (task aborts, memory/world_model
         # persistence, motor/sensor teardown) rather than duplicating it — that's already what
         # run()'s `finally` calls on any exit. The actual OS shutdown call only ever fires from
         # stop()'s tail, gated on _shutdown_after_stop, so this never risks a plain service
         # restart/SIGTERM/Ctrl-C powering off the Pi.
-        log.warning('Voice-commanded shutdown confirmed.')
-        self.safety.emergency_stop('commanded shutdown')
+        log.warning(f'Graceful shutdown: {reason}')
+        self.safety.emergency_stop(f'shutdown: {reason}')
         self.arm.center_all()  # stow placeholder -- no calibrated stow pose exists yet (§20.6)
         if self.voice.available: self.voice.speak('Shutting down now. Goodbye.')
         self._shutdown_after_stop=True; self._running=False
@@ -1320,6 +1357,38 @@ class RoverBrain:
                     f'{wheels} reading zero is likely the rail, not the wheels')
         return f'wheel stall: {wheels}'
 
+    def _battery_reading_disputed(self):
+        """True when the +12V bus monitor is live and disagrees with the ADC right now.
+
+        A halt powers the Pi off, so it needs more than the ADC's word. 2026-10-01: a stale
+        divider scale read a healthy 11.37V pack as 8.53V while 0x45 read 11.26V, and the rover
+        walked to SHUTDOWN on the ADC alone. With the bus down (motor cut, base off) there is
+        nothing to compare against, and the ADC stays the authority."""
+        try:
+            bus=self.current.rail('bus_12v')['voltage_v']
+        except Exception:
+            return False
+        if bus<config.MOTOR_RAIL_MIN_V: return False
+        return abs(self.adc.battery_volts-bus)>config.BAT_CROSSCHECK_MAX_DIFF_V
+
+    def _battery_halt(self,reason,bat_v,threshold,d,tilt):
+        """FR-200-004/005: the FR-900-005 graceful halt, once the reading has stayed under
+        `threshold` for BAT_HALT_CONFIRM_S with the rover stopped, and is not disputed."""
+        now=time.time()
+        if self._battery_reading_disputed():
+            self._bat_halt_since=None
+            self._upd('lowbatt',f'BATTERY {bat_v:.2f}V disputed by the bus monitor — NOT shutting down',d,tilt)
+            return
+        if bat_v>=threshold or self._bat_halt_since is None:
+            self._bat_halt_since=now   # first tick, or the sag recovered: (re)start the clock
+        left=config.BAT_HALT_CONFIRM_S-(now-self._bat_halt_since)
+        if left<=0 and not self._shutdown_after_stop:
+            log_event(log,'BATTERY_HALT',severity='error',subsystem='battery',status=reason,
+                      volts=f'{bat_v:.2f}',threshold=threshold)
+            self._begin_shutdown(reason)
+        self._upd('lowbatt',f'BATTERY {bat_v:.2f}V — {reason}, shutting down'
+                  +(f' in {left:.0f}s' if left>0 else ''),d,tilt)
+
     def _check_battery_crosscheck(self):
         """Compare the ADS1115 pack reading against the +12V bus INA260. DETECTION ONLY.
 
@@ -1413,6 +1482,9 @@ class RoverBrain:
         # on the face -- the percentage, the tier, the range estimate.
         if self._bat_xcheck_flagged: st=f'⚠BATTERY SENSE SUSPECT — {st}'
         if self._r5_low: st=f'⚠ENCODER RAIL LOW — {st}'
+        # FR-1600-004: the 'warn' tier keeps driving, so it is a prefix, not a face state.
+        if getattr(self,'_bat_tier','normal')=='warn':
+            st=f'🔋BATTERY LOW {self.adc.battery_volts:.1f}V — {st}'
         self.display.update_state(state=fs,status=st,distances=d,tilt=tilt,speed=spd,
                                    awaiting_reset=awaiting_reset,offer_override=offer_override)
 

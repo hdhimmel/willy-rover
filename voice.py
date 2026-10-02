@@ -64,6 +64,7 @@ _SAFETY_PATTERN=re.compile(
 # 15x worse than assumed and widening coverage matters far more than it did.
 _ADDRESS=r'(?:(?:hey |ok |okay )?willie(?:[,]? )|please |can you |could you |would you |'\
           r'i want you to |go ahead and |lets |let\'s )*'
+_BARE_ADDRESS=re.compile(r'\s*(?:(?:hey|hi|ok|okay)[\s,]+)?willie[\s,.!?]*',re.I)
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
 def _fp(core):
@@ -523,6 +524,10 @@ class VoicePipeline:
         if not text:
             self.speak("How can I help?"); return
         log.info(f'Heard: "{text}"')
+        if _BARE_ADDRESS.fullmatch(text):
+            # Only the wake phrase was transcribed. 2026-10-01 the LLM turned a bare "Hey,
+            # Willie" into a 'retrieve' intent; there is no command here to interpret.
+            self.speak("How can I help?"); return
         if self.display: self.display.note_heard()
 
         # FR-1900-006: explicit teaching commands short-circuit interpretation, handled locally.

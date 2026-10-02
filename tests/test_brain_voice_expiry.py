@@ -20,6 +20,7 @@ _REPO_ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _SCRIPT='''
 import queue,time,types,config
 from brain import RoverBrain
+config.ENABLE_RETRIEVAL_TASK=True  # these exercise the drain path, not the 2026-10-02 retrieve gate
 
 def fb():
     """A stand-in self carrying only what _drain_voice_commands() touches."""
