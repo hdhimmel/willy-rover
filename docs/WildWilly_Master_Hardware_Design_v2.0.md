@@ -2100,7 +2100,7 @@ not a swap.
 Sonar is blind to chair legs, soft furnishings and angled surfaces. ToF is blind
 to **glass** — it looks straight through a glass table or patio door, which sonar
 reflects off perfectly well. Neither covers the other's blind spot, so both stay.
-The same reasoning applies to a lidar later: it shares the ToF's glass problem.
+**No scanning lidar is fitted or planned (owner, 2026-10-02).** The SEN0628 is the "lidar" in DFRobot's naming.
 
 **The TCA9548A is no longer required.** The mux was mandated because of the
 84KB-per-init upload; the RP2040 removes it, so the containment argument falls away.
@@ -2208,7 +2208,6 @@ state. Everything downstream — `DIST_STOP`/`DIST_SLOW`/`DIST_CLEAR`, `_roam()`
 the sensor's own RP2040 resetting), fall back to sonar alone and log it:
 **adding a sensor must never make the rover less available than it is today.**
 
-A note for whoever fits a lidar later: that same `min()` is where it fuses in too.
 
 ---
 

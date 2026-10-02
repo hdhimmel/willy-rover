@@ -2330,18 +2330,14 @@ independent of whether climbing is ever built.
     where the stairs are. **Vision** (both cameras are mounted 15° downward, so
     the ground plane is in frame) detects floor-plane discontinuities at range
     and is what makes stair candidates proposable during a mapping run rather
-    than hunted for by hand. **Lidar**, when fitted, contributes *localisation* —
-    scan matching gives a far better position estimate than dead reckoning, and
-    that is what makes a margin this tight mean anything.
+    than hunted for by hand. The **SEN0628 ToF** (DFRobot sells it as a "matrix
+    lidar"; it is the 8×8 multi-zone ToF, not a scanner) is the reflex drop detector.
+    **No scanning lidar is fitted or planned (owner, 2026-10-02).** Position comes from odometry (wheel
+    encoders, optionally IMU heading), so the standoff is only as good as dead
+    reckoning.
 
-    **Note what lidar does NOT do here.** A 2D lidar sweeps a horizontal plane;
-    a descending staircase is empty space in that plane and is indistinguishable
-    from an open doorway. It cannot see the drop. Its role is knowing where the
-    rover is, not what is underfoot. Do not record it as a cliff sensor.
-
-    **0.15 m must be validated, not assumed.** Measure the real localisation
-    error once lidar SLAM is running and widen the standoff if it exceeds the
-    margin. Until then, pose is dead-reckoned from encoders that have produced
+    **0.15 m must be validated, not assumed.** Measure the real odometry error on
+    the floor and widen the standoff if it exceeds the margin. Until then, pose is dead-reckoned from encoders that have produced
     nothing since 2026-08-25, so the standoff is *arithmetic without a position
     to apply it to* and must not be relied on. (*2026-10-01: the encoders now count —
     a-0.3, 763/rev — but odometry rests on a one-wheel scale with no slip model and is

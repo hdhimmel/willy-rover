@@ -793,12 +793,11 @@ conflate:
 |---|---|---|
 | Mapping | Where the stairs are | Deliberative |
 | Vision (15° down) | Propose stair candidates during a mapping run; discontinuities at range | Deliberative |
-| Lidar (when fitted) | **Localisation.** Scan matching, so the pose the standoff is measured from is trustworthy | Deliberative |
 | **SEN0628 multi-zone ToF** (the VL53L7CX behind its RP2040) | The actual drop detector | **Reflex** |
 
-A 2D lidar cannot see a descending staircase — it is empty space in a horizontal
-scan plane. Its contribution is knowing where the rover is well enough for a 15cm
-margin to be meaningful, which dead reckoning cannot deliver.
+**No scanning lidar is fitted or planned (owner, 2026-10-02).** The pose the standoff is measured from is
+dead-reckoned (odometry, optionally IMU heading), so a 15 cm margin is only as good as
+that; measure the drift on the floor before relying on it.
 
 **The gate must fail closed.** If pose is unknown or stale, the standoff cannot be
 computed, and the correct response is to refuse to roam rather than to proceed as
