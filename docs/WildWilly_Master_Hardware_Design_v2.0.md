@@ -1495,8 +1495,7 @@ Item numbers are stable; closed items are removed, not renumbered.
     re-run `scripts/breakaway_sweep.py` so its `WHEEL_FF` line is measured.
 19. **Steering uncalibrated** — per-unit servo range and centre; kinematics deferred.
 20. **ToF floor profile not captured** — `scripts/calibrate_tof_floor.py` on clear floor.
-21. **Sonars on order** — fit and range-test the replacement HC-SR04s (check polarity and
-    seating first; R2 current step ~15 mA per healthy sensor).
+21. *(closed 2026-10-02 — all three sonars working, owner-confirmed.)*
 22. **Arm per-joint limits** — record with `arm_jog.py`; identify CH3's function; define a
     stow pose and a safe elbow centre.
 23. **Odometry and IMU** — drive a measured straight line (rolling diameter, other five
@@ -1566,7 +1565,7 @@ Current components only.
 | Component | Role | Qty | Status |
 |-----------|------|-----|--------|
 | BNO085 9-DoF IMU | Orientation, 0x4A | 1 | Installed |
-| HC-SR04 sonar | Front, left, right | 3 | Replacements on order (§14 item 21) |
+| HC-SR04 sonar | Front, left, right | 3 | Installed, all three working |
 | DFRobot SEN0628 (VL53L7CX + RP2040) | Front 8×8 ToF, obstacle and drop | 1 + 1 spare | Installed, profile not captured |
 | FSR402 force sensor | Gripper contact force, ADS1115 A1 | 1 | Fitted, uncalibrated |
 | 1 kΩ resistor | ECHO dividers, high side — R1/R3/R5 | 3 | Installed |
