@@ -1,4 +1,4 @@
-import imaplib,smtplib,email,json,os,time,threading,queue,uuid
+import imaplib,smtplib,email,email.utils,json,os,re,time,threading,queue,uuid
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
@@ -28,11 +28,53 @@ log=logsetup.setup('email')
 # caller (voice.py, brain.py) MUST use instead of hand-rolling one — it wraps the body in an
 # explicit untrusted-data delimiter and instructs the model not to treat it as commands.
 #
-# FR-2000-011 caveat: "only the owner can modify the allowlist" is enforced here as
-# owner_confirmed=True being passed explicitly by the caller — there is no voiceprint/biometric
-# auth anywhere in this codebase (voice.py has none either), so in practice this means "a
-# command spoken at the physical device", not a cryptographically verified owner identity. Flag
-# this as a real gap, not a solved one.
+# FR-2000-011 (2026-10-02): the only caller that passes owner_confirmed=True is
+# _handle_command(), and only for a message from OWNER_EMAIL whose topmost mx.google.com
+# Authentication-Results shows DKIM pass aligned with the From domain (dkim_verified()). No
+# voice or other path can modify the allowlist. FR-2000-012 owner commands go through the same
+# check, a freshness limit, and then brain.py's normal command queue and Directive gating. The
+# residual risk the FRD names stands: a compromised owner Gmail account passes DKIM. The kill
+# switch is config.ENABLE_EMAIL_COMMANDS.
+
+_CMD_SUBJECT=None   # compiled lazily from config.EMAIL_COMMAND_PREFIX
+
+def command_text(subject):
+    """'Willie: go to the kitchen' -> 'go to the kitchen'; not a command -> None."""
+    global _CMD_SUBJECT
+    if _CMD_SUBJECT is None:
+        _CMD_SUBJECT=re.compile(r'^\s*(?:re:\s*)?'+re.escape(config.EMAIL_COMMAND_PREFIX)+r'\s*[:,]\s*(.+)$',re.I)
+    m=_CMD_SUBJECT.match(subject or '')
+    return m.group(1).strip() if m and m.group(1).strip() else None
+
+def dkim_verified(msg,from_addr):
+    """FR-2000-013: True only if the receiving server's (EMAIL_AUTHSERV_ID) own
+    Authentication-Results header records dkim=pass for a signing domain aligned with the From
+    domain. Headers from any other authserv-id are ignored -- a sender can write their own
+    Authentication-Results, but not one Gmail itself stamped at the top. Fails closed."""
+    from_dom=(from_addr.rsplit('@',1)[-1] if '@' in (from_addr or '') else '').lower()
+    if not from_dom: return False
+    for h in msg.get_all('Authentication-Results') or []:
+        h=' '.join(str(h).split())
+        if not h.lower().startswith(config.EMAIL_AUTHSERV_ID.lower()):
+            continue   # not our receiver's stamp
+        for m in re.finditer(r'dkim=(\w+)([^;]*)',h,re.I):
+            if m.group(1).lower()!='pass': continue
+            d=re.search(r'header\.(?:d|i)=@?([A-Za-z0-9.-]+)',m.group(2))
+            dom=(d.group(1).lower() if d else '')
+            if dom==from_dom or from_dom.endswith('.'+dom) or dom.endswith('.'+from_dom):
+                return True
+        return False   # ONLY the topmost header from our receiver counts
+    return False
+
+def message_age_s(msg,now=None):
+    """Seconds since the message's Date header; None if missing or unparseable."""
+    try:
+        dt=email.utils.parsedate_to_datetime(str(msg.get('Date')))
+        if dt.tzinfo is None:   # RFC 5322 '-0000': UTC, local zone unknown -- not local time
+            import datetime as _dt; dt=dt.replace(tzinfo=_dt.timezone.utc)
+        return (now if now is not None else time.time())-dt.timestamp()
+    except Exception:
+        return None
 
 class EmailClient:
     def __init__(self):
@@ -42,6 +84,7 @@ class EmailClient:
             log.warning(f'{config.GMAIL_APP_PASSWORD_ENV} not set — email stays disabled.')
             self._enabled=False
         self._pending_sends={}  # id -> (to, subject, body) awaiting confirm_and_send
+        self._command_handler=None   # FR-2000-012: set by brain.py, (text, reply_fn) -> None
         self._inbox_summaries=queue.Queue()  # FR-2000-003: surfaced to voice/display, not acted on
         self._running=False; self._thread=None
         self._stop_event=threading.Event()  # lets stop() interrupt the poll loop's long wait
@@ -71,6 +114,27 @@ class EmailClient:
         with open(path,'w') as f: json.dump(sorted(allowed),f)
         log.info(f'Sender allowlisted: {sender_email}')
         return True,'added'
+
+    def remove_allowed_sender(self,sender_email,owner_confirmed=False):
+        if not owner_confirmed:
+            log.warning(f'Rejected allowlist removal for {sender_email}: not owner-confirmed.')
+            return False,'only the owner can modify the sender allowlist'
+        allowed=self._inbound_allowlist(); allowed.discard(sender_email.lower())
+        path=self._allowlist_path(); os.makedirs(os.path.dirname(path),exist_ok=True)
+        with open(path,'w') as f: json.dump(sorted(allowed),f)
+        log.info(f'Sender removed from allowlist: {sender_email}')
+        return True,'removed'
+
+    def set_command_handler(self,fn):
+        """FR-2000-012: brain.py's handler for verified owner commands."""
+        self._command_handler=fn
+
+    def send_owner_reply(self,subject,body):
+        """FR-2000-012's 'confirmed back by reply'. Owner-only, text-only, never in response to
+        anyone but the DKIM-verified owner. Runs on its own thread so a caller on the tick
+        thread (brain._say via on_reply) never waits on SMTP."""
+        threading.Thread(target=lambda: self.send_alert(subject,body),daemon=True,
+                         name='email-reply').start()
 
     def _sender_allowed(self,sender_email):
         sender_email=sender_email.lower()
@@ -170,18 +234,68 @@ class EmailClient:
             m.login(config.WILLIE_GOOGLE_ACCOUNT,self._password)
             m.select('INBOX')
             _,data=m.search(None,'UNSEEN')
+            handled_command=False
             for num in data[0].split():
-                _,msg_data=m.fetch(num,'(RFC822)')
+                # BODY.PEEK: nothing is marked read until it is actually dealt with, so a second
+                # command in the same poll stays unread for the next one (FR-2000-012).
+                _,msg_data=m.fetch(num,'(BODY.PEEK[])')
                 msg=email.message_from_bytes(msg_data[0][1])
                 sender=email.utils.parseaddr(msg.get('From',''))[1]
                 subject=_decode(msg.get('Subject',''))
                 if not self._sender_allowed(sender):
                     # FR-2000-010: existence noted, body never read.
                     log.info(f'Ignored email from non-allowlisted sender: {sender} ("{subject}")')
+                    m.store(num,'+FLAGS','\\Seen')
                     continue
+                cmd=command_text(subject) if config.ENABLE_EMAIL_COMMANDS else None
+                if cmd is not None:
+                    if handled_command: continue          # one per poll; stays unread
+                    handled_command=True
+                    m.store(num,'+FLAGS','\\Seen')
+                    self._handle_command(msg,sender,subject,cmd)
+                    continue
+                m.store(num,'+FLAGS','\\Seen')
                 body=_extract_body(msg)
                 self._inbox_summaries.put({'from':sender,'subject':subject,'body':body,'ts':time.time()})
                 log.info(f'Email received from allowlisted sender {sender}: "{subject}"')
+
+    def _handle_command(self,msg,sender,subject,cmd):
+        """FR-2000-011/012/013. Called once per poll at most, on the email thread."""
+        from logsetup import log_event
+        if sender.lower()!=config.OWNER_EMAIL.lower():
+            log.info(f'Command-style email from non-owner {sender} ignored: "{subject}"')
+            return
+        if not dkim_verified(msg,sender):
+            # Surfaced, never acted on: "an email claiming to be from..."
+            log_event(log,'EMAIL_COMMAND',severity='warning',subsystem='email',status='refused_dkim',
+                      sender=sender)
+            self._inbox_summaries.put({'from':f'someone claiming to be {sender}','ts':time.time(),
+                'subject':f'an unverified command ({cmd[:60]}) that I ignored','body':''})
+            return
+        age=message_age_s(msg)
+        if age is None or age>config.EMAIL_COMMAND_MAX_AGE_S:
+            why='no date' if age is None else f'{age/60:.0f} minutes old'
+            log_event(log,'EMAIL_COMMAND',severity='warning',subsystem='email',status='refused_stale',
+                      reason=why,limit_s=config.EMAIL_COMMAND_MAX_AGE_S)
+            self._inbox_summaries.put({'from':config.OWNER_NAME,'ts':time.time(),
+                'subject':f'a command too old to act on ({why}): {cmd[:60]}','body':''})
+            self.send_owner_reply(f'Re: {subject}',f'Not done -- your command arrived {why}, past the '
+                                  f'{config.EMAIL_COMMAND_MAX_AGE_S/60:.0f}-minute limit.\n\n-- Willie')
+            return
+        # FR-2000-011: allowlist changes need this authenticated path, nothing else.
+        a=re.fullmatch(r'(allow|add|remove|block)\s+sender\s+(\S+@\S+)',cmd,re.I)
+        if a:
+            fn=self.add_allowed_sender if a.group(1).lower() in ('allow','add') else self.remove_allowed_sender
+            ok,res=fn(a.group(2),owner_confirmed=True)
+            log_event(log,'EMAIL_COMMAND',subsystem='email',status=f'allowlist_{res}',target=a.group(2))
+            self.send_owner_reply(f'Re: {subject}',f'Sender allowlist: {a.group(2)} {res}.\n\n-- Willie')
+            return
+        log_event(log,'EMAIL_COMMAND',subsystem='email',status='accepted',command=cmd[:80],
+                  age_s=f'{age:.0f}')
+        if self._command_handler is None:
+            self.send_owner_reply(f'Re: {subject}','Email commands are not wired up on this run.\n\n-- Willie')
+            return
+        self._command_handler(cmd,lambda text: self.send_owner_reply(f'Re: {subject}',f'{text}\n\n-- Willie'))
 
     def get_new_summaries(self):
         # FR-2000-003: drained by brain.py/voice.py to actually tell the owner — this class never

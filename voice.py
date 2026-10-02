@@ -594,6 +594,24 @@ class VoicePipeline:
             self.speak("I'm not confident I understood that — could you rephrase it?"); return
         self._act_on_intent(intent,text)
 
+    def interpret_text(self,text):
+        """FR-2000-012: the voice interpreter for text that did not come from the microphone
+        (an authenticated owner email). Same steps as a spoken utterance -- bare-address check,
+        stored instruction, fast path, local model with the FR-1400-001 gate -- but it speaks
+        nothing and queues nothing; the caller does. Returns an intent dict or None."""
+        text=(text or '').strip()
+        if not text or _BARE_ADDRESS.fullmatch(text): return None
+        if self.memory:
+            spoken=text.rstrip('.!? ').lower()
+            for ins in self.memory.all_instructions():
+                if spoken==ins['trigger_phrase'].strip().rstrip('.!? ').lower():
+                    text=ins['action_text']; break
+        fast=self._fast_path(text)
+        if fast is not None: return fast
+        if not self._enabled or self._local_ai is None: return None
+        intent,confidence=self._interpret_local(text)
+        return intent if confidence>=config.LOCAL_LLM_CONFIDENCE_FLOOR else None
+
     def _maybe_learn(self,text):
         norm=text.strip().rstrip('.!? ')
         # FR-1900-008: correction and deletion by voice. Both delete paths existed; nothing

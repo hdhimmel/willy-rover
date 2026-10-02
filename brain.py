@@ -44,6 +44,13 @@ _NON_EXPIRING_INTENTS=frozenset({'confirm_receipt'})
 #                     already under strain.
 # Both belong here once they are made non-blocking, and not before.
 _SPEECH_ONLY_INTENTS=frozenset({'status','battery','where_are_you'})
+# Command sources that are not someone in the room speaking: they never answer a pending
+# yes/no ask (the shutdown confirmation, the roam permission). See answers_ask.
+_NON_SPOKEN_SOURCES=frozenset({'remote','email'})
+# What an email may queue: everything a spoken command could, through the same gating.
+_EMAIL_QUEUEABLE=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve','map',
+    'stop_map','status','battery','arm_stow','arm_home','wave','come_here','follow','diagnostics',
+    'where_are_you','what_do_you_see','name_room','mark_stairs','shutdown'})
 
 # Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
 # that state, before either drain pass, so Willie heard every command and answered none -- with
@@ -211,6 +218,7 @@ class RoverBrain:
         self.pursuit=PursuitTask(self.safety,self.detector,display=self.display,voice=self.voice)  # FR-1000
         self.email=EmailClient()
         self.remote=RemoteCommandServer(self.voice)  # HA / Google Home in, see remote_cmd.py
+        self.email.set_command_handler(self._email_command)   # FR-2000-012
         self.witty=WittyPi()
         self._state='INIT'; self._stuck_count=0; self._last_action='none'; self._manual_action=None
         self._idle_t=0.0; self._avoid_start=0.0; self._avoid_phase=None; self._running=False
@@ -954,6 +962,27 @@ class RoverBrain:
          'LOW_BATTERY':lambda d,t:None,'OVERCURRENT_FAULT':lambda d,t:None,
         }.get(self._state,lambda d,t:None)(d,tilt)
 
+    def _email_command(self,text,reply):
+        """FR-2000-012, on the email thread: interpret an authenticated owner command, announce
+        it aloud, and queue it exactly like a spoken one (Directives 1-5 gate it at drain).
+        reply(text) mails the result back; brain._say() calls it with the actual answer."""
+        intent=self.voice.interpret_text(text)
+        if not intent:
+            reply(f"I didn't understand \"{text}\", so I did nothing."); return
+        name=intent.get('intent','')
+        who=config.OWNER_NAME
+        if name=='stop':
+            self.voice.stop_requested.set()
+            if self.voice.available: self.voice.speak(f'{who} emailed: stop. Stopping.')
+            reply('Stopping.'); return
+        if name not in _EMAIL_QUEUEABLE:
+            r=intent.get('reply') or "That isn't something I can do from an email."
+            reply(r); return
+        if self.voice.available: self.voice.speak(f'{who} emailed: {text}.')
+        log_event(log,'EMAIL_COMMAND',subsystem='email',status='queued',intent=name)
+        self.voice.pending_commands.put({'source':'email','intent':name,'args':intent.get('args',{}),
+                                         'text':text,'ts':time.time(),'on_reply':reply})
+
     def _say(self,text):
         # Every answer from the two drain passes goes through here. Speaks it, and hands it to
         # a remote caller (remote_cmd.py) when the command being answered came from one, so
@@ -973,7 +1002,7 @@ class RoverBrain:
         with q.mutex:
             if not q.queue: return
             head=q.queue[0]; intent=head.get('intent')
-        if (self._shutdown_pending or self._roam_ask_pending) and head.get('source')!='remote':
+        if (self._shutdown_pending or self._roam_ask_pending) and head.get('source') not in _NON_SPOKEN_SOURCES:
             self._drain_voice_commands(); return
         if not intent or intent in _SELFTEST_FAULT_INTENTS:
             self._drain_voice_commands(); return
@@ -998,7 +1027,7 @@ class RoverBrain:
             with q.mutex:
                 if not q.queue: return
                 head=q.queue[0]
-            if (self._shutdown_pending or self._roam_ask_pending) and head.get('source')!='remote': return
+            if (self._shutdown_pending or self._roam_ask_pending) and head.get('source') not in _NON_SPOKEN_SOURCES: return
             if head.get('intent') not in _SPEECH_ONLY_INTENTS: return
         try:
             cmd=self.voice.pending_commands.get_nowait()
@@ -1013,7 +1042,7 @@ class RoverBrain:
         # Only something the person SAID can answer a pending yes/no ask. A remote command
         # arriving mid-ask is a command in its own right: found live 2026-10-01, when an HA
         # "status" landed while Willie was asking to explore and was taken as a "no".
-        answers_ask=cmd.get('source')!='remote'
+        answers_ask=cmd.get('source') not in _NON_SPOKEN_SOURCES
         if self._shutdown_pending and answers_ask:
             # First queued command after a 'shutdown' intent is treated as the yes/no answer to
             # that confirmation, not dispatched normally below -- see the 'shutdown' branch and

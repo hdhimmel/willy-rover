@@ -769,6 +769,17 @@ GMAIL_IMAP_HOST='imap.gmail.com'; GMAIL_SMTP_HOST='smtp.gmail.com'; GMAIL_SMTP_P
 GMAIL_APP_PASSWORD_ENV='WILLIE_GMAIL_APP_PASSWORD'
 GMAIL_POLL_INTERVAL_S=120  # FR-2000-002
 OWNER_EMAIL='h.d.himmel@gmail.com'
+OWNER_NAME='Howard'   # how Willie names the owner aloud ("Howard emailed: ...")
+# FR-2000-012/013 email commands (owner decision 2026-09-11, built 2026-10-02). Only the owner,
+# only with Gmail's own Authentication-Results showing DKIM pass ALIGNED with the From domain,
+# only with a subject starting EMAIL_COMMAND_PREFIX, only if fresher than
+# EMAIL_COMMAND_MAX_AGE_S, one per poll. Everything then goes through the same queue and
+# Directive gating as a spoken command. Set False to shut the channel if the account is ever
+# suspected compromised.
+ENABLE_EMAIL_COMMANDS=True
+EMAIL_COMMAND_PREFIX='willie'          # subject "Willie: go to the kitchen" (':' or ',' after)
+EMAIL_COMMAND_MAX_AGE_S=600.0          # mirrors VOICE_COMMAND_MAX_AGE_S: late motion is worse than none
+EMAIL_AUTHSERV_ID='mx.google.com'      # only this receiver's Authentication-Results is trusted
 # FR-2000-009: single hard-coded outbound recipient, enforced in email_client.py itself, not
 # just here — changing who Willie can email requires a code change, not a config edit.
 EMAIL_OUTBOUND_ALLOWLIST=('h.d.himmel@gmail.com',)
