@@ -4,9 +4,15 @@ Six-wheel rocker-bogie rover. Raspberry Pi 5 host ("willie") with an AI HAT+ 2
 (Hailo-10H), a 5-DOF arm, one non-isolated I²C segment of ten devices, and two Pico 2 W
 co-processors on UART. Build is complete; work now is live verification and software.
 
-**Authority order:** a live measurement beats `config.py`; `config.py` (and the rest of
-the code) beats any document; the three design docs beat this file. If you find a
-disagreement, fix the loser.
+**Authority order, highest first:**
+1. A live measurement on the rover.
+2. The code (`config.py` and the rest).
+3. The three design docs (Hardware, Software, FRD).
+4. This file.
+
+Higher always wins, with one exception: a design doc recording a **measured hardware fact**
+(a wiring landing, a metered value) outranks code that contradicts it -- the code is then
+the bug. On any disagreement, fix the loser.
 
 ---
 
