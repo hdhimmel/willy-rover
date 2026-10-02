@@ -560,6 +560,12 @@ BAT_HYSTERESIS_V=0.2
 # to, so it runs FR-200-005's proactive graceful shutdown instead of driving DOCK. Flip this
 # only when a dock and a route to it exist.
 ENABLE_DOCKING=False
+# FR-1000-003 IMU heading in odometry (2026-10-02). OFF until checked on the rover: the BNO085's
+# mounting sets the sign of its yaw relative to odometry's (CCW-positive) heading. To enable:
+# turn left on the spot, confirm odometry heading and IMU.heading both increase (else set
+# IMU_YAW_SIGN=-1), then set ODOM_USE_IMU_HEADING=True.
+ODOM_USE_IMU_HEADING=False
+IMU_YAW_SIGN=1
 # FR-1000-006 search sweep: look for PURSUIT_LOOK_TICKS ticks, then turn PURSUIT_SEARCH_TURN_S,
 # up to PURSUIT_SEARCH_STEPS times. Skid-turn timing is uncalibrated -- tune on the floor.
 PURSUIT_LOOK_TICKS=10

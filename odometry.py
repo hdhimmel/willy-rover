@@ -31,13 +31,16 @@ _COUNTS_TO_M=(math.pi*config.WHEEL_DIAMETER_M)/config.ENCODER_COUNTS_PER_REV
 # +counts on the left and -counts on the right. Without the sign, straight ahead reads as a spin.
 def _avg(counts,wheels): return sum(counts[w]*config.ENCODER_SIGN[w] for w in wheels)/len(wheels)
 
-def integrate(pose,d_left_m,d_right_m,dt,timestamp):
+def _wrap(a): return math.atan2(math.sin(a),math.cos(a))
+
+def integrate(pose,d_left_m,d_right_m,dt,timestamp,d_heading=None):
     """Pure function, no hardware/threading — independently testable (tests/test_odometry.py).
     d_left_m/d_right_m are this tick's per-side distance deltas in meters (already
     count->meters converted by the caller). Returns a new Pose; does not mutate the input."""
     if dt<=0: return pose
     d_center=(d_left_m+d_right_m)/2.0
-    d_heading=(d_right_m-d_left_m)/config.TRACK_WIDTH_M
+    if d_heading is None:   # FR-1000-003: the caller may supply the IMU's rotation instead
+        d_heading=(d_right_m-d_left_m)/config.TRACK_WIDTH_M
     heading_mid=pose.heading+d_heading/2.0
     x=pose.x+d_center*math.cos(heading_mid)
     y=pose.y+d_center*math.sin(heading_mid)
@@ -45,8 +48,15 @@ def integrate(pose,d_left_m,d_right_m,dt,timestamp):
     return Pose(x,y,heading,d_center/dt,d_heading/dt,timestamp,stale=False)
 
 class Odometry:
-    def __init__(self,encoders):
-        self._encoders=encoders
+    # FR-1000-003 (2026-10-02): heading_source is a callable returning the IMU yaw in degrees,
+    # or None when the IMU is unhealthy. With config.ODOM_USE_IMU_HEADING set, each tick's
+    # rotation comes from the IMU's yaw DELTA instead of the left/right wheel difference --
+    # the wheel difference is the weakest part of skid-steer odometry (the wheels slip sideways
+    # on every turn and the effective track is uncalibrated). Distance still comes from the
+    # wheels. Deltas only, so a constant magnetic bias in the absolute yaw cancels out.
+    # Falls back to the wheels for any tick the IMU can't answer.
+    def __init__(self,encoders,heading_source=None):
+        self._encoders=encoders; self._heading_source=heading_source; self._last_yaw=None
         self._pose=Pose(timestamp=time.perf_counter())
         self._last_left=0.0; self._last_right=0.0
 
@@ -65,7 +75,17 @@ class Odometry:
         dt=now-self._pose.timestamp
         d_left_m=(left-self._last_left)*_COUNTS_TO_M
         d_right_m=(right-self._last_right)*_COUNTS_TO_M
-        self._pose=integrate(self._pose,d_left_m,d_right_m,dt,now)
+        d_heading=None
+        if config.ODOM_USE_IMU_HEADING and self._heading_source is not None:
+            try: yaw=self._heading_source()
+            except Exception: yaw=None
+            if yaw is not None:
+                yaw=math.radians(yaw)*config.IMU_YAW_SIGN
+                if self._last_yaw is not None: d_heading=_wrap(yaw-self._last_yaw)
+                self._last_yaw=yaw
+            else:
+                self._last_yaw=None
+        self._pose=integrate(self._pose,d_left_m,d_right_m,dt,now,d_heading=d_heading)
         self._last_left=left; self._last_right=right
         return self._pose
 

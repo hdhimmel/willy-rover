@@ -181,7 +181,8 @@ class RoverBrain:
         self.encoders=_init_device(Encoders,'encoders')
         self.current=_init_device(CurrentMonitor,'current')
         self.arm=_init_device(Arm,'arm')
-        self.odometry=Odometry(self.encoders)
+        self.odometry=Odometry(self.encoders,
+                               heading_source=lambda: self.imu.heading if self.imu.is_healthy else None)
         self.world_model=WorldModel(self.odometry)  # §9: loads any previously saved map in __init__
         self._sd=_SdNotify()
         # v2.2 subsystems (docs/archive/WildWilly_Functional_Requirements_Document_v2.2.md,

@@ -90,3 +90,23 @@ def test_come_here_searches_before_giving_up():
           'print("SWEEP_OK")\n')
     r=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True,cwd=_REPO_ROOT,env=env,timeout=120)
     assert 'SWEEP_OK' in r.stdout, r.stdout+r.stderr
+
+def test_odometry_takes_rotation_from_the_imu_when_enabled():
+    # FR-1000-003: with ODOM_USE_IMU_HEADING the tick's rotation is the IMU yaw delta; wheels
+    # still give distance; a None yaw falls back to the wheels.
+    env=dict(os.environ,WILLY_SIMULATE='1',PYTHONPATH=_REPO_ROOT)
+    code=('import math,types,config\n'
+          'config.ODOM_USE_IMU_HEADING=True\n'
+          'import odometry\n'
+          'counts={w:0 for w in ("lf","lm","lr","rf","rm","rr")}\n'
+          'enc=types.SimpleNamespace(is_healthy=True,counts=counts)\n'
+          'yaw=[10.0]\n'
+          'o=odometry.Odometry(enc,heading_source=lambda: yaw[0])\n'
+          'o.update(); yaw[0]=40.0; o.update()\n'
+          'assert abs(math.degrees(o.pose.heading)-30.0)<1e-6, math.degrees(o.pose.heading)\n'
+          'yaw[0]=None; o.update(); assert abs(math.degrees(o.pose.heading)-30.0)<1e-6\n'
+          'config.ODOM_USE_IMU_HEADING=False; yaw[0]=90.0; o.update()\n'
+          'assert abs(math.degrees(o.pose.heading)-30.0)<1e-6\n'
+          'print("ODOM_OK")\n')
+    r=subprocess.run([sys.executable,'-c',code],capture_output=True,text=True,cwd=_REPO_ROOT,env=env,timeout=120)
+    assert 'ODOM_OK' in r.stdout, r.stdout+r.stderr
