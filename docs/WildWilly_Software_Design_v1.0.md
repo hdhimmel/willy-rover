@@ -43,7 +43,7 @@ them separate.
 | Process management | systemd unit `willy-rover.service`, `Restart=on-failure` |
 | Modules | 33 Python files at repository root (was 26; recounted 2026-10-02) |
 | Source size | ~8,490 lines (was ~4,160) |
-| Tests | **476** collected across 66 files under `WILLY_SIMULATE=1` (2026-10-02; was 144 across 17) |
+| Tests | **476** collected across 66 files under `WILLY_SIMULATE=1` (2026-10-02; was 144 across 17). Later 2026-10-02: +5 functions, **481 across 67** by count, not re-collected |
 | Simulation mode | `WILLY_SIMULATE=1` gates every real I²C and GPIO open |
 
 ### 1.1 Module inventory
@@ -57,16 +57,16 @@ refresh; treat those as approximate.
 | Module | Lines | Responsibility |
 |--------|-------|----------------|
 | `brain.py` | 849 | Top-level FSM, tick loop, directive arbitration |
-| `voice.py` | 507 | Wake word, STT, intent parsing, TTS, fast-path matching |
+| `voice.py` | 507 | Wake word, STT, intent parsing, TTS, fast-path matching. Since 2026-10-02 (not yet run on the rover): `name_room`/`mark_stairs` fast-path intents, "forget X" / "what do you remember" / "what do I usually ask", stored instructions applied by one exact-match substitution, unknown-intent → confidence 0.0 |
 | `config.py` | 482 | All tunables, addresses, pin maps; `validate()` self-check |
 | `sensors.py` | 320 | Sonar, IMU, ADC, encoders, current monitors |
-| `world_model.py` | 282 | Persistent spatial model — obstacles, rooms, objects, routes |
+| `world_model.py` | 282 | Persistent spatial model — obstacles, rooms, objects, routes; stair edges (`Stair`, `stairs` table, `ray_to_segment()`) since 2026-10-02 |
 | `ai_provider.py` | 272 | Unified cloud/local LLM abstraction |
 | `display.py` | 197 | Face rendering and status overlay |
 | `email_client.py` | 184 | IMAP/SMTP with allowlist and confirm gates |
 | `retrieval_task.py` | 181 | Object retrieval sub-FSM |
 | `vision.py` | 162 | Object detection (CPU + Hailo NPU backends) and bearing/range heuristics |
-| `memory_store.py` | 173 | Conversational and episodic memory (SQLite) |
+| `memory_store.py` | 173 | Conversational and episodic memory (SQLite). `note_routine()` has a caller since 2026-10-02 (`brain.py`, every queued request as `"<intent> around HH:00"`); `top_routines()` added |
 | `navigation.py` | 165 | Route resolution and local planning |
 | `safety.py` | 124 | The motion authority — sole gate to the motors |
 | `pursuit_task.py` | 101 | Come-here and follow-me sub-FSM |
@@ -77,7 +77,7 @@ refresh; treat those as approximate.
 | `remote_cmd.py` | 90 | Inbound commands from Home Assistant: `POST :8765/command`, Bearer token from `secrets/remote_cmd_token.txt`, intents `status`/`battery`/`stop`/`come_here`. Stop → `stop_requested`; the rest queue like voice; replies via `brain._say()`. Owner decision 2026-10-01, see S-8. Added 2026-10-02 |
 | `motors.py` | 94 | Drive base and steering primitives. Applies `config.MOTOR_SIGN` at the throttle write — the sides are mounted mirrored, so the right side is negated |
 | `smart_home.py` | 82 | Home Assistant REST client |
-| `odometry.py` | 74 | Dead-reckoning pose integration |
+| `odometry.py` | 74 | Dead-reckoning pose integration. Since 2026-10-02 can take each tick's rotation from the IMU yaw delta (`heading_source`, `ODOM_USE_IMU_HEADING`, **off** until the sign is checked); distance stays on the wheels |
 | `mapping.py` | 68 | Learning-mode map recording session |
 | `diagnostics.py` | 64 | Standalone read-only self-test |
 | `privacy.py` | 59 | Mic/camera disable flag |
@@ -193,7 +193,9 @@ Order of operations within `_tick()`:
    overcurrent check (`_check_overcurrent()`: a rail in `OVERCURRENT_LIMIT_A` —
    `bus_12v` 9.0 A, `steering_5v` 9.0 A — held for `OVERCURRENT_S` 1.0 s) stops and
    latches `OVERCURRENT_FAULT` until an operator reset. Not yet run on the rover.
-5. **Safety context update** — cached into `SafetyController`.
+5. **Safety context update** — cached into `SafetyController`. Since 2026-10-02 the
+   `front` value passed in may be a virtual stair-standoff reading rather than the sonar
+   (§6.6). Built, not yet run on the rover.
 6. **State dispatch** — the Directive 6 layer.
 
 Tick duration is recorded and an overrun past `TICK_OVERRUN_THRESHOLD_S`
@@ -283,7 +285,10 @@ Three task modules own their own internal state and run *underneath* a
 top-level state rather than replacing it:
 
 - `RetrievalTask` — `LOCALIZE / APPROACH / GRASP / VERIFY / DELIVER / AWAIT_CONFIRM`
-- `PursuitTask` — `LOCALIZE / APPROACH / FOLLOWING`
+- `PursuitTask` — `LOCALIZE / APPROACH / FOLLOWING`. Since 2026-10-02 `LOCALIZE` searches
+  before failing: `PURSUIT_LOOK_TICKS` (10) ticks of looking, then a timed left turn
+  (`PURSUIT_SEARCH_TURN_S` 0.4 s), up to `PURSUIT_SEARCH_STEPS` (8) — built, not yet run
+  on the rover
 - `Navigator` — `SEEKING / AVOIDING / DONE / FAILED / ABORTED`
 
 Each exposes `abort()`, called externally by `brain.py` when any Directive 1–4
@@ -495,7 +500,7 @@ Two separate SQLite databases, both WAL-mode:
 | Database | Module | Contents |
 |----------|--------|----------|
 | `memory.db` | `memory_store.py` | Conversational and episodic memory |
-| `world_model.db` | `world_model.py` | Obstacles, rooms, doorways, objects, landmarks, routes |
+| `world_model.db` | `world_model.py` | Obstacles, rooms, doorways, objects, landmarks, routes; `stairs` (name, x, y, heading, width_m) since 2026-10-02 |
 
 **Corruption handling.** Both `__init__` paths catch `sqlite3.DatabaseError`,
 move the corrupted file aside — never delete it — and start fresh. Without
@@ -530,8 +535,11 @@ provider, so one shared instance cannot leak STUCK's motion turns into voice's
 unrelated turns.
 
 `CloudAIProvider` calls Anthropic's Claude API with `ANTHROPIC_API_KEY`. FRD FR-1400
-specifies Gemini on Willie's Google account; which one the requirement should name is
-an **open owner decision** (recorded 2026-10-02 in FRD FR-1400). Since 2026-10-02 the
+specified Gemini on Willie's Google account; **owner decision 2026-10-02: Claude**
+(FRD FR-1400). Model `claude-sonnet-5-5` since `916c99f`: adaptive thinking at
+`CLAUDE_EFFORT='low'` (Sonnet 5.5 rejects disabled thinking), `max_tokens` 2000, the
+reply read from the first text block, a refusal raised as a failure, and server-side
+refusal fallback (`fallbacks: "default"`) on. Since 2026-10-02 the
 STUCK escalation calls `privacy.note_cloud_send()` before sending (FR-1800-003).
 
 ### 6.2 Confidence is four separate signals
@@ -702,7 +710,17 @@ in the code implements them. They are a capability gate to be built alongside
 FR-1200's stair navigation, orthogonal to the FSM in the same way `mapping.active` is.
 Until they exist, `floor` is the implicit and only behaviour, so the standoff simply
 always applies. Recorded 2026-09-13, because §6.6 referenced them as though they were
-already defined somewhere.
+already defined somewhere. *(2026-10-02: `config.MOBILITY_MODE='floor'` now exists as a
+constant the standoff reads; there is still no `stair` mode and no selector.)*
+
+✅ **Built 2026-10-02 (`4f59034`), not yet run on the rover.** Stairs are labelled by
+voice (*"stairs ahead"*, intent `mark_stairs`) as a `world_model.Stair` **edge** — centre
+`STAIR_LABEL_AHEAD_M` (0.30 m) ahead of the rover, running across its heading,
+`STAIR_DEFAULT_WIDTH_M` (0.9 m) wide — persisted in `world_model.db`'s `stairs` table.
+Each tick, `brain.py::_apply_stair_standoff(d, pose)` casts a ray along the odometry
+heading (`world_model.ray_to_segment()`); the nearest edge hit at distance *t* becomes a
+virtual front reading `(t − STAIR_STANDOFF_M) × 100 + DIST_STOP` cm, substituted into
+`d['front']` when it is nearer than the sonar. Forward only.
 
 **This lives in the deliberative layer, and that is deliberate.** The standoff is
 arithmetic on a mapped position against an estimated pose — both of which can be
@@ -711,6 +729,12 @@ It is never what stops the rover. §2.1's rule is unchanged, and this is exactly
 case it exists for: the consequence of being wrong here is unrecoverable, so the
 stop stays with the reflex layer (the VL53L7CX, §6.5), which does not consult the
 map, the camera, or the pose.
+
+✅ **Brought into line 2026-10-02 (`cb9a68d`).** The first build (`4f59034`) folded the
+edge into `d['front']`, which put a map-and-pose estimate on the stop path and plotted a
+phantom `sonar_front` obstacle every tick. It now lives in
+`brain.py::_stair_planning_front()`, used only by `_roam()` / `_slow()` / `_avoid()`:
+`d`, `approve_motion()`, the world model and `mapping.tick()` see the sonar alone.
 
 Three inputs, three distinct jobs — worth keeping straight because they are easy to
 conflate:
@@ -729,6 +753,9 @@ margin to be meaningful, which dead reckoning cannot deliver.
 **The gate must fail closed.** If pose is unknown or stale, the standoff cannot be
 computed, and the correct response is to refuse to roam rather than to proceed as
 though the zone were clear. An uncomputable keep-out is not an absent keep-out.
+✅ **As built (`cb9a68d`) it fails closed:** with stairs on the map and a stale pose, or
+an exception reading them, `_roam()` stops and returns to IDLE with the reason on the
+face, and `_avoid()` treats the front as blocked.
 
 ## 6.7 Which functions may use which reasoner — architectural decision, 2026-09-14
 
@@ -770,6 +797,12 @@ information. Both facts point the same way and neither is fixable by tuning.
 What *does* carry information is the structural check: `_action_confidence()` verifies the
 action name is recognised and that duration/speed are in range. That is deterministic, it is
 not the model's opinion of itself, and it is what the gate should keep reading.
+
+✅ **The voice path got its structural check 2026-10-02 (`4f59034`, FR-1400-001), not yet
+run on the rover.** `voice.py::_interpret_local()` returns confidence 0.0 for an answer
+that fails to parse or names an intent outside `_ACTIONABLE_INTENTS`, so those escalate
+regardless of the model's number. A wrong but valid intent still passes on the
+self-report; this catches invented intents only.
 
 ### 6.7.2 Tiers: what each reasoner is allowed to decide
 
@@ -866,7 +899,9 @@ first; this is load-bearing, not just a precaution.
 and camera id. Bearing and range come from a separate `localize()` call and are
 documented in-code as heuristic, not calibrated ranging — this remains true
 for the Hailo backend too; the accuracy improvement is detection quality/speed,
-not ranging calibration. **The fix for ranging is not a better camera heuristic, it is §6.5's
+not ranging calibration. *(2026-10-02, `be4922a`, not yet run on the rover: range now
+uses a nominal per-class width, `_CLASS_WIDTH_CM` — person 45 cm, 8 cm fallback — instead
+of 8 cm for everything; widths and focal length are both unmeasured.)* **The fix for ranging is not a better camera heuristic, it is §6.5's
 multi-zone ToF** — a real depth sensor at the reflex layer. Do not fuse ToF zones into
 `localize()`: they answer different questions at different layers, and blending them would put
 a deliberative estimate inside a reflex path. (`vision.py`'s header asserted "there is no depth
@@ -1197,6 +1232,7 @@ Tagged events currently emitted:
 | `OVERCURRENT`, `ARM_OVERCURRENT` | `_check_overcurrent()`, `_check_arm_current()` — 2026-10-02 |
 | `SONAR_FAULT` | `_check_sonar_channels()` — 2026-10-02 |
 | `UNCOMMANDED_MOTION` | `_check_uncommanded_motion()` — 2026-10-02 |
+| `STAIR_LABELLED` | `brain.py` `mark_stairs` intent — 2026-10-02 |
 | `COMMANDED_SHUTDOWN` | `stop()` tail, before `shutdown -h now` |
 
 *Rows dated 2026-10-02 are simulated only, not yet run on the rover. `_check_health()`
@@ -1219,7 +1255,8 @@ a pass/fail string, and can run without starting the tick loop.
 ## 10. Testing
 
 144 tests across 17 files, all off-hardware, all passing. ⚠ **Stale — 2026-10-02:
-476 tests across 66 files** are collected under `WILLY_SIMULATE=1`. On the Windows
+476 tests across 66 files** are collected under `WILLY_SIMULATE=1` (481 across 67 later
+the same day by count: `test_rooms_stairs_memory.py`, +3 in `test_sensor_gaps.py`). On the Windows
 dev box 435 pass and 40 fail or error, all for environment reasons (no `board`
 module, Windows file locking on temp SQLite files, no `socket.AF_UNIX`, no real
 `picamera2` Hailo class) — the suite's home is willie.

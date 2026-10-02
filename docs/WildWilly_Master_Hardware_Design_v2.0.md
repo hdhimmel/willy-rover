@@ -1803,13 +1803,17 @@ is already mostly spent by the Pi's own 1.8kΩ pull-ups.
 
 **The 15° down-angle is load-bearing for
 FR-1200-005: it is what puts the ground plane in frame, which is what makes
-camera-based stair-edge detection possible at all. Mount height is still
+camera-based stair-edge detection possible at all. *(2026-10-02: the standoff as built
+takes its edges from voice labels, not the camera — camera detection is still unbuilt.)*
+Mount height is still
 unrecorded — **measure it**, because a ground-plane model needs both numbers and
 anyone building floor detection will otherwise guess.
 
 `vision.py::localize()` does **not** model this tilt. It computes bearing from
 horizontal pixel offset and range from bounding-box width, with no ground plane
-anywhere in it. That is adequate for what it does today and wrong for floor
+anywhere in it. *(2026-10-02: the width is now a nominal per-class value — person 45 cm,
+8 cm fallback — rather than 8 cm for everything; built, not yet run on the rover. The
+focal length and HFOV are still estimates, not measured for this camera.)* That is adequate for what it does today and wrong for floor
 geometry — do not extend it for stair detection without adding the tilt and the
 height explicitly.
 
@@ -1903,7 +1907,12 @@ board** — provided the constant is corrected, not carried over.
 ### 6.3 IMU
 
 BNO085, 0x4A. On-chip SH-2 fusion gives drift-free heading without a
-magnetometer — useful with six motors nearby.
+magnetometer — useful with six motors nearby. ⚠ **Not how the code reads it (noted
+2026-10-02):** `sensors.IMU.heading` uses the ROTATION_VECTOR report, which *is*
+magnetometer-referenced (the game rotation vector is the magnetometer-free one), so the
+motors can bias it. This matters more now that odometry can take its rotation from the
+yaw delta (`ODOM_USE_IMU_HEADING`, built 2026-10-02, not yet run on the rover, **off**
+until the yaw sign is checked — `IMU_YAW_SIGN`).
 
 | Pin | Connection |
 |-----|------------|
@@ -2962,7 +2971,7 @@ Status as of **2026-09-11**.
 | Pi-rail INA260 address | **PASS — 0x45** | `config.py:212` `INA260_PI_ADDR=0x45` ("VERIFIED 9.068V"); `config.py:210` `INA260_MOTOR_ADDR=0x44` is the +12V bus. ⚠ **Superseded 2026-09-15 (corrected here 2026-10-02):** live reads put **0x45 on the +12V bus** (`INA260_BUS_12V_ADDR`, 11.174V) and **0x44 on the 6V arm rail** (`INA260_ARM_6V_ADDR`); no INA260 monitors the Pi rail (§14 item 11). |
 | Sonars connected | ✅ **ALL THREE RANGE-TESTED AND WORKING AGAIN 2026-09-29, now through Pico B** — 33.3 Hz over `uart2-pi5`, rail 5.004V @ 0.031A. ⚠ **Four sonars have now been destroyed in total** (two on 2026-09-17, one in the 2026-09-28 smoke event, and a spare that proved dead when fitted) — the stuck-high ECHO signature identifies them in one frame. Previous entry: **ALL THREE RANGE-TESTED AND WORKING, 2026-09-17** — first time since the build | Front 49.7cm, left 91.1cm, right 30.9cm, each stable to ±0.4cm over 8 samples and each reading its own direction (three distinct distances, so no cross-talk). **All three ECHO lines idle LOW and go low against a pull-down** — the healthy signature on every channel. Rail 4.990V @ **0.026A**, against 0.101A with one sensor and the 0.348A that flagged a short earlier the same day: no sensor is drawing fault current. Getting here took finding a reversed crimp pin that had not clicked home, a ground fault on the GeeekPi breakout (§5.3), and replacing two sensors destroyed by reverse polarity (§16.12) |
 | Encoder counts on all six channels | **PASS 2026-10-01** (counts and direction; scale from one wheel) | ⚠ **Blocked twice over.** Counts-per-rev waits for the 170 RPM motors (§7.1, §14 item 17); the MCP23017 path is then replaced by Pico A (§4.7) and the bus drops to ten devices when 0x27 leaves. Channel attribution must be re-run **after** the motor swap either way. **Superseded 2026-10-01:** all six count A and B through Pico A, signed x2 (a-0.3), direction verified per wheel; 763 counts/rev |
-| BNO085 interrupt and fusion output | Not tested | INT on GP15 is unused by the driver; library polls over I²C. *(2026-10-02: no code reads INT and none is required — FRD FR-100-003 corrected. Pico B's GP15 is the BNO085 RST, proven 2026-10-01. `IMU.heading` (yaw) added 2026-10-02, not yet run on the rover.)* |
+| BNO085 interrupt and fusion output | Not tested | INT on GP15 is unused by the driver; library polls over I²C. *(2026-10-02: no code reads INT and none is required — FRD FR-100-003 corrected. Pico B's GP15 is the BNO085 RST, proven 2026-10-01. `IMU.heading` (yaw) added 2026-10-02, not yet run on the rover. Odometry can take its rotation from the yaw delta, built 2026-10-02, off (`ODOM_USE_IMU_HEADING=False`) until a left turn on the spot shows both headings increasing — the yaw sign check is the open hardware step.)* |
 | Battery divider calibration | **RE-TRIMMED 2026-10-01 — 0.2432, ONE POINT** | ✅ **Current (2026-10-01):** `BATTERY_DIVIDER_SCALE` = **0.2432**, A0 2.7653V against 11.37V metered, within 0.4% of the rev 15.1 nominal 0.242; second point open (§6.2, §14 item 12). The 2026-09-17 entry below belonged to the old board — 0.3237 read a healthy 11.37V pack as 8.53V on 2026-10-01 — and both of its open items are answered by §6.2. History: `BATTERY_DIVIDER_SCALE` 0.2386 → **0.3237**, from AIN0 = 3.7229V (raw 29783) against a bench supply metered at 11.5V. The old value belonged to the pre-2026-09-02 divider and was reporting **15.60V from an 11.5V input** — impossible for a 3S pack, and it passed every guard because the guards only catch readings that are too LOW. **Two open items:** the implied ratio (~10k/4.7k) does not match the 10k/3.197k described in §16, so meter the fitted parts; and at PGA ±4.096V this scale saturates at **12.65V**, ~50mV above a rested 3S pack, so full-charge readings are untrustworthy without moving to PGA ±6.144V |
 | Steering servo sweep | Not tested | — |
 | Arm servo range and per-joint limits | **MEASURED 2026-09-17** — channel map corrected; formal per-joint limits still undefined | Every channel identified on hardware (§11.1). Elbow traversed 1400→2500µs with no binding (~200°); shoulder 750→2010µs; wrist 1500→2500µs, free below ~2300µs and holding a sustained 0.9A above it; gripper direction and grip-by-current established. One elbow servo was destroyed during this work (§11.1). §20.6 calibration remains the route to formal limits; `arm_jog.py` is the tool |

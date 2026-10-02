@@ -154,7 +154,11 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                           approach/grasp not      2026-08-21 (FR-1700-001).
                                                   FR-1700-002's range/
                                                   bearing remains
-                                                  uncalibrated heuristic.
+                                                  uncalibrated heuristic
+                                                  (per-class widths, not
+                                                  one 8 cm: built
+                                                  2026-10-02, not yet run
+                                                  on the rover).
                                                   FR-1700-003/004 (approach
                                                   planning, grasp) not
                                                   live-verified.
@@ -181,15 +185,25 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   (a-0.3, 763/rev, one-
                                                   wheel scale); odometry
                                                   unproven on the floor.
+                                                  Rooms and stairs by
+                                                  voice, stair standoff,
+                                                  IMU-heading odometry
+                                                  (off by default), come-
+                                                  here search sweep:
+                                                  built 2026-10-02, not
+                                                  yet run on the rover.
 
   FR-900 through FR-1400, Implemented, off-       FR-1300: inbound
   FR-1800 onwards         hardware tested only    remote_cmd.py added
                                                   2026-10-01. FR-1400:
-                                                  code uses Claude, FRD
-                                                  says Gemini --- OPEN
-                                                  owner decision.
+                                                  Claude, owner
+                                                  decision 2026-10-02
+                                                  (claude-sonnet-5-5).
                                                   FR-2100: identity.py
                                                   store/matcher only.
+                                                  FR-1400-001 intent gate,
+                                                  FR-1900-005/007/008:
+                                                  built 2026-10-02.
                                                   Everything dated
                                                   2026-10-01/02 below is
                                                   simulated tests only.
@@ -208,6 +222,9 @@ units (FR-400), and the steering servo V+ current path (~9A worst case against a
 The software is 26 modules / ~4,160 lines with 144 off-hardware tests, all
 passing under `WILLY_SIMULATE=1`. ⚠ **Stale counts — 2026-10-02:** 33 modules /
 ~8,490 lines; **476 tests** collected across 66 files under `WILLY_SIMULATE=1`.
+Later 2026-10-02: +5 test functions (`test_rooms_stairs_memory.py` new, 2;
+`test_sensor_gaps.py` +3), so **481 across 67 files** by count — not re-collected;
+~8,720 lines.
 Rows marked 2026-10-02 were added for this; the rest of the table dates from
 2026-08-18 (full module list: Software Design §1.1). Every requirement group below has an
 implementing module. Coverage here means unit tests exist and pass off
@@ -250,8 +267,11 @@ hardware; it is not evidence of live behaviour.
 
   FR-1000 Navigation      navigation.py,           test_navigation.py,
                           pursuit_task.py,         test_mapping.py,
-                          mapping.py,              test_world_model.py
-                          world_model.py
+                          mapping.py,              test_world_model.py,
+                          world_model.py           test_rooms_stairs_
+                                                   memory.py,
+                                                   test_sensor_gaps.py
+                                                   (2026-10-02 row)
 
   FR-1100 Diagnostics     diagnostics.py,          test_logsetup.py
                           logsetup.py::log_event
@@ -274,8 +294,10 @@ hardware; it is not evidence of live behaviour.
   FR-1800 Privacy         privacy.py               ---
 
   FR-1900 Learning        memory_store.py,         test_memory_store.py,
-                          world_model.py,          test_storage.py
-                          storage.py
+                          world_model.py,          test_storage.py,
+                          storage.py, voice.py     test_rooms_stairs_
+                          (forget/recall/apply,    memory.py
+                          2026-10-02 row)          (2026-10-02 row)
 
   FR-2000 Email           email_client.py          ---
 
@@ -835,6 +857,11 @@ visible as a logged overrun before it became a kill.
 >    31% is a real separation, not noise — but it is nowhere near a safety
 >    interlock. Note also that 4 of the 13 escalations would have been right, so
 >    the floor costs some correct answers to buy that separation.
+>    *(2026-10-02: the floor is no longer the only escalation signal. An unparseable
+>    answer, or an intent outside `voice.py::_ACTIONABLE_INTENTS`, is now scored 0.0 —
+>    "not understood" — whatever the model reported (FR-1400-001). Built 2026-10-02, not
+>    yet run on the rover. A confident wrong answer that names a* valid *intent still
+>    passes; this catches invented intents only.)*
 >
 > 4. **Latency, measured 2026-09-14 (was unmeasured).** Median **4.86s**, p90
 >    5.47s, max 8.53s, min 3.89s over 96 calls — against a pre-fix range of 12s to
@@ -1777,7 +1804,9 @@ and Master Hardware Design §8 / §16.11 carry the same table.
 -   **FR-800-001, heading.** ✅ **Built 2026-10-02 (`20fc3ab`), not yet run on the
     rover:** `sensors.IMU.heading` exposes yaw (−180..180°) from the fused quaternion.
     With the ROTATION_VECTOR report it is magnetometer-referenced, so anything
-    magnetic on the chassis biases it. Nothing steers by it yet.
+    magnetic on the chassis biases it. Nothing steers by it yet. *(2026-10-02: odometry
+    can take its rotation from it — FR-1000-003 — but `ODOM_USE_IMU_HEADING=False` until
+    the yaw sign is checked on the rover, so as configured it is still unused.)*
 
 -   **FR-800-003 (tilt detection).** Excessive tilt is detected from IMU
     output and halts motion. Verify the threshold against the rover's actual
@@ -1903,6 +1932,14 @@ separately under FR-1200.
 
 -   **FR-1000-001 (navigate unaided).** The rover reaches a commanded
     destination on flat ground without operator input.
+    ✅ **Room labelling built 2026-10-02 (`4f59034`), not yet run on the rover.** Rooms
+    were never added, so `go to <room>` had nothing to resolve. Spoken *"this is the
+    kitchen"* (also *"this room is the …"*, *"we're in the …"*, *"you're in the …"*,
+    with or without a leading "Willie") is a `voice.py` fast-path intent `name_room`;
+    `brain.py` calls `world_model.add_room(name, x, y)` at the current pose, saves at
+    once and says "Got it, this is the kitchen." The room is a point plus
+    `ROOM_MATCH_RADIUS_M`, so it is only as good as odometry at the moment of labelling.
+    The fast path now also strips a leading "Hey/OK Willie," before matching.
 
 -   **FR-1000-002 (obstacle avoidance).** Obstacles are detected and avoided.
     **Detection must not depend on the vision pipeline.** Sonar and encoders
@@ -1913,13 +1950,24 @@ separately under FR-1200.
 
 -   **FR-1000-003 (route maintenance).** The planned route is followed within
     tolerance, with odometry drift corrected against IMU heading.
+    ✅ **Built 2026-10-02 (`ff20415`), not yet run on the rover — and off by default.**
+    `Odometry(encoders, heading_source)` can take each tick's rotation from the IMU yaw
+    *delta* (wrapped, times `IMU_YAW_SIGN`) instead of the left/right wheel difference;
+    distance still comes from the wheels, and any tick the IMU cannot answer falls back
+    to the wheels. `ODOM_USE_IMU_HEADING=False` until a left turn on the spot confirms
+    odometry heading and `IMU.heading` both increase (else `IMU_YAW_SIGN=-1`). This is
+    substitution per tick, not filtering; the yaw is magnetometer-referenced (FR-800-001),
+    so a bias that changes as the rover turns near the motors is not cancelled by taking
+    deltas.
 
 -   **FR-1000-004 (handover).** Operator control is regained on demand within
     one control cycle, from any autonomous state.
 
 -   **FR-1000-006 (come to me).** Added v3.3. Design:
     `docs/superpowers/specs/2026-09-10-come-to-me-design.md`. **NOT IMPLEMENTED** ---
-    no `come_to_me_task.py`, no room-labelling tools.
+    no `come_to_me_task.py`, no doorway-routed room-to-room planning. *(2026-10-02:
+    room labelling by voice now exists — FR-1000-001 — and both prerequisites below are
+    built; the requirement as a whole is still not implemented.)*
 
     One spoken command --- *"Willie, I'm in the kitchen, come to me"* --- routes him to
     a named room **through labelled doorways, not centroid-to-centroid**, then has him
@@ -1939,6 +1987,17 @@ separately under FR-1200.
     --- and a **per-class width table**, since `localize()` assumes an 8cm object and a
     person therefore ranges about 6x too near, making him report "arrived" from across
     the room.
+
+    ✅ **Both built 2026-10-02 (`be4922a`), not yet run on the rover.** *Width table:*
+    `vision.py::_CLASS_WIDTH_CM` gives nominal widths for ~30 COCO classes (person
+    45 cm), with 8 cm kept as the fallback for anything not listed. The widths are
+    nominal, not measured, and `_FOCAL_PX_ESTIMATE` is still an estimate, so range
+    remains a heuristic. *Search sweep:* in `LOCALIZE`, `PursuitTask` looks for
+    `PURSUIT_LOOK_TICKS` (10) ticks, then turns left for `PURSUIT_SEARCH_TURN_S`
+    (0.4 s, at 0.6 × `SPEED_TURN`) through `safety.turn_left_for()`, up to
+    `PURSUIT_SEARCH_STEPS` (8) turns, then fails with "no one found after looking
+    around". Turn timing is uncalibrated, so eight steps is not known to be a full
+    circle.
 
     **A width table is the stopgap; the multi-zone ToF is the real answer** (added
     2026-09-15). `localize()` infers range from bounding-box size against an *assumed*
@@ -2092,12 +2151,17 @@ independent of whether climbing is ever built.
     labelling a real flight and confirming the record round-trips through
     `world_model.db`. *Camera-proposed detection (§4 of the come-to-me spec) is the
     intended mechanism; manual labelling satisfies this requirement on its own.*
+    *(2026-10-02: manual labelling by voice now exists — FR-1200-006 — but this stays
+    open: no real flight has been labelled and round-tripped, and camera detection is
+    not built.)*
 
 -   **FR-1200-002 (floor / stair mode).** A mobility mode selector exists with
     `floor` as the power-on default, and no path switches to `stair` implicitly.
     Verified by confirming the rover powers up in `floor` and that only an explicit
     operator action changes it. **Neither mode is implemented as of 2026-09-13** —
-    see Software Design §6.6.
+    see Software Design §6.6. *(2026-10-02: `config.MOBILITY_MODE='floor'` now exists
+    and the stair standoff reads it, but it is a constant, not a selector — there is no
+    `stair` mode and no way to switch. Still open.)*
 
 -   **FR-1200-003 (traction and tilt during climbing).** While in `stair` mode,
     per-wheel stall and IMU tilt are sampled every control cycle, and either a stall
@@ -2114,7 +2178,17 @@ independent of whether climbing is ever built.
 
 -   **FR-1200-006 (record stairs).** Added v3.3. **NOT IMPLEMENTED** --- `world_model`
     has no stair, hazard or keep-out concept at all; its tables are rooms, doorways,
-    landmarks, objects and routes.
+    landmarks, objects and routes. ✅ **Superseded — built 2026-10-02 (`4f59034`), not
+    yet run on the rover.** `world_model` has a
+    `stairs` table (name, x, y, heading, width_m) and a `Stair` class that is an
+    **edge**, not a point: (x, y) is the middle, heading is the direction you face to go
+    over it, the edge runs across that heading for `width_m`. `add_stair` /
+    `all_stairs` / `delete_stair`, saved and reloaded with the rest of the map. Spoken
+    *"stairs ahead"* / *"the stairs are here"* (fast-path intent `mark_stairs`), with
+    Willie facing them, places the edge `STAIR_LABEL_AHEAD_M` (0.30 m) in front of his
+    centre, across his heading, `STAIR_DEFAULT_WIDTH_M` (0.9 m) wide, named
+    `stairs1`, `stairs2`, … Labelling is by voice at any time, not tied to a mapping
+    run; there is no voice command to delete one, and no camera-proposed candidates.
 
     A stair label carries **position, heading and width**, not just a position. A circle
     is enough to stay away from and useless for climbing, and FR-1200 says this chassis
@@ -2134,6 +2208,17 @@ independent of whether climbing is ever built.
     a hazard to be walled off**: the rocker-bogie is designed to climb them, and
     the same mapped geometry that keeps him clear today is what he will approach
     deliberately under FR-1200-001/002.
+
+    ✅ **Built 2026-10-02 (`4f59034`, reworked `cb9a68d`), not yet run on the rover.**
+    With `MOBILITY_MODE='floor'`, `brain.py::_stair_planning_front()` casts a ray along
+    the odometry heading; a mapped stair edge it crosses becomes a nearer *planning*
+    front `(t − STAIR_STANDOFF_M) × 100 + DIST_STOP` cm, used only by ROAM / SLOW / AVOID
+    to turn away 0.15 m short. Per Software Design §6.6 it is **deliberative only**: the
+    reflex `d['front']`, `approve_motion()` and the world-model obstacle feed still see
+    the sonar alone, so the map steers the rover but never stops it. It **fails closed**:
+    with stairs mapped and a stale pose, or an error reading them, ROAM refuses to run.
+    Limits: **forward only**; **only as good as odometry** — drift moves the edge with it;
+    and a voice "forward" (`approve_motion`) is not held back by the map. The paragraph below on validating 0.15 m still governs.
 
     ⚠ **The reflex layer is sonar-only today.** FR-1000-002 names sonar *and
     encoders* as the reflex layer, but the encoders have produced no edges since
@@ -2326,16 +2411,23 @@ the fix and the end-to-end Google path have not been run on the rover.
 -   No smart-home command can initiate motion while the startup self-test is
     unsatisfied.
 
-# FR-1400 Cloud AI Assistance (Gemini Fallback)
+# FR-1400 Cloud AI Assistance (Claude Fallback)
 
-⚠ **OPEN OWNER DECISION — the code does not use Gemini (recorded 2026-10-02).**
-`ai_provider.py::CloudAIProvider` calls **Anthropic's Claude API** with
-`ANTHROPIC_API_KEY` from the environment. Per `config.py`, Willie's account's Gemini key
-hit a zero free-tier quota even with billing linked (2026-08-06) and the provider was
-swapped. FR-1400-002 and FR-1400-005 (Gemini, via Willie's Google account) are therefore
-**not satisfied as written**; FR-1800-003 and FR-2000-001 name Gemini too. Neither
-"amend the FRD to Claude" nor "return to Gemini" has been decided — this section is
-not to be read as recording either.
+✅ **OWNER DECISION 2026-10-02: the cloud provider is Anthropic's Claude, not Gemini.**
+`ai_provider.py::CloudAIProvider` calls the Claude API with `ANTHROPIC_API_KEY`, model
+`config.CLAUDE_MODEL='claude-sonnet-5-5'` (moved from `claude-sonnet-5` the same day,
+`916c99f`): adaptive thinking at `CLAUDE_EFFORT='low'` (Sonnet 5.5 cannot disable
+thinking), server-side refusal fallback on. Background: Willie's account's Gemini key hit
+a zero free-tier quota even with billing linked (2026-08-06) and the provider was swapped
+then. **Wherever this register says "Gemini" — the FR-1400 table, FR-1800-003,
+FR-2000-001, M-014, the Willie-account notes — read "Claude (Anthropic API key)".** The
+requirement text is kept as written for traceability; the provider is decided.
+
+✅ **FR-1400-001, built 2026-10-02 (`4f59034`), not yet run on the rover:** escalation
+no longer rests on the local model's self-reported confidence alone (G-6 measured it as
+carrying no information). In `voice.py::_interpret_local()`, an answer that fails to
+parse, or names an intent outside `_ACTIONABLE_INTENTS`, is returned with confidence
+0.0 — "not understood" — and so escalates. A wrong but *valid* intent still passes.
 
 ASSUMPTION (flag for review): Gemini is a FALLBACK path used only when
 the onboard Llama 3.2 3B cannot adequately handle a request --- not a
@@ -2729,6 +2821,11 @@ capability in the spec and was not previously captured anywhere. Added
     refused aloud while `ENABLE_RETRIEVAL_TASK=False` (new flag, default False), because
     this section is not safe yet — the grasp drives the elbow toward its forbidden
     centre and hand-off releases on a timer (G-4). Flip it only when those are fixed.
+-   **FR-1700-008, person range.** ✅ **Built 2026-10-02 (`be4922a`), not yet run on
+    the rover:** `localize()` now ranges a person against a nominal 45 cm width, not
+    8 cm, so the `RETRIEVAL_PERSON_MAX_RANGE_CM` (150 cm) gate no longer reads a person
+    at about a sixth of their true distance. Widths are nominal and the focal length is
+    still an estimate (FR-1000-006), so the gate remains uncalibrated.
 
 # FR-1800 Privacy and Data Handling
 
@@ -2998,6 +3095,26 @@ guaranteed-save requirement in particular had none anywhere in the document.
 -   **FR-1900-011, battery path (2026-10-02).** With docking deferred, the rth tier
     calls `memory.save_all_now()` once on entering `LOW_BATTERY`, before the guarded
     halt (FR-200-005). Built, not yet run on the rover.
+
+✅ **Built 2026-10-02, simulated tests only — not yet run on the rover**
+(`tests/test_rooms_stairs_memory.py`):
+
+-   **FR-1900-005, routines** (`0f99e26`). Every queued request except
+    `confirm_receipt` is noted as `"<intent> around HH:00"` via `memory.note_routine()`
+    (which existed with no caller). `memory.top_routines()` returns the most repeated,
+    seen at least 3 times; *"what do I usually ask"* reads them back. Patterns are
+    recorded, not acted on.
+-   **FR-1900-007, instructions applied** (`4f59034`). A stored *"when I say X, do Y"*
+    is now used: if the utterance (less a leading "Hey Willie,") exactly matches a
+    trigger, the action text replaces it **once** and goes through the normal fast
+    path / LLM and all of `brain.py`'s gating. One substitution, so instructions cannot
+    chain. Exact match only — no paraphrase.
+-   **FR-1900-008, forget and recall** (`4f59034`). *"Forget X"* deletes every fact and
+    instruction whose key, value, trigger or action contains X, and says how many;
+    *"what do you remember (about X)"* reads back up to four. Matching is a plain
+    substring, so a short X matches broadly.
+-   **Still not built:** FR-1900-001/002 (capture and replay a demonstration) and
+    FR-1900-003 (replay mismatch).
 
 # FR-2000 Email Account and Management
 
