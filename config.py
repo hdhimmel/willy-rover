@@ -524,7 +524,7 @@ INA260_ARM_6V_ADDR=0x44  # R3, 6V (DROK-6V) -> arm servo distribution. Reads 6.0
                          # cut collapses the 12V bus and leaves this rail untouched, so the cut
                          # was UNDETECTABLE; and this rail idles at 6.043V against a 6.0V
                          # threshold, so 43mV of arm-servo droop raised a false "motor rail lost".
-INA260_BUS_12V_ADDR=0x45 # +12V bus (battery via F1/KCD4/Q1) -> both FeatherWing VIN. Reads
+INA260_BUS_12V_ADDR=0x45 # +12V bus (battery via F1/SW-MAIN/Q1) -> both FeatherWing VIN. Reads
                          # 11.174V against an owner-metered pack of 11.36V -- the ~0.19V delta is
                          # the fuse and switch drop. This is the rail brain.py watches for a
                          # motor-power cut.
@@ -651,7 +651,7 @@ BAT_HALT_CONFIRM_S=10.0
 # a rover whose battery sensing is the thing under suspicion.
 BAT_CROSSCHECK_MAX_DIFF_V=1.5
 # Must clear the LEGITIMATE difference between the two taps, not just sensor noise. The bus sits
-# downstream of F1/KCD4/Q1 (and, per §2.1's P3 row, SW-M), so it reads lower than the pack by the
+# downstream of F1/SW-MAIN/Q1 (and, per §2.1's P3 row, SW-M), so it reads lower than the pack by the
 # drop across them: measured 0.19V at 16mA idle on 2026-09-15. Under motor load that drop grows,
 # and nobody has measured how much yet -- M-1/E-1 will produce that number, and this value should
 # be TIGHTENED once they have. 1.5V is deliberately loose to start: a false "your battery sensor

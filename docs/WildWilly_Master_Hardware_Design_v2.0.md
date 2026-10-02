@@ -67,7 +67,7 @@ Pi 5 40-pin header
 | R3 | 6 V | DROK-6V | Arm servo distribution | INA260 `0x44` |
 | R4 | 3.3 V | Pi header pin 1 | All I²C device logic, SEN0628, BNO085 RST pull-up, FSR402 excitation | — |
 | R5 | 3.3 V | DROK-4 | Motor Hall encoders and Pico A VSYS | Pico A ADC2 (GP28) |
-| — | +12 V bus | Battery via F1 / KCD4 / Q1 | Both FeatherWing VIN (via F2, SW-M), all DROK inputs | INA260 `0x45` |
+| — | +12 V bus | Battery via F1 / SW-MAIN / Q1 | Both FeatherWing VIN (via F2, SW-M), all DROK inputs | INA260 `0x45` |
 | — | Pi 5 V | Witty Pi 5 output (~5.4 V) | Pi 5, display (3-pin header tap), Pico B VSYS (breakout terminal) | — |
 
 **Pi header pin 1 is a loaded rail**, not a spare pin: ten devices' logic, the bus
@@ -201,12 +201,12 @@ different zones.
 | ID | Path | Volts in → out | Rail | Gauge | Protection |
 |----|------|---|---|-------|------------|
 | P1 | 2 × 3S 8000 mAh → hard parallel, per-pack BMS | — → 12.6 V max, 11.1 V nominal | — | 12–14 AWG | BMS per pack |
-| P2 | Battery+ → F1 → KCD4 switch → Q1 FET → +12 V bus | 12.6 V → +12 V bus | — | 12 AWG | F1 30 A ATC |
+| P2 | Battery+ → F1 → SW-MAIN (SPST) → Q1 FET → +12 V bus | 12.6 V → +12 V bus | — | 12 AWG | F1 30 A ATC |
 | P3 | +12 V bus → F2 → SW-M → INA260 0x45 → both FeatherWing VIN | 12 V → 12 V | — | 16 AWG | F2 10 A |
 | P4 | +12 V bus → F3 → Switch 2 → DROK-Pi → Witty Pi VIN | 12 V → 9 V | R1 | 16 AWG | F3 5 A |
 | P5 | +12 V bus → F4 → DROK-5V | 12 V → 5.0 V | R2 | 16 AWG | F4 10 A |
 | P6 | +12 V bus → F5 → SW-A → DROK-6V | 12 V → 6.0 V | R3 | 16 AWG | F5 10 A |
-| P7 | Charge Y-cable (main + balance) → battery side of KCD4 | 12.6 V charge in | — | 14 AWG | — |
+| P7 | Charge Y-cable (main + balance) → battery side of SW-MAIN | 12.6 V charge in | — | 14 AWG | — |
 | P8 | +12 V bus → DROK-4 | 12 V → 3.3 V | R5 | unrecorded | **no fuse recorded** (§14 item 16) |
 
 ```mermaid
@@ -214,7 +214,7 @@ graph TD
     BAT["2× 3S 8000mAh LiPo<br/>in parallel"]
     BMS["Per-pack BMS"]
     F1["F1: 30A ATC"]
-    KCD4["KCD4 Main Switch"]
+    KCD4["SW-MAIN — SPST main switch (E-stop)"]
     Q1["Q1 FET"]
     BUS["12V Bus"]
     F2["F2 10A<br/>Motor"]
@@ -249,8 +249,8 @@ graph TD
 | R3 | 6 V | DROK-6V buck | Arm servo distribution (PCA9685 0x43 V+) | INA260 0x44 |
 | R4 | 3.3 V | Pi header pin 1 | All I²C device logic, SEN0628, BNO085 RST pull-up (via Pico B carrier R4), FSR402 | — |
 | R5 | 3.3 V | DROK-4 buck | Six Hall encoders and Pico A VSYS | Pico A GP28 (ADC2), flagged below 3.0 V |
-| — | +12 V bus | Battery via F1/KCD4/Q1 | Both FeatherWing VIN (motors) | INA260 0x45 |
-| — | +12 V main | Battery via F1/KCD4/Q1 | All four DROK inputs | — |
+| — | +12 V bus | Battery via F1/SW-MAIN/Q1 | Both FeatherWing VIN (motors) | INA260 0x45 |
+| — | +12 V main | Battery via F1/SW-MAIN/Q1 | All four DROK inputs | — |
 
 The Hall encoders and their reader (Pico A) share R5, and therefore a reference. Pico A's
 buck-boost holds its 3.3 V down to 1.8 V in, so if R5 sags the encoders go static while
@@ -1594,7 +1594,7 @@ Current components only.
 | P6KE15A TVS diode (D1) | Transient suppression | 1 | Installed |
 | 30 A ATC fuse + holder (F1) | Main fuse, off-board | 1 | Built |
 | Branch fuses F2–F5 | 10 A / 5 A / 10 A / 10 A | 4 | Built |
-| KCD4 rocker switch | Main power switch — also the emergency stop; cuts all power including the Pi | 1 | Installed |
+| SPST main power switch (SW-MAIN) | Main power switch — also the emergency stop; cuts all power including the Pi | 1 | Installed |
 | SW-M, SW-A | Motor cut, arm cut | 2 | Installed |
 | Switch 2 | Pi-rail cutoff, in buck input line | 1 | Built |
 | 7-port distribution / ground block | Single-point star | 1 | Installed |
