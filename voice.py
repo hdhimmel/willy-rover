@@ -399,12 +399,21 @@ class VoicePipeline:
         self._blocksize=frame_len*self._rate_factor
         try:
             self._audio_q=queue.Queue(maxsize=config.AUDIO_QUEUE_BLOCKS)
+            # blocksize=0: let PortAudio deliver the driver's natural period and re-cut it into
+            # _blocksize frames here. Measured on the rover 2026-10-02: a forced 3840-sample
+            # block lost ~20% of the samples (19 overflows / 15 s); blocksize=0 lost none.
+            pend=[np.zeros(0,dtype=np.int16)]
             def _cb(indata,frames,t,status):
                 if status.input_overflow: self._hb['overflows']+=1
-                try: self._audio_q.put_nowait(indata[:,0].copy())
-                except queue.Full: self._hb['overflows']+=1   # consumer 4 s behind: drop
+                buf=np.concatenate((pend[0],indata[:,0]))
+                n=self._blocksize
+                while len(buf)>=n:
+                    try: self._audio_q.put_nowait(buf[:n].copy())
+                    except queue.Full: self._hb['overflows']+=1   # consumer 4 s behind: drop
+                    buf=buf[n:]
+                pend[0]=buf
             with sd.InputStream(samplerate=int(config.AUDIO_INPUT_RATE),channels=1,dtype='int16',
-                                 device=config.AUDIO_INPUT_DEVICE,blocksize=self._blocksize,
+                                 device=config.AUDIO_INPUT_DEVICE,blocksize=0,
                                  latency='high',callback=_cb) as stream:
                 # Logged once, by resolved name: picking the wrong mic is otherwise invisible and
                 # presents as "the wake word just doesn't work" -- see the 2026-08-21 hunt.
