@@ -185,27 +185,86 @@ class ToFSensor:
         return FloorProfile(zones)
 
 
-def read_frame(port=None,baud=None,timeout=0.2):
-    """The real transport: one 8x8 frame from the SEN0628 over UART.
+_STATUS_SUCCESS=0x53; _STATUS_FAILED=0x63; _FILLER=0xFF
+_CMD_SETMODE=1; _CMD_ALLDATA=2; _MATRIX_8X8=8; _INVALID_MM=4000
 
-    Deliberately the only untestable part of this module, and deliberately thin. `pyserial` is
-    imported here rather than at module scope so the rest of this file imports and tests on a
-    machine without it -- which is how everything above was developed while the rover was
-    powered down."""
-    import serial
-    port=port or config.TOF_PORT; baud=baud or config.TOF_BAUD
-    with serial.Serial(port,baud,timeout=timeout) as ser:
-        raise NotImplementedError(
-            'SEN0628 frame parsing is not written. The PROTOCOL is now known -- read verbatim '
-            'from DFRobot_MatrixLidar.cpp on 2026-09-15 and implemented in scripts/tof_probe.py: '
-            'request [0x55][argsNumH][argsNumL][cmd][args] with argsNum = len(args)+1; reply '
-            '[status][cmd][lenL][lenH][payload] where 0x53 is SUCCESS, 0x63 FAILED and 0xFF is '
-            'skippable filler; getAllData is 55 00 01 02; payload is little-endian uint16 mm, '
-            '64 zones = 128 bytes, 4000 = invalid. It is POLLED, never streaming -- passive '
-            'listening returns nothing, and that is correct. '
-            'The sensor WORKS as of 2026-09-15: 200/200 clean frames at 0.13s each via '
-            'scripts/tof_probe.py -n 200, once its 3.3V was moved off a dormant supply rail '
-            'onto the Pi 3V3 / I2C rail. So this function is unblocked and is simply not '
-            'written yet -- port the framing out of scripts/tof_probe.py, which already does '
-            'exactly this. Everything above this function is complete and tested, and takes any '
-            'callable returning 64 millimetre values.')
+def _req(cmd,args=b''):
+    n=len(args)+1                                   # argsNum counts the cmd byte: len+1
+    return bytes([0x55,(n>>8)&0xFF,n&0xFF,cmd])+args
+
+def _recv(ser,timeout):
+    """[status][cmd][lenL][lenH][payload], 0xFF filler skipped (DFRobot_MatrixLidar.cpp)."""
+    t0=time.time()
+    while time.time()-t0<timeout:
+        b=ser.read(1)
+        if not b or b[0]==_FILLER: continue
+        if b[0] not in (_STATUS_SUCCESS,_STATUS_FAILED): continue
+        hdr=b''
+        while len(hdr)<3 and time.time()-t0<timeout: hdr+=ser.read(3-len(hdr))
+        if len(hdr)<3: return None
+        n=hdr[1]|(hdr[2]<<8); pay=b''
+        while len(pay)<n and time.time()-t0<timeout:
+            c=ser.read(n-len(pay))
+            if not c: break
+            pay+=c
+        return b[0],hdr[0],pay
+    return None
+
+def decode_frame(pay):
+    """128 payload bytes -> 64 millimetre values, None for the firmware's 4000 'no return'."""
+    if len(pay)<2*config.TOF_ZONES: return None
+    v=[pay[i]|(pay[i+1]<<8) for i in range(0,2*config.TOF_ZONES,2)]
+    return [None if x>=_INVALID_MM else x for x in v]
+
+class SerialFrameSource:
+    """The real transport, ported from scripts/tof_probe.py (2026-10-02). Keeps the port open,
+    sets 8x8 once, then polls getAllData. Polled, never streaming -- see that script."""
+    def __init__(self,port=None,baud=None):
+        self.port=port or config.TOF_PORT; self.baud=baud or config.TOF_BAUD; self._ser=None
+    def _open(self):
+        import serial
+        self._ser=serial.Serial(self.port,self.baud,timeout=0.2)
+        self._ser.reset_input_buffer(); self._ser.write(_req(_CMD_SETMODE,bytes([0,0,0,_MATRIX_8X8])))
+        self._ser.flush(); _recv(self._ser,8.0)
+        time.sleep(5.5)                              # the vendor library's delay(5000)
+    def __call__(self):
+        try:
+            if self._ser is None: self._open()
+            self._ser.reset_input_buffer(); self._ser.write(_req(_CMD_ALLDATA)); self._ser.flush()
+            r=_recv(self._ser,1.0)
+        except Exception:
+            try: self._ser and self._ser.close()
+            except Exception: pass
+            self._ser=None; raise
+        if r is None or r[0]!=_STATUS_SUCCESS or r[1]!=_CMD_ALLDATA: return None
+        return decode_frame(r[2])
+
+class BackgroundFrames:
+    """2026-10-02: a frame takes ~0.13 s over UART, far too long for the 20 Hz tick, which
+    used to call the source directly (twice per tick). This thread polls; the tick reads the
+    newest frame, and only if it is younger than TOF_FRAME_MAX_AGE_S -- a stale frame is no
+    frame, so ToFSensor reports unavailable and sensors.py falls back to sonar."""
+    def __init__(self,source):
+        import threading
+        self._source=source; self._latest=None; self._t=0.0; self._err=None
+        self._running=True
+        self._thread=threading.Thread(target=self._loop,daemon=True,name='tof'); self._thread.start()
+    def _loop(self):
+        while self._running:
+            try:
+                f=self._source(); self._err=None
+                if f is not None: self._latest=f; self._t=time.monotonic()
+            except Exception as e:
+                if self._err is None: log.warning(f'ToF read failed: {e} -- retrying')
+                self._err=str(e); time.sleep(2.0)
+            time.sleep(config.TOF_POLL_S)
+    def stop(self): self._running=False
+    def __call__(self):
+        if self._latest is None or time.monotonic()-self._t>config.TOF_FRAME_MAX_AGE_S:
+            raise RuntimeError(self._err or 'no fresh ToF frame')
+        return self._latest
+
+def read_frame(port=None,baud=None,timeout=0.2):
+    """One frame, opening and setting the sensor up each call (5 s). For scripts only; the
+    service uses SerialFrameSource inside BackgroundFrames."""
+    return SerialFrameSource(port,baud)()

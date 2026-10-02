@@ -175,3 +175,19 @@ def test_capturing_a_profile_averages_several_frames(tmp_path):
     p = s.capture_profile(samples=3)
     assert p is not None
     assert p.classify(0, 1000.0) == FLOOR
+
+
+def test_decode_frame_and_background_reader():
+    # 2026-10-02: the transport was ported from scripts/tof_probe.py and moved off the tick.
+    import time, tof, config
+    pay=b''.join((i*10 if i%2 else 4000).to_bytes(2,'little') for i in range(config.TOF_ZONES))
+    f=tof.decode_frame(pay)
+    assert len(f)==config.TOF_ZONES and f[0] is None and f[1]==10 and f[63]==630
+    assert tof.decode_frame(pay[:10]) is None
+    calls=[]
+    bg=tof.BackgroundFrames(lambda: (calls.append(1),[100]*config.TOF_ZONES)[1])
+    t0=time.time()
+    while not calls and time.time()-t0<2: time.sleep(0.01)
+    time.sleep(0.05)
+    assert bg()==[100]*config.TOF_ZONES
+    bg.stop()

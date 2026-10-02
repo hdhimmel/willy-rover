@@ -178,7 +178,10 @@ DIST_STOP=20; DIST_SLOW=40; DIST_CLEAR=60; DIST_SIDE_CLEAR=25
 # Front obstacle sensing ALONGSIDE the sonar, never replacing it: the two fail in opposite
 # directions. Sonar is blind to chair legs, soft furnishings and angled surfaces; ToF looks
 # straight THROUGH glass, which sonar reflects off perfectly well.
-ENABLE_TOF=False            # flip True once the sensor is wired and a floor profile is captured
+ENABLE_TOF=True             # fitted and answering (5/5 clean frames 2026-10-02). Reports NOTHING
+                            # until scripts/calibrate_tof_floor.py has captured a floor profile.
+TOF_POLL_S=0.05             # background reader cadence; a frame itself takes ~0.13 s
+TOF_FRAME_MAX_AGE_S=0.5     # an older frame is no frame -> sonar alone
 TOF_PORT='/dev/ttyAMA3'     # UART, not I2C -- keeps it off a bus that took the whole rover down
                             # twice on 2026-09-07/08. CONFIRM the Pi 5 overlay->pin mapping first
                             # (§6.5): the Pi 4 mapping does not carry over to the RP1.

@@ -181,6 +181,16 @@ class SonarArray:
                 near = tof.nearest_obstacle_cm()
                 if near is not None and near < front:
                     front = near
+                # The ToF is the ONLY cliff detection (dedicated IR cliff sensors were dropped
+                # 2026-09-12). Open space where the profile expects floor reads as an obstacle
+                # at zero, so every forward gate stops. A dark rug can trip it: the safe way.
+                drop = tof.drop_detected()
+                if drop != getattr(self, '_tof_drop', False):
+                    self._tof_drop = drop
+                    (log.warning if drop else log.info)(
+                        'ToF: DROP AHEAD -- stopping forward motion' if drop else 'ToF: floor ahead again')
+                if drop:
+                    front = 0.0
             except Exception:
                 # distances() runs on the 20Hz tick. An exception escaping here would stop
                 # obstacle checks entirely -- strictly worse than having no ToF at all.

@@ -17,7 +17,7 @@ import os, sys, argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import config
-from tof import ToFSensor, FloorProfile, read_frame
+from tof import ToFSensor, FloorProfile, SerialFrameSource
 
 
 def _grid(zones, width=8):
@@ -49,7 +49,7 @@ def main():
     print(f'Capturing {args.samples} frames from {config.TOF_PORT} at {config.TOF_BAUD}.')
     print('The rover must be on CLEAR, LEVEL floor — the surface it actually roams.\n')
 
-    sensor = ToFSensor(source=read_frame, profile_path=path)
+    sensor = ToFSensor(source=SerialFrameSource(), profile_path=path)
     profile = sensor.capture_profile(samples=args.samples)
     if profile is None:
         print('Capture failed: no usable frames. Check the DIP switch is set to UART, the '

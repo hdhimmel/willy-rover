@@ -191,6 +191,17 @@ class RoverBrain:
         self.steering=_init_device(Steering,'steering')
         self.safety=SafetyController(self.motors)
         self.sonars=_init_device(SonarArray,'sonars')
+        # FR-1000-002 / FR-1200-005: the SEN0628 multi-zone ToF. It was fitted but never
+        # constructed -- sensors.py had a slot "set by brain.py" that nothing set (2026-10-02).
+        if config.ENABLE_TOF and not config.SIMULATE_HARDWARE:
+            try:
+                from tof import ToFSensor,SerialFrameSource,BackgroundFrames
+                self.sonars.tof=ToFSensor(source=BackgroundFrames(SerialFrameSource()))
+                if self.sonars.tof.profile is None:
+                    log.warning('ToF fitted but no floor profile -- it reports nothing until '
+                                'scripts/calibrate_tof_floor.py is run on clear floor')
+            except Exception:
+                log.warning('ToF could not start; sonar alone',exc_info=True)
         # The BNO085's RST is on Pico B, whose link SonarArray owns (§4.7 consequence 1).
         self.imu=_init_device(lambda:IMU(reset=self.sonars.reset_imu),'imu')
         self.adc=_init_device(ADC,'adc')
