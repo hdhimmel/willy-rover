@@ -134,9 +134,14 @@ class MemoryStore:
             (min_count,n))]
 
     # --- retrieval-augmented context (FR-1900-007) ---
-    def get_context_for(self,query_text):
+    def get_context_for(self,query_text,person=None):
+        # FR-2100-004 (2026-10-02): facts are scoped to the person who taught them -- a key
+        # '[Carolyn] ...' is only offered when Carolyn is the one being talked to. Unscoped
+        # facts are offered to everyone. INSTRUCTIONS ARE NEVER SCOPED: an instruction is a
+        # capability, and scoping it would let identity decide what the rover will do.
         q=query_text.lower()
-        facts=self.all_facts()
+        facts={k:v for k,v in self.all_facts().items()
+               if not k.startswith('[') or (person and k.startswith(f'[{person}] '))}
         matched_facts={k:v for k,v in facts.items() if k.lower() in q or q in k.lower()}
         matched_instr=[i for i in self.all_instructions() if i['trigger_phrase'].lower() in q]
         return {'facts':matched_facts,'instructions':matched_instr}

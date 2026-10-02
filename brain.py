@@ -20,6 +20,8 @@ from pursuit_task import PursuitTask
 from email_client import EmailClient
 from remote_cmd import RemoteCommandServer
 from feature_requests import FeatureRequests
+from identity import IdentityStore,RECOGNISED,UNCERTAIN,UNKNOWN
+from recognition import FaceRecognizer
 from witty_pi import WittyPi
 if config.ENABLE_HAILO_LLM:
     from hailo_llm import HailoIntentModel
@@ -221,7 +223,12 @@ class RoverBrain:
         self.remote=RemoteCommandServer(self.voice)  # HA / Google Home in, see remote_cmd.py
         self.email.set_command_handler(self._email_command)   # FR-2000-012
         self.feature_requests=FeatureRequests(self.cloud_ai,self.email)   # FR-2200
-        self.email.set_approval_handler(self.feature_requests.approve)
+        self.email.add_approval_handler(self.feature_requests.try_approve)
+        # FR-2100 person recognition: store/matcher + embedding source, both inert if disabled.
+        self.identity=IdentityStore()
+        self.faces=FaceRecognizer(self.detector.capture_frame)
+        self.email.add_approval_handler(self._approve_enrolment)
+        self._face_unknown_run=0; self._face_asked_t=0.0; self._face_asking=False
         self.witty=WittyPi()
         self._state='INIT'; self._stuck_count=0; self._last_action='none'; self._manual_action=None
         self._idle_t=0.0; self._avoid_start=0.0; self._avoid_phase=None; self._running=False
@@ -323,6 +330,7 @@ class RoverBrain:
         # gate; email never acts autonomously per FR-2000-004) — but both stay inert no-ops if
         # their ENABLE_* flag is off or credentials/models are missing (see each module).
         self.voice.start(); self.email.start(); self.remote.start(); self.feature_requests.start()
+        self.faces.start()
         self._running=True
         # FR-100-003 (run startup self-test): _self_test() below.
         ok,reason=self._self_test()
@@ -430,7 +438,7 @@ class RoverBrain:
         if self.mapping.active: self.mapping.abort('shutdown')
         if self.navigator.active: self.navigator.abort('shutdown')
         if self.pursuit.active: self.pursuit.abort('shutdown')
-        self.feature_requests.stop(); self.remote.stop(); self.voice.stop(); self.email.stop(); self.detector.close()
+        self.faces.stop(); self.feature_requests.stop(); self.remote.stop(); self.voice.stop(); self.email.stop(); self.detector.close()
         self.memory.close()  # FR-1900-011: persist any new/updated memory before power-off
         self.world_model.close()  # §9/§10: persist rooms/landmarks/objects/routes before power-off
         self.motors.cleanup(); self.sonars.stop(); self.imu.stop(); self.adc.stop()
@@ -604,6 +612,114 @@ class RoverBrain:
         if best is None: return f,True
         # f < DIST_STOP  <=>  the edge is closer than the standoff
         return min(f,max(0.0,(best-config.STAIR_STANDOFF_M)*100.0+config.DIST_STOP)),True
+
+    # --- FR-2100 person recognition (2026-10-02) -----------------------------------------
+    # Personality, not security: no alert, no event log, no photo, no behaviour change on a
+    # stranger (design §5). Every bit of this runs from IDLE only and only reads the
+    # recognizer's single-slot result, so the tick thread never waits on a model.
+    def _face_tick(self):
+        if not self.faces.available: return
+        self.faces.set_scanning(True)
+        res=self.faces.latest()
+        if res is None or self._face_asking: return
+        _,faces=res
+        if len(faces)!=1:
+            self._face_unknown_run=0; return
+        m=self.identity.match(faces[0][1])
+        if m.band==RECOGNISED:
+            self._face_unknown_run=0
+            if self.identity.greeting_due(m.name) and self.voice.available:
+                self.voice.speak(f'Hi, {m.name}!')
+            pose=self.world_model.get_robot_pose(); room=self.world_model.get_room(pose.x,pose.y)
+            self.identity.note_seen(m.name,room.name if room else None)
+            self.voice.set_current_person(m.name)
+            return
+        if m.band==UNCERTAIN:
+            self._face_unknown_run=0
+            self._face_last_uncertain=(time.time(),faces[0][1]); return   # silent (design §5)
+        # Confidently unknown: ask, but only after FACE_STRANGER_CONFIRM_N in a row, only once
+        # per session, and never while nobody is enrolled.
+        self._face_unknown_run+=1
+        if (self._face_unknown_run>=config.FACE_STRANGER_CONFIRM_N
+                and self.identity.names(include_pending=False)
+                and time.time()-self._face_asked_t>config.FACE_GREET_SESSION_S
+                and self.voice.available):
+            self._face_unknown_run=0; self._face_asked_t=time.time(); self._face_asking=True
+            vec=faces[0][1]
+            self.voice.speak('Hello! Who are you?')
+            self.voice.prompt_listen(lambda text: self._stranger_answer(text,vec,UNKNOWN),
+                                     config.FACE_ASK_TIMEOUT_S)
+
+    def _stranger_answer(self,text,vec,band):
+        """FR-2100-003. A spoken name may RESOLVE an identity, never create one. A vector is
+        only added from the UNCERTAIN band -- a stranger claiming a name must not poison it."""
+        self._face_asking=False
+        import re as _re
+        from voice import _NAME_REPLY
+        m=_NAME_REPLY.fullmatch((text or '').strip()) if text else None
+        name=m.group(1).capitalize() if m else None
+        active=self.identity.names(include_pending=False)
+        if name and name in active:
+            if band==UNCERTAIN: self.identity.add_vector(name,vec)
+            self.identity.note_seen(name); self.voice.set_current_person(name)
+            if self.voice.available: self.voice.speak(f'Oh, hi {name}! Sorry, I didn\'t recognise you.')
+            return
+        if self.voice.available: self.voice.speak('Stranger danger!')
+
+    def _start_enrolment(self,name):
+        """FR-2100-001/006: soft gate, capture ~2 s off the tick thread, store PENDING (inert),
+        email the owner a code, then introduce himself and wave -- after the capture."""
+        if not self.faces.available:
+            self._say("I can't learn faces right now; my camera or face models aren't available."); return
+        if not name: self._say('Who should I meet?'); return
+        now=time.time()
+        seen=[s for s in (self.identity.last_seen(n) for n in config.FACE_ENROL_AUTHORISED) if s]
+        if self.identity.names(include_pending=False) and not any(now-s.at<config.FACE_ENROL_SEEN_WINDOW_S for s in seen):
+            # Deterrent only (design §5): the email approval below is the real authority.
+            self._say(f'I can only meet someone new when {" or ".join(config.FACE_ENROL_AUTHORISED)} is with me.')
+            return
+        self._say(f'Hello {name}. Look at me for a moment, please.')
+        def work():
+            vecs,why=self.faces.capture_for_enrolment()
+            if why:
+                if self.voice.available: self.voice.speak(why)
+                return
+            self.identity.enrol(name,vecs)
+            code=__import__('secrets').token_hex(2)
+            pend=self._load_pending_enrol(); pend[code]={'name':name,'expires':time.time()+config.FACE_ENROL_CODE_TTL_S}
+            self._save_pending_enrol(pend)
+            self.email.send_alert(f'Willie met {name}',
+                f'Willie was introduced to "{name}" and stored their face as PENDING. It does nothing '
+                f'until you approve it.\n\nTo approve, send an email with the subject:\n\n'
+                f'    Willie: approve {code}\n\nIf you did not introduce anyone, ignore this; it '
+                f'expires in a day.\n\n-- Willie')
+            log_event(log,'IDENTITY',subsystem='identity',status='enrolled_pending',name=name,vectors=len(vecs))
+            if self.voice.available:
+                self.voice.speak(f"Nice to meet you, {name}. I'm Willie. {config.OWNER_NAME} will confirm you by email.")
+            self._wave_requested=True   # the wave runs AFTER the capture, from the tick (design §5)
+        threading.Thread(target=work,daemon=True,name='enrol').start()
+
+    def _load_pending_enrol(self):
+        try:
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),config.FACE_PENDING_ENROL_PATH)) as f:
+                return json.load(f)
+        except (OSError,ValueError): return {}
+    def _save_pending_enrol(self,pend):
+        p=os.path.join(os.path.dirname(os.path.abspath(__file__)),config.FACE_PENDING_ENROL_PATH)
+        os.makedirs(os.path.dirname(p),exist_ok=True)
+        with open(p,'w') as f: json.dump(pend,f)
+
+    def _approve_enrolment(self,code,provenance):
+        """Email approval handler (DKIM already verified). None if the code is not an enrolment.
+        It may ONLY flip an already-pending identity to active (design §5)."""
+        pend=self._load_pending_enrol()
+        ent=pend.pop(code.lower(),None)
+        if ent is None: return None
+        self._save_pending_enrol(pend)
+        if time.time()>ent['expires']: return False,f'the code for {ent["name"]} has expired'
+        ok=self.identity.approve(ent['name'])
+        log_event(log,'IDENTITY',subsystem='identity',status='approved' if ok else 'approve_failed',name=ent['name'])
+        return (True,f'{ent["name"]} is now recognised') if ok else (False,f'{ent["name"]} was not pending')
 
     def _demo_sample(self,pose):
         """FR-1900-001: while a demonstration is recording, keep a waypoint every
@@ -1136,6 +1252,12 @@ class RoverBrain:
                 self.world_model.add_room(name,pose.x,pose.y); self.world_model.save()
                 log.info(f'Room labelled: {name} at ({pose.x:.2f},{pose.y:.2f})')
                 self._say(f'Got it, this is the {name}.')
+        elif cmd.get('intent')=='enrol':
+            self._start_enrolment(cmd.get('args',{}).get('name','').strip())
+        elif cmd.get('intent')=='forget_everyone':
+            self.identity.forget_all()
+            log_event(log,'IDENTITY',subsystem='identity',status='forgot_everyone')
+            self._say("Done. I've forgotten everyone's face.")
         elif cmd.get('intent')=='demo_start':
             # FR-1900-001: record the path while following the person (camera) or while driven.
             name=cmd.get('args',{}).get('name','').strip()
@@ -1353,6 +1475,11 @@ class RoverBrain:
     def _idle(self,d,tilt):
         self.safety.stop(); self._idle_t+=0.05
         self._retention_sweep()
+        self._face_tick()
+        if getattr(self,'_wave_requested',False):
+            self._wave_requested=False
+            try: self._start_wave()
+            except Exception: log.warning('Post-enrolment wave failed',exc_info=True)
         self._upd('idle',f'Waiting... bat={self.adc.battery_pct}%',d,tilt)
         summaries=self.email.get_new_summaries() if self.email.available else []
         for s in summaries:
@@ -1528,6 +1655,8 @@ class RoverBrain:
             log.info(f'  {self._state}->{state}'); self._state=state
             if state=='AVOID': self._avoid_start=time.time(); self._avoid_phase=None
             if state=='IDLE': self._idle_t=0.0
+            elif getattr(self,'faces',None) is not None:
+                self.faces.set_scanning(False)   # FR-2100: face scans run from IDLE only
             # Hooked here rather than in _stuck() because _go() fires exactly once on entry --
             # _stuck() runs every tick while stuck, which would be ~20Hz of email.
             if state=='STUCK': self._send_stuck_alert()

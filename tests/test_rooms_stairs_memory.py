@@ -68,7 +68,7 @@ class Mem:
     def delete_instruction(s,i): s.i=[x for x in s.i if x["id"]!=i]
     def add_fact(s,*a): pass
     def add_instruction(s,*a): pass
-    def get_context_for(s,t): return {}
+    def get_context_for(s,t,person=None): return {}
 v.memory=Mem(); v.speak=lambda t,**k: said.append(t)
 assert v._maybe_learn("what do you remember about cup") and "blue cup" in said[-1]
 v.memory=Mem(); assert v._maybe_learn("forget about cup") and v.memory.f=={} and "forgotten 1" in said[-1]

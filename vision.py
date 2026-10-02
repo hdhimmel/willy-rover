@@ -175,6 +175,16 @@ class ObjectDetector:
         bearing_deg=offset*(_ASSUMED_HFOV_DEG/2.0)
         return distance_cm,bearing_deg
 
+    def capture_frame(self):
+        """FR-2100: one BGR frame from the already-open camera for face recognition, or None.
+        Same privacy gate as capture_still (available honours privacy.camera_enabled()). The
+        caller embeds it and drops it; nothing here keeps it."""
+        if not self.available or getattr(self,'_picam2',None) is None: return None
+        try:
+            return self._picam2.capture_array('main')[:,:,:3].copy()   # XRGB8888 -> BGR
+        except Exception:
+            log.warning('capture_frame failed',exc_info=True); return None
+
     def capture_still(self):
         """JPEG bytes from the already-open camera, or None. Added 2026-08-24 for the STUCK
         help-photo feature.

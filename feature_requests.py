@@ -180,6 +180,13 @@ class FeatureRequests:
                 f'It expires unapproved on {when}. Approval queues it for a design discussion; it is not a '
                 f'specification.\n\n-- Willie')
 
+    def try_approve(self,code,provenance):
+        """Shared 'approve <code>' path: None if the code is not ours (another handler may
+        own it), else approve()'s (ok, message)."""
+        pend=self._load(config.FEATURE_REQUEST_PENDING_PATH,None)
+        if not pend or pend.get('code','').lower()!=code.lower(): return None
+        return self.approve(code,provenance)
+
     # --- approval (called by email_client._handle_command, DKIM already verified) ---
     def approve(self,code,provenance):
         with self._lock:

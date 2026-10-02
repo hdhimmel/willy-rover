@@ -1025,11 +1025,23 @@ RAW_AUDIO_CAMERA_PERSIST=False  # FR-1800-002
 ENABLE_LEARNING=True
 MEMORY_DB_PATH='memory.db'
 
-# --- FR-2100 person recognition. NOT ENABLED: identity.py (the store/matcher) exists, but the
-# embedding source (recognition.py) and its ArcFace/SCRFD models do not, so nothing can produce a
-# vector yet. Flag stays False until that half lands, matching the convention used by
-# ENABLE_HAILO_LLM and ENABLE_OBJECT_RETRIEVAL.
-ENABLE_FACE_RECOGNITION=False
+# --- FR-2100 person recognition. Built 2026-10-02: identity.py (store/matcher) + recognition.py
+# (OpenCV YuNet detector + SFace 128-d embedding, CPU). recognition.py disables itself if the
+# models in models/ are missing or the camera is unavailable. Faces only -- pets wait on the
+# design's §10 spike.
+ENABLE_FACE_RECOGNITION=True
+FACE_DET_MODEL_PATH='models/face_detection_yunet_2023mar.onnx'
+FACE_REC_MODEL_PATH='models/face_recognition_sface_2021dec.onnx'
+FACE_DET_SCORE=0.8              # YuNet confidence for a face
+FACE_SCAN_S=2.0                 # one frame every this long, IDLE only
+FACE_ENROL_FRAMES=6; FACE_ENROL_S=2.0       # FR-2100-001: ~2 s of frames, one face each
+FACE_ENROL_AUTHORISED=('Howard','Carolyn')  # FR-2100-006 soft gate (deterrent, not enforcement)
+FACE_ENROL_SEEN_WINDOW_S=600
+FACE_ENROL_CODE_TTL_S=86400     # the email approval code expires after a day
+FACE_STRANGER_CONFIRM_N=3       # consecutive confidently-unknown scans before he asks
+FACE_ASK_TIMEOUT_S=8.0          # how long he listens for a name after "who are you?"
+FACE_SPEAKER_WINDOW_S=120       # FR-2100-004: last recognised face = "who am I talking to"
+FACE_PENDING_ENROL_PATH='secrets/pending_enrolments.json'
 # Biometric data lives in its OWN file, deliberately not a table inside memory.db (design §4):
 # a wipe is then a file delete rather than a careful DELETE, and the embeddings sit on a visibly
 # separate boundary from ordinary learned facts. That separation is what makes FR-2100-005's
@@ -1048,8 +1060,11 @@ IDENTITY_DB_PATH='identities.db'
 # scripts/tune_face_threshold.py alongside and sweep them against real enrolments. This project
 # already carries one threshold that reads as tunable and is not -- HAILO_LLM_CONFIDENCE_FLOOR=0.7,
 # recorded in FRD G-6 as exactly that and still an open risk. Do not add a second.
-FACE_MATCH_MAX_DISTANCE=0.40
-FACE_STRANGER_MIN_DISTANCE=0.60
+# 2026-10-02: re-based for SFace, whose published same-person threshold is cosine SIMILARITY
+# 0.363 (distance 0.637). Recognised needs clearly better than that; stranger needs clearly
+# worse. Still starting points -- tune against real enrolments.
+FACE_MATCH_MAX_DISTANCE=0.55
+FACE_STRANGER_MIN_DISTANCE=0.78
 # Cap per identity, oldest evicted. Rescued matches (FR-2100-003) add vectors over time, so
 # without a cap an identity accumulates hundreds and matching slows for no accuracy gain.
 FACE_MAX_VECTORS_PER_IDENTITY=12

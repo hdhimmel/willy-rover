@@ -80,6 +80,10 @@ _MARK_STAIRS=re.compile(r"(?:there are |these are )?(?:the )?(?:stairs|steps)(?:
 _DEMO_START=re.compile(r"(?:watch me|follow me)?[\s,]*(?:and )?learn (?:the |this )?(?:way|route|path) (?:to )?(?:the )?([a-z][a-z ]{1,30})",re.I)
 _DEMO_STOP=re.compile(r"(?:that's it|that is it|stop learning|done learning|finished|we're here|we are here)",re.I)
 _DEMO_REPLAY=re.compile(r"(?:do|take|repeat|replay|show me) (?:the )?(?:way|route|path) (?:to )?(?:the )?([a-z][a-z ]{1,30})",re.I)
+# FR-2100: "this is Carolyn" (a NAME -- "this is the kitchen" is a room, matched first).
+_ENROL=re.compile(r"this is ([A-Z][a-z]+)",re.I)
+_FORGET_EVERYONE=re.compile(r"forget everyone|forget all (?:the )?faces",re.I)
+_NAME_REPLY=re.compile(r"(?:(?:hi|hello|hey)[\s,]+)?(?:i'?m|i am|it'?s|it is|my name is|this is)?\s*([A-Za-z]+)[.!]?",re.I)
 _FORGET=re.compile(r"(?:please )?forget (?:about |that )?(.+)",re.I)
 _ROUTINES=re.compile(r"what do i usually (?:ask|do|ask for)|what are my routines",re.I)
 _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
@@ -90,7 +94,7 @@ _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
 _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve',
     'confirm_receipt','map','stop_map','shutdown','status','battery','arm_stow','arm_home','wave',
     'come_here','follow','diagnostics','where_are_you','what_do_you_see','name_room','mark_stairs',
-    'demo_start','demo_stop','demo_replay','stop','smart_home','chat','time','date'})
+    'demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
 def _fp(core):
@@ -407,7 +411,19 @@ class VoicePipeline:
                     self._heartbeat()
                     if self._speaking.is_set():
                         self._hb['muted']+=1
+                        p=getattr(self,'_prompt',None)
+                        if p: p['seen_speaking']=True
                         continue  # still drain the buffer, just don't score our own echo
+                    p=getattr(self,'_prompt',None)
+                    if p:
+                        # FR-2100-003 prompted listen: once the question has played (or 3 s if
+                        # it never started), capture one utterance with no wake word.
+                        if time.time()>p['deadline']:
+                            self._prompt=None; p['cb'](None); continue
+                        if p['seen_speaking'] or time.time()-p['t0']>3.0:
+                            self._prompt=None
+                            self._handle_wake(stream,frame_len,time.time(),on_text=p['cb'])
+                            continue
                     self._update_noise(flat)
                     scores=self._wakeword.predict(flat)
                     hb=self._hb; hb['scored']+=1
@@ -492,7 +508,7 @@ class VoicePipeline:
         except Exception as e:
             log.info(f'Done chirp skipped: {e}')
 
-    def _handle_wake(self,stream,frame_len,t_wake):
+    def _handle_wake(self,stream,frame_len,t_wake,on_text=None):
         # FR-1500-001 satisfied (wake word seen) — now capture an utterance and process it.
         # Endpointed capture (2026-08-21, was a fixed 4s window): ends once the speaker stops,
         # so a short command no longer pays a long command's latency. Falls back to the old
@@ -537,6 +553,13 @@ class VoicePipeline:
         log.info('capture: %.1fs of %.1fs max (endpointed=%s)',
                   len(audio)/fps,config.VOICE_CAPTURE_MAX_S,heard and silent>=end_frames)
         if self.display: self.display.update_state(state='processing',status='Thinking...')
+        if on_text is not None:   # prompted listen: hand back the words, interpret nothing
+            try:
+                segs,_=self._whisper.transcribe(pcm,language='en',beam_size=1,vad_filter=True)
+                text=' '.join(s.text for s in segs).strip()
+            except Exception:
+                log.warning('Prompted transcription failed',exc_info=True); text=''
+            on_text(text or None); return
         self._process_utterance(pcm,t_wake)
 
     def _process_utterance(self,pcm,t_wake):
@@ -598,6 +621,22 @@ class VoicePipeline:
             self.speak("I'm not confident I understood that — could you rephrase it?"); return
         self._act_on_intent(intent,text)
 
+    def set_current_person(self,name):
+        """FR-2100-004: brain reports each recognised face; it is 'who I am talking to' for
+        FACE_SPEAKER_WINDOW_S. Last face seen, not a voice match -- design §5.1's known weakness."""
+        self._person=(name,time.time())
+    def current_person(self):
+        p=getattr(self,'_person',None)
+        return p[0] if p and time.time()-p[1]<config.FACE_SPEAKER_WINDOW_S else None
+
+    def prompt_listen(self,on_text,timeout_s):
+        """FR-2100-003: listen once WITHOUT the wake word, after the question being spoken has
+        finished, and call on_text(transcript or None). A narrow entry point -- the wake gate
+        itself is untouched (design §5)."""
+        if not self._enabled or self._whisper is None: on_text(None); return
+        self._prompt={'cb':on_text,'deadline':time.time()+timeout_s+6.0,'seen_speaking':False,
+                      't0':time.time()}
+
     def interpret_text(self,text):
         """FR-2000-012: the voice interpreter for text that did not come from the microphone
         (an authenticated owner email). Same steps as a spoken utterance -- bare-address check,
@@ -618,6 +657,7 @@ class VoicePipeline:
 
     def _maybe_learn(self,text):
         norm=text.strip().rstrip('.!? ')
+        if _FORGET_EVERYONE.fullmatch(norm): return False   # FR-2100: brain's intent, not a fact
         # FR-1900-008: correction and deletion by voice. Both delete paths existed; nothing
         # spoken reached them.
         m=_FORGET.fullmatch(norm)
@@ -652,7 +692,12 @@ class VoicePipeline:
                        else "I don't have anything stored about that.")
             return True
         m=re.match(r"remember that (.+)",text,re.I)
-        if m: self.memory.add_fact(m.group(1)[:60],m.group(1)); self.speak(f"Got it, I'll remember that."); return True
+        if m:
+            # FR-2100-004: scoped to whoever he last recognised (within FACE_SPEAKER_WINDOW_S).
+            who=self.current_person()
+            key=(f'[{who}] ' if who else '')+m.group(1)[:60]
+            self.memory.add_fact(key,m.group(1))
+            self.speak(f"Got it, I'll remember that{', ' + who if who else ''}."); return True
         m=re.match(r"when i say (.+?), do (.+)",text,re.I)
         if m: self.memory.add_instruction(m.group(1).strip(),m.group(2).strip())
         if m: self.speak(f"Understood — when you say '{m.group(1)}', I'll {m.group(2)}."); return True
@@ -667,6 +712,10 @@ class VoicePipeline:
         m=_NAME_ROOM.fullmatch(norm)
         if m: return {'intent':'name_room','args':{'room':m.group(1).strip().lower()},'reply':''}
         if _MARK_STAIRS.fullmatch(norm): return {'intent':'mark_stairs','args':{},'reply':''}
+        m=_ENROL.fullmatch(norm)
+        if m and m.group(1).lower() not in ('the','a','an','it','me','my','that','him','her'):
+            return {'intent':'enrol','args':{'name':m.group(1).capitalize()},'reply':''}
+        if _FORGET_EVERYONE.fullmatch(norm): return {'intent':'forget_everyone','args':{},'reply':''}
         m=_DEMO_START.fullmatch(norm)
         if m: return {'intent':'demo_start','args':{'name':m.group(1).strip().lower()},'reply':''}
         if _DEMO_STOP.fullmatch(norm): return {'intent':'demo_stop','args':{},'reply':''}
@@ -694,7 +743,7 @@ class VoicePipeline:
         # now, not one masquerading as the other — see ai_provider.py's module docstring. The
         # model is asked to self-report its own confidence rather than confidence being inferred
         # from whether the JSON happened to parse.
-        ctx=self.memory.get_context_for(text) if self.memory else {}
+        ctx=self.memory.get_context_for(text,person=self.current_person()) if self.memory else {}
         prompt=(f'You are Willie, a home-assistant rover. Known facts: {json.dumps(ctx)}\n'
                 f'User said: "{text}"\n'
                 f'If the user is asking you to fetch/bring/collect an object -- phrasings like '
@@ -753,7 +802,7 @@ class VoicePipeline:
                          'confirm_receipt','map','stop_map','shutdown','status','battery',
                          'arm_stow','arm_home','wave','come_here','follow','diagnostics',
                          'where_are_you','what_do_you_see','name_room','mark_stairs',
-                         'demo_start','demo_stop','demo_replay'}
+                         'demo_start','demo_stop','demo_replay','enrol','forget_everyone'}
         if name in motion_intents:
             # FR-1500-007: queued only — brain.py applies full Directive 1-5 gating before this
             # is ever executed.

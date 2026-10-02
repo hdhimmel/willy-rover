@@ -85,7 +85,7 @@ class EmailClient:
             self._enabled=False
         self._pending_sends={}  # id -> (to, subject, body) awaiting confirm_and_send
         self._command_handler=None   # FR-2000-012: set by brain.py, (text, reply_fn) -> None
-        self._approval_handler=None  # FR-2200-002: feature_requests.approve(code, provenance)
+        self._approval_handlers=[]   # FR-2200-002 / FR-2100-006: each (code, provenance) -> None|(ok,msg)
         self._inbox_summaries=queue.Queue()  # FR-2000-003: surfaced to voice/display, not acted on
         self._running=False; self._thread=None
         self._stop_event=threading.Event()  # lets stop() interrupt the poll loop's long wait
@@ -126,9 +126,10 @@ class EmailClient:
         log.info(f'Sender removed from allowlist: {sender_email}')
         return True,'removed'
 
-    def set_approval_handler(self,fn):
-        """FR-2200-002: feature_requests.FeatureRequests.approve."""
-        self._approval_handler=fn
+    def add_approval_handler(self,fn):
+        """'approve <code>' handlers (feature requests, face enrolment). Each returns None when
+        the code is not its own, else (ok, message)."""
+        self._approval_handlers.append(fn)
 
     def set_command_handler(self,fn):
         """FR-2000-012: brain.py's handler for verified owner commands."""
@@ -291,8 +292,10 @@ class EmailClient:
         # authenticated path only.
         ap=re.fullmatch(r'approve\s+([0-9a-f]{4,8})',cmd,re.I)
         if ap:
-            if self._approval_handler is None: ok,res=False,'feature requests are not running'
-            else: ok,res=self._approval_handler(ap.group(1),'email, DKIM verified')
+            ok,res=False,'that code does not match anything waiting for approval'
+            for h in self._approval_handlers:
+                r=h(ap.group(1),'email, DKIM verified')
+                if r is not None: ok,res=r; break
             log_event(log,'EMAIL_COMMAND',subsystem='email',status='approve_'+('ok' if ok else 'refused'))
             self.send_owner_reply(f'Re: {subject}',f'{res}.\n\n-- Willie')
             return
