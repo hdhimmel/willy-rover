@@ -112,6 +112,15 @@ class DriveBase:
         # Immediate, not ramped — for ESTOP/tilt-fault use where a 0.5s ramp-down is wrong.
         # throttle=0.0 is adafruit_motor's hard-brake (both legs driven); throttle=None coasts.
         with self._lock:
+            # ALREADY STOPPED AND RELEASED -> NOTHING TO BRAKE (2026-10-02). A latched fault
+            # re-issues emergency_stop() every tick; each one used to wake the sleeping drivers
+            # and write brake, the ramp loop released them again after MOTOR_COAST_AFTER_S, and
+            # round it went. Waking + braking writes each motor's two direction pins one after
+            # the other, and for the instant between them the bridge DRIVES the motor: the owner
+            # saw all the wheels twitching on the block. A stopped, released wheel has no motion
+            # to brake, so leave it be. A brake while anything is moving or commanded is unchanged.
+            if self._coasting and all(self._actual[w]==0.0 and self._target[w]==0.0 for w in self._WHEELS):
+                self.current_speed=0.0; return
             if self._coasting: self._wake()   # a sleeping PCA9685 cannot brake; wake before driving
             # _write: one failing driver must not leave the wheels after it unbraked.
             for w in self._WHEELS: self._target[w]=0.0; self._actual[w]=0.0; self._write(w,0.0)
