@@ -784,6 +784,19 @@ ENABLE_EMAIL_COMMANDS=True
 EMAIL_COMMAND_PREFIX='willie'          # subject "Willie: go to the kitchen" (':' or ',' after)
 EMAIL_COMMAND_MAX_AGE_S=600.0          # mirrors VOICE_COMMAND_MAX_AGE_S: late motion is worse than none
 EMAIL_AUTHSERV_ID='mx.google.com'      # only this receiver's Authentication-Results is trusted
+# FR-2200 feature requests (built 2026-10-02, feature_requests.py). Evidence-grounded, composed
+# by the cloud model, approved by DKIM-verified owner email, then one Markdown file committed.
+ENABLE_FEATURE_REQUESTS=True
+FEATURE_REQUEST_MAX_PER_DAY=1
+FEATURE_REQUEST_MIN_EVENTS=5          # a category needs this many events in the window to count
+FEATURE_REQUEST_WINDOW_DAYS=7
+FEATURE_REQUEST_EXPIRE_DAYS=7         # unapproved requests are discarded after this
+FEATURE_REQUEST_REPROPOSE_DAYS=30     # the same problem is not proposed again within this
+FEATURE_REQUEST_FIRST_CHECK_S=600     # first look 10 min after start
+FEATURE_REQUEST_CHECK_S=21600         # then every 6 h
+FEATURE_REQUEST_PENDING_PATH='secrets/pending_feature_request.json'
+FEATURE_REQUEST_HISTORY_PATH='secrets/feature_request_history.json'
+FEATURE_REQUEST_PUSH_PENDING_PATH='secrets/feature_request_push_pending.json'
 # FR-2000-009: single hard-coded outbound recipient, enforced in email_client.py itself, not
 # just here — changing who Willie can email requires a code change, not a config edit.
 EMAIL_OUTBOUND_ALLOWLIST=('h.d.himmel@gmail.com',)

@@ -19,6 +19,7 @@ from retrieval_task import RetrievalTask
 from pursuit_task import PursuitTask
 from email_client import EmailClient
 from remote_cmd import RemoteCommandServer
+from feature_requests import FeatureRequests
 from witty_pi import WittyPi
 if config.ENABLE_HAILO_LLM:
     from hailo_llm import HailoIntentModel
@@ -219,6 +220,8 @@ class RoverBrain:
         self.email=EmailClient()
         self.remote=RemoteCommandServer(self.voice)  # HA / Google Home in, see remote_cmd.py
         self.email.set_command_handler(self._email_command)   # FR-2000-012
+        self.feature_requests=FeatureRequests(self.cloud_ai,self.email)   # FR-2200
+        self.email.set_approval_handler(self.feature_requests.approve)
         self.witty=WittyPi()
         self._state='INIT'; self._stuck_count=0; self._last_action='none'; self._manual_action=None
         self._idle_t=0.0; self._avoid_start=0.0; self._avoid_phase=None; self._running=False
@@ -318,7 +321,7 @@ class RoverBrain:
         # neither can move the robot on its own (voice queues motion intents for _tick() to
         # gate; email never acts autonomously per FR-2000-004) — but both stay inert no-ops if
         # their ENABLE_* flag is off or credentials/models are missing (see each module).
-        self.voice.start(); self.email.start(); self.remote.start()
+        self.voice.start(); self.email.start(); self.remote.start(); self.feature_requests.start()
         self._running=True
         # FR-100-003 (run startup self-test): _self_test() below.
         ok,reason=self._self_test()
@@ -426,7 +429,7 @@ class RoverBrain:
         if self.mapping.active: self.mapping.abort('shutdown')
         if self.navigator.active: self.navigator.abort('shutdown')
         if self.pursuit.active: self.pursuit.abort('shutdown')
-        self.remote.stop(); self.voice.stop(); self.email.stop(); self.detector.close()
+        self.feature_requests.stop(); self.remote.stop(); self.voice.stop(); self.email.stop(); self.detector.close()
         self.memory.close()  # FR-1900-011: persist any new/updated memory before power-off
         self.world_model.close()  # §9/§10: persist rooms/landmarks/objects/routes before power-off
         self.motors.cleanup(); self.sonars.stop(); self.imu.stop(); self.adc.stop()
