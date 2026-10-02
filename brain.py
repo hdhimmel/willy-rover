@@ -812,9 +812,10 @@ class RoverBrain:
                 if self.navigator.active: self.navigator.abort(f'return-to-home {bat_v:.2f}V')
                 if self.pursuit.active: self.pursuit.abort(f'return-to-home {bat_v:.2f}V')
                 self._abandon_stuck_if_active()
-                # FR-200-005/FR-1900-011: the GUARANTEED memory save happens here, at the earlier
-                # RTH threshold, while there's still time for a full graceful save — not at the
-                # actual SHUTDOWN tier below, which only gets a best-effort backstop attempt.
+                # ENABLE_DOCKING=True only (docking is deferred; the branch above handles rth
+                # today). FR-1900-011: the guaranteed memory save happens here, at the earlier RTH
+                # threshold. This does NOT by itself satisfy FR-200-005, which also requires the
+                # FR-900-005 graceful halt -- with a dock, that halt is still to be designed.
                 self.memory.save_all_now()
                 log_event(log,'LOW_BATTERY',severity='warning',subsystem='battery',
                           status='return_to_home',volts=f'{bat_v:.2f}')

@@ -6,8 +6,9 @@ if not config.SIMULATE_HARDWARE:
     from adafruit_pca9685 import PCA9685
     _i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
 
-# FR-700-002 (preset positions): NOT implemented -- no named poses exist, per this
-# class's own comment below (no per-joint safe limits, preset poses, or IK yet).
+# FR-700-002 (preset positions): PARTIAL -- config.py defines ARM_POSE_WAVE_HELLO (verified
+# on hardware 2026-09-17) and ARM_POSE_REST (two open caveats, see config.py), but nothing
+# here or in brain.py applies them yet; stow/home use center_all(), which skips the elbow.
 # FR-700-003 (joint limits) -- PARTIAL: _drive() below clamps to manufacturer-default
 # ARM_SERVO_MIN_US/MAX_US, but real per-joint calibrated limits haven't been bench-set.
 # FR-700-004 (arm stops on E-stop) -- PARTIAL: safety.SafetyController still only holds a
@@ -26,9 +27,10 @@ if not config.SIMULATE_HARDWARE:
 # clear the "IDLE-only, low risk" reasoning for leaving it alone assumed no systemd watchdog was
 # configured, which turned out to be wrong (WatchdogSec=500ms is real -- see FRD v3.1 G-5).
 class Arm:
-    # PCA9685 @0x43, CH1-7 (CH0 unused, shifted 2026-08-21), base->gripper order (§11.1). No
-    # per-joint safe limits, preset poses,
-    # or IK exist yet — §20.6 bench calibration hasn't been run. This is a driver + primitive
+    # PCA9685 @0x43, CH0-6 -- the hardware-verified 2026-09-17 map is in config.py (ARM_BASE=6
+    # ... ARM_WRIST_PITCH=0), not the old base->gripper CH1-7 order. No per-joint safe limits
+    # or IK exist yet -- §20.6 bench calibration hasn't been run. FR-700-001's current limit is
+    # enforced every tick by brain._check_arm_current() (2026-10-02), which releases the arm. This is a driver + primitive
     # set_pulse interface only, clamped to manufacturer defaults; arm_jog.py is the tool for
     # producing real calibration numbers. No autonomous motion is wired to this class anywhere.
     # Channel numbers corrected against hardware 2026-09-17 -- see the map in config.py. The old
