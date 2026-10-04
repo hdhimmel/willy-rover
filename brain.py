@@ -1877,13 +1877,20 @@ class RoverBrain:
         A halt powers the Pi off, so it needs more than the ADC's word. 2026-10-01: a stale
         divider scale read a healthy 11.37V pack as 8.53V while 0x45 read 11.26V, and the rover
         walked to SHUTDOWN on the ADC alone. With the bus down (motor cut, base off) there is
-        nothing to compare against, and the ADC stays the authority."""
+        nothing to compare against, and the ADC stays the authority.
+
+        Must compare against the ADS1115 divider specifically, not ADC.battery_volts: since
+        2026-10-02 (bus_source) battery_volts itself tracks the bus whenever the bus is live, so
+        comparing it to the bus it was derived from is tautological and can never flag a
+        disagreement -- see sensors.py::ADC.battery_volts and the same fix already applied to
+        _check_battery_crosscheck() below."""
         try:
             bus=self.current.rail('bus_12v')['voltage_v']
         except Exception:
             return False
         if bus<config.MOTOR_RAIL_MIN_V: return False
-        return abs(self.adc.battery_volts-bus)>config.BAT_CROSSCHECK_MAX_DIFF_V
+        adc=getattr(self.adc,'divider_volts',self.adc.battery_volts)
+        return abs(adc-bus)>config.BAT_CROSSCHECK_MAX_DIFF_V
 
     def _battery_halt(self,reason,bat_v,threshold,d,tilt):
         """FR-200-004/005: the FR-900-005 graceful halt, once the reading has stayed under

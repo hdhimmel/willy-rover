@@ -17,10 +17,10 @@ from brain import RoverBrain
 clock=[1000.0]
 brain.time.time=lambda: clock[0]
 
-def fb(adc_v,bus_v):
+def fb(adc_v,bus_v,divider_v=None):
     halts=[]; shown=[]
     ns=types.SimpleNamespace(_bat_halt_since=None,_shutdown_after_stop=False,
-        adc=types.SimpleNamespace(battery_volts=adc_v),
+        adc=types.SimpleNamespace(battery_volts=adc_v,divider_volts=adc_v if divider_v is None else divider_v),
         current=types.SimpleNamespace(rail=lambda name:{"voltage_v":bus_v}))
     ns._upd=lambda fs,st,d,tilt,*a,**k: shown.append(st)
     ns._begin_shutdown=lambda reason: (halts.append(reason),setattr(ns,"_shutdown_after_stop",True))
@@ -48,6 +48,15 @@ assert f.halts==[], "a recovered sag must restart the confirm window"
 f=fb(8.53,11.26)
 for _ in range(5):
     f._battery_halt("critical battery",8.53,config.BAT_SHUTDOWN_V,{},0.0); clock[0]+=C
+assert f.halts==[] and "disputed" in f.shown[-1], f.shown[-1]
+
+# 3b. Regression guard (2026-10-02): ADC.battery_volts now tracks the bus itself whenever the
+# bus is live (bus_source + BUS_TO_PACK_DROP_V), so comparing battery_volts to the bus it was
+# derived from would always agree and could never dispute a halt. The independent divider
+# reading (divider_volts) must be what gets compared instead.
+f=fb(11.26+config.BUS_TO_PACK_DROP_V,11.26,divider_v=8.53)
+for _ in range(5):
+    f._battery_halt("critical battery",11.26+config.BUS_TO_PACK_DROP_V,config.BAT_SHUTDOWN_V,{},0.0); clock[0]+=C
 assert f.halts==[] and "disputed" in f.shown[-1], f.shown[-1]
 
 # 4. Bus down (motor cut / base off): the ADC is the authority and the halt proceeds.
