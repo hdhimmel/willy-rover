@@ -517,14 +517,15 @@ implementation waits for either an explicit voice confirmation or a fixed
 timeout before releasing, so the rover cannot detect that the person has
 actually taken the object.
 
-⚠ **The hardware half of this gap is now closed. The software half is not.**
-An **FSR402 force sensor is fitted to the gripper** and read as ADS1115 **A1**
-(Master Hardware Design §6.6, §16.14), built into the signal conditioning board
-2026-09-16. It is **uncalibrated** and nothing in the codebase reads A1 —
+⚠ **The hardware half of this gap is closed. The software half is not.**
+The FSR402 was removed 2026-10-04. The gripper sense is now **position feedback
+from the gripper servo itself**: its pot wiper feeds ADS1115 **A2** through a
+47k/47k divider (Master Hardware Design §6.6, §16.14). `sensors.ADC.grip_feedback_volts()`
+reads it, but it is **uncalibrated** and nothing consults it —
 `retrieval_task.py:18` still records the hand-off as time-based, correctly.
-This item stays open until the sensor is calibrated (its response is
-logarithmic; a linear scale reads plausibly and is wrong) and
-`_process_handoff` consults it. It is no longer a hardware limitation.
+This item stays open until `scripts/grip_feedback_curve.py` has produced the
+free-travel curve and `_await_confirm()` uses it: jaw stalled short of its
+command = holding; jaw jumped back to its command = taken.
 
 **G-5 --- watchdog and tick-overrun thresholds are inconsistent.**
 `willy-rover.service` now sets `WatchdogSec=500ms`, which requires the process

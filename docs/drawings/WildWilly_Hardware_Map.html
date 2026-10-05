@@ -211,7 +211,7 @@ code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--rule
   <g class="dev">
     <rect x="470" y="492" width="170" height="52" rx="4" class="bx"/>
     <text class="bt" x="482" y="514">ADS1115  0x48</text>
-    <text class="bl" x="482" y="534">battery · FSR</text>
+    <text class="bl" x="482" y="534">battery · grip fb</text>
   </g>
   <g class="dev">
     <rect x="680" y="492" width="170" height="52" rx="4" class="bx"/>
@@ -295,7 +295,7 @@ code{font-family:"IBM Plex Mono",monospace;font-size:.92em;background:var(--rule
     <tr><td>FeatherWings</td><td>Six drive motors, 12 V straight from the bus</td><td>0x61 is LEFT, 0x60 is RIGHT — measured, and the reverse of what the docs said until M-1</td></tr>
     <tr><td>PCA9685 ×2</td><td>Six steering servos (5 V), seven arm servos (6 V)</td><td>Separate boards because the rails differ, and 0x43 carries the 2200 µF the arm needs</td></tr>
     <tr><td>INA260 ×3</td><td>R2 5 V, R3 6 V arm, +12 V bus</td><td>0x40 on R2 is also the sonar short-detector: ~15 mA per healthy sensor, a ~250 mA step is a dead one</td></tr>
-    <tr><td>ADS1115</td><td>A0 battery divider, A1 gripper FSR, A2 spare</td><td>The shutdown ladder reads A0, so it sits in the quiet corner 30 mm from the nearest motor driver</td></tr>
+    <tr><td>ADS1115</td><td>A0 battery divider, A2 gripper servo feedback (47k/47k), A1/A3 spare</td><td>The shutdown ladder reads A0, so it sits in the quiet corner 30 mm from the nearest motor driver</td></tr>
   </tbody>
 </table>
 </div>

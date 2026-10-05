@@ -251,10 +251,18 @@ class Steering:
     def set_angle(self,corner,degrees):
         # degrees relative to center, clamped to the conservative servo range's half-span
         half_span_us=(config.SERVO_MAX_US-config.SERVO_MIN_US)/2
-        us=config.SERVO_CENTER_US+(degrees/90.0)*half_span_us
+        us=self.center_us(corner)+(degrees/90.0)*half_span_us
         self._set_pulse(self._CORNERS[corner],us)
+    @staticmethod
+    def center_us(corner):
+        """This corner's straight-ahead pulse (config.STEER_CENTER_US, from scripts/steer_jog.py)."""
+        return config.STEER_CENTER_US.get(corner,config.SERVO_CENTER_US)
+    def set_pulse(self,corner,us):
+        """Raw pulse for one corner, clamped to SERVO_MIN_US..SERVO_MAX_US. Calibration only."""
+        us=max(config.SERVO_MIN_US,min(config.SERVO_MAX_US,us))
+        self._set_pulse(self._CORNERS[corner],us); return us
     def center_all(self):
-        for ch in self._CORNERS.values(): self._set_pulse(ch,config.SERVO_CENTER_US)
+        for corner,ch in self._CORNERS.items(): self._set_pulse(ch,self.center_us(corner))
     # Park brake -- owner's idea, 2026-09-30. Skid-steer never uses the corner servos, so
     # they are free for this: toe opposite corners against each other and the chassis cannot
     # roll in a straight line without the tyres scrubbing sideways. Then RELEASE them, and the

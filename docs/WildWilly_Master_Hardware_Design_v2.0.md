@@ -65,7 +65,7 @@ Pi 5 40-pin header
 | R1 | 9 V | DROK-Pi | Witty Pi 5 VIN → Pi 5 | Witty Pi HAT (no INA260) |
 | R2 | 5 V | DROK-5V | Steering servos, sonar VCC — nothing else | INA260 `0x40` |
 | R3 | 6 V | DROK-6V | Arm servo distribution | INA260 `0x44` |
-| R4 | 3.3 V | Pi header pin 1 | All I²C device logic, SEN0628, BNO085 RST pull-up, FSR402 excitation | — |
+| R4 | 3.3 V | Pi header pin 1 | All I²C device logic, SEN0628, BNO085 RST pull-up | — |
 | R5 | 3.3 V | DROK-4 | Motor Hall encoders and Pico A VSYS | Pico A ADC2 (GP28) |
 | — | +12 V bus | Battery via F1 / SW-MAIN / Q1 | Both FeatherWing VIN (via F2, SW-M), all DROK inputs | INA260 `0x45` |
 | — | Pi 5 V | Witty Pi 5 output (~5.4 V) | Pi 5, display (3-pin header tap), Pico B VSYS (breakout terminal) | — |
@@ -94,9 +94,9 @@ speech.
 | Arm | 7 servos — 4 × MG996R, 3 × MG90S — on PCA9685 0x43 |
 | Ranging | 3 × HC-SR04 sonar (front, left, right) via Pico B; DFRobot SEN0628 8×8 ToF (front) |
 | Orientation | BNO085 9-DoF IMU, on-chip fusion |
-| Gripper sense | FSR402 on ADS1115 A1 (not yet read by software) |
+| Gripper sense | Gripper MG90S pot wiper on ADS1115 A2 via 47k/47k divider (uncalibrated) |
 | Vision | Front CSI camera (imx708, 15° down); rear USB camera (15° down) |
-| Power | 2 × 3S 8000 mAh LiPo in parallel, four DROK bucks, Witty Pi 5 HAT+ |
+| Power | 2 × 3S 15000 mAh LiPo in parallel (30 Ah, ≈333 Wh; fitted 2026-10-05), four DROK bucks, Witty Pi 5 HAT+ |
 | Bus | One non-isolated I²C segment, ten devices; three UART links |
 
 **Physical layout.** Pi 5, AI HAT and audio in the head assembly. The body is two decks:
@@ -142,9 +142,9 @@ validates it against the deck outline, the harness notch and the four M3 keep-ou
 
 | Board | Position | Footprint | Height | Mounting holes |
 |---|---|---|---|---|
-| EPLZON signal board rev 15.1 — 3 × ECHO ÷, battery ÷, FSR ÷, P1 1×17 | (4, 86) | 50 × 40 | ≈14 | same as power boards |
+| EPLZON signal board rev 15.1 — 3 × ECHO ÷, battery ÷, P1 1×17 | (4, 86) | 50 × 40 | ≈14 | same as power boards |
 | Pico B — 3 × HC-SR04 + BNO085 RST, VSYS from Pi 5 V | (4, 31) | 21 × 51 | ≈9.5 | 47.0 × 11.4, Ø2.1 |
-| ADS1115 `0x48` — A0 battery ÷, A1 FSR, A2/A3 spare | (58, 86) | 25.4 × 17.78 | ≈9 | measure |
+| ADS1115 `0x48` — A0 battery ÷, A2 gripper feedback ÷, A1/A3 spare | (58, 86) | 25.4 × 17.78 | ≈9 | measure |
 | I²C hub — GODIYMODULES, 10 ports + 1 input | (58, 108) | 60 × 25 | ≈12 | unknown — measure |
 | LTC4311 — inline on the trunk | (120, 108) | 25.4 × 17.78 | ≈9 | measure |
 | BNO085 `0x4A` — X/Y axes parallel to chassis | (150, 85) | 25.4 × 22.86 | ≈4.6 | 20.32 × 17.78 |
@@ -161,7 +161,7 @@ measure before printing.
 
 #### Why each board is where it is
 
-- **The analog corner is protected.** The ADS1115 reads the battery divider and the FSR,
+- **The analog corner is protected.** The ADS1115 reads the battery divider and the gripper feedback,
   the quietest nets on the rover and the ones the shutdown ladder depends on. It sits
   30.6 mm from the nearest drive board, with the signal board 4 mm away.
 - **H-bridges lowest.** The FeatherWings switch 12 V at motor current, so they occupy the
@@ -200,7 +200,7 @@ different zones.
 
 | ID | Path | Volts in → out | Rail | Gauge | Protection |
 |----|------|---|---|-------|------------|
-| P1 | 2 × 3S 8000 mAh → hard parallel, per-pack BMS | — → 12.6 V max, 11.1 V nominal | — | 12–14 AWG | BMS per pack |
+| P1 | 2 × 3S 15000 mAh → hard parallel, per-pack BMS | — → 12.6 V max, 11.1 V nominal | — | 12–14 AWG | BMS per pack |
 | P2 | Battery+ → F1 → SW-MAIN (SPST) → Q1 FET → +12 V bus | 12.6 V → +12 V bus | — | 12 AWG | F1 30 A ATC |
 | P3 | +12 V bus → F2 → SW-M → INA260 0x45 → both FeatherWing VIN | 12 V → 12 V | — | 16 AWG | F2 10 A |
 | P4 | +12 V bus → F3 → Switch 2 → DROK-Pi → Witty Pi VIN | 12 V → 9 V | R1 | 16 AWG | F3 5 A |
@@ -211,7 +211,7 @@ different zones.
 
 ```mermaid
 graph TD
-    BAT["2× 3S 8000mAh LiPo<br/>in parallel"]
+    BAT["2× 3S 15000mAh LiPo<br/>in parallel"]
     BMS["Per-pack BMS"]
     F1["F1: 30A ATC"]
     KCD4["SW-MAIN — SPST main switch (E-stop)"]
@@ -247,7 +247,7 @@ graph TD
 | R1 | 9 V | DROK-Pi buck | Witty Pi 5 VIN (KF350-2P screw terminal) → Witty Pi → Pi 5 header 5 V | Witty Pi HAT monitors its own VIN |
 | R2 | 5 V | DROK-5V buck | Steering servo distribution (PCA9685 0x42 V+), sonar VCC | INA260 0x40 |
 | R3 | 6 V | DROK-6V buck | Arm servo distribution (PCA9685 0x43 V+) | INA260 0x44 |
-| R4 | 3.3 V | Pi header pin 1 | All I²C device logic, SEN0628, BNO085 RST pull-up (via Pico B carrier R4), FSR402 | — |
+| R4 | 3.3 V | Pi header pin 1 | All I²C device logic, SEN0628, BNO085 RST pull-up (via Pico B carrier R4) | — |
 | R5 | 3.3 V | DROK-4 buck | Six Hall encoders and Pico A VSYS | Pico A GP28 (ADC2), flagged below 3.0 V |
 | — | +12 V bus | Battery via F1/SW-MAIN/Q1 | Both FeatherWing VIN (motors) | INA260 0x45 |
 | — | +12 V main | Battery via F1/SW-MAIN/Q1 | All four DROK inputs | — |
@@ -303,7 +303,7 @@ The signal conditioning board (§4) and the Pico carriers (§4.8) carry no capac
 | Pack | 12.6 V full, 11.1 V nominal | 10.2 V cutoff (`BAT_SHUTDOWN_V`) |
 
 Charge to 12.6 V (4.20 V/cell) on the iMAX B6 (6 A max). **Set the charger's capacity
-cut-off above the 8000 mAh pack capacity**, or a charge ends early at storage level
+cut-off above the 15000 mAh pack capacity**, or a charge ends early at storage level
 (~11.4 V, which is also `BAT_WARN_V`). Storage charge 11.4 V (3.8 V/cell). Packs must be
 within 0.05 V per cell of each other before paralleling — main Y first, balance Y a minute
 later.
@@ -353,7 +353,7 @@ before raising the clock.
 | 0x43 | PCA9685 | Arm servos, CH0–CH6 (CH7 unused) |
 | 0x44 | INA260 | R3, 6 V arm servo rail |
 | 0x45 | INA260 | +12 V bus → both FeatherWing VIN |
-| 0x48 | ADS1115 | A0 battery voltage, A1 gripper FSR |
+| 0x48 | ADS1115 | A0 battery voltage, A2 gripper position feedback |
 | 0x4A | BNO085 | 9-DoF IMU |
 | 0x51 | Witty Pi 5 HAT+ | RTC, power management, hardware watchdog |
 | 0x60 | FeatherWing | Motor driver, RIGHT |
@@ -374,8 +374,9 @@ not probe it (§11.2).
 **EPLZON Mini 17, rev 15.1 — built and resistance-verified.**
 
 Entirely passive: ten resistors and one connector. No ICs, no capacitors, no regulators.
-It sits between Pico B, the three HC-SR04 sonars, the ADS1115, the 12 V pack and the
-gripper's FSR402. I²C distribution is not on a board.
+It sits between Pico B, the three HC-SR04 sonars, the ADS1115 and the 12 V pack. I²C
+distribution is not on a board. The gripper feedback divider is not on it either — it sits at
+the ADS1115 (§6.6).
 
 ### 4.1 What software needs to know
 
@@ -386,8 +387,7 @@ gripper's FSR402. I²C distribution is not on a board.
 | ECHO divider ratio | 2/3 — the sonar's 5 V arrives at Pico B as 3.33 V |
 | Battery sense | ADS1115 A0, address 0x48 |
 | Battery divider ratio | nominal 0.242; calibrated `BATTERY_DIVIDER_SCALE` = 0.2432 (§6.2) |
-| Force sense | ADS1115 A1, address 0x48 |
-| FSR pull-down | 10 k, so `Vout = Vexc × 10k / (R_fsr + 10k)` |
+| P1-15/16, R10 | Unused since the FSR402 was removed 2026-10-04 |
 
 Sonar bearings (`config.SONAR_BEARING_DEG`): front 0°, left −90°, right +90°. There is no
 rear sonar.
@@ -412,17 +412,16 @@ One continuous 1×17 male header in row a, columns 1–17.
 | 12 | ECHO-R ÷ | out | Pico B GP5 (pin 7) | 3.33 V |
 | 13 | +12 V | in | +12 V bus, via inline fuse | 12.6 V max |
 | 14 | A0 | out | ADS1115 (0x48) A0 | ≈2.90 V at 12 V |
-| 15 | FSR-B | in | FSR402 lead B | 0–3.3 V |
-| 16 | A1 | out | ADS1115 (0x48) A1 | 0–3.3 V |
+| 15 | — | — | unused (was FSR402 lead B) | — |
+| 16 | — | — | unused (was ADS1115 A1) | — |
 | 17 | GND | — | Pico B GND + ADS1115 GND | 0 V |
 
-Pass-through pairs (0 Ω by design): 1–2, 5–6, 9–10 (TRIG); 15–16 (FSR tap).
+Pass-through pairs (0 Ω by design): 1–2, 5–6, 9–10 (TRIG); 15–16 (unused, was the FSR tap).
 
 | Not on this board | Goes to |
 |---|---|
 | Sonar VCC ×3 | R2 5 V |
 | Sonar GND ×3 | R2 ground — must be common with Pi/Pico B ground |
-| FSR402 lead A | R4 3.3 V, the rail that feeds the ADS1115's VDD |
 
 ### 4.3 Circuits
 
@@ -449,16 +448,6 @@ marginal trigger before the divider.
 
 Nominal ratio 3.2/13.2 = 0.242. Calibrate rather than trusting it (§6.2).
 
-**FSR402 force sense**
-
-```
-3V3 --[ FSR402 ]--+--[ 10k ]-- GND
-                  +-- ADS1115 A1
-```
-
->10 MΩ untouched down to ~250 Ω under full load, no polarity, logarithmic response.
-Excitation comes from the ADS1115's own VDD rail (R4): the ADS1115 measures absolute volts
-against an internal reference, so sharing the rail keeps A1 ≤ VDD.
 
 ### 4.4 Build detail
 
@@ -481,7 +470,7 @@ columns, no power rails.
 Ground bus (bottom section): `c4g-c8g  c8h-c12h  c12i-c14i  c14h-c16h  c16g-c17g`, then
 `c17f-c17e` up to pin 17.
 
-Jumpers (10): TRIG `c1b–c2b`, `c5b–c6b`, `c9b–c10b`; FSR tie `c15b–c16b`; the five ground
+Jumpers (10): TRIG `c1b–c2b`, `c5b–c6b`, `c9b–c10b`; old FSR tie `c15b–c16b` (unused); the five ground
 links; `c17f–c17e`.
 
 ### 4.5 Verification
@@ -511,8 +500,6 @@ pin 17: 5 V → pins 3/7/11 gives 3.33 V on 4/8/12; 12 V → pin 13 gives ≈2.9
 | All three sonars nonsense, board passes every resistance check | R2 ground not common with Pico B ground — the dividers have no valid reference |
 | Battery reads ~⅓ high | R8 or R9 not connected |
 | Battery reads plausible but consistently off | Scale not calibrated against a meter |
-| A1 pinned at 0 regardless of grip | FSR not making contact, or its node shorted to ground |
-| A1 noisy | Ripple on the excitation rail, or FSR on a compliant surface |
 
 ### 4.7 Sonar and encoders on two Pico 2 W
 
@@ -1090,22 +1077,46 @@ There is no spare SEN0628. No scanning lidar is fitted or planned.
 
 ---
 
-### 6.6 Gripper force sense — FSR402
+### 6.6 Gripper position feedback — modified MG90S
 
-**Fitted, uncalibrated, not read by software.** Interlink FSR402 on the gripper, read as
-ADS1115 A1 through the divider in §4.3.
+**Chosen 2026-10-04, replacing the FSR402 (removed). Uncalibrated; read by
+`sensors.ADC.grip_feedback_volts()`, consulted by nothing yet.** The gripper servo (MG90S,
+arm CH5, PCA9685 `0x43`) has a wire soldered to its feedback pot's wiper. The wiper runs to
+ADS1115 `0x48` **A2** through a divider that sits at the ADS1115 end of the wire.
+
+```
+wiper ──[ R1 47k ]──┬──── ADS1115 A2
+                    │
+                [ R2 47k ]  ║ C1 100 nF
+                    │
+ADS1115 GND ────────┴────
+```
 
 | | |
 |---|---|
-| Excitation | R4 3.3 V — the rail that feeds the ADS1115's VDD |
-| Pull-down | 10 kΩ (R10, §4.4) |
-| Transfer | `Vout = Vexc × 10k / (R_fsr + 10k)` |
-| Range | >10 MΩ untouched, ~250 Ω under full load |
-| Polarity | none |
+| Source | MG90S pot wiper; the pot ends sit on the servo's own V+ (R3 6 V arm rail) and GND |
+| Divider | 47k / 47k → ×0.5 (`config.GRIP_FB_DIVIDER_SCALE`); 6 V max → 3.0 V, under the 3.3 V VDD |
+| Filter | C1 100 nF from A2 to the ADS1115's own GND pin, parallel with R2; τ ≈ 2.4 ms |
+| Load on the pot | ~1% shift at mid-travel (the servo's control chip reads the same wiper) |
+| ADC loading | ADS1115 input impedance (~6 MΩ at ±4.096 V) reads ~0.4% low — calibrated out |
+| Channel | `config.ADS_CH_GRIP_FB` = 2 |
+| Travel (longer fingers, 2026-10-05) | open 1150 µs = 73 mm gap (0.07 A); shut 2205 µs (0.39 A); 2210 µs and 1050 µs stall |
+| First reading, jaws empty | A2 2.01 V at 1500 µs → 2.26 V at 1700 µs, ≈0.8 mV/µs, smooth |
 
-Response is logarithmic: use a lookup table or curve fit, calibrated with whatever
-actually contacts the pad in service. Until software reads A1, hand-off confirmation stays
-timed (Software Design S-5; §14 item 13).
+**The wiper is ratiometric to the arm rail, so read it against the rail.** On 2026-10-05,
+2100 µs read 2.574 V on one run and 2110 µs read 2.411 V on the next. Divide A2 by the R3
+voltage from INA260 `0x44` before trusting it as a position. Not done in software yet.
+
+R1, R2 and C1 all sit at the ADS1115; R2 and C1 return to the ADS GND pin, not to a ground
+elsewhere. Meter the wiper open → closed before connecting: if it never exceeds about
+3.2 V the divider can be dropped (keep R1 as a current limit, and C1).
+
+What it gives: the jaw's **actual** position. When the gripper stalls short of its commanded
+position it is holding something, and the stop position is the object's width; a jump back
+to the commanded position is "it was taken". Force still comes from rail current
+(`config.py`: grip force is set by current, not position). `scripts/grip_feedback_curve.py`
+records the free-travel and loaded curves. Until something consults it, hand-off
+confirmation stays timed (Software Design S-5; §14 item 13).
 
 ---
 
@@ -1288,7 +1299,7 @@ current; do not derive one from the other.
 
 | Pin | BCM / function | Connects to |
 |-----|----------------|-------------|
-| 1 | 3V3 | R4: all I²C device logic, SEN0628 VCC, BNO085 RST pull-up (Pico B J4-1), FSR402 lead A |
+| 1 | 3V3 | R4: all I²C device logic, SEN0628 VCC, BNO085 RST pull-up (Pico B J4-1) |
 | 2, 4 | 5V | From Witty Pi 5 output; display 3-pin tap (which pin unrecorded); Pico B VSYS via the breakout terminal |
 | 3 | GP2 — I²C1 SDA1 | I²C hub → all devices |
 | 5 | GP3 — I²C1 SCL1 | I²C hub → all devices |
@@ -1454,7 +1465,7 @@ Standing rules.
 | Battery divider | PASS, one point | 0.2432; second point open |
 | Arm channel map | PASS | Every channel identified on hardware; formal limits undefined |
 | Steering servo sweep | Not tested | — |
-| FSR402 | Not read | — |
+| Gripper position feedback (A2) | Not tested | — |
 | Witty Pi watchdog heartbeat | Not confirmed | — |
 
 ---
@@ -1480,17 +1491,18 @@ Item numbers are stable; closed items are removed, not renumbered.
     suspect. Affects log timestamps before sync, `feature_requests.py`'s evidence window,
     and the `willie-backup` / `willie-sd-refresh` timers.
 12. **Battery divider second point** — near 12.6 V (full) or 10.5 V. A full charge needs
-    the iMAX B6 capacity cut-off set above 8000 mAh (§2.5).
-13. **FSR402** — read A1 under power at several forces (also proves the pad and divider are
-    connected), fit a logarithmic curve, and add a software reader (§6.6).
+    the iMAX B6 capacity cut-off set above 15000 mAh (§2.5).
+13. **Gripper position feedback** — meter the wiper open → closed, then run
+    `scripts/grip_feedback_curve.py` empty and on an object; store the free-travel curve and
+    use the stall gap for hand-off confirmation (§6.6).
 14. **Signal board powered injection check** (§4.5), and the three ECHO junctions at
     3.2–3.4 V **under servo load** (§16.12).
 15. **D2 on both Pico carriers** — 1N5819 across J1 (§4.7.2). Not fitted.
 16. **P8 fuse and gauge** — confirm whether the DROK-4 branch is fused; fit one if not;
     record the gauge. Its load is six encoders plus Pico A.
 17. **Charge sense not wired.** `ADC.is_charging` is hardcoded False; its callers are in
-    `DOCK` handling, dormant while docking is deferred. Charge sense would use ADS1115 A2
-    or A3 (A1 is the FSR; A2 is spare since R5 sense is on Pico A).
+    `DOCK` handling, dormant while docking is deferred. Charge sense would use ADS1115 A1
+    or A3 (A2 is the gripper feedback; A1 is free since the FSR402 was removed).
 18. **rf motor disconnected** — reconnect, meter its crimps, verify on its own (M-1), and
     re-run `scripts/breakaway_sweep.py` so its `WHEEL_FF` line is measured.
 19. **Steering uncalibrated** — per-unit servo range and centre; kinematics deferred.
@@ -1556,7 +1568,7 @@ Current components only.
 |-----------|------|-----|--------|
 | GODIY passive I²C hub | Fan-out, two daisy-chained | 2 | Installed |
 | Adafruit LTC4311 | I²C accelerator — no address | 1 | Installed |
-| ADS1115 | ADC, 0x48 — A0 battery, A1 FSR | 1 | Installed |
+| ADS1115 | ADC, 0x48 — A0 battery, A2 gripper feedback | 1 | Installed |
 | INA260 | 0x40 = R2 5 V, 0x44 = R3 6 V arm, 0x45 = +12 V bus | 3 | Installed |
 | Adafruit PCA9685 | 0x42 steering, 0x43 arm | 2 | Installed |
 | 1000 µF 16 V electrolytic | PCA9685 0x42 V+, C2 pad | 1 | Installed |
@@ -1569,10 +1581,11 @@ Current components only.
 | BNO085 9-DoF IMU | Orientation, 0x4A | 1 | Installed |
 | HC-SR04 sonar | Front, left, right | 3 | Installed, all three working |
 | DFRobot SEN0628 (VL53L7CX + RP2040) | Front 8×8 ToF, obstacle and drop | 1 + 1 spare | Installed, profile not captured |
-| FSR402 force sensor | Gripper contact force, ADS1115 A1 | 1 | Fitted, uncalibrated |
+| 47 kΩ resistor | Gripper feedback divider R1/R2, at the ADS1115 (§6.6) | 2 | Chosen 2026-10-04 |
+| 100 nF capacitor | Gripper feedback filter C1, A2 → ADS GND | 1 | Chosen 2026-10-04 |
 | 1 kΩ resistor | ECHO dividers, high side — R1/R3/R5 | 3 | Installed |
 | 2 kΩ resistor | ECHO dividers, low side — R2/R4/R6 | 3 | Installed |
-| 10 kΩ resistor | Battery high side (R7), low-side parallel leg (R9), FSR pull-down (R10) | 3 | Installed |
+| 10 kΩ resistor | Battery high side (R7), low-side parallel leg (R9), R10 (unused since the FSR402 was removed) | 3 | Installed |
 | 4.7 kΩ resistor | Battery low side (R8) | 1 | Installed |
 | 1×17 male header, 0.1" | P1 | 1 | Installed |
 | EPLZON Mini 17 solderable breadboard | Signal conditioning board rev 15.1 (§4) | 1 | Installed |
@@ -1581,7 +1594,7 @@ Current components only.
 
 | Component | Role | Qty | Status |
 |-----------|------|-----|--------|
-| 3S LiPo 8000 mAh | Two packs, hard-paralleled | 2 | Installed |
+| 3S LiPo 15000 mAh | Two packs, hard-paralleled | 2 | Installed 2026-10-05 |
 | 3S BMS 40–60 A with balance | One per pack | 2 | Installed |
 | DROK-Pi adjustable buck | 12 V → 9 V, Witty Pi VIN (R1) | 1 | Installed |
 | DROK-5V adjustable buck | 12 V → 5.0 V, steering servos + sonar (R2) | 1 | Installed |
@@ -1625,7 +1638,7 @@ device's view. `I²C` = via the GODIY hub; a drop is identified by its device.
 
 | Device | Pin / label | Dir | Signal | Destination device | Destination pin |
 |---|---|---|---|---|---|
-| **Raspberry Pi 5** | pin 1 `3V3` | pwr out | 3.3 V (R4) | I²C device logic, SEN0628, Pico B J4-1, FSR402 | `VIN` / `VDD` |
+| **Raspberry Pi 5** | pin 1 `3V3` | pwr out | 3.3 V (R4) | I²C device logic, SEN0628, Pico B J4-1 | `VIN` / `VDD` |
 | | pin 2, 4 `5V` | pwr in | 5 V | Witty Pi 5 | 5 V out |
 | | pin 3 `GP2` SDA1 | bidir | I²C SDA | I²C hub | SDA |
 | | pin 5 `GP3` SCL1 | bidir | I²C SCL | I²C hub | SCL |
@@ -1660,14 +1673,14 @@ device's view. `I²C` = via the GODIY hub; a drop is identified by its device.
 | **Signal board P1** | `P1-1`…`P1-12` | — | sonar TRIG/ECHO | Pico B, sonars | §4.2 |
 | | `P1-13` | pwr in | +12 V via inline fuse | +12 V bus | branch |
 | | `P1-14` | out | battery ÷ | ADS1115 | `A0` |
-| | `P1-15` | in | FSR leg B | FSR402 | lead B |
-| | `P1-16` | out | FSR ÷ | ADS1115 | `A1` |
+| | `P1-15`, `P1-16` | — | unused | — | — |
 | | `P1-17` | ref | board ground | Pico B GND + ADS1115 GND | star |
 | **ADS1115** `0x48` | `VDD` / `GND` | pwr | 3.3 V | Pi | pin 1 |
 | | `SDA` / `SCL` | bidir | I²C | hub | — |
 | | `ADDR` | in | strap → 0x48 | GND | — |
-| | `A0` / `A1` | in | battery / gripper force | Signal board | `P1-14` / `P1-16` |
-| | `A2`, `A3`, `ALRT` | — | unconnected | — | — |
+| | `A0` | in | battery ÷ | Signal board | `P1-14` |
+| | `A2` | in | gripper feedback ÷ | R1/R2 junction at the ADS1115 (§6.6) | — |
+| | `A1`, `A3`, `ALRT` | — | unconnected | — | — |
 | **INA260** `0x40` | `VIN+` / `VIN−` | pwr thru | inline in R2 | DROK-5V → servo/sonar | — |
 | **INA260** `0x44` | `VIN+` / `VIN−` | pwr thru | inline in R3 | DROK-6V → arm servos | — |
 | **INA260** `0x45` | `VIN+` / `VIN−` | pwr thru | inline in +12 V bus | F2 → both FeatherWing `VIN` | — |
@@ -1693,7 +1706,7 @@ device's view. `I²C` = via the GODIY hub; a drop is identified by its device.
 | | yellow / green | out | Phase A / B | Pico A | even / odd GP |
 | **HC-SR04** ×3 | `VCC` / `GND` | pwr | 5 V | R2 | ground common with Pico B |
 | | `TRIG` / `ECHO` | in / out | — | Signal board | `P1-2/6/10` / `P1-3/7/11` |
-| **FSR402** | lead A / lead B | — | excitation / tap | Pi pin 1 / Signal board | — / `P1-15` |
+| **Gripper MG90S** (arm CH5) | wiper wire | out | pot wiper, 0–6 V | ADS1115 via 47k/47k + 100 nF (§6.6) | `A2` |
 | **SEN0628** | `VCC` / `GND` / `TX` / `RX` | — | 3.3 V / — / data / data | Pi | pin 1 / 6 or 9 / GP9 / GP8 |
 
 ### 16.2 ADS1115 — 0x48
@@ -1703,8 +1716,8 @@ device's view. `I²C` = via the GODIY hub; a drop is identified by its device.
 | VDD / GND / SDA / SCL | its hub drop (3.3 V from Pi pin 1) |
 | ADDR | GND — selects 0x48 |
 | A0 | Battery divider midpoint, `P1-14` |
-| A1 | Gripper force, `P1-16` (§6.6) |
-| A2, A3, ALRT | unconnected (A2/A3 available for charge sense) |
+| A2 | Gripper position feedback, 47k/47k + 100 nF at the pin (§6.6, §16.14) |
+| A1, A3, ALRT | unconnected (A1/A3 available for charge sense) |
 
 ### 16.3 INA260 × 3
 
@@ -1862,16 +1875,16 @@ harness if wanted.
 
 Meter P1-14 ↔ P1-17 as 3.2 k, not 4.7 k or 10 k (§4.5). Calibrated scale 0.2432 (§6.2).
 
-### 16.14 FSR402 gripper force sensor
+### 16.14 Gripper position feedback
 
 | Node | To |
 |---|---|
-| Lead A | R4 3.3 V (the ADS1115's VDD rail) — off-board |
-| Lead B | P1-15 |
-| Divider tap | P1-15 ↔ P1-16, `c15b–c16b` jumper |
-| R10 10 kΩ (`c16e–c16f`) | Tap → GND |
-| Output | P1-16 → ADS1115 A1 |
-| Low | P1-17 |
+| Wiper wire | Gripper MG90S pot wiper → R1 47 kΩ, at the ADS1115 |
+| R1 / R2 junction | ADS1115 A2 |
+| R2 47 kΩ | Junction → ADS1115 GND pin |
+| C1 100 nF | A2 → ADS1115 GND pin, parallel with R2 |
+
+Not on the signal board. P1-15/16 and R10 (the old FSR402 path) are unused.
 
 ### 16.15 Vision, display, accelerator
 

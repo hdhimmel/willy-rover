@@ -141,7 +141,7 @@ MOTOR_COAST_AFTER_S=2.0
 # LIMP. That is the point -- and the hazard.
 #
 # WHY THIS IS NOT ABOUT BATTERY. Idle draw measured 2026-09-30 is 0.23W on R2 and 0.35W on
-# R3, which is nothing against a 63Wh pack. The real reason is arm.py's note: the servo
+# R3, which is nothing against a ~333Wh pack (2x 3S 15000mAh since 2026-10-05). The real reason is arm.py's note: the servo
 # fitted before 2026-09-17 "held ~8A at 1500us indefinitely and was destroyed by it". A
 # servo stalling against its own mechanism cooks itself in minutes, and releasing an idle
 # joint is what prevents that. Treat this as servo protection that happens to save power.
@@ -242,6 +242,9 @@ IMU_STALE_S=3.0
 STEER_PCA_ADDR=0x42
 STEER_LF=0; STEER_RF=1; STEER_LM=2; STEER_RM=3; STEER_LR=4; STEER_RR=5
 SERVO_CENTER_US=1500; SERVO_MIN_US=1000; SERVO_MAX_US=2000
+# Per-corner straight-ahead pulse. UNCALIBRATED -- every corner is still the nominal 1500us.
+# Fill in from scripts/steer_jog.py: jog each corner until its wheel points dead ahead.
+STEER_CENTER_US={'lf':1500,'rf':1500,'lm':1500,'rm':1500,'lr':1500,'rr':1500}
 SERVO_PWM_FREQ=50
 
 # Arm — PCA9685 @0x43. Wider nominal range than steering (manufacturer spec 500-2500us) though
@@ -271,7 +274,10 @@ ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
 #
 # DIRECTIONS, owner-confirmed on hardware 2026-09-17:
 #   shoulder CH2 : DECREASING us raises, increasing lowers
-#   gripper  CH5 : INCREASING us closes (jaw contact from ~1700us), decreasing opens
+#   gripper  CH5 : INCREASING us closes, decreasing opens. LONGER FINGERS fitted by 2026-10-05:
+#                  jaws now shut at ~2205us (0.39A); 2210us drew 0.49A = stalling. Widest open
+#                  without load is 1150us (0.07A); the open stop is ~1100 and 1050us stalls at 0.8A. The ~1700us
+#                  contact point and the current figures below are from the old, shorter fingers.
 #
 # GRIP FORCE IS SET BY CURRENT, NOT POSITION. Closing draws 0.075A at 1500us, 0.156A at 1650,
 # 0.215A at 1700, 0.457A at 1750, 1.049A at 1780. Stop feeding past ~0.4-0.5A: it grips there,
@@ -550,7 +556,17 @@ INA260_BUS_12V_ADDR=0x45 # +12V bus (battery via F1/SW-MAIN/Q1) -> both FeatherW
 ENABLE_WITTY_PI=True
 WITTY_PI_ADDR=0x51
 
-ADS_ADDR=0x48; ADS_CH_BATTERY=0  # AIN0 = battery divider. (A1 = gripper FSR402, no reader yet)
+ADS_ADDR=0x48; ADS_CH_BATTERY=0  # AIN0 = battery divider. A1 spare (FSR402 removed 2026-10-04).
+# GRIPPER POSITION FEEDBACK on AIN2 (2026-10-04, replaces the FSR402). The gripper MG90S (arm CH5)
+# is modified: a wire is soldered to its pot wiper and runs to a 47k/47k divider + 100 nF at the
+# ADS1115 end (MHD §6.6). The divider is there because the wiper swings toward the 6V arm rail and
+# the ADS1115 runs on 3.3V. 47k keeps the load on the servo's own pot to ~1%. Not yet calibrated:
+# scripts/grip_feedback_curve.py records wiper volts against commanded us.
+ADS_CH_GRIP_FB=2
+GRIP_FB_DIVIDER_SCALE=0.5  # 47k/(47k+47k); ADS1115 input impedance pulls the reading ~0.4% low
+# Gripper end points with the longer fingers, measured 2026-10-05 (see the CH5 note above).
+GRIP_OPEN_US=1150; GRIP_CLOSED_US=2205
+GRIP_OPEN_WIDTH_MM=73   # jaw gap at GRIP_OPEN_US, owner-measured; 0 at GRIP_CLOSED_US
 # Re-trimmed 2026-10-01: AIN0 read 2.7653V (raw ~22120, 40 samples) against the pack metered at
 # 11.37V at the divider input. Scale = 2.7653/11.37 = 0.2432 -- within 0.4% of the 10k/3.197k
 # = 0.2423 that Master Hardware Design §16 specifies. The divider now matches its design.
@@ -996,7 +1012,8 @@ IDLE_PERSONALITY_CYCLE_S=90  # FR-1600-007: how often the idle 'silly' animation
 # describe only the older CPU/Arducam fallback path, which that swap left untouched.
 # The RETRIEVE TASK itself (voice 'fetch the X'), separate from the camera backend flags around
 # it. Off until FR-1700 is safe: the grasp drives the elbow to its forbidden centre and
-# hand-off releases on a timer because nothing reads the FSR (2026-10-02 FRD audit). The arm
+# hand-off releases on a timer because nothing reads the gripper feedback yet (2026-10-02 FRD audit;
+# the FSR402 was replaced by servo position feedback on ADS1115 A2 2026-10-04). The arm
 # current limit IS enforced (brain._check_arm_current), but it only limits the damage. A misheard bare "Hey Willie" was classified as 'retrieve' on
 # 2026-10-01 -- with this off, that is answered, not acted on.
 ENABLE_RETRIEVAL_TASK=False
@@ -1227,6 +1244,9 @@ def validate():
                                 ('ARM_SERVO',ARM_SERVO_MIN_US,ARM_SERVO_CENTER_US,ARM_SERVO_MAX_US)):
         if not (lo<center<hi):
             problems.append(f'{label} pulse-width range not ordered MIN<CENTER<MAX: {lo}<{center}<{hi}')
+    for corner,center in STEER_CENTER_US.items():
+        if not (SERVO_MIN_US<center<SERVO_MAX_US):
+            problems.append(f'STEER_CENTER_US[{corner!r}]={center} outside SERVO_MIN_US..SERVO_MAX_US')
 
     for name,speed in (('SPEED_ROAM',SPEED_ROAM),('SPEED_TURN',SPEED_TURN),('SPEED_SLOW',SPEED_SLOW)):
         if not (0<speed<=SPEED_MAX):

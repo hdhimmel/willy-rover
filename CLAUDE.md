@@ -104,7 +104,7 @@ Pi header pin 1 (3V3). Any device holding SDA or SCL low takes the whole bus dow
 | 0x43 | PCA9685 | Arm servos CH0–CH6 (CH7 empty) |
 | 0x44 | INA260 | R3 6 V arm servo rail (`INA260_ARM_6V_ADDR`, `arm_6v`) |
 | 0x45 | INA260 | +12 V bus → both FeatherWing VIN (`INA260_BUS_12V_ADDR`, `bus_12v`) |
-| 0x48 | ADS1115 | A0 battery divider, A1 gripper FSR402, A2/A3 spare |
+| 0x48 | ADS1115 | A0 battery divider, A2 gripper servo position feedback (47k/47k), A1/A3 spare |
 | 0x4A | BNO085 | 9-DoF IMU |
 | 0x51 | Witty Pi 5 HAT+ | RTC, power management, hardware watchdog |
 | 0x60 | FeatherWing #2927 | Motor driver, RIGHT side |
@@ -144,7 +144,7 @@ evidence of damage** — prove the board is present over USB or with a meter fir
 
 Other header pins:
 
-- Pin 1 **3V3** — R4: all I²C device logic, SEN0628, BNO085 RST pull-up, FSR402.
+- Pin 1 **3V3** — R4: all I²C device logic, SEN0628, BNO085 RST pull-up.
 - Pins 2/4 **5V** — from the Witty Pi output; display tap; Pico B VSYS.
 - GP15 **UART0 RXD** (phys 10) — BNO085 INT, wired, not read by software.
 - GP0 **ID_SD** / GP1 **ID_SC** (phys 27/28) — reserved for the AI HAT EEPROM.
@@ -182,7 +182,7 @@ Other header pins:
 | R1 | 9 V | DROK-Pi (via Switch 2) | Witty Pi 5 VIN → Pi 5 header 5 V | Witty Pi HAT |
 | R2 | 5 V | DROK-5V | Steering servos (0x42 V+), sonar VCC | INA260 0x40 |
 | R3 | 6 V | DROK-6V (via SW-A) | Arm servos (0x43 V+) | INA260 0x44 |
-| R4 | 3.3 V | Pi header pin 1 | I²C logic, SEN0628, BNO085 RST pull-up, FSR402 | — |
+| R4 | 3.3 V | Pi header pin 1 | I²C logic, SEN0628, BNO085 RST pull-up | — |
 | R5 | 3.3 V | DROK-4 | Hall encoders, Pico A VSYS | Pico A ADC2 (GP28), flagged < 3.0 V |
 | +12 V | pack | Battery → F1 → SW-MAIN → Q1 | All DROKs; via F2 → SW-M → both FeatherWings | INA260 0x45 |
 

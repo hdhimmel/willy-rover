@@ -397,6 +397,13 @@ class ADC:
         self._bat_last_ok=time.perf_counter()
         return True
 
+    def grip_feedback_volts(self):
+        """Gripper servo pot wiper voltage, servo side of the 47k/47k divider on AIN2.
+
+        On demand, not polled: only the gripper calibration and (later) hand-off confirmation
+        need it. Uncalibrated -- this is volts, not a jaw opening (MHD §6.6)."""
+        return self.read_channel(config.ADS_CH_GRIP_FB)*self._LSB/config.GRIP_FB_DIVIDER_SCALE
+
     @property
     def battery_raw(self): return self._bat_raw
     @property

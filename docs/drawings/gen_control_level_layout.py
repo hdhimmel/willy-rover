@@ -31,11 +31,11 @@ PALETTE = {
 # name: (x, y, w, h, height_mm, zone, stacked, role)
 BOARDS = [
     ("EPLZON signal rev 15.1", 4, 86, 50, 40, 14, "quiet", False,
-     "3x ECHO div, battery div, FSR div - P1 1x17"),
+     "3x ECHO div, battery div - P1 1x17"),
     ("Pico B", 4, 31, 21, 51, 9.5, "quiet", False,
      "Pico 2 W - 3x HC-SR04 + BNO085 RST, VSYS from Pi 5V"),
     ("ADS1115 0x48", 58, 86, 25.4, 17.78, 9, "quiet", False,
-     "A0 battery div, A1 FSR - A2 spare for R5 sense"),
+     "A0 battery div, A2 gripper feedback 47k/47k - A1/A3 spare"),
     ("I2C hub", 58, 108, 60, 25, 12, "logic", False,
      "GODIYMODULES 10 ports + 1 input - 8 drops, 2 spare"),
     ("LTC4311", 120, 108, 25.4, 17.78, 9, "logic", False,

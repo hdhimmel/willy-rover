@@ -731,11 +731,11 @@
 <text x="808.0" y="82.0" font-size="12" font-weight="700" fill="#1A1A1A" text-anchor="start">Placement &#183; zone &#183; role</text>
 <text x="808.0" y="108.0" font-size="9.5" font-weight="700" fill="#3E7A52" text-anchor="start">QUIET — analog, far from the drive block</text>
 <text x="808.0" y="127.0" font-size="9.5" font-weight="700" fill="#1A1A1A" text-anchor="start">EPLZON signal rev 15.1 @ (4, 86)</text>
-<text x="816.0" y="139.0" font-size="9" font-weight="400" fill="#555" text-anchor="start">• 3x ECHO div, battery div, FSR div - P1 1x17</text>
+<text x="816.0" y="139.0" font-size="9" font-weight="400" fill="#555" text-anchor="start">• 3x ECHO div, battery div - P1 1x17</text>
 <text x="808.0" y="154.0" font-size="9.5" font-weight="700" fill="#1A1A1A" text-anchor="start">Pico B @ (4, 31)</text>
 <text x="816.0" y="166.0" font-size="9" font-weight="400" fill="#555" text-anchor="start">• Pico 2 W - 3x HC-SR04 + BNO085 RST, VSYS from Pi 5V</text>
 <text x="808.0" y="181.0" font-size="9.5" font-weight="700" fill="#1A1A1A" text-anchor="start">ADS1115 0x48 @ (58, 86)</text>
-<text x="816.0" y="193.0" font-size="9" font-weight="400" fill="#555" text-anchor="start">• A0 battery div, A1 FSR - A2 spare for R5 sense</text>
+<text x="816.0" y="193.0" font-size="9" font-weight="400" fill="#555" text-anchor="start">• A0 battery div, A2 gripper feedback 47k/47k - A1/A3 spare</text>
 <text x="808.0" y="209.0" font-size="9.5" font-weight="700" fill="#2F6B8F" text-anchor="start">LOGIC — bus trunk and IMU</text>
 <text x="808.0" y="228.0" font-size="9.5" font-weight="700" fill="#1A1A1A" text-anchor="start">I2C hub @ (58, 108)</text>
 <text x="816.0" y="240.0" font-size="9" font-weight="400" fill="#555" text-anchor="start">• GODIYMODULES 10 ports + 1 input - 8 drops, 2 spare</text>

@@ -15,9 +15,9 @@ log=logsetup.setup('retrieval')
 # working approximation, not a calibrated motion. Bench-calibrate §20.6 before trusting this
 # near anything fragile.
 #
-# HAND-OFF CONFIRMATION IS TIME-BASED, NOT SENSED (FR-1700-006). An FSR402 IS fitted to the
-# gripper on ADS1115 A1 and was proven under power 2026-10-01, but nothing reads it yet and it
-# has no force curve (fingers being lengthened first). Until then this waits for an explicit
+# HAND-OFF CONFIRMATION IS TIME-BASED, NOT SENSED (FR-1700-006). The gripper servo's pot wiper
+# is wired to ADS1115 A2 (2026-10-04, replacing the FSR402) and sensors.ADC.grip_feedback_volts()
+# reads it, but it has no curve yet, so nothing here consults it. Until then this waits for an explicit
 # voice confirmation or a fixed timeout before releasing -- a real gap, flagged rather than
 # papered over. The whole task is also gated off by config.ENABLE_RETRIEVAL_TASK (2026-10-02)
 # until the arm is safe: the grasp below drives the elbow to 1500/1200us, and config.py records

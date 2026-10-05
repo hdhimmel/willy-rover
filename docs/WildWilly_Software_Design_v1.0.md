@@ -701,10 +701,12 @@ shaft when back-driven; `scripts/encoder_calibration.py` is invalid on this rove
 **S-4 — No inverse kinematics for the arm.** No per-joint calibration exists, so there is
 no reach-envelope model. Grasp is a fixed primitive sequence. `arm_jog.py` is the tool.
 
-**S-5 — Hand-off confirmation is timed, not sensed.** An FSR402 is fitted on ADS1115 A1
-(Master Hardware Design §6.6), but `sensors.py` reads A0 only, and `retrieval_task.py`
-releases on a timeout and logs that there is no tactile confirmation. Closing it needs a
-reader that `_await_confirm()` consults and a logarithmic curve fit.
+**S-5 — Hand-off confirmation is timed, not sensed.** The FSR402 was removed 2026-10-04.
+The gripper servo's pot wiper now feeds ADS1115 A2 through a 47k/47k divider (Master
+Hardware Design §6.6), and `sensors.ADC.grip_feedback_volts()` reads it on demand. Nothing
+consults it yet: `retrieval_task.py` releases on a timeout and logs that there is no
+confirmation. Closing it needs the free-travel curve from `scripts/grip_feedback_curve.py`,
+then `_await_confirm()` treating "jaw jumped back to its commanded position" as taken.
 
 **S-6 — No systemd watchdog.** `willy-rover.service` has no `WatchdogSec` (the line is
 commented out). It must not be added as-is: the unit is `Type=simple`, so systemd discards
@@ -861,7 +863,8 @@ Bench procedures with blank result fields are in `docs/WildWilly_Bench_Test_Proc
    the 15 cm margin.
 6. **Arm per-joint limits** — run `arm_jog.py` and record real limits (S-4); identify what
    CH3 does alone.
-7. **FSR402 reader** — read A1, fit a curve, consult it in `RetrievalTask._await_confirm()` (S-5).
+7. **Gripper feedback curve** — run `scripts/grip_feedback_curve.py` empty and loaded, store the
+   curve, consult it in `RetrievalTask._await_confirm()` (S-5).
 8. **Steering** — steering servos are centred and held; kinematics (crab, point-turn,
    arc) are deferred. Skid steer is the only turning mechanism (`motors.py::Steering`).
 9. **Overcurrent limits** — the 9.0 A `steering_5v` and `bus_12v` limits are 90% of the
