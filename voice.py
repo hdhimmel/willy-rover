@@ -75,6 +75,11 @@ _BASHFUL_TRIGGER=re.compile(r"\b(good (boy|job|robot)|well done|(you'?re|you are
                             r"do you have (a )?(girlfriend|boyfriend|feelings)|are you (alive|happy|shy))\b",re.I)
 # FR-1000-001 / FR-1200-006 labelling, matched before the LLM (2026-10-02).
 _NAME_ROOM=re.compile(r"(?:this is|this room is|we(?:'re| are) in|you(?:'re| are) in) the ([a-z][a-z ]{1,30})",re.I)
+# FR-1000-006 "I'm in the kitchen, come to me" / "come to me in the kitchen". "I'm in the
+# kitchen" alone is not a room label (_NAME_ROOM is "we're in" / "this is"), so the two do not
+# collide; matched first anyway so the order says so.
+_COME_TO_ME=re.compile(r"(?:i'?m|i am) in the ([a-z][a-z ]{1,30}?)[,.]? (?:(?:please|can you|could you) )?"
+                       r"come (?:to me|and find me|find me)|come (?:to me|and find me|find me) in the ([a-z][a-z ]{1,30})",re.I)
 _MARK_STAIRS=re.compile(r"(?:there are |these are )?(?:the )?(?:stairs|steps)(?: are)? (?:here|ahead|in front of you)",re.I)
 # FR-1900-001/002 demonstrations.
 _DEMO_START=re.compile(r"(?:watch me|follow me)?[\s,]*(?:and )?learn (?:the |this )?(?:way|route|path) (?:to )?(?:the )?([a-z][a-z ]{1,30})",re.I)
@@ -93,7 +98,7 @@ _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
 # deterministic "the local model did not understand" signal.
 _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve',
     'confirm_receipt','map','stop_map','shutdown','status','battery','arm_stow','arm_home','wave',
-    'come_here','follow','diagnostics','where_are_you','what_do_you_see','name_room','mark_stairs',
+    'come_here','come_to_me','follow','diagnostics','where_are_you','what_do_you_see','name_room','mark_stairs',
     'demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
@@ -113,8 +118,8 @@ def _fp(core):
 # (the|your) arm' -- the same enumeration trap that let the time/date patterns regress three
 # times. Both word orders are accepted because people say it both ways, and composing means a
 # phrasing nobody predicted still lands.
-# NOTE brain.py currently aliases arm_home AND arm_stow to arm.center_all(), since no calibrated
-# stow pose exists yet (section 20.6). The intents are distinct; the behaviour is not yet.
+# NOTE brain.py runs arm_home AND arm_stow as the same stepped move to ARM_POSE_REST (since
+# 2026-10-02). The intents are distinct; the behaviour is not.
 _ARM=r"(?:the |your )?arm"
 _ARM_HOME_V=r"(?:centre|center|home|reset)"
 _ARM_STOW_V=r"(?:stow|park)"
@@ -728,6 +733,8 @@ class VoicePipeline:
         # LLM rather than risk matching on a fragment (e.g. "don't stop" must never hit 'stop').
         norm=text.strip().rstrip('.!? ')
         norm=re.sub(r'^(?:(?:hey|ok|okay)[\s,]+)?willie[\s,]+','',norm,flags=re.I)
+        m=_COME_TO_ME.fullmatch(norm)
+        if m: return {'intent':'come_to_me','args':{'room':(m.group(1) or m.group(2)).strip().lower()},'reply':''}
         m=_NAME_ROOM.fullmatch(norm)
         if m: return {'intent':'name_room','args':{'room':m.group(1).strip().lower()},'reply':''}
         if _MARK_STAIRS.fullmatch(norm): return {'intent':'mark_stairs','args':{},'reply':''}
@@ -776,6 +783,7 @@ class VoicePipeline:
                 f'"arm_stow" -- "stow the arm", "put your arm away"\n'
                 f'"arm_home" -- "arm home", "reset your arm"\n'
                 f'"come_here" -- "come here", "come over here"\n'
+                f'"come_to_me" -- "I\'m in the kitchen, come to me" -- args {{"room":"kitchen"}}\n'
                 f'"follow" -- "follow me", "keep following me"\n'
                 f'"diagnostics" -- "run diagnostics", "self test"\n'
                 f'"where_are_you" -- "where are you?", "what room is this?"\n'
@@ -784,7 +792,7 @@ class VoicePipeline:
                 f'"stop" -- "stop", "halt", "freeze"\n'
                 f'Reply with one JSON object and nothing else. It must ALWAYS contain all four keys '
                 f'\"intent\", \"args\", \"reply\" and \"confidence\" -- never leave one out.\n'
-                f'Give args an object name ONLY for \"retrieve\"; for every other intent '
+                f'Give args an object name ONLY for \"retrieve\" and a room ONLY for \"come_to_me\"; for every other intent '
                 f'args must be exactly {{}}. Never output angle brackets or placeholder text.\n'
                 f'Example: {{\"intent\":\"retrieve\",\"args\":{{\"object\":\"newspaper\"}},'
                 f'\"reply\":\"On my way to get the newspaper.\",\"confidence\":0.9}}\n'
@@ -819,7 +827,7 @@ class VoicePipeline:
         # consumer" rule as every motion intent.
         motion_intents={'forward','reverse','turn_left','turn_right','go_to','retrieve',
                          'confirm_receipt','map','stop_map','shutdown','status','battery',
-                         'arm_stow','arm_home','wave','come_here','follow','diagnostics',
+                         'arm_stow','arm_home','wave','come_here','come_to_me','follow','diagnostics',
                          'where_are_you','what_do_you_see','name_room','mark_stairs',
                          'demo_start','demo_stop','demo_replay','enrol','forget_everyone'}
         if name in motion_intents:

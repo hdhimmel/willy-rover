@@ -66,6 +66,12 @@ plan=RoverBrain._rest_plan(750)
 sh=[p[1] for p in plan if p[0]=="shoulder"]
 assert max(abs(b-a) for a,b in zip([750]+sh,sh))<=config.ARM_WAVE_APPROACH_STEP_US and sh[-1]==R["shoulder"]
 assert [p[0] for p in plan][-2:]==["elbow","wrist_pitch"]
+# FR-700-002: elbow position unknown -> it opens BEFORE the first shoulder step
+assert plan[0][:2]==("elbow",W["elbow"]) and plan[1][0]=="shoulder"
+# already open (coming back from the wave) -> no extra elbow move first
+assert RoverBrain._rest_plan(750,W["elbow"])[0][0]=="shoulder"
+# shoulder already at rest -> nothing swings, so the elbow is not opened first either
+assert RoverBrain._rest_plan(R["shoulder"])[0][:2]==("shoulder",R["shoulder"])
 print("WAVE_CHECK_OK")
 '''
 

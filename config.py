@@ -173,6 +173,10 @@ SONAR_MAX_CM=400.0
 # short enough that a dead link cannot be driven through.
 SONAR_STALE_S=0.30
 DIST_STOP=20; DIST_SLOW=40; DIST_CLEAR=60; DIST_SIDE_CLEAR=25
+# FR-1000-002 turn choice (avoidance.py, owner 2026-10-06): the front camera's detections bias
+# WHICH WAY he turns. Never whether he stops -- Master Hardware Design §12 rule 15.
+AVOID_USE_CAMERA=True
+AVOID_CAMERA_CENTRE_DEG=5.0   # a detection this close to dead ahead counts for neither side
 
 # --- FR-1000-002 / FR-1200-005 multi-zone ToF (DFRobot SEN0628, Master Hardware Design §6.5).
 # Front obstacle sensing ALONGSIDE the sonar, never replacing it: the two fail in opposite
@@ -187,6 +191,11 @@ TOF_PORT='/dev/ttyAMA3'     # UART, not I2C -- keeps it off a bus that took the 
                             # (§6.5): the Pi 4 mapping does not carry over to the RP1.
 TOF_BAUD=115200             # fixed in the sensor's firmware, not configurable
 TOF_ZONES=64                # 8x8. A frame of any other length is a desynchronised UART, not data
+TOF_ZONE_COLUMNS=8          # zone index % this = column
+# Which zone columns look LEFT (FR-1000-002 turn choice, avoidance.py). None = not yet checked on
+# the rover, and the ToF then says nothing about sides -- a guess the wrong way round would steer
+# the turn INTO what it sees. Find it with a hand on one side and scripts/tof_probe.py.
+TOF_LEFT_COLUMNS=None
 # Floor-profile margin. A zone counts as an obstacle only when it returns this much SHORTER than
 # its own stored floor distance, and as a drop when it returns this much LONGER (or nothing).
 # Wide enough to absorb carpet pile, a rug edge and a few mm of ride height -- without a margin
@@ -234,16 +243,21 @@ IMU_STALE_S=3.0
 # 2026-10-01 -- cold solder joints on the one wire, Pi phys 7 to c27 -- and is now proven:
 # PING, ID and BOGUS all answered. RST itself has not yet been sent.
 
-# Steering — PCA9685 @0x42, CH0-5 (§3.1/§10). Servo mode (500-2500/1000-2000/900-2100us) is
+# Steering — PCA9685 @0x42, CH0-3 and CH8-9 since 2026-10-05 (§3.1/§10). Servo mode (500-2500/1000-2000/900-2100us) is
 # unconfirmed per-unit — default to the narrowest documented range so a narrow-mode servo can't
 # be driven into a mechanical bind. Widen only after a bench check confirms a unit's real range.
 # Steering kinematics (wheel-angle coordination, crab/point-turn) are undesigned in the master
 # doc (§10: "pending in software") — this pass only centers all six and holds them there.
 STEER_PCA_ADDR=0x42
-STEER_LF=0; STEER_RF=1; STEER_LM=2; STEER_RM=3; STEER_LR=4; STEER_RR=5
+# Channels as re-plugged by the owner 2026-10-05: fronts ch2/3, middles ch0/1, rears ch8/9 (ch0
+# connector replaced and moving, 2026-10-06). ⚠ LEFT vs RIGHT WITHIN EACH PAIR IS NOT YET KNOWN --
+# lower channel = left is a placeholder. Centring is unaffected (every corner is 1500); park()
+# and any future steering are not. Settle it with scripts/steer_identify.py and replace this.
+STEER_LF=2; STEER_RF=3; STEER_LM=0; STEER_RM=1; STEER_LR=8; STEER_RR=9
 SERVO_CENTER_US=1500; SERVO_MIN_US=1000; SERVO_MAX_US=2000
-# Per-corner straight-ahead pulse. UNCALIBRATED -- every corner is still the nominal 1500us.
-# Fill in from scripts/steer_jog.py: jog each corner until its wheel points dead ahead.
+# Per-corner straight-ahead pulse. All six were mechanically re-horned straight at 1500us on
+# 2026-10-05, so 1500 is measured, not nominal; the earlier trims (1800/1350/1270) are void.
+# Fine-tune with scripts/steer_jog.py if a wheel is visibly off.
 STEER_CENTER_US={'lf':1500,'rf':1500,'lm':1500,'rm':1500,'lr':1500,'rr':1500}
 SERVO_PWM_FREQ=50
 
@@ -698,6 +712,13 @@ SONAR_BEARING_DEG={'front':0.0,'left':-90.0,'right':90.0}
 # navigation.py's Navigator. No bench-measurement basis for these two (same "UNCONFIRMED
 # placeholder" caveat as WHEEL_DIAMETER_M/TRACK_WIDTH_M above) -- reasonable starting guesses.
 NAV_ARRIVAL_RADIUS_M=0.3       # how close counts as "reached" a waypoint
+# FR-1000-006 shut door (come-to-me design §4.7), ask-only -- the knock is not built.
+# Blocked counts as a door only at a LABELLED doorway waypoint and within this radius of it. Wider
+# than NAV_ARRIVAL_RADIUS_M because a shut door stops him DIST_STOP short of the doorway point,
+# plus however far the label sits from the door leaf.
+DOOR_BLOCKED_RADIUS_M=0.8
+DOOR_WAIT_S=15.0               # between asks, re-checking front clearance every tick
+DOOR_MAX_ASKS=3
 NAV_HEADING_DEADBAND_DEG=15.0  # within this heading error, drive forward instead of turning first
 NAV_TURN_STEP_S=0.2            # duration of each incremental heading-correction turn while seeking
 

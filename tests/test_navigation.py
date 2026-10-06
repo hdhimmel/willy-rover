@@ -82,7 +82,7 @@ def test_mission_room_graph_path_through_doorway():
         odo=_FakeOdometry(_FakePose(x=0.0,y=0.0))  # inside hallway's radius
         nav=Navigator(_FakeSafety(),odo,wm)
         ok,_=nav.start(Mission(room='kitchen'))
-        assert ok and nav._waypoints==[(5.0,0.0)]  # single-hop path -> just the target centroid
+        assert ok and nav._waypoints==[(2.5,0.0),(5.0,0.0)]  # through the doorway, then the centroid
 
 # --- local planner (_seeking/_avoiding) ---
 

@@ -6,9 +6,9 @@ if not config.SIMULATE_HARDWARE:
     from adafruit_pca9685 import PCA9685
     _i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
 
-# FR-700-002 (preset positions): PARTIAL -- config.py defines ARM_POSE_WAVE_HELLO (verified
-# on hardware 2026-09-17) and ARM_POSE_REST (two open caveats, see config.py), but nothing
-# here or in brain.py applies them yet; stow/home use center_all(), which skips the elbow.
+# FR-700-002 (preset positions): applied by brain.py's step sequences -- the wave through
+# ARM_POSE_WAVE_HELLO, stow/home to ARM_POSE_REST (elbow opened first if the shoulder must move,
+# 2026-10-06). Not yet run on the rover. center_all() below is no longer used for stow.
 # FR-700-003 (joint limits) -- PARTIAL: _drive() below clamps to manufacturer-default
 # ARM_SERVO_MIN_US/MAX_US, but real per-joint calibrated limits haven't been bench-set.
 # FR-700-004 (arm stops on E-stop) -- PARTIAL: safety.SafetyController still only holds a

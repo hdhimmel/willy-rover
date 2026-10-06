@@ -292,6 +292,20 @@ own `_go('ROAM')` transitions would silently exit mapping.
 `_avoid()`**, for the same reason. The constants are shared. `Navigator` does own a
 top-level state, because driving needs one.
 
+**Both avoiders take their turn direction from `avoidance.py`** (2026-10-06). Left and
+right clearance are each the min() of the side sonar, the ToF's column half (only once
+`TOF_LEFT_COLUMNS` records the sensor's orientation) and the nearest front-camera detection
+on that side. It runs only after something has already stopped him, so the camera picks a
+side and never gates a stop (Master Hardware Design §12 rule 15). A source that raises or
+has nothing to say contributes nothing.
+
+**Come to me (`come_to_me_task.py`, FR-1000-006) owns no motion.** It sequences
+`Navigator` (room mission, through labelled doorways) and `PursuitTask` (`come_here`, with
+its search sweep) under one `COME_TO_ME` state. Directive aborts reach the legs through the
+existing navigator/pursuit abort sites, so the task's `active` is read from its current
+leg, not from its own state. A blocked labelled doorway puts `Navigator` in `DOOR_WAIT`
+(stopped, still `active`), asking aloud until the way clears or `DOOR_MAX_ASKS` runs out.
+
 ---
 
 ## 4. Startup and Shutdown

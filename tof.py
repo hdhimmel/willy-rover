@@ -150,6 +150,26 @@ class ToFSensor:
             if best is None or v<best: best=v
         return None if best is None else best/10.0
 
+    def side_obstacles_cm(self):
+        """(left_cm,right_cm): nearest obstacle zone in the left and right column halves, or
+        None for a side with nothing to report. FR-1000-002 turn choice (avoidance.py).
+
+        (None,None) until config.TOF_LEFT_COLUMNS is set. Which zone columns face left depends
+        on how the sensor is mounted (the VL53L7CX's zone order is mirrored relative to its
+        field of view) and has not been checked on the rover. Guessing would make a turn steer
+        INTO what the ToF sees, so an unknown orientation reports nothing. Check: hand on one
+        side, scripts/tof_probe.py, see which columns drop."""
+        if self.profile is None or config.TOF_LEFT_COLUMNS is None: return None,None
+        frame=self._frame()
+        if frame is None: return None,None
+        left=right=None; cols=config.TOF_ZONE_COLUMNS; left_cols=set(config.TOF_LEFT_COLUMNS)
+        for i,v in enumerate(frame):
+            if self.profile.classify(i,v)!=OBSTACLE: continue
+            cm=v/10.0
+            if i%cols in left_cols: left=cm if left is None else min(left,cm)
+            else: right=cm if right is None else min(right,cm)
+        return left,right
+
     def drop_detected(self):
         """True when any zone reports open space where the profile expects floor.
 

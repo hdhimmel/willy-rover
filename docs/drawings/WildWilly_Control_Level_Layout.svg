@@ -747,7 +747,7 @@
 <text x="808.0" y="329.0" font-size="9.5" font-weight="700" fill="#1A1A1A" text-anchor="start">FeatherWing x2 @ (60, 4)</text>
 <text x="816.0" y="341.0" font-size="9" font-weight="400" fill="#555" text-anchor="start">• 0x60 RIGHT / 0x61 LEFT - 12V VIN via F2 and SW-M</text>
 <text x="808.0" y="356.0" font-size="9.5" font-weight="700" fill="#1A1A1A" text-anchor="start">PCA9685 0x42 @ (58, 30)</text>
-<text x="816.0" y="368.0" font-size="9" font-weight="400" fill="#555" text-anchor="start">• Steering CH0-5 - V+ = 5V (R2), 1000uF on C2</text>
+<text x="816.0" y="368.0" font-size="9" font-weight="400" fill="#555" text-anchor="start">• Steering CH0-3,8-9 - V+ = 5V (R2), 1000uF on C2</text>
 <text x="808.0" y="383.0" font-size="9.5" font-weight="700" fill="#1A1A1A" text-anchor="start">PCA9685 0x43 @ (122, 14)</text>
 <text x="816.0" y="395.0" font-size="9" font-weight="400" fill="#555" text-anchor="start">• Arm - V+ = 6V (R3), 2200uF Rubycon on C2</text>
 <text x="808.0" y="410.0" font-size="9.5" font-weight="700" fill="#1A1A1A" text-anchor="start">Pico A @ (26, 4)</text>

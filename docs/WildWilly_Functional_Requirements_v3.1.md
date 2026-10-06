@@ -132,11 +132,28 @@ Requirements are implemented and unit-tested off-hardware unless noted.
 
   FR-600 Steering         Not live-verified       Servo V+ current path
                                                   unconfirmed
+                                                  Re-plugged 2026-10-05:
+                                                  fronts ch2/3, middles
+                                                  ch0/1, rears ch8/9;
+                                                  all horned straight at
+                                                  1500. LEFT/RIGHT within
+                                                  each pair UNVERIFIED --
+                                                  config is a placeholder
+                                                  until scripts/steer_
+                                                  identify.py is run
+                                                  (built 2026-10-06).
 
   FR-700 Arm              Not live-verified       Arm current limit
                                                   (release) built
                                                   2026-10-02, not yet run
                                                   on the rover.
+                                                  Both poses applied by
+                                                  code since 2026-10-02
+                                                  (wave, stow); stow
+                                                  opens the elbow before
+                                                  the shoulder moves:
+                                                  built 2026-10-06, not
+                                                  yet run on the rover.
 
   FR-800 Sensors          PARTIAL --- sonars      Sonar re-proven through
                           connected               Pico B 2026-09-29; IMU
@@ -219,6 +236,13 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   here search sweep:
                                                   built 2026-10-02, not
                                                   yet run on the rover.
+                                                  Come to me (FR-1000-006),
+                                                  doorway routing, ask at
+                                                  a shut door, avoidance
+                                                  turn from sonar + ToF +
+                                                  camera: built
+                                                  2026-10-06, not yet run
+                                                  on the rover.
 
   FR-900 through FR-1400, Implemented, off-       FR-1300: inbound
   FR-1800 onwards         hardware tested only    remote_cmd.py added
@@ -1663,7 +1687,10 @@ Pico A a-0.3 reports signed counts.
 
 # Acceptance Criteria
 
-Six steering servos on PCA9685 0x42, channels CH0--CH5.
+Six steering servos on PCA9685 0x42. ⚠ **Re-plugged 2026-10-05: fronts CH2/CH3, middles
+CH0/CH1, rears CH8/CH9.** Which channel of each pair is the left wheel is not yet recorded;
+`config.STEER_*` assumes lower = left as a placeholder, which centring does not care about and
+`park()` does. `scripts/steer_identify.py` (2026-10-06) settles it one channel at a time.
 
 -   **FR-600-001 (servo control).** Each corner responds on its own channel
     and moves the expected wheel. Verified one channel at a time.
@@ -1772,6 +1799,15 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     1500 µs **except the elbow** (left where it is). So no named pose is reachable from
     software and FR-700-002 is **not met**. What follows records the hand-verified
     pulse values only.
+
+    ⛔ **Superseded the same evening (`e82e407`), recorded 2026-10-06.** `wave` steps
+    through `ARM_POSE_WAVE_HELLO` (elbow first, shoulder 50 µs at a time) and back;
+    `arm_stow`/`arm_home` step to `ARM_POSE_REST` with the wrist at `ARM_REST_WRIST_US`
+    (2300 µs, the 0.23 A variant) and the elbow clamped to 2500 µs. **2026-10-06:** stow
+    now opens the elbow to the wave pose's 1000 µs *before* any shoulder step whenever the
+    elbow is not known to be that open — the owner's self-collision rule, which the stow
+    path did not honour from an arbitrary start. Software side met; repeatability is
+    **not yet run on the rover**.
 
     **Two poses exist as of 2026-09-17**, both owner-designated and verified on
     hardware: `ARM_POSE_WAVE_HELLO` (elbow 1000µs, shoulder 750µs, wrist 1500µs
@@ -2022,6 +2058,13 @@ separately under FR-1200.
     Vision runs at frame rate with variable latency and informs route choice
     and classification only. Verified by confirming the rover still stops for
     an obstacle with the vision pipeline disabled entirely.
+    ✅ **Turn choice built 2026-10-06 (owner: "avoidance needs to use tof and cameras"),
+    not yet run on the rover.** `avoidance.py::choose_turn()` picks the side for both
+    `brain._avoid()` and `Navigator._avoiding()` from the side sonars, the ToF's column
+    halves and the front camera's detections — min() per side, the same fail-safe rule as
+    `'front'`. The stop is unchanged: sonar + ToF only, the camera never gates it. The
+    ToF contributes sides only once `TOF_LEFT_COLUMNS` is set; its mounting orientation
+    has not been checked, and a guess the wrong way round would steer into what it sees.
 
 -   **FR-1000-003 (route maintenance).** The planned route is followed within
     tolerance, with odometry drift corrected against IMU heading.
@@ -2039,10 +2082,15 @@ separately under FR-1200.
     one control cycle, from any autonomous state.
 
 -   **FR-1000-006 (come to me).** Added v3.3. Design:
-    `docs/superpowers/specs/2026-09-10-come-to-me-design.md`. **NOT IMPLEMENTED** ---
-    no `come_to_me_task.py`, no doorway-routed room-to-room planning. *(2026-10-02:
-    room labelling by voice now exists — FR-1000-001 — and both prerequisites below are
-    built; the requirement as a whole is still not implemented.)*
+    `docs/superpowers/specs/2026-09-10-come-to-me-design.md`. ⛔ **Built 2026-10-06,
+    not yet run on the rover** (`tests/test_come_to_me.py`). `come_to_me_task.py`
+    sequences `Navigator` then `PursuitTask(come_here)` under one `COME_TO_ME` state;
+    `Navigator._resolve_room()` now routes doorway → centroid → doorway; voice
+    "I'm in the kitchen, come to me" / "come to me in the kitchen" on the fast path.
+    A blocked **labelled** doorway asks to be let in (`DOOR_WAIT_S`, `DOOR_MAX_ASKS`)
+    and resumes when it clears. **The knock is not built** — no tap motion with measured
+    joint limits exists — so it runs the spec's own no-arm rule: ask aloud, same retries.
+    Refuses before moving if the room is unknown or the camera is unavailable.
 
     One spoken command --- *"Willie, I'm in the kitchen, come to me"* --- routes him to
     a named room **through labelled doorways, not centroid-to-centroid**, then has him

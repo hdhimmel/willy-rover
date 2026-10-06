@@ -208,7 +208,7 @@ class DriveBase:
 # adding untested steering kinematics on top of a drive system that has never been
 # live-tested at all would stack two unverified things at once.
 class Steering:
-    # PCA9685 @0x42, CH0-5 (§3.1/§10). Kinematics (crab/point-turn coordination, per-corner
+    # PCA9685 @0x42; channels from config.STEER_* (CH0-3, CH8-9 since 2026-10-05). Kinematics (crab/point-turn coordination, per-corner
     # clearance limits) are undesigned in the master doc — this class only centers/holds
     # wheels straight; brain.py calls center_all() once at startup, nothing per-tick yet.
     _CORNERS={'lf':config.STEER_LF,'rf':config.STEER_RF,'lm':config.STEER_LM,

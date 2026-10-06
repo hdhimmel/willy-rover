@@ -1,7 +1,9 @@
 # "Willie, I'm in the kitchen, come to me" — design
 
 **Date:** 2026-09-10
-**Status:** design approved in chat; not yet planned or implemented
+**Status:** built 2026-10-06 (`come_to_me_task.py`, `tests/test_come_to_me.py`), not yet run
+on the rover. §4.7's knock is NOT built — ask-only, per its own no-arm rule. §2's blockers
+are stale: encoders count (2026-10-01) and the arm has a current monitor (0x44).
 **Owner decisions:** real room navigation (not a search heuristic); rooms labelled
 after a mapping run; labelling via export → browser page → import; doorways
 labelled and routed through.

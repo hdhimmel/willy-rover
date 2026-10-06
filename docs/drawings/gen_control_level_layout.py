@@ -45,7 +45,7 @@ BOARDS = [
     ("FeatherWing x2", 60, 4, 50.8, 22.9, 32, "drive", True,
      "0x60 RIGHT / 0x61 LEFT - 12V VIN via F2 and SW-M"),
     ("PCA9685 0x42", 58, 30, 62.5, 25.4, 20, "drive", False,
-     "Steering CH0-5 - V+ = 5V (R2), 1000uF on C2"),
+     "Steering CH0-3,8-9 - V+ = 5V (R2), 1000uF on C2"),
     ("PCA9685 0x43", 122, 14, 62.5, 25.4, 26, "drive", False,
      "Arm - V+ = 6V (R3), 2200uF Rubycon on C2"),
     ("Pico A", 26, 4, 21, 51, 9.5, "drive", False,

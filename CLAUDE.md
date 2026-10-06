@@ -100,7 +100,7 @@ Pi header pin 1 (3V3). Any device holding SDA or SCL low takes the whole bus dow
 | Addr | Device | Function |
 |------|--------|----------|
 | 0x40 | INA260 | R2 5 V rail — steering servos, sonar (`INA260_5V_ADDR`, `steering_5v`) |
-| 0x42 | PCA9685 | Steering servos CH0–CH5 |
+| 0x42 | PCA9685 | Steering servos CH0–3, CH8–9 (2026-10-05) |
 | 0x43 | PCA9685 | Arm servos CH0–CH6 (CH7 empty) |
 | 0x44 | INA260 | R3 6 V arm servo rail (`INA260_ARM_6V_ADDR`, `arm_6v`) |
 | 0x45 | INA260 | +12 V bus → both FeatherWing VIN (`INA260_BUS_12V_ADDR`, `bus_12v`) |
@@ -222,7 +222,7 @@ Other header pins:
 - A stalled wheel draws 1.8 A against the TB6612's 1.2 A continuous. A stall must stop and
   report (`STALL_GRACE_S`), never drive harder.
 - Measure counts per rev under power, never by hand-turning — the hub slips on the shaft.
-- Steering: 6 × DS041MG on 0x42 CH0–CH5 (LF, RF, LM, RM, LR, RR), 1000–2000 µs, centred
+- Steering: 6 × DS041MG on 0x42 — fronts CH2/3, middles CH0/1, rears CH8/9 (2026-10-05; L/R within each pair unverified, scripts/steer_identify.py), 1000–2000 µs, centred
   and held. Skid steer is the only turning mechanism.
 - **Arm map (0x43, measured):** CH0 wrist pitch, CH1 elbow, CH2 shoulder (lift; decreasing
   µs raises), CH3 second shoulder axis, CH4 wrist rotate, CH5 gripper (increasing µs

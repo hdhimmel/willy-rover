@@ -1,5 +1,6 @@
 import math,time,config,logsetup
 import networkx as nx
+import avoidance
 from logsetup import log_event
 log=logsetup.setup('navigation')
 
@@ -34,15 +35,23 @@ def _wrap_deg(a):
     return (a+180)%360-180
 
 class Navigator:
-    def __init__(self,safety,odometry,world_model):
+    def __init__(self,safety,odometry,world_model,sonars=None,detector=None,say=None):
         self.safety=safety; self.odometry=odometry; self.world_model=world_model
-        self.state='IDLE'  # IDLE|SEEKING|AVOIDING|DONE|FAILED|ABORTED
-        self._waypoints=[]; self._wp_index=0
+        # sonars/detector feed only the avoidance TURN choice (avoidance.py); say speaks the
+        # doorway request. All optional: without them he turns on side sonar and asks silently.
+        self.sonars=sonars; self.detector=detector; self.say=say
+        self.state='IDLE'  # IDLE|SEEKING|AVOIDING|DOOR_WAIT|DONE|FAILED|ABORTED
+        self._waypoints=[]; self._wp_index=0; self._doorway_wps=set(); self._target_room=None
         self._avoid_start=0.0; self._avoid_phase=None
+        self._door_asks=0; self._door_since=0.0
         self._fail_reason=''
 
+    # DOOR_WAIT is active: he is stopped, but mid-mission, and every abort path has to reach it.
     @property
-    def active(self): return self.state in('SEEKING','AVOIDING')
+    def active(self): return self.state in('SEEKING','AVOIDING','DOOR_WAIT')
+
+    @property
+    def fail_reason(self): return self._fail_reason
 
     # FR-1000-001 (navigate unaided): reaches a commanded destination without operator
     # intervention -- PARTIAL per Subsystem_Status.md: dead-reckoning odometry only
@@ -53,7 +62,7 @@ class Navigator:
         if not waypoints:
             self.state='FAILED'; self._fail_reason='could not resolve a route for mission'
             return False,self._fail_reason
-        self._waypoints=waypoints; self._wp_index=0; self._fail_reason=''
+        self._waypoints=waypoints; self._wp_index=0; self._fail_reason=''; self._door_asks=0
         self.state='SEEKING'
         log.info(f'Navigation started: {mission} -> {len(waypoints)} waypoint(s)')
         return True,'started'
@@ -71,6 +80,7 @@ class Navigator:
     def reset(self): self.state='IDLE'
 
     def _resolve_route(self,mission):
+        self._doorway_wps=set(); self._target_room=mission.room
         if mission.route is not None:
             route=self.world_model.get_route(mission.route)
             if route is None:
@@ -93,7 +103,14 @@ class Navigator:
             return [(target.cx,target.cy)]  # already there, or current room unknown -- direct waypoint
         path=self._graph_path(current.name,target.name,rooms)
         if path:
-            return [(rooms[n].cx,rooms[n].cy) for n in path[1:]]
+            # FR-1000-006 (come-to-me design §4.4): through each DOORWAY, then that room's centroid.
+            # Centroid to centroid drives at the wall between two rooms.
+            doors={frozenset((dw.room_a_name,dw.room_b_name)):(dw.x,dw.y) for dw in self.world_model.all_doorways()}
+            wps=[]
+            for a,b in zip(path,path[1:]):
+                self._doorway_wps.add(len(wps)); wps.append(doors[frozenset((a,b))])
+                wps.append((rooms[b].cx,rooms[b].cy))
+            return wps
         # No known Room/Doorway connectivity between here and there -- honest straight-line
         # fallback (§9's "do not pretend this is full SLAM"), not fake obstacle-aware planning.
         log.info(f'Navigation: no known room graph path {current.name!r}->{room_name!r}, '
@@ -112,7 +129,39 @@ class Navigator:
         except (nx.NetworkXNoPath,nx.NodeNotFound): return None
 
     def tick(self,d,tilt):
-        {'SEEKING':self._seeking,'AVOIDING':self._avoiding}.get(self.state,lambda d,t:None)(d,tilt)
+        {'SEEKING':self._seeking,'AVOIDING':self._avoiding,
+         'DOOR_WAIT':self._door_wait}.get(self.state,lambda d,t:None)(d,tilt)
+
+    def _at_blocked_doorway(self):
+        """Only a LABELLED doorway waypoint counts (design §4.7) -- never an arbitrary obstacle,
+        or a sofa in the hall gets asked to let him in."""
+        if self._wp_index not in self._doorway_wps: return False
+        pose=self.odometry.pose; wx,wy=self._waypoints[self._wp_index]
+        return math.hypot(wx-pose.x,wy-pose.y)<=config.DOOR_BLOCKED_RADIUS_M
+
+    def _ask_at_door(self):
+        self._door_asks+=1; self._door_since=time.time()
+        log_event(log,'DOOR_BLOCKED',severity='info',subsystem='navigation',status='asking',
+                  attempt=self._door_asks,room=self._target_room or '')
+        if self.say:
+            where=f' the {self._target_room}' if self._target_room else ' through'
+            self.say(f"Can someone let me in? I'm trying to get to{where}.")
+
+    # Design §4.7, ask-only. THE KNOCK IS NOT BUILT: it needs a tap motion with measured joint
+    # limits, and nothing defines one yet. The spec's own rule for a missing arm -- "skip the
+    # knock, still ask aloud, then apply the same retry rule" -- is what runs here.
+    def _door_wait(self,d,tilt):
+        self.safety.stop()
+        if d['front']>config.DIST_CLEAR:
+            log.info('Doorway cleared -- resuming the route at the same waypoint.')
+            self.state='SEEKING'; return
+        if time.time()-self._door_since<config.DOOR_WAIT_S: return
+        if self._door_asks>=config.DOOR_MAX_ASKS:
+            self.state='FAILED'; self._fail_reason='door shut'
+            log.warning('Navigation FAILED: doorway stayed blocked.')
+            if self.say: self.say("I asked, but nobody let me in.")
+            return
+        self._ask_at_door()
 
     # FR-1000-003 (route maintenance): drives toward the next waypoint, arrival tolerance
     # is config.NAV_ARRIVAL_RADIUS_M. Straight-line waypoint following, no obstacle-aware
@@ -121,7 +170,10 @@ class Navigator:
         if self.safety.timed_move_active: return
         f=d['front']
         if f<config.DIST_STOP:
-            self.safety.stop(); self.state='AVOIDING'
+            self.safety.stop()
+            if self._at_blocked_doorway():
+                self.state='DOOR_WAIT'; self._ask_at_door(); return
+            self.state='AVOIDING'
             self._avoid_start=time.time(); self._avoid_phase=None
             return
         pose=self.odometry.pose
@@ -150,7 +202,7 @@ class Navigator:
         f=d['front']; l=d['left']; r=d['right']
         if self._avoid_phase=='turn_after_reverse':
             self._avoid_phase=None
-            self.safety.request('turn_right',None,config.TURN_TIME_90)
+            self.safety.request(self._turn(d) or 'turn_right',None,config.TURN_TIME_90)
             return
         if time.time()-self._avoid_start>config.STUCK_TIMEOUT:
             self.safety.stop(); self.state='FAILED'; self._fail_reason='stuck avoiding obstacle'
@@ -158,8 +210,12 @@ class Navigator:
             return
         if f>config.DIST_CLEAR:
             self.state='SEEKING'; return
-        if r>l: self.safety.request('turn_right',None,config.TURN_TIME_90*0.5)
-        elif l>r: self.safety.request('turn_left',None,config.TURN_TIME_90*0.5)
+        turn=self._turn(d)
+        if turn: self.safety.request(turn,None,config.TURN_TIME_90*0.5)
         else:
             self.safety.request('reverse',None,config.BACK_UP_TIME)
             self._avoid_phase='turn_after_reverse'
+
+    def _turn(self,d):
+        # FR-1000-002: side sonar + ToF columns + camera (avoidance.py), not side sonar alone.
+        return avoidance.choose_turn(d,getattr(self.sonars,'tof',None),self.detector)

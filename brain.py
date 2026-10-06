@@ -17,6 +17,8 @@ from voice import VoicePipeline
 from vision import ObjectDetector
 from retrieval_task import RetrievalTask
 from pursuit_task import PursuitTask
+from come_to_me_task import ComeToMeTask
+import avoidance
 from email_client import EmailClient
 from remote_cmd import RemoteCommandServer
 from feature_requests import FeatureRequests
@@ -52,7 +54,7 @@ _SPEECH_ONLY_INTENTS=frozenset({'status','battery','where_are_you'})
 _NON_SPOKEN_SOURCES=frozenset({'remote','email'})
 # What an email may queue: everything a spoken command could, through the same gating.
 _EMAIL_QUEUEABLE=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve','map',
-    'stop_map','status','battery','arm_stow','arm_home','wave','come_here','follow','diagnostics',
+    'stop_map','status','battery','arm_stow','arm_home','wave','come_here','come_to_me','follow','diagnostics',
     'where_are_you','what_do_you_see','name_room','mark_stairs','shutdown','demo_replay'})
 
 # Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
@@ -162,7 +164,7 @@ _MOTION_SCHEMA={'action':str,'duration':(int,float),'speed':(int,float)}
 # retried before surfacing; unrelated exception types still propagate on the first attempt.
 # States in which the tick's dispatch commands motion. A voice "stop" must leave these, or the
 # same tick's dispatch drives again -- see the stop_requested branch of _tick().
-_MOTION_STATES=('ROAM','SLOW','AVOID','STUCK','DOCK','WAVE','RETRIEVE','NAVIGATE','MANUAL','PURSUE')
+_MOTION_STATES=('ROAM','SLOW','AVOID','STUCK','DOCK','WAVE','RETRIEVE','NAVIGATE','MANUAL','PURSUE','COME_TO_ME')
 
 def _sonar_returns(d):
     """The sonar readings that are echoes off something real, for the world model.
@@ -229,9 +231,12 @@ class RoverBrain:
                                   smart_home=self.smart_home)
         self.detector=ObjectDetector()
         self.mapping=MappingSession(self.world_model,self.detector)  # §10
-        self.navigator=Navigator(self.safety,self.odometry,self.world_model)  # §11
+        self.navigator=Navigator(self.safety,self.odometry,self.world_model,  # §11
+                                 sonars=self.sonars,detector=self.detector,say=self._say)
         self.retrieval=RetrievalTask(self.safety,self.arm,self.detector,display=self.display,voice=self.voice)
         self.pursuit=PursuitTask(self.safety,self.detector,display=self.display,voice=self.voice)  # FR-1000
+        self.come_to_me=ComeToMeTask(self.navigator,self.pursuit,self.world_model,self.detector,
+                                     say=self._say)  # FR-1000-006
         self.email=EmailClient()
         self.remote=RemoteCommandServer(self.voice)  # HA / Google Home in, see remote_cmd.py
         self.email.set_command_handler(self._email_command)   # FR-2000-012
@@ -1127,6 +1132,7 @@ class RoverBrain:
         {'IDLE':self._idle,'ROAM':self._roam,'SLOW':self._slow,'AVOID':self._avoid,
          'STUCK':self._stuck,'DOCK':self._dock,'WARN':self._warn,'RETRIEVE':self._retrieve,
          'NAVIGATE':self._navigate,'MANUAL':self._manual,'PURSUE':self._pursue,'WAVE':self._wave,
+         'COME_TO_ME':self._come_to_me_tick,
          'TILT_FAULT':lambda d,t:None,'SAFE_MODE':lambda d,t:None,'SHUTDOWN':lambda d,t:None,
          'LOW_BATTERY':lambda d,t:None,'OVERCURRENT_FAULT':lambda d,t:None,
         }.get(self._state,lambda d,t:None)(d,tilt)
@@ -1371,6 +1377,10 @@ class RoverBrain:
                 if ok: self._go('PURSUE')
                 self._say('On my way.' if ok else f"I can't come over: {msg}")
                 log.info(f'Voice-triggered pursuit: mode={mode} ({msg})')
+        elif cmd.get('intent')=='come_to_me':
+            ok,msg=self.come_to_me.start(cmd.get('args',{}).get('room',''))
+            if ok: self._go('COME_TO_ME')
+            log.info(f'Voice-triggered come to me: {cmd.get("args")} ({msg})')
         elif cmd.get('intent')=='status':
             bat_v=self.adc.battery_volts; bat_pct=self.adc.battery_pct
             if not self._motion_enabled and self._init_fail_reason:
@@ -1387,7 +1397,8 @@ class RoverBrain:
             # Stow/home = the REST pose, reached in steps (shoulder first, 50 us at a time, then
             # elbow, then wrist) through the same tick-serviced sequence as the wave. Used to be
             # center_all(), which jumped the shoulder to 1500 in one step.
-            self._start_arm_sequence(self._rest_plan(self._shoulder_now()))
+            self._start_arm_sequence(self._rest_plan(self._shoulder_now(),
+                                     int(self.arm.pulse('elbow')) if self.arm.was_driven('elbow') else None))
             self._say('Putting my arm away.')
         elif cmd.get('intent')=='wave':
             self._start_wave()
@@ -1429,6 +1440,12 @@ class RoverBrain:
         if self.retrieval.state in('DONE','FAILED','ABORTED'):
             if self.retrieval.state=='DONE' and self.voice.available: self.voice.speak('All done!')
             self.retrieval.reset(); self._go('IDLE')
+
+    def _come_to_me_tick(self,d,tilt):
+        # FR-1000-006. The task speaks every outcome itself; this only leaves the state.
+        self.come_to_me.tick(d,tilt)
+        if self.come_to_me.state not in('LEG_NAVIGATE','LEG_FIND'):
+            self.come_to_me.reset(); self._go('IDLE')
 
     def _pursue(self,d,tilt):
         self.pursuit.tick(d,tilt)
@@ -1473,11 +1490,22 @@ class RoverBrain:
         return plan
 
     @staticmethod
-    def _rest_plan(shoulder_from):
-        """Back to ARM_POSE_REST: shoulder in steps, then elbow, then the low-current wrist."""
+    def _rest_plan(shoulder_from,elbow_from=None):
+        """Back to ARM_POSE_REST: shoulder in steps, then elbow, then the low-current wrist.
+
+        FR-700-002, stow from ANY starting configuration. Owner rule: the elbow must be open
+        before the shoulder moves, or the arm strikes the top of Willy. Coming back from the
+        wave it already is; from anywhere else (arm_jog, a half-finished sequence) it may not
+        be. So if the shoulder has to move and the elbow is not known to be at least as open as
+        the wave pose's, open it first -- the same first step the hardware-verified wave takes.
+        elbow_from=None means not driven this boot: position unknown, treated as closed."""
         r=config.ARM_POSE_REST; step=config.ARM_WAVE_APPROACH_STEP_US
+        open_us=config.ARM_POSE_WAVE_HELLO['elbow']
+        plan=[]
+        if shoulder_from!=r['shoulder'] and (elbow_from is None or elbow_from>open_us):
+            plan.append(('elbow',open_us,0.6))
         d=step if r['shoulder']>shoulder_from else -step
-        plan=[('shoulder',v,config.ARM_WAVE_STEP_S) for v in range(shoulder_from+d,r['shoulder'],d)]
+        plan+=[('shoulder',v,config.ARM_WAVE_STEP_S) for v in range(shoulder_from+d,r['shoulder'],d)]
         plan+=[('shoulder',r['shoulder'],0.3),
                ('elbow',min(r['elbow'],config.ARM_SERVO_MAX_US),0.6),
                ('wrist_pitch',config.ARM_REST_WRIST_US,0.0)]
@@ -1588,7 +1616,7 @@ class RoverBrain:
             self._upd('stop',f'Avoiding l={l:.0f} r={r:.0f}',d,tilt); return
         if self._avoid_phase=='turn_after_reverse':
             self._avoid_phase=None
-            self.safety.request('turn_right',None,config.TURN_TIME_90); self._last_action='back_turn'
+            self.safety.request(self._avoid_turn(d) or 'turn_right',None,config.TURN_TIME_90); self._last_action='back_turn'
             self._upd('stop',f'Avoiding l={l:.0f} r={r:.0f}',d,tilt); return
         if time.time()-self._avoid_start>config.STUCK_TIMEOUT:
             self._stuck_count+=1
@@ -1596,12 +1624,17 @@ class RoverBrain:
             self._avoid_start=time.time(); self.safety.request('reverse',None,config.BACK_UP_TIME); return
         if f>config.DIST_CLEAR: self._stuck_count=0; self._go('ROAM'); return
         self.safety.stop()
-        if r>l: self.safety.request('turn_right',None,config.TURN_TIME_90*0.5); self._last_action='turn_right'
-        elif l>r: self.safety.request('turn_left',None,config.TURN_TIME_90*0.5); self._last_action='turn_left'
+        turn=self._avoid_turn(d)
+        if turn: self.safety.request(turn,None,config.TURN_TIME_90*0.5); self._last_action=turn
         else:
             self.safety.request('reverse',None,config.BACK_UP_TIME)
             self._avoid_phase='turn_after_reverse'; self._last_action='back_turn'
         self._upd('stop',f'Avoiding l={l:.0f} r={r:.0f}',d,tilt)
+
+    def _avoid_turn(self,d):
+        # FR-1000-002 (owner 2026-10-06): side sonar + ToF columns + front camera pick the side.
+        # Only the side -- the stop is still sonar + ToF alone (avoidance.py header).
+        return avoidance.choose_turn(d,getattr(self.sonars,'tof',None),self.detector)
 
     def _stuck(self,d,tilt):
         # Autonomous thinking: Hailo LLM primary (on-device), Claude fallback only if needed.

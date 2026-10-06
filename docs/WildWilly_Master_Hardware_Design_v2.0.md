@@ -149,7 +149,7 @@ validates it against the deck outline, the harness notch and the four M3 keep-ou
 | LTC4311 — inline on the trunk | (120, 108) | 25.4 × 17.78 | ≈9 | measure |
 | BNO085 `0x4A` — X/Y axes parallel to chassis | (150, 85) | 25.4 × 22.86 | ≈4.6 | 20.32 × 17.78 |
 | FeatherWing ×2 — `0x60` RIGHT, `0x61` LEFT | (60, 4) | 50.8 × 22.9, ×2 stacked | ≈32 | 45.72 × 17.78, Ø2.5 |
-| PCA9685 `0x42` — steering CH0–5, V+ = 5 V (R2), 1000 µF on C2 | (58, 30) | 62.5 × 25.4 | ≈20 | 55.9 × 19.0, Ø2.5 |
+| PCA9685 `0x42` — steering CH0–3/8–9, V+ = 5 V (R2), 1000 µF on C2 | (58, 30) | 62.5 × 25.4 | ≈20 | 55.9 × 19.0, Ø2.5 |
 | PCA9685 `0x43` — arm, V+ = 6 V (R3), 2200 µF Rubycon on C2 | (122, 14) | 62.5 × 25.4 | ≈26 | 55.9 × 19.0, Ø2.5 |
 | Pico A — 6 × encoders, VSYS from R5 | (26, 4) | 21 × 51 | ≈9.5 | 47.0 × 11.4, Ø2.1 |
 | EPLZON power stack — ×2 stacked | (128, 42) | 50 × 40 | ≈30 | same board, same holes |
@@ -349,7 +349,7 @@ before raising the clock.
 | Address | Device | Function |
 |---------|--------|----------|
 | 0x40 | INA260 | R2, 5 V steering/sonar rail |
-| 0x42 | PCA9685 | Steering servos, CH0–CH5 |
+| 0x42 | PCA9685 | Steering servos, CH0–3 and CH8–9 (2026-10-05) |
 | 0x43 | PCA9685 | Arm servos, CH0–CH6 (CH7 unused) |
 | 0x44 | INA260 | R3, 6 V arm servo rail |
 | 0x45 | INA260 | +12 V bus → both FeatherWing VIN |
@@ -1202,8 +1202,11 @@ over I²C — no direction GPIOs, no STBY pin. M4 on each board is spare.
 
 ### 7.3 Steering
 
-6 × GDW DS041MG on PCA9685 0x42, CH0–CH5 in the order LF, RF, LM, RM, LR, RR. Each plugs
-into a 3-pin channel header; the board takes V+ from R2.
+6 × GDW DS041MG on PCA9685 0x42. **Re-plugged 2026-10-05: fronts CH2/CH3, middles
+CH0/CH1, rears CH8/CH9** (CH0's connector replaced 2026-10-06). Which channel of each pair
+is the left wheel is **not yet recorded** — `scripts/steer_identify.py` finds it. Each plugs
+into a 3-pin channel header; the board takes V+ from R2. All six were re-horned straight at
+1500 µs on 2026-10-05; the earlier per-corner trims are void.
 
 Software drives 1000–2000 µs (`SERVO_MIN_US`/`SERVO_MAX_US`), centre 1500 µs, 50 Hz — the
 narrowest documented range, so a narrow-mode unit cannot be driven into a bind. The
@@ -1268,7 +1271,7 @@ graph TD
 | J0 base yaw | MG996R | CH6 | `ARM_BASE` |
 | — | unused | CH7 | nothing connected |
 
-0x43 CH7 and 0x42 CH6–15 are electrically empty. **A paper remap is not a rewiring** —
+0x43 CH7 is electrically empty; on 0x42 only CH0–3 and CH8–9 are used since 2026-10-05. **A paper remap is not a rewiring** —
 drive one channel at a time and watch the joint before trusting any arm mapping.
 
 **CH2 and CH3 are not a mirrored pair.** Mirrored and same-direction commands draw the same
@@ -1804,7 +1807,8 @@ One 6-pin JST-PH per motor. Meter each crimp before trusting the colour.
 
 ### 16.10 Steering servos × 6
 
-On PCA9685 0x42: LF CH0, RF CH1, LM CH2, RM CH3, LR CH4, RR CH5.
+On PCA9685 0x42 (2026-10-05): fronts CH2/CH3, middles CH0/CH1, rears CH8/CH9. Left/right
+within each pair unverified — see §7.3.
 
 ### 16.11 Arm servos × 7
 
