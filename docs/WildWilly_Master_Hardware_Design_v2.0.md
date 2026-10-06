@@ -1202,9 +1202,10 @@ over I²C — no direction GPIOs, no STBY pin. M4 on each board is spare.
 
 ### 7.3 Steering
 
-6 × GDW DS041MG on PCA9685 0x42. **Re-plugged 2026-10-05: fronts CH2/CH3, middles
-CH0/CH1, rears CH8/CH9** (CH0's connector replaced 2026-10-06). Which channel of each pair
-is the left wheel is **not yet recorded** — `scripts/steer_identify.py` finds it. Each plugs
+6 × GDW DS041MG on PCA9685 0x42: **LF CH3, RF CH2, LM CH0, RM CH1, LR CH9, RR CH8** — re-plugged 2026-10-05, each channel
+measured one at a time 2026-10-06 (CH0's connector replaced that day). Fronts and rears have
+right on the lower channel; the middles have left. ⚠ INA260 0x40 does **not** see this
+supply: a swinging steering servo left its reading flat. Each plugs
 into a 3-pin channel header; the board takes V+ from R2. All six were re-horned straight at
 1500 µs on 2026-10-05; the earlier per-corner trims are void.
 
@@ -1807,8 +1808,7 @@ One 6-pin JST-PH per motor. Meter each crimp before trusting the colour.
 
 ### 16.10 Steering servos × 6
 
-On PCA9685 0x42 (2026-10-05): fronts CH2/CH3, middles CH0/CH1, rears CH8/CH9. Left/right
-within each pair unverified — see §7.3.
+On PCA9685 0x42 (measured 2026-10-06): LF CH3, RF CH2, LM CH0, RM CH1, LR CH9, RR CH8.
 
 ### 16.11 Arm servos × 7
 

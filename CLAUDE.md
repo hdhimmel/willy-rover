@@ -222,7 +222,7 @@ Other header pins:
 - A stalled wheel draws 1.8 A against the TB6612's 1.2 A continuous. A stall must stop and
   report (`STALL_GRACE_S`), never drive harder.
 - Measure counts per rev under power, never by hand-turning — the hub slips on the shaft.
-- Steering: 6 × DS041MG on 0x42 — fronts CH2/3, middles CH0/1, rears CH8/9 (2026-10-05; L/R within each pair unverified, scripts/steer_identify.py), 1000–2000 µs, centred
+- Steering: 6 × DS041MG on 0x42 — LF CH3, RF CH2, LM CH0, RM CH1, LR CH9, RR CH8 (measured 2026-10-06), 1000–2000 µs, centred
   and held. Skid steer is the only turning mechanism.
 - **Arm map (0x43, measured):** CH0 wrist pitch, CH1 elbow, CH2 shoulder (lift; decreasing
   µs raises), CH3 second shoulder axis, CH4 wrist rotate, CH5 gripper (increasing µs

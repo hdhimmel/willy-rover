@@ -249,11 +249,12 @@ IMU_STALE_S=3.0
 # Steering kinematics (wheel-angle coordination, crab/point-turn) are undesigned in the master
 # doc (§10: "pending in software") — this pass only centers all six and holds them there.
 STEER_PCA_ADDR=0x42
-# Channels as re-plugged by the owner 2026-10-05: fronts ch2/3, middles ch0/1, rears ch8/9 (ch0
-# connector replaced and moving, 2026-10-06). ⚠ LEFT vs RIGHT WITHIN EACH PAIR IS NOT YET KNOWN --
-# lower channel = left is a placeholder. Centring is unaffected (every corner is 1500); park()
-# and any future steering are not. Settle it with scripts/steer_identify.py and replace this.
-STEER_LF=2; STEER_RF=3; STEER_LM=0; STEER_RM=1; STEER_LR=8; STEER_RR=9
+# Channels as re-plugged by the owner 2026-10-05, each one MEASURED 2026-10-06: one channel swung
+# 1000<->2000us at a time with the owner naming the wheel. Not a pattern -- the fronts and rears
+# have right on the lower channel, the middles have left. Do not "tidy" it.
+# INA260 0x40 showed NO current change while a steering servo swung (0.51-0.54A flat), so the
+# servo V+ is not on that monitor's path: current cannot confirm steering motion, only eyes can.
+STEER_LF=3; STEER_RF=2; STEER_LM=0; STEER_RM=1; STEER_LR=9; STEER_RR=8
 SERVO_CENTER_US=1500; SERVO_MIN_US=1000; SERVO_MAX_US=2000
 # Per-corner straight-ahead pulse. All six were mechanically re-horned straight at 1500us on
 # 2026-10-05, so 1500 is measured, not nominal; the earlier trims (1800/1350/1270) are void.

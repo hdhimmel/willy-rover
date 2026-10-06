@@ -132,16 +132,15 @@ Requirements are implemented and unit-tested off-hardware unless noted.
 
   FR-600 Steering         Not live-verified       Servo V+ current path
                                                   unconfirmed
-                                                  Re-plugged 2026-10-05:
-                                                  fronts ch2/3, middles
-                                                  ch0/1, rears ch8/9;
-                                                  all horned straight at
-                                                  1500. LEFT/RIGHT within
-                                                  each pair UNVERIFIED --
-                                                  config is a placeholder
-                                                  until scripts/steer_
-                                                  identify.py is run
-                                                  (built 2026-10-06).
+                                                  Channel map MEASURED
+                                                  2026-10-06, one at a
+                                                  time: LF3 RF2 LM0 RM1
+                                                  LR9 RR8. All six centre
+                                                  straight at 1500. INA260
+                                                  0x40 saw no current
+                                                  while a servo swung:
+                                                  servo V+ is not on its
+                                                  path (see FR-600).
 
   FR-700 Arm              Not live-verified       Arm current limit
                                                   (release) built
@@ -1687,10 +1686,12 @@ Pico A a-0.3 reports signed counts.
 
 # Acceptance Criteria
 
-Six steering servos on PCA9685 0x42. ⚠ **Re-plugged 2026-10-05: fronts CH2/CH3, middles
-CH0/CH1, rears CH8/CH9.** Which channel of each pair is the left wheel is not yet recorded;
-`config.STEER_*` assumes lower = left as a placeholder, which centring does not care about and
-`park()` does. `scripts/steer_identify.py` (2026-10-06) settles it one channel at a time.
+Six steering servos on PCA9685 0x42: **LF CH3, RF CH2, LM CH0, RM CH1, LR CH9, RR CH8** (re-plugged 2026-10-05, each channel
+measured 2026-10-06 by swinging it 1000↔2000 µs alone while the owner named the wheel). All
+six sit straight at 1500 µs. **FR-600-001's "moves the expected wheel" is met for all six.**
+⚠ **The steering servo supply is not on INA260 0x40's path:** six full swings of a servo
+that visibly moved left the 0x40 reading flat at 0.51–0.54 A. Current cannot confirm
+steering motion, and the "servo V+ current path" item stays open with that as its evidence.
 
 -   **FR-600-001 (servo control).** Each corner responds on its own channel
     and moves the expected wheel. Verified one channel at a time.
