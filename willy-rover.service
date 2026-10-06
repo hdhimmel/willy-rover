@@ -13,6 +13,10 @@ Environment=SDL_VIDEO_ROTATION=0
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=WAYLAND_DISPLAY=wayland-0
 EnvironmentFile=-/home/hhimmel/rover/.env
+# Internet time first, then the Witty Pi RTC from it (scripts/clock_sync.sh). Bounded at 45 s
+# and never fatal ('-'): no network means starting on the RTC's time, not not starting.
+ExecStartPre=-/bin/sh /home/hhimmel/rover/scripts/clock_sync.sh
+TimeoutStartSec=120
 ExecStart=/home/hhimmel/rover/venv/bin/python3 /home/hhimmel/rover/main.py
 Restart=on-failure
 RestartSec=5

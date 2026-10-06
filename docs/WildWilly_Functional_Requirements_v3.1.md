@@ -59,6 +59,12 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   probed (05bcddd):
                                                   live-proven
                                                   2026-10-02.
+                                                  Clock from internet
+                                                  time before start, then
+                                                  written to the Witty Pi
+                                                  RTC (clock_sync.sh,
+                                                  2026-10-06; the RTC had
+                                                  been a week fast).
 
   FR-200 Power            PARTIAL --- rail        Pi rail 5.144V,
                           measurement, and the      throttled 0x0. Divider

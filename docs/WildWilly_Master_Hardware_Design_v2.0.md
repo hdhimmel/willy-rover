@@ -262,6 +262,11 @@ healthy.
 input, 5 A output); Witty Pi outputs ~5.4 V to the Pi. Witty Pi's low-voltage cutoff
 (`wp5` menu option 7) is 8.0 V. Measured: V-IN 9.0–9.2 V, Pi 5 V rail 5.144 V.
 
+**Witty Pi RTC sets the boot clock.** `wp5d` copies its RTC into the system clock at boot;
+the Pi 5's own RTC has no battery. On 2026-10-06 the Witty Pi RTC was a week fast; it was
+reset from internet time, and `scripts/clock_sync.sh` now rewrites it from internet time
+before every service start.
+
 Set each DROK off-load before connecting anything downstream: 9 V, 5.0–5.1 V, 6.0 V,
 3.3 V. They are trimpot modules — re-verify after any knock. The 5 V setting directly sets
 the sonar ECHO divider outputs (§16.12).

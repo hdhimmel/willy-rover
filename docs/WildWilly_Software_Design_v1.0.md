@@ -312,6 +312,13 @@ leg, not from its own state. A blocked labelled doorway puts `Navigator` in `DOO
 
 ### 4.1 Startup sequence
 
+**Before any of this: the clock** (`scripts/clock_sync.sh`, the unit's `ExecStartPre`,
+2026-10-06). At boot the Witty Pi daemon sets the system clock from its own RTC; on
+2026-10-06 that RTC was a week fast and the service started on the wrong date before
+internet time arrived. The script waits up to 45 s for `timesyncd` to sync, then writes
+the system time back to the Witty Pi RTC (`wp5`, as the service user). No internet in time
+means starting on the RTC's time, logged; it never stops the service starting.
+
 0. **I²C pre-probe in `main.py`.** Before importing `brain.py`, `main.py` does an `smbus2`
    read against each expected address. If none ack (Pi disconnected from the rover
    harness), it sets `WILLY_SIMULATE=1` and `WILLY_I2C_FORCED_SIMULATE=1` and patches
