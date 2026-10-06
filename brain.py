@@ -1982,9 +1982,10 @@ class RoverBrain:
             self._bat_xcheck_flagged=True
             log.error(f'BATTERY SENSE SUSPECT — ADS1115 says {adc:.2f}V, +12V bus INA260 says '
                       f'{bus:.2f}V ({diff:.2f}V apart, tolerance '
-                      f'{config.BAT_CROSSCHECK_MAX_DIFF_V}V). One of them is wrong. The divider '
-                      f'taps the pack side and is the authority, but do not trust battery_pct '
-                      f'or the tier until this is resolved. Check the divider feed at V21.')
+                      f'{config.BAT_CROSSCHECK_MAX_DIFF_V}V). One of them is wrong. battery_volts follows '
+                      f'the bus while it is live (b47f7d7), so the tiers use the bus; the divider is '
+                      f'only the fallback for a dead bus, and that fallback is what is suspect. '
+                      f'Check the divider feed at V21.')
         return f'BATTERY SENSE SUSPECT (ADC {adc:.2f}V vs bus {bus:.2f}V)'
 
     def _send_stuck_alert(self):

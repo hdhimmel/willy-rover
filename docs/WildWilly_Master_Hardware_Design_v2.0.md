@@ -1010,7 +1010,8 @@ lowering it) after a full roll-call check.
 
 3 × INA260, each inline in its rail (the rail passes through VIN+/VIN−). Integrated 2 mΩ
 shunt, factory calibrated. 0x40 = R2 5 V (`steering_5v`), 0x44 = R3 6 V arm (`arm_6v`),
-0x45 = +12 V bus (`bus_12v`). An inline INA260 can drop off the bus while its rail works
+0x45 = +12 V bus (`bus_12v`). ⚠ 0x40 did **not** move while a steering servo visibly swung
+(2026-10-06, §7.3) — whatever it monitors, the steering servo supply is not on it. An inline INA260 can drop off the bus while its rail works
 perfectly — its absence blinds monitoring without causing a power fault.
 
 ---
@@ -1019,6 +1020,13 @@ perfectly — its absence blinds monitoring without causing a power fault.
 
 Front obstacle and drop sensing **alongside** the front sonar. Read by `tof.py`
 (Software Design §6.5); `ENABLE_TOF=True`.
+
+**Orientation, measured 2026-10-06:** the zone image is mirrored — an object on Willie's
+left (front-camera photo as witness) lands in columns 5–7. `TOF_LEFT_COLUMNS=(4,5,6,7)`.
+Row 0 is the top of the view; rows 4–7 see floor. ⚠ Zones r0–r2 × c0–c2 read 0–5 cm with
+nothing ahead — the cover's window edge clips the field of view (owner, 2026-10-06). A cover
+with a bigger window is being printed; capture the floor profile only after it is fitted, or
+the profile bakes the edge in.
 
 | | |
 |---|---|

@@ -91,16 +91,14 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   See FR-300 Acceptance
                                                   Criteria and G-1.
 
-  FR-400 Drive            Not live-verified       Motor crimps unverified
-                                                  on five of six units; 170
-                                                  RPM motors on order will
-                                                  re-open M-1 and the speed
-                                                  tuning. Fitted
-                                                  2026-10-01. Speeds in
-                                                  mph, 1.5 mph cap
-                                                  (FR-400-004): built
-                                                  2026-10-02, not yet
-                                                  run on the rover.
+  FR-400 Drive            LIVE-VERIFIED           Owner, 2026-10-06:
+                          (owner, 2026-10-06)     drive verified on the
+                                                  rover. Supersedes the
+                                                  crimp and not-yet-run
+                                                  notes that stood here
+                                                  (170 RPM motors fitted
+                                                  2026-10-01; mph speeds,
+                                                  1.5 mph cap).
                                                   Brake on a stopped,
                                                   released drive is a
                                                   no-op (6be1091) ---
@@ -272,8 +270,7 @@ Motion-related groups (FR-400 through FR-700) were gated behind FR-300 passing
 --- Directive 2. **That gate is released as of 2026-08-24** by the owner decision
 recorded in FR-300's Acceptance Criteria: the E-stop's physical power cut
 satisfies FR-300-001/002/003 without a Pi-side sense line. Remaining pre-drive
-items are physical, not requirement-level: motor crimps unverified on five of six
-units (FR-400), and the steering servo V+ current path (~9A worst case against an
+items are physical, not requirement-level: the steering servo V+ current path (~9A worst case against an
 8A UBEC, Master Hardware Design §12 rule 13).
 
 ## V.1 Implementation and test coverage (2026-08-18)
@@ -2063,9 +2060,14 @@ separately under FR-1200.
     not yet run on the rover.** `avoidance.py::choose_turn()` picks the side for both
     `brain._avoid()` and `Navigator._avoiding()` from the side sonars, the ToF's column
     halves and the front camera's detections — min() per side, the same fail-safe rule as
-    `'front'`. The stop is unchanged: sonar + ToF only, the camera never gates it. The
-    ToF contributes sides only once `TOF_LEFT_COLUMNS` is set; its mounting orientation
-    has not been checked, and a guess the wrong way round would steer into what it sees.
+    `'front'`. The stop is unchanged: sonar + ToF only, the camera never gates it.
+    **ToF orientation measured 2026-10-06:** a hand and then an upright tin on his left,
+    confirmed by front-camera photo, appeared in columns 5–7 only — the image is mirrored,
+    `TOF_LEFT_COLUMNS=(4,5,6,7)`; row 0 is the top of the view. ⚠ Zones r0–r2 × c0–c2 (top
+    of the right side) read 0–5 cm in every frame with nothing ahead: something is in the
+    sensor's view at the lens: the cover's window edge (owner); a bigger-window cover is being printed. The floor profile is still not captured,
+    so the ToF reports nothing to avoidance until `scripts/calibrate_tof_floor.py` runs on
+    clear floor.
 
 -   **FR-1000-003 (route maintenance).** The planned route is followed within
     tolerance, with odometry drift corrected against IMU heading.
