@@ -50,7 +50,8 @@ def test_a_failing_hook_does_not_stop_the_generation(monkeypatch):
 def _brain(commanded):
     from brain import RoverBrain
     b=types.SimpleNamespace(braked=0)
-    b.motors=types.SimpleNamespace(commanded=commanded,brake=lambda: setattr(b,'braked',b.braked+1))
+    b.motors=types.SimpleNamespace(commanded=commanded)
+    b.safety=types.SimpleNamespace(brake_now=lambda reason: setattr(b,'braked',b.braked+1))
     b._brake_before_hailo=types.MethodType(RoverBrain._brake_before_hailo,b)
     return b
 
@@ -59,3 +60,11 @@ def test_brain_brakes_only_when_something_is_moving():
     b._brake_before_hailo(); assert b.braked==1
     b=_brain({w:False for w in ('lf','lm','lr','rf','rm','rr')})
     b._brake_before_hailo(); assert b.braked==0
+
+def test_brake_now_brakes_from_any_thread_and_leaves_timed_state_alone():
+    from safety import SafetyController
+    calls=[]
+    s=SafetyController(types.SimpleNamespace(brake=lambda: calls.append('brake')))
+    s._deadline=123.0; s._active_action='forward'
+    s.brake_now('test')
+    assert calls==['brake'] and s._deadline==123.0 and s._active_action=='forward'

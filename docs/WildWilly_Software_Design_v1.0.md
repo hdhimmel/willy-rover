@@ -332,8 +332,8 @@ Navigator's own avoidance still skid-turns. The service uses the front camera on
 the whole call (5.4 s measured): tick loop, sensor readers and the motor ramp thread all stop, and
 every freshness check fails at once when it returns (IMU, encoders, current, battery ADC, sonars,
 all within 0.1 s). A rover driving when a call starts would keep its last duty, unwatched. Interim:
-`hailo_llm.set_before_generate()` runs brain's `_brake_before_hailo()` first, which brakes on
-DriveBase synchronously if anything is commanded (fast-path voice never reaches the model). Real
+`hailo_llm.set_before_generate()` runs brain's `_brake_before_hailo()` first, which brakes
+synchronously through `SafetyController.brake_now()` if anything is commanded (fast-path voice never reaches the model). Real
 fix open: the model in its own process, which needs design because the VDevice is shared with
 vision (why hailo-ollama was rejected, 2026-08-21).
 

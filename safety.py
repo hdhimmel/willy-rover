@@ -86,6 +86,17 @@ class SafetyController:
     def turn_left_for(self,duration,speed=None): return self.request('turn_left',speed,duration)
     def turn_right_for(self,duration,speed=None): return self.request('turn_right',speed,duration)
 
+    def brake_now(self,reason):
+        """Immediate hard brake from ANY thread, for a caller about to block every thread for
+        seconds (brain.py's brake-before-generation; the deliberative layer is named there, not
+        here -- this module stays reflex-only). The tick loop and motor ramp will be frozen, so the
+        brake must be written synchronously before the block starts. DriveBase.brake() holds its own lock. Deliberately does
+        NOT touch the timed-move state, which belongs to the tick thread; the tick re-issues or
+        finishes motion once the call returns. Stop-only by construction. Kept here so that
+        nothing outside this class calls DriveBase directly (tests/test_no_direct_drive_bypass)."""
+        log_event(log,'BRAKE_NOW',severity='warning',subsystem='safety',status='braked',reason=reason)
+        self._drive.brake()
+
     def set_wheels(self,targets):
         """Per-wheel targets for rotation mode (rotate.py), approved like any other turn: motion
         enabled, tilt and battery tier are checked first, so rotation never bypasses this class

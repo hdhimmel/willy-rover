@@ -1479,14 +1479,13 @@ class RoverBrain:
 
     def _brake_before_hailo(self):
         """Runs on whichever thread is about to call the Hailo model (voice or the STUCK worker),
-        right before the process freezes. Brakes directly on DriveBase -- a synchronous write --
-        because a request through SafetyController would only set a target for the ramp thread,
-        which is about to freeze too. The tick loop re-issues motion after the call returns; this
+        right before the process freezes. Uses SafetyController.brake_now(), a synchronous hard
+        brake -- a normal stop request would only set a target for the ramp thread, which is about
+        to freeze too. (First written as a direct DriveBase call; tests/test_no_direct_drive_bypass
+        caught it in CI.) The tick loop re-issues motion after the call returns; this
         does not change state, it only makes sure nothing is moving through the blind seconds."""
         if any(self.motors.commanded.values()):
-            self.motors.brake()
-            log_event(log,'HAILO_BRAKE',severity='warning',subsystem='drive',status='braked',
-                      reason='Hailo generation freezes every thread; braked before it')
+            self.safety.brake_now('Hailo generation freezes every thread; braked before it')
 
     def start_rotation(self,degrees,then='IDLE'):
         """Turn on the spot by `degrees` (+ left) in rotation mode, then go to state `then`."""

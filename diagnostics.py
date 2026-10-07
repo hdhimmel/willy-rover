@@ -3,7 +3,7 @@
 # safe to run any time (including mid-assembly) without risk of the rover moving. Mirrors the
 # INIT self-test in brain.py but reports a full itemized table instead of a pass/fail reason
 # string, and can be run standalone without starting the tick loop.
-import sys,time,board,busio,config,logsetup
+import sys,time,config,logsetup
 from sensors import SonarArray,IMU,ADC,Encoders,CurrentMonitor
 
 log=logsetup.setup('diagnostics')
@@ -26,6 +26,9 @@ _EXPECTED_I2C={config.INA260_5V_ADDR,config.STEER_PCA_ADDR,config.ARM_PCA_ADDR,
 if config.ENABLE_WITTY_PI: _EXPECTED_I2C.add(config.WITTY_PI_ADDR)
 
 def scan_i2c():
+    # board/busio imported here, not at the top: they exist only on the rover, and a top-level
+    # import stopped tests/test_expected_i2c_agreement.py anywhere else (first CI run, 2026-10-07).
+    import board,busio
     i2c=busio.I2C(board.SCL,board.SDA,frequency=100000)
     while not i2c.try_lock(): pass
     found=set(i2c.scan()); i2c.unlock()
