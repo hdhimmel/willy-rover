@@ -87,19 +87,61 @@ def test_a_turn_that_is_not_happening_times_out():
     clk.t+=config.ROTATE_TIMEOUT_S+0.1; r.tick(_CLEAR,0)
     assert r.state=='FAILED' and 'only turned' in said[-1]
 
-def test_camera_disagreeing_with_the_gyro_stops(monkeypatch):
+def _camera_stub(r,name,deg,imu_deg,ok=True):
+    c=[c for c in r._cams if c.name==name][0]
+    c.ok=ok; c.deg=deg; c.imu_deg=imu_deg; c.update=lambda turned: None
+    return c
+
+def test_camera_disagreeing_with_the_gyro_stops():
     r,s,dr,imu,clk,said=_task(cam=lambda:None)
     r.start(180); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
-    monkeypatch.setattr(r._cam,'update',lambda:2.0)      # scene barely moved
-    imu.heading=10+60; clk.t+=config.ROTATE_CAMERA_GRACE_S+0.1; r.tick(_CLEAR,0)
-    assert r.state=='FAILED' and 'camera' in said[-1]
+    _camera_stub(r,'front',2.0,60.0); _camera_stub(r,'rear',0.0,0.0,ok=False)
+    imu.heading=10+60; r.tick(_CLEAR,0)
+    assert r.state=='FAILED' and 'front camera' in said[-1]
 
-def test_camera_agreeing_lets_it_finish(monkeypatch):
+def test_camera_agreeing_lets_it_finish():
     r,s,dr,imu,clk,said=_task(cam=lambda:None)
     r.start(90); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
-    monkeypatch.setattr(r._cam,'update',lambda:80.0)
-    imu.heading=10+88; clk.t+=config.ROTATE_CAMERA_GRACE_S+0.1; r.tick(_CLEAR,0)
+    _camera_stub(r,'front',80.0,85.0)
+    imu.heading=10+88; r.tick(_CLEAR,0)
     assert r.state=='DONE'
+
+def test_one_camera_agreeing_is_enough():
+    """A blurred or dark camera must not stop a turn the other camera and the IMU agree on."""
+    r,s,dr,imu,clk,said=_task(cam=lambda:None)
+    r.start(180); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
+    _camera_stub(r,'front',5.0,60.0); _camera_stub(r,'rear',58.0,60.0)
+    imu.heading=10+60; r.tick(_CLEAR,0)
+    assert r.state=='SPIN'
+
+def test_a_camera_without_enough_clear_frames_does_not_judge():
+    r,s,dr,imu,clk,said=_task(cam=lambda:None)
+    r.start(180); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
+    _camera_stub(r,'front',0.0,config.ROTATE_CAMERA_MIN_MATCHED_DEG-1)
+    imu.heading=10+60; r.tick(_CLEAR,0)
+    assert r.state=='SPIN'
+
+def test_log_only_never_stops(monkeypatch):
+    monkeypatch.setattr(config,'ROTATE_CAMERA_STOP',False)
+    r,s,dr,imu,clk,said=_task(cam=lambda:None)
+    r.start(180); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
+    _camera_stub(r,'front',2.0,60.0)
+    imu.heading=10+60; r.tick(_CLEAR,0)
+    assert r.state=='SPIN'
+
+def test_blurred_frames_are_no_measurement_not_no_movement(monkeypatch):
+    """The 2026-10-07 failure: blurred frames counted as ~0 px and dragged 87 deg down to 17."""
+    import types, numpy as np
+    from rotate import CameraYaw
+    seq=iter([(4.4,0.8),(0.5,0.25),(0.4,0.2),(4.5,0.7)])     # (dx px, match quality)
+    fake=types.SimpleNamespace(INTER_AREA=3,resize=lambda g,size,interpolation=None: g,
+                               cvtColor=lambda f,code: f,COLOR_BGR2GRAY=6,
+                               phaseCorrelate=lambda a,b: (lambda v: ((v[0],0.0),v[1]))(next(seq)))
+    monkeypatch.setitem(sys.modules,'cv2',fake)
+    c=CameraYaw(lambda: np.zeros((90,160),np.uint8),66.0)
+    for imu in (0.0,1.8,3.6,5.4,7.2): c.update(imu)
+    assert abs(c.deg-(4.4+4.5)*66/160)<0.01           # only the two clear frames
+    assert abs(c.imu_deg-3.6)<0.01                     # IMU over the same two frames
 
 def test_abort_stops_and_recentres():
     r,s,dr,imu,clk,_=_task()

@@ -304,8 +304,13 @@ has nothing to say contributes nothing.
 the turning circle (FL and RR right, FR and RL left, middles straight), waits for the servos,
 then spins with corners 1.44× the middles' speed (`DriveBase.set_wheels`). It stops on IMU
 heading, not time; any sonar/ToF reading inside `ROTATE_CLEAR_CM`, a heading moving the wrong
-way, a timeout, or the front camera's integrated image shift disagreeing with the IMU stops it
-and says why. Bench-run by `scripts/rotate_test.py` (feed-forward drive, no speed loop). Not
+way, a timeout, or the cameras disagreeing with the IMU stops it and says why. **Camera check
+(2026-10-07, after two live runs):** front and rear cameras each integrate frame-to-frame image
+shift, but only over clear frames (phase-correlation quality ≥ 0.5) and against the IMU over
+those same frames — motion-blurred frames had read as "no movement" and turned 87° into 17°.
+It stops only if every camera with enough clear frames disagrees, so one blurred or dark camera
+cannot stop a turn the other agrees on. The rear camera's field of view is a typical figure,
+not measured. Bench-run by `scripts/rotate_test.py` (feed-forward drive, no speed loop). Not
 yet run on the rover, and not yet wired into brain.py's turns.
 
 **Come to me (`come_to_me_task.py`, FR-1000-006) owns no motion.** It sequences

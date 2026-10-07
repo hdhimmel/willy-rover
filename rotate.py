@@ -67,40 +67,59 @@ def _wrap(a): return (a+180.0)%360.0-180.0
 
 
 class CameraYaw:
-    """Integrated horizontal image shift -> degrees. Frame-to-frame (phase correlation on a small
-    greyscale copy), because a whole turn soon leaves the first frame's view entirely."""
-    def __init__(self,grab,clock=time.time):
-        self.grab=grab; self.prev=None; self.deg=0.0; self.ok=grab is not None
-        self.clock=clock; self._t_prev=None
-        self.samples=[]   # (t, dt_s, dx_px, response) per frame pair -- diagnosing the estimate
+    """Integrated horizontal image shift -> degrees, for one camera. Frame-to-frame (phase
+    correlation on a small greyscale copy), because a whole turn soon leaves the first view.
+
+    ONLY CLEAR FRAMES COUNT, and the IMU is compared over THE SAME FRAMES. Second live run
+    2026-10-07 (90 deg, 54 frames at a steady 67 ms): frames with match quality >= 0.5 showed the
+    expected ~4.4 px per frame; motion-blurred ones (quality 0.2-0.35) reported 0.3-1.5 px, and
+    summing them turned 87 deg into 17. A blurred frame is now NO MEASUREMENT, not "no movement":
+    the camera's degrees and the IMU's degrees are both accumulated only across clear frames."""
+    def __init__(self,grab,hfov_deg,name='front',clock=time.time):
+        self.grab=grab; self.hfov=hfov_deg; self.name=name; self.clock=clock
+        self.prev=None; self._t_prev=None; self._imu_prev=None
+        self.deg=0.0            # camera estimate over clear frames
+        self.imu_deg=0.0        # IMU rotation over the same clear frames
+        self.ok=grab is not None
+        self.samples=[]         # (t, dt_s, dx_px, response, used) per frame pair
     def _small(self,f):
         import cv2,numpy as np
-        g=cv2.cvtColor(f,cv2.COLOR_BGR2GRAY)
+        g=cv2.cvtColor(f,cv2.COLOR_BGR2GRAY) if f.ndim==3 else f
         g=cv2.resize(g,(160,90),interpolation=cv2.INTER_AREA)
         return np.float32(g)
-    def update(self):
-        if not self.ok: return None
+    def update(self,imu_turned):
+        if not self.ok: return
         try:
             f=self.grab()
-            if f is None: return None
+            if f is None: return
             import cv2
-            s=self._small(f)
-            now=self.clock()
+            s=self._small(f); now=self.clock()
             if self.prev is not None:
                 (dx,_dy),resp=cv2.phaseCorrelate(self.prev,s)
-                self.deg+=abs(dx)*config.ROTATE_CAMERA_HFOV_DEG/160.0
-                self.samples.append((now,now-self._t_prev,dx,resp))
-            self.prev=s; self._t_prev=now
-            return self.deg
+                used=resp>=config.ROTATE_CAMERA_MIN_RESPONSE
+                if used:
+                    self.deg+=abs(dx)*self.hfov/160.0
+                    self.imu_deg+=abs(imu_turned-self._imu_prev)
+                self.samples.append((now,now-self._t_prev,dx,resp,used))
+            self.prev=s; self._t_prev=now; self._imu_prev=imu_turned
         except Exception:
-            log.warning('Camera yaw estimate failed; continuing on IMU alone',exc_info=True)
-            self.ok=False; return None
+            log.warning(f'{self.name} camera yaw estimate failed; turning without it',exc_info=True)
+            self.ok=False
+    @property
+    def judged(self):
+        """Enough clear-frame rotation to compare at all."""
+        return self.ok and self.imu_deg>=config.ROTATE_CAMERA_MIN_MATCHED_DEG
+    @property
+    def agrees(self):
+        return abs(self.deg-self.imu_deg)<=max(config.ROTATE_CAMERA_MAX_DISAGREE_DEG,
+                                               config.ROTATE_CAMERA_MAX_DISAGREE_FRAC*self.imu_deg)
 
 
 class Rotation:
-    def __init__(self,steering,drive,imu,distances,camera_grab=None,say=None,clock=time.time):
+    def __init__(self,steering,drive,imu,distances,camera_grab=None,say=None,clock=time.time,
+                 rear_grab=None):
         self.steering=steering; self.drive=drive; self.imu=imu; self.distances=distances
-        self.camera_grab=camera_grab; self.say=say or (lambda t:None); self.clock=clock
+        self.camera_grab=camera_grab; self.rear_grab=rear_grab; self.say=say or (lambda t:None); self.clock=clock
         self.state='IDLE'   # IDLE|SETTLE|SPIN|DONE|FAILED|ABORTED
         self._fail_reason=''
 
@@ -115,8 +134,12 @@ class Rotation:
         if abs(degrees)<config.ROTATE_MIN_DEG: return False,'too small to rotate for'
         self._goal=float(degrees); self._dir=1 if degrees>0 else -1
         self._h0=self.imu.heading; self._t0=self.clock(); self._last_steer=0.0
-        self._cam=CameraYaw(self.camera_grab if config.ROTATE_USE_CAMERA else None,clock=self.clock)
-        self.trace=[]     # (t, imu_turned, camera_deg) each spin tick
+        use=config.ROTATE_USE_CAMERA
+        # Front and back cameras (owner: "include willie's back camera"). The back one looks the
+        # other way, so its image moves the other way -- only magnitudes are compared.
+        self._cams=[CameraYaw(self.camera_grab if use else None,config.ROTATE_CAMERA_HFOV_DEG,'front',self.clock),
+                    CameraYaw(self.rear_grab if use else None,config.ROTATE_REAR_CAMERA_HFOV_DEG,'rear',self.clock)]
+        self.trace=[]     # (t, imu_turned, {camera: (camera_deg, imu_deg over its clear frames)})
         self._pulses=rotation_pulses(); self._steer()
         self.state='SETTLE'; self._fail_reason=''
         log.info(f'Rotation start: {degrees:+.0f} deg from heading {self._h0:.1f}, corners {self._pulses}')
@@ -157,11 +180,14 @@ class Rotation:
         if near<config.ROTATE_CLEAR_CM:
             self._finish('FAILED',f'something is {near:.0f} centimetres away'); return
         turned=self._turned()
-        cam=self._cam.update()
-        self.trace.append((now,turned,cam))
-        if (cam is not None and config.ROTATE_CAMERA_STOP and now-self._spin_t0>=config.ROTATE_CAMERA_GRACE_S and
-                abs(abs(turned)-cam)>config.ROTATE_CAMERA_MAX_DISAGREE_DEG):
-            self._finish('FAILED',f'my gyro says {abs(turned):.0f} degrees but my camera says {cam:.0f}'); return
+        for c in self._cams: c.update(turned)
+        self.trace.append((now,turned,{c.name:(c.deg,c.imu_deg) for c in self._cams if c.ok}))
+        judged=[c for c in self._cams if c.judged]
+        # Stop only when every camera that can judge disagrees: one blurred or badly lit camera
+        # must not stop a turn the other camera and the IMU agree on.
+        if config.ROTATE_CAMERA_STOP and judged and not any(c.agrees for c in judged):
+            c=judged[0]
+            self._finish('FAILED',f'my gyro says {c.imu_deg:.0f} degrees but my {c.name} camera says {c.deg:.0f}'); return
         if turned*self._dir<-config.ROTATE_WRONG_WAY_DEG:
             self._finish('FAILED','I was turning the wrong way'); return
         if abs(turned)>=abs(self._goal)-config.ROTATE_STOP_EARLY_DEG:

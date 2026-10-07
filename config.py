@@ -187,8 +187,11 @@ ROTATE_WRONG_WAY_DEG=10.0     # heading moving this far the wrong way = stop
 ROTATE_MIN_DEG=5.0
 ROTATE_USE_CAMERA=True
 ROTATE_CAMERA_HFOV_DEG=66.0   # imx708 standard lens, horizontal (datasheet), not bench-measured
-ROTATE_CAMERA_GRACE_S=1.0     # let the image estimate catch up before comparing
+ROTATE_REAR_CAMERA_HFOV_DEG=65.0  # rear USB webcam (Microdia "Vitade AF") -- NOT measured, a typical figure
+ROTATE_CAMERA_MIN_RESPONSE=0.5    # phase-correlation quality; below it a frame is blurred = no measurement
+ROTATE_CAMERA_MIN_MATCHED_DEG=20.0  # IMU rotation over a camera's clear frames before it may judge
 ROTATE_CAMERA_MAX_DISAGREE_DEG=25.0
+ROTATE_CAMERA_MAX_DISAGREE_FRAC=0.4
 # First live run 2026-10-07: IMU 46 deg (owner: the turn was good) vs camera 17 deg -> stopped. The
 # camera estimate under-reads; until the cause is found it can be set to log-only (False).
 ROTATE_CAMERA_STOP=True

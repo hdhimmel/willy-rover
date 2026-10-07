@@ -23,6 +23,7 @@ from rotate import Rotation,rotation_pulses
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument('degrees',type=float)
     ap.add_argument('--no-camera',action='store_true')
+    ap.add_argument('--no-rear',action='store_true',help='front camera only')
     ap.add_argument('--camera-log-only',action='store_true',
                     help='record the camera estimate without letting it stop the turn')
     a=ap.parse_args()
@@ -38,11 +39,22 @@ def main():
     if not a.no_camera:
         from vision import ObjectDetector
         det=ObjectDetector(); grab=det.capture_frame if det.available else None
-        if grab is None: print('Camera unavailable: IMU only')
+        if grab is None: print('Front camera unavailable')
+    rear=None
+    if not a.no_camera and not a.no_rear:
+        import cv2
+        cap=cv2.VideoCapture(config.CAMERA_DEVICE,cv2.CAP_V4L2)
+        cap.set(cv2.CAP_PROP_FOURCC,cv2.VideoWriter_fourcc(*'MJPG'))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH,640); cap.set(cv2.CAP_PROP_FRAME_HEIGHT,360)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE,1)            # newest frame, not a queued one
+        if cap.isOpened():
+            def rear():
+                ok,f=cap.read(); return f if ok else None
+        else: print(f'Rear camera {config.CAMERA_DEVICE} would not open')
     steer=Steering(); drive=DriveBase()
     time.sleep(2.0)
     print('corner pulses:',{k:round(v) for k,v in rotation_pulses().items()})
-    r=Rotation(steer,drive,imu,None,camera_grab=grab,say=lambda t:print('SAY:',t))
+    r=Rotation(steer,drive,imu,None,camera_grab=grab,rear_grab=rear,say=lambda t:print('SAY:',t))
     ok,msg=r.start(a.degrees); print('start:',msg)
     t0=time.time()
     try:
@@ -53,20 +65,19 @@ def main():
     finally:
         drive.brake(); time.sleep(0.5)
     turned=r._turned()
-    cam=getattr(r,'_cam',None)
     print(f'result: {r.state} {r.fail_reason}  turned {turned:+.1f} deg of {a.degrees:+.0f} '
-          f'in {time.time()-t0:.1f}s; camera estimate '
-          f'{"n/a" if cam is None or not cam.ok else f"{cam.deg:.0f} deg"}')
+          f'in {time.time()-t0:.1f}s')
     time.sleep(1.0); print(f'heading after settling: {r._turned():+.1f} deg (coast included)')
-    if cam is not None and cam.samples:
-        t0s=cam.samples[0][0]
-        print('camera frames: t(s) dt(ms) dx(px) response')
-        for t,dt,dx,resp in cam.samples:
-            print(f'  {t-t0s:5.2f} {dt*1000:6.0f} {dx:+7.2f} {resp:.3f}')
-        dts=[s[1] for s in cam.samples]
-        print(f'frames {len(cam.samples)}, mean dt {sum(dts)/len(dts)*1000:.0f} ms, max dt {max(dts)*1000:.0f} ms')
-    if r.trace:
-        print('imu vs camera (deg): ' + ' '.join(f'{t:.0f}/{c:.0f}' for _,t,c in r.trace[::5] if c is not None))
+    for c in getattr(r,'_cams',[]):
+        if not c.samples: print(f'{c.name} camera: no frames'); continue
+        used=[x for x in c.samples if x[4]]; dts=[x[1] for x in c.samples]
+        print(f'{c.name} camera: {len(c.samples)} frames, mean dt {sum(dts)/len(dts)*1000:.0f} ms, '
+              f'{len(used)} clear; camera {c.deg:.1f} deg vs IMU {c.imu_deg:.1f} deg over those frames '
+              f'({"agrees" if c.agrees else "DISAGREES"}{"" if c.judged else ", not enough to judge"})')
+        print('   t(s)  dt(ms)  dx(px)  quality used')
+        t0s=c.samples[0][0]
+        for t,dt,dx,resp,u in c.samples:
+            print(f'  {t-t0s:5.2f} {dt*1000:6.0f} {dx:+7.2f}  {resp:.3f}  {"*" if u else ""}')
     return 0 if r.state=='DONE' else 1
 
 
