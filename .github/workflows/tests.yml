@@ -27,4 +27,14 @@ jobs:
       - name: Syntax check every Python file
         run: python -m compileall -q -x '(\.venv|venv)' .
       - name: Simulated test suite
-        run: python -m pytest -q -p no:cacheprovider
+        # Logs need a GitHub login; ANNOTATIONS are public through the API. So every collection
+        # error, error and failure is also emitted as an annotation (GitHub keeps 10 per type
+        # per step -- the count line says how many there were in all).
+        run: |
+          set +e
+          python -m pytest -q -p no:cacheprovider -rfE --tb=line 2>&1 | tee pytest.out
+          rc=${PIPESTATUS[0]}
+          grep -E "^(ERROR|FAILED) " pytest.out | head -40 | while IFS= read -r line; do echo "::error::$line"; done
+          grep -E "^E +[A-Za-z]*Error" pytest.out | sort | uniq -c | sort -rn | head -5 | while IFS= read -r line; do echo "::warning::$line"; done
+          echo "::notice::$(tail -1 pytest.out)"
+          exit $rc
