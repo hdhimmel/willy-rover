@@ -1222,6 +1222,12 @@ supply: a swinging steering servo left its reading flat. Each plugs
 into a 3-pin channel header; the board takes V+ from R2. All six were re-horned straight at
 1500 µs on 2026-10-05; the earlier per-corner trims are void.
 
+**Direction and scale (2026-10-07, each corner alone to 1700 µs, owner by eye):** all four corner
+wheels point **right** for +µs, about 15° per 200 µs — including the rears, whose servos are
+mounted reversed (the linkage undoes it). Middles not measured. Wheelbase 0.32 m front-to-rear
+axle, track 0.31 m: the rotation-mode corner angle is atan(0.16/0.155) = 46°, which needs about
+610 µs and is clamped to the ±500 µs allowed (~37°) until a wider servo range is confirmed.
+
 Software drives 1000–2000 µs (`SERVO_MIN_US`/`SERVO_MAX_US`), centre 1500 µs, 50 Hz — the
 narrowest documented range, so a narrow-mode unit cannot be driven into a bind. The
 servos are centred and held; they release after `STEER_RELEASE_AFTER_S` (2 s) idle.

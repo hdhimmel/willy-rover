@@ -176,6 +176,19 @@ DIST_STOP=20; DIST_SLOW=40; DIST_CLEAR=60; DIST_SIDE_CLEAR=25
 # FR-1000-002 turn choice (avoidance.py, owner 2026-10-06): the front camera's detections bias
 # WHICH WAY he turns. Never whether he stops -- Master Hardware Design §12 rule 15.
 AVOID_USE_CAMERA=True
+# Rotation mode (rotate.py, owner 2026-10-07): corners steered onto the turning circle, spin on IMU.
+ROTATE_SPEED=1.0              # fraction of the mph cap for the corners; a skid turn needed full duty
+ROTATE_SETTLE_S=0.6           # steering reaches its angle before any wheel drives
+ROTATE_RESTEER_S=0.5          # re-assert the corner pulses, ahead of STEER_RELEASE_AFTER_S
+ROTATE_STOP_EARLY_DEG=5.0     # stop this short of the goal; he coasts the rest (tune live)
+ROTATE_TIMEOUT_S=8.0          # a turn that is not happening, not a turn that is slow
+ROTATE_CLEAR_CM=15.0          # anything nearer than this on any sonar/ToF stops the spin
+ROTATE_WRONG_WAY_DEG=10.0     # heading moving this far the wrong way = stop
+ROTATE_MIN_DEG=5.0
+ROTATE_USE_CAMERA=True
+ROTATE_CAMERA_HFOV_DEG=66.0   # imx708 standard lens, horizontal (datasheet), not bench-measured
+ROTATE_CAMERA_GRACE_S=1.0     # let the image estimate catch up before comparing
+ROTATE_CAMERA_MAX_DISAGREE_DEG=25.0
 AVOID_CAMERA_CENTRE_DEG=5.0   # a detection this close to dead ahead counts for neither side
 
 # --- FR-1000-002 / FR-1200-005 multi-zone ToF (DFRobot SEN0628, Master Hardware Design §6.5).
@@ -270,6 +283,12 @@ SERVO_CENTER_US=1500; SERVO_MIN_US=1000; SERVO_MAX_US=2000
 # 2026-10-05, so 1500 is measured, not nominal; the earlier trims (1800/1350/1270) are void.
 # Fine-tune with scripts/steer_jog.py if a wheel is visibly off.
 STEER_CENTER_US={'lf':1500,'rf':1500,'lm':1500,'rm':1500,'lr':1500,'rr':1500}
+# Steering direction and scale, owner-measured 2026-10-07 by eye, each corner ALONE to 1700 us:
+# all four corners point RIGHT for +us, ~15 deg per 200 us. The rear servos are mounted reversed
+# from the fronts, but the wheel still went right -- measure, don't infer from the mounting.
+# Middles not measured (rotation keeps them straight). 1 = +us turns the wheel right.
+STEER_RIGHT_SIGN={'lf':1,'rf':1,'lr':1,'rr':1}
+STEER_US_PER_DEG=200/15.0
 SERVO_PWM_FREQ=50
 
 # Arm — PCA9685 @0x43. Wider nominal range than steering (manufacturer spec 500-2500us) though
@@ -460,6 +479,7 @@ WHEEL_DIAMETER_M=0.1016 # 4.00 in, owner-measured 2026-08-25. Was 0.065 (an UNCO
                         # NOTE this is the nominal/unloaded diameter. The effective ROLLING
                         # diameter under the rover's weight is slightly smaller if the tyre
                         # compresses; a drive-a-measured-distance check is what settles that.
+WHEELBASE_M=0.320      # front axle to rear axle, centre to centre, owner-measured 2026-10-07
 TRACK_WIDTH_M=0.310     # Owner-measured 2026-08-25. 400mm overall width ACROSS THE WHEELS minus
                         # one 90mm wheel width: outer edges at +/-200mm put the wheel centrelines
                         # at +/-155mm, so track = 310mm. Was 0.28, which over-reported rotation by

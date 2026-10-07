@@ -162,6 +162,13 @@ class DriveBase:
     def turn_right(self,speed=None):
         s=min(config.SPEED_MAX,speed or config.SPEED_TURN); self._set(s,-s)
     def stop(self): self._set(0.0,0.0)
+    def set_wheels(self,targets):
+        """Per-wheel targets (fraction of the mph cap, + = that wheel forward), each clamped to
+        SPEED_MAX. For rotation mode (rotate.py), where corners and middles need different
+        speeds; everything else drives by side through _set()."""
+        with self._lock:
+            for w,v in targets.items():
+                if w in self._target: self._target[w]=max(-config.SPEED_MAX,min(config.SPEED_MAX,float(v)))
     def brake(self):
         # Immediate, not ramped — for ESTOP/tilt-fault use where a 0.5s ramp-down is wrong.
         # throttle=0.0 is adafruit_motor's hard-brake (both legs driven); throttle=None coasts.

@@ -145,6 +145,14 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   while a servo swung:
                                                   servo V+ is not on its
                                                   path (see FR-600).
+                                                  2026-10-07: +us turns
+                                                  all four corners RIGHT,
+                                                  ~15 deg/200 us (by eye).
+                                                  Rotation mode (corners on
+                                                  the turning circle, spin
+                                                  on IMU, sonar/ToF/camera
+                                                  watching): built, not
+                                                  yet run on the rover.
 
   FR-700 Arm              Not live-verified       Arm current limit
                                                   (release) built

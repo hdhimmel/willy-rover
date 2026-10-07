@@ -300,6 +300,14 @@ on that side. It runs only after something has already stopped him, so the camer
 side and never gates a stop (Master Hardware Design §12 rule 15). A source that raises or
 has nothing to say contributes nothing.
 
+**Rotation mode (`rotate.py`, 2026-10-07).** Turning on the spot steers the four corners onto
+the turning circle (FL and RR right, FR and RL left, middles straight), waits for the servos,
+then spins with corners 1.44× the middles' speed (`DriveBase.set_wheels`). It stops on IMU
+heading, not time; any sonar/ToF reading inside `ROTATE_CLEAR_CM`, a heading moving the wrong
+way, a timeout, or the front camera's integrated image shift disagreeing with the IMU stops it
+and says why. Bench-run by `scripts/rotate_test.py` (feed-forward drive, no speed loop). Not
+yet run on the rover, and not yet wired into brain.py's turns.
+
 **Come to me (`come_to_me_task.py`, FR-1000-006) owns no motion.** It sequences
 `Navigator` (room mission, through labelled doorways) and `PursuitTask` (`come_here`, with
 its search sweep) under one `COME_TO_ME` state. Directive aborts reach the legs through the
