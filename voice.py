@@ -44,6 +44,68 @@ def downsample_to_16k(samples,factor):
     return decimate(samples,factor,ftype='fir',zero_phase=True).astype(np.int16)
 
 
+class PiperEngine:
+    """Text -> WAV file, with the voice model loaded ONCE (2026-10-07, "faster responses").
+
+    Every reply used to run the `piper` console script as a fresh process, which loads the
+    .onnx voice from disk before synthesising a word: live timing put the tts bucket at
+    2.6-5.1 s for one-line replies. Here the model is loaded on first use through Piper's Python
+    API and kept. Two API generations exist (piper-tts 1.3+: synthesize_wav + SynthesisConfig;
+    1.2: synthesize(text, wav, length_scale=)) -- both are tried. If neither imports or loads,
+    `fallback` (the old subprocess path) is used, so speech can never be lost to this.
+
+    Short fixed replies are also CACHED as finished WAV bytes, keyed on (text, length_scale):
+    "Turning left.", "Checking.", ... need no synthesis at all after their first use."""
+    def __init__(self,model_path,fallback,cache_max=None,max_cached_chars=None):
+        self.model_path=model_path; self.fallback=fallback
+        self.cache_max=cache_max if cache_max is not None else config.TTS_CACHE_MAX
+        self.max_cached_chars=max_cached_chars if max_cached_chars is not None else config.TTS_CACHE_MAX_CHARS
+        self._voice=None; self._api=None; self._load_failed=False; self._cache={}
+        self.last_path=''   # 'cache' | 'inproc' | 'subprocess' -- logged beside the timing
+    def _load(self):
+        if self._voice is not None or self._load_failed: return
+        try:
+            from piper import PiperVoice
+            self._voice=PiperVoice.load(self.model_path)
+            try:
+                from piper import SynthesisConfig    # piper-tts 1.3+
+                self._api=('new',SynthesisConfig)
+            except ImportError:
+                self._api=('old',None)
+            log.info(f'Piper voice loaded in-process ({self._api[0]} API)')
+        except Exception as e:
+            self._load_failed=True
+            log.warning(f'Piper in-process unavailable ({type(e).__name__}: {e}); using the piper subprocess')
+    def _synth_inproc(self,text,wav_path,scale):
+        import wave
+        with wave.open(wav_path,'wb') as w:
+            kind,Cfg=self._api
+            if kind=='new':
+                self._voice.synthesize_wav(text,w,syn_config=Cfg(length_scale=scale))
+            else:
+                self._voice.synthesize(text,w,length_scale=scale)
+    def synthesize(self,text,wav_path,scale=1.0):
+        key=(text,round(scale,3))
+        if key in self._cache:
+            with open(wav_path,'wb') as f: f.write(self._cache[key])
+            self.last_path='cache'; return
+        self._load()
+        done=False
+        if self._voice is not None:
+            try:
+                self._synth_inproc(text,wav_path,scale); self.last_path='inproc'; done=True
+            except Exception as e:
+                log.warning(f'Piper in-process synthesis failed ({type(e).__name__}: {e}); subprocess this time')
+        if not done:
+            self.fallback(text,wav_path,scale); self.last_path='subprocess'
+        if len(text)<=self.max_cached_chars:
+            try:
+                with open(wav_path,'rb') as f: data=f.read()
+                if len(self._cache)>=self.cache_max: self._cache.pop(next(iter(self._cache)))
+                self._cache[key]=data
+            except OSError: pass
+
+
 def speech_envelope(wav_path,step_s):
     """FR-1600-009: loudness per `step_s` of a 16-bit WAV, scaled 0..1 for the talking mouth.
     RMS per window, normalised to the 95th percentile so a loud word does not make every other
@@ -275,6 +337,7 @@ class VoicePipeline:
     def __init__(self,memory=None,cloud_ai=None,display=None,smart_home=None):
         self._enabled=config.ENABLE_VOICE
         self.memory=memory; self.cloud_ai=cloud_ai; self.display=display; self.smart_home=smart_home
+        self._tts=None   # PiperEngine, created on the speaker thread at first use
         self.pending_commands=queue.Queue()
         self._speak_queue=queue.Queue()
         # 'stop' bypasses pending_commands entirely — every other queued intent only gets drained
@@ -379,6 +442,14 @@ class VoicePipeline:
     def _speaker_loop(self):
         # Sole consumer of _speak_queue — keeps every speak()/speak_safety() call (including
         # brain.py's, from the main tick thread) non-blocking regardless of caller.
+        # Load the voice now, while nothing is waiting to be said, so the FIRST reply is as quick
+        # as the rest (PiperEngine, 2026-10-07).
+        try:
+            if self._tts is None:
+                model=os.path.join(os.path.dirname(os.path.abspath(__file__)),config.PIPER_VOICE_PATH)
+                self._tts=PiperEngine(model,self._piper_subprocess)
+            self._tts._load()
+        except Exception: log.warning('Piper warm-up failed; loading on first reply',exc_info=True)
         while self._running:
             try: text,timing,tone=self._speak_queue.get(timeout=0.5)
             except queue.Empty: continue
@@ -891,6 +962,23 @@ class VoicePipeline:
             log.info(f'(voice disabled) would say: {text}'); return
         self._speak_queue.put((text,None,'neutral'))
 
+    @staticmethod
+    def _piper_subprocess(text,wav_path,scale):
+        """The original path: one `piper` process per reply. Kept as PiperEngine's fallback."""
+        model=os.path.join(os.path.dirname(os.path.abspath(__file__)),config.PIPER_VOICE_PATH)
+        # `piper` is a venv-installed console script (venv/bin/piper) -- willy-rover.service sets
+        # no PATH, so resolve it next to the running interpreter rather than trusting PATH.
+        piper_bin=os.path.join(os.path.dirname(sys.executable),'piper')
+        cmd=[piper_bin,'--model',model,'--output_file',wav_path]
+        try:
+            subprocess.run(cmd+(['--length_scale',str(scale)] if scale!=1.0 else []),
+                           input=text.encode(),capture_output=True,timeout=10,check=True)
+        except subprocess.CalledProcessError:
+            if scale==1.0: raise
+            # A Piper build that rejects the flag must cost the tone, never the speech.
+            log.warning('piper rejected --length_scale; speaking in the neutral tone')
+            subprocess.run(cmd,input=text.encode(),capture_output=True,timeout=10,check=True)
+
     def _synthesize_and_play(self,text,timing=None,tone='neutral'):
         # Only ever called from _speaker_loop's own thread — never call this directly.
         try:
@@ -901,24 +989,17 @@ class VoicePipeline:
             # bare 'piper' lookup fails FileNotFoundError under the actual live service (caught
             # below, so it fails silent — no speech, no crash, no obvious clue why). Resolve it
             # next to the interpreter actually running this process instead of trusting PATH.
-            piper_bin=os.path.join(os.path.dirname(sys.executable),'piper')
-            cmd=[piper_bin,'--model',model,'--output_file',wav_path]
             scale=_TONE_LENGTH_SCALE.get(tone,1.0)
-            try:
-                subprocess.run(cmd+(['--length_scale',str(scale)] if scale!=1.0 else []),
-                               input=text.encode(),capture_output=True,timeout=10,check=True)
-            except subprocess.CalledProcessError:
-                if scale==1.0: raise
-                # A Piper build that rejects the flag must cost the tone, never the speech.
-                log.warning('piper rejected --length_scale; speaking in the neutral tone')
-                subprocess.run(cmd,input=text.encode(),capture_output=True,timeout=10,check=True)
+            if self._tts is None:
+                self._tts=PiperEngine(model,self._piper_subprocess)
+            self._tts.synthesize(text,wav_path,scale)
             if timing is not None:
                 # Voice latency handoff 2026-08-15 Step 0: logged right after synthesis, before
                 # aplay/pw-play, so this bucket reflects piper compute cost rather than the
                 # reply's spoken-audio duration (which scales with reply length, not latency).
                 t_wake,t_stt,t_intent=timing; t_tts=time.time()
-                log.info('voice timing: stt=%.1fs intent=%.1fs tts=%.1fs total=%.1fs',
-                          t_stt-t_wake,t_intent-t_stt,t_tts-t_intent,t_tts-t_wake)
+                log.info('voice timing: stt=%.1fs intent=%.1fs tts=%.1fs (%s) total=%.1fs',
+                          t_stt-t_wake,t_intent-t_stt,t_tts-t_intent,self._tts.last_path,t_tts-t_wake)
             # aplay opens ALSA directly, which conflicts with pipewire holding the USB
             # card exclusively under this user session (confirmed 2026-08-15: bare aplay
             # fails with "Device or resource busy", caught here as a silent no-op).

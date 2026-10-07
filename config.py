@@ -961,6 +961,10 @@ WHISPER_CPU_THREADS=3          # 2026-08-21: was unset, so faster-whisper took a
 ENABLE_HAILO_STT=False
 HAILO_STT_MODEL_PATH='models/hailo_whisper.hef'  # does not exist yet
 PIPER_VOICE_PATH='models/piper/en_US-amy-medium.onnx'
+# Faster replies (2026-10-07): voice.PiperEngine keeps the voice loaded in-process and caches the
+# finished audio of short replies ("Turning left.", "Checking.") so they need no synthesis at all.
+TTS_CACHE_MAX=64              # cached replies kept (oldest dropped first)
+TTS_CACHE_MAX_CHARS=60        # only replies this short are cached -- the fixed fast-path ones
 LOCAL_LLM_MODEL_PATH='models/llama-3.2-3b-instruct-q4.gguf'  # llama.cpp gguf
 LOCAL_LLM_CONFIDENCE_FLOOR=0.55  # FR-1400-001: below this, offer cloud AI fallback if enabled
 # --- Hailo NPU intent-parsing LLM, 2026-08-23. See docs/superpowers/plans/2026-08-23-hailo-

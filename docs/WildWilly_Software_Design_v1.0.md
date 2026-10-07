@@ -336,6 +336,16 @@ around" (180°) and "turn left/right N degrees"; `_avoid()` turns ±45°/±90° 
 `AVOID_USE_ROTATION`, and a refused or blocked rotation backs off and lets AVOID retry.
 Navigator's own avoidance still skid-turns. The service uses the front camera only.
 
+**Faster replies (2026-10-07).** Live `voice timing` put speech-to-text at ~3.7–4.1 s (mostly
+the speaking itself plus the 0.6 s end-of-speech silence; transcription ~1 s) and reply
+synthesis at **2.6–5.1 s**, because every reply started a new `piper` process that loaded the
+voice model from disk. `voice.PiperEngine` now loads the model once (on the speaker thread at
+startup) through Piper's Python API — 1.3+ `synthesize_wav`/`SynthesisConfig` or 1.2
+`synthesize` — and caches the finished audio of short replies (≤ `TTS_CACHE_MAX_CHARS`), so
+fixed fast-path answers need no synthesis after first use. Any failure falls back to the old
+subprocess. The timing line now names the path taken (`cache`/`inproc`/`subprocess`). Not yet
+measured on the rover.
+
 **Talking mouth (FR-1600-009, 2026-10-07).** `_synthesize_and_play()` computes the loudness
 envelope of the WAV Piper just wrote (`speech_envelope`, 50 ms windows, normalised and gated)
 and hands it to `display.set_talking()` immediately before `pw-play`; `stop_talking()` runs in
