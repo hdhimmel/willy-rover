@@ -18,6 +18,7 @@ from vision import ObjectDetector
 from retrieval_task import RetrievalTask
 from pursuit_task import PursuitTask
 from come_to_me_task import ComeToMeTask
+from rotate import Rotation
 import avoidance
 from email_client import EmailClient
 from remote_cmd import RemoteCommandServer
@@ -54,7 +55,7 @@ _SPEECH_ONLY_INTENTS=frozenset({'status','battery','where_are_you'})
 _NON_SPOKEN_SOURCES=frozenset({'remote','email'})
 # What an email may queue: everything a spoken command could, through the same gating.
 _EMAIL_QUEUEABLE=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve','map',
-    'stop_map','status','battery','arm_stow','arm_home','wave','come_here','come_to_me','follow','diagnostics',
+    'stop_map','status','battery','arm_stow','arm_home','wave','come_here','come_to_me','rotate','follow','diagnostics',
     'where_are_you','what_do_you_see','name_room','mark_stairs','shutdown','demo_replay'})
 
 # Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
@@ -164,7 +165,7 @@ _MOTION_SCHEMA={'action':str,'duration':(int,float),'speed':(int,float)}
 # retried before surfacing; unrelated exception types still propagate on the first attempt.
 # States in which the tick's dispatch commands motion. A voice "stop" must leave these, or the
 # same tick's dispatch drives again -- see the stop_requested branch of _tick().
-_MOTION_STATES=('ROAM','SLOW','AVOID','STUCK','DOCK','WAVE','RETRIEVE','NAVIGATE','MANUAL','PURSUE','COME_TO_ME')
+_MOTION_STATES=('ROAM','SLOW','AVOID','STUCK','DOCK','WAVE','RETRIEVE','NAVIGATE','MANUAL','PURSUE','COME_TO_ME','ROTATE')
 
 def _sonar_returns(d):
     """The sonar readings that are echoes off something real, for the world model.
@@ -235,6 +236,13 @@ class RoverBrain:
                                  sonars=self.sonars,detector=self.detector,say=self._say)
         self.retrieval=RetrievalTask(self.safety,self.arm,self.detector,display=self.display,voice=self.voice)
         self.pursuit=PursuitTask(self.safety,self.detector,display=self.display,voice=self.voice)  # FR-1000
+        # Rotation mode (rotate.py, live-verified 2026-10-07). Drives THROUGH SafetyController
+        # (set_wheels is approved like a turn). Front camera only here: the rear camera is not
+        # opened by the service, and opening a USB camera on the tick thread would stall it.
+        self.rotation=Rotation(self.steering,self.safety,self.imu,None,
+                               camera_grab=self.detector.capture_frame,encoders=self.encoders,
+                               say=self._say)
+        self._after_rotate='IDLE'
         self.come_to_me=ComeToMeTask(self.navigator,self.pursuit,self.world_model,self.detector,
                                      say=self._say)  # FR-1000-006
         self.email=EmailClient()
@@ -466,6 +474,7 @@ class RoverBrain:
         if self.mapping.active: self.mapping.abort('shutdown')
         if self.navigator.active: self.navigator.abort('shutdown')
         if self.pursuit.active: self.pursuit.abort('shutdown')
+        if self.rotation.active: self.rotation.abort('shutdown')
         self.faces.stop(); self.feature_requests.stop(); self.remote.stop(); self.voice.stop(); self.email.stop(); self.detector.close()
         self.memory.close()  # FR-1900-011: persist any new/updated memory before power-off
         self.world_model.close()  # §9/§10: persist rooms/landmarks/objects/routes before power-off
@@ -824,6 +833,7 @@ class RoverBrain:
             if self.mapping.active: self.mapping.abort('operator stop button')
             if self.navigator.active: self.navigator.abort('operator stop button')
             if self.pursuit.active: self.pursuit.abort('operator stop button')
+            if self.rotation.active: self.rotation.abort('operator stop button')
             self.memory.save_all_now()
             self.display.update_state('warn','STOPPING SERVICE…')
             self._running=False
@@ -837,6 +847,7 @@ class RoverBrain:
             if self.mapping.active: self.mapping.abort('voice stop')
             if self.navigator.active: self.navigator.abort('voice stop')
             if self.pursuit.active: self.pursuit.abort('voice stop')
+            if self.rotation.active: self.rotation.abort('voice stop')
             self._abandon_stuck_if_active()
             self.safety.emergency_stop('voice stop')
             self._revoke_roam_permission()  # stop means stop, not "pause for 30 seconds"
@@ -931,6 +942,7 @@ class RoverBrain:
             if self.mapping.active: self.mapping.abort(f'sensor fault: {sustained_fault}')
             if self.navigator.active: self.navigator.abort(f'sensor fault: {sustained_fault}')
             if self.pursuit.active: self.pursuit.abort(f'sensor fault: {sustained_fault}')
+            if self.rotation.active: self.rotation.abort(f'sensor fault: {sustained_fault}')
             self._abandon_stuck_if_active()
             self.safety.emergency_stop(f'{sustained_fault} sensor fault')
             if self._state!='SENSOR_FAULT': log.warning(f'  {self._state}->SENSOR_FAULT ({sustained_fault})')
@@ -945,6 +957,7 @@ class RoverBrain:
             if self.mapping.active: self.mapping.abort(f'tilt fault {tilt:.1f}deg')
             if self.navigator.active: self.navigator.abort(f'tilt fault {tilt:.1f}deg')
             if self.pursuit.active: self.pursuit.abort(f'tilt fault {tilt:.1f}deg')
+            if self.rotation.active: self.rotation.abort(f'tilt fault {tilt:.1f}deg')
             self._abandon_stuck_if_active()
             if self._state!='TILT_FAULT': log.warning(f'TILT_FAULT tilt={tilt:.1f}'); self._go('TILT_FAULT')
             self.safety.emergency_stop(f'tilt fault {tilt:.1f}deg')
@@ -980,6 +993,7 @@ class RoverBrain:
             if self.mapping.active: self.mapping.abort(f'battery shutdown {bat_v:.2f}V')
             if self.navigator.active: self.navigator.abort(f'battery shutdown {bat_v:.2f}V')
             if self.pursuit.active: self.pursuit.abort(f'battery shutdown {bat_v:.2f}V')
+            if self.rotation.active: self.rotation.abort(f'battery shutdown {bat_v:.2f}V')
             self._abandon_stuck_if_active()
             self.safety.emergency_stop(f'battery shutdown {bat_v:.2f}V')
             if self._state!='SHUTDOWN':
@@ -997,6 +1011,7 @@ class RoverBrain:
             if self.mapping.active: self.mapping.abort(f'battery safe mode {bat_v:.2f}V')
             if self.navigator.active: self.navigator.abort(f'battery safe mode {bat_v:.2f}V')
             if self.pursuit.active: self.pursuit.abort(f'battery safe mode {bat_v:.2f}V')
+            if self.rotation.active: self.rotation.abort(f'battery safe mode {bat_v:.2f}V')
             self._abandon_stuck_if_active()
             if self._state!='SAFE_MODE':
                 log_event(log,'LOW_BATTERY',severity='warning',subsystem='battery',
@@ -1011,6 +1026,7 @@ class RoverBrain:
             if self.mapping.active: self.mapping.abort(f'low battery {bat_v:.2f}V')
             if self.navigator.active: self.navigator.abort(f'low battery {bat_v:.2f}V')
             if self.pursuit.active: self.pursuit.abort(f'low battery {bat_v:.2f}V')
+            if self.rotation.active: self.rotation.abort(f'low battery {bat_v:.2f}V')
             self._abandon_stuck_if_active()
             self.safety.stop()
             if self._state!='LOW_BATTERY':
@@ -1027,6 +1043,7 @@ class RoverBrain:
                 if self.mapping.active: self.mapping.abort(f'return-to-home {bat_v:.2f}V')
                 if self.navigator.active: self.navigator.abort(f'return-to-home {bat_v:.2f}V')
                 if self.pursuit.active: self.pursuit.abort(f'return-to-home {bat_v:.2f}V')
+                if self.rotation.active: self.rotation.abort(f'return-to-home {bat_v:.2f}V')
                 self._abandon_stuck_if_active()
                 # ENABLE_DOCKING=True only (docking is deferred; the branch above handles rth
                 # today). FR-1900-011: the guaranteed memory save happens here, at the earlier RTH
@@ -1075,6 +1092,7 @@ class RoverBrain:
             if self.mapping.active: self.mapping.abort(why)
             if self.navigator.active: self.navigator.abort(why)
             if self.pursuit.active: self.pursuit.abort(why)
+            if self.rotation.active: self.rotation.abort(why)
             self._abandon_stuck_if_active()
             if self._state!='STALL_FAULT':
                 log_event(log,'MOTOR_STALL',severity='warning',subsystem='motors',
@@ -1095,6 +1113,7 @@ class RoverBrain:
             if self.mapping.active: self.mapping.abort(oc)
             if self.navigator.active: self.navigator.abort(oc)
             if self.pursuit.active: self.pursuit.abort(oc)
+            if self.rotation.active: self.rotation.abort(oc)
             self._abandon_stuck_if_active()
             self.safety.emergency_stop(oc)
             if self._state!='OVERCURRENT_FAULT': log.warning(f'  {self._state}->OVERCURRENT_FAULT ({oc})')
@@ -1132,7 +1151,7 @@ class RoverBrain:
         {'IDLE':self._idle,'ROAM':self._roam,'SLOW':self._slow,'AVOID':self._avoid,
          'STUCK':self._stuck,'DOCK':self._dock,'WARN':self._warn,'RETRIEVE':self._retrieve,
          'NAVIGATE':self._navigate,'MANUAL':self._manual,'PURSUE':self._pursue,'WAVE':self._wave,
-         'COME_TO_ME':self._come_to_me_tick,
+         'COME_TO_ME':self._come_to_me_tick,'ROTATE':self._rotate_tick,
          'TILT_FAULT':lambda d,t:None,'SAFE_MODE':lambda d,t:None,'SHUTDOWN':lambda d,t:None,
          'LOW_BATTERY':lambda d,t:None,'OVERCURRENT_FAULT':lambda d,t:None,
         }.get(self._state,lambda d,t:None)(d,tilt)
@@ -1377,6 +1396,11 @@ class RoverBrain:
                 if ok: self._go('PURSUE')
                 self._say('On my way.' if ok else f"I can't come over: {msg}")
                 log.info(f'Voice-triggered pursuit: mode={mode} ({msg})')
+        elif cmd.get('intent')=='rotate':
+            deg=float(cmd.get('args',{}).get('degrees',180))
+            ok,msg=self.start_rotation(deg)
+            if not ok: self._say(f"I can't turn: {msg}")
+            log.info(f'Voice-triggered rotation {deg:+.0f} deg ({msg})')
         elif cmd.get('intent')=='come_to_me':
             ok,msg=self.come_to_me.start(cmd.get('args',{}).get('room',''))
             if ok: self._go('COME_TO_ME')
@@ -1440,6 +1464,23 @@ class RoverBrain:
         if self.retrieval.state in('DONE','FAILED','ABORTED'):
             if self.retrieval.state=='DONE' and self.voice.available: self.voice.speak('All done!')
             self.retrieval.reset(); self._go('IDLE')
+
+    def start_rotation(self,degrees,then='IDLE'):
+        """Turn on the spot by `degrees` (+ left) in rotation mode, then go to state `then`."""
+        ok,msg=self.rotation.start(degrees)
+        if ok: self._after_rotate=then; self._go('ROTATE')
+        return ok,msg
+
+    def _rotate_tick(self,d,tilt):
+        self.rotation.tick(d,tilt)
+        if not self.rotation.active:
+            done=self.rotation.state; self.rotation.reset()
+            nxt=self._after_rotate; self._after_rotate='IDLE'
+            if nxt=='AVOID' and done!='DONE':
+                # Blocked or refused mid-avoidance: back off and let AVOID try again.
+                self._avoid_phase=None
+                self.safety.request('reverse',None,config.BACK_UP_TIME)
+            self._go(nxt)
 
     def _come_to_me_tick(self,d,tilt):
         # FR-1000-006. The task speaks every outcome itself; this only leaves the state.
@@ -1616,7 +1657,10 @@ class RoverBrain:
             self._upd('stop',f'Avoiding l={l:.0f} r={r:.0f}',d,tilt); return
         if self._avoid_phase=='turn_after_reverse':
             self._avoid_phase=None
-            self.safety.request(self._avoid_turn(d) or 'turn_right',None,config.TURN_TIME_90); self._last_action='back_turn'
+            turn=self._avoid_turn(d) or 'turn_right'
+            if not (config.AVOID_USE_ROTATION and self.start_rotation(90 if turn=='turn_left' else -90,then='AVOID')[0]):
+                self.safety.request(turn,None,config.TURN_TIME_90)
+            self._last_action='back_turn'
             self._upd('stop',f'Avoiding l={l:.0f} r={r:.0f}',d,tilt); return
         if time.time()-self._avoid_start>config.STUCK_TIMEOUT:
             self._stuck_count+=1
@@ -1625,7 +1669,11 @@ class RoverBrain:
         if f>config.DIST_CLEAR: self._stuck_count=0; self._go('ROAM'); return
         self.safety.stop()
         turn=self._avoid_turn(d)
-        if turn: self.safety.request(turn,None,config.TURN_TIME_90*0.5); self._last_action=turn
+        if turn:
+            # Rotation mode (live-verified 2026-10-07) when allowed; the skid turn if it will not start.
+            if not (config.AVOID_USE_ROTATION and self.start_rotation(45 if turn=='turn_left' else -45,then='AVOID')[0]):
+                self.safety.request(turn,None,config.TURN_TIME_90*0.5)
+            self._last_action=turn
         else:
             self.safety.request('reverse',None,config.BACK_UP_TIME)
             self._avoid_phase='turn_after_reverse'; self._last_action='back_turn'

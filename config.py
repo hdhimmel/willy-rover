@@ -202,7 +202,8 @@ ROTATE_CAMERA_MAX_DISAGREE_FRAC=0.4
 # First live run 2026-10-07: IMU 46 deg (owner: the turn was good) vs camera 17 deg -> stopped. The
 # camera estimate under-reads; until the cause is found it can be set to log-only (False).
 ROTATE_CAMERA_STOP=True
-AVOID_CAMERA_CENTRE_DEG=5.0   # a detection this close to dead ahead counts for neither side
+AVOID_CAMERA_CENTRE_DEG=5.0
+AVOID_USE_ROTATION=True       # brain._avoid turns in rotation mode (rotate.py); False = the old skid turn   # a detection this close to dead ahead counts for neither side
 
 # --- FR-1000-002 / FR-1200-005 multi-zone ToF (DFRobot SEN0628, Master Hardware Design §6.5).
 # Front obstacle sensing ALONGSIDE the sonar, never replacing it: the two fail in opposite

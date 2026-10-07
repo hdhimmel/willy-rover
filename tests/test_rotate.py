@@ -26,6 +26,13 @@ class _Clock:
 
 _CLEAR={'front':999,'left':999,'right':999}
 
+import pytest
+@pytest.fixture(autouse=True)
+def _measured_geometry(monkeypatch):
+    # tests/test_odometry.py sets config.TRACK_WIDTH_M=1.0 and never restores it, so pin the
+    # measured chassis here rather than inherit whatever ran before.
+    monkeypatch.setattr(config,'TRACK_WIDTH_M',0.310); monkeypatch.setattr(config,'WHEELBASE_M',0.320)
+
 def _task(cam=None):
     s,dr,imu,clk,said=_Steer(),_Drive(),_IMU(10.0),_Clock(),[]
     r=Rotation(s,dr,imu,None,camera_grab=cam,say=said.append,clock=clk)
@@ -185,3 +192,60 @@ def test_steering_is_reasserted_before_the_idle_release():
     r.start(90); s.pulses.clear()
     clk.t+=config.ROTATE_RESTEER_S; r.tick(_CLEAR,0)
     assert s.pulses
+
+
+# --- wiring: SafetyController approval, brain glue (2026-10-07) ---
+
+class _DB:
+    def __init__(self): self.wheels=None; self.stopped=0
+    def set_wheels(self,t): self.wheels=dict(t)
+    def stop(self): self.stopped+=1
+
+def _safety(**ctx):
+    from safety import SafetyController
+    s=SafetyController(_DB())
+    s.update_context(front_cm=999,tilt_deg=0,bat_tier='normal',motion_enabled=True)
+    s.update_context(**ctx)
+    return s
+
+def test_rotation_goes_through_the_safety_layer():
+    s=_safety()
+    r=s.set_wheels(wheel_targets(+1,1.0))
+    assert type(r).__name__=='ApprovedMotion' and s._drive.wheels['rf']>0
+
+def test_rotation_is_refused_when_motion_is_disabled_or_tilted():
+    from safety import Rejected
+    for ctx in ({'motion_enabled':False},{'tilt_deg':config.IMU_TILT_LIMIT+5},{'bat_tier':'safe'}):
+        s=_safety(**ctx)
+        assert isinstance(s.set_wheels(wheel_targets(-1,1.0)),Rejected) and s._drive.wheels is None
+
+def test_a_refused_spin_fails_the_rotation_and_says_why():
+    s=_safety(motion_enabled=False)
+    st,imu,clk,said=_Steer(),_IMU(0.0),_Clock(),[]
+    r=Rotation(st,s,imu,None,say=said.append,clock=clk)
+    r.start(90); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
+    assert r.state=='FAILED' and 'not allowed to move' in said[-1]
+
+def _brain():
+    import types
+    from brain import RoverBrain
+    b=types.SimpleNamespace(_state='AVOID',_after_rotate='IDLE',_avoid_phase='x',requests=[])
+    b._go=lambda st: setattr(b,'_state',st)
+    b.safety=types.SimpleNamespace(request=lambda a,s,d: b.requests.append((a,d)))
+    b.rotation=types.SimpleNamespace(active=True,state='SPIN',tick=lambda d,t:None,
+                                     reset=lambda: None,start=lambda deg:(True,'started'))
+    for m in ('start_rotation','_rotate_tick'):
+        setattr(b,m,types.MethodType(getattr(RoverBrain,m),b))
+    return b
+
+def test_brain_runs_a_rotation_in_its_own_state_and_returns():
+    b=_brain(); b._state='IDLE'
+    ok,_=b.start_rotation(90,then='AVOID')
+    assert ok and b._state=='ROTATE'
+    b.rotation.active=False; b.rotation.state='DONE'; b._rotate_tick({},0)
+    assert b._state=='AVOID' and b.requests==[]
+
+def test_a_blocked_rotation_during_avoidance_backs_off():
+    b=_brain(); b.start_rotation(-45,then='AVOID')
+    b.rotation.active=False; b.rotation.state='FAILED'; b._rotate_tick({},0)
+    assert b._state=='AVOID' and b.requests and b.requests[0][0]=='reverse'

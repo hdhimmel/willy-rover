@@ -313,8 +313,15 @@ cannot stop a turn the other agrees on. The rear camera's field of view is a typ
 not measured. **Blind spots (2026-10-07, spun into the couch):** nothing senses the rear or the
 corners during a spin — sonars face front/left/right, the ToF forward, and sonar misses soft
 furniture. The backstop is a bump stop: once under way, heading slower than 5°/s for 0.7 s
-stops the turn (~1 s, not the 8 s timeout that caught the couch). Rotation needs open space. Bench-run by `scripts/rotate_test.py` (feed-forward drive, no speed loop). Not
-yet run on the rover, and not yet wired into brain.py's turns.
+stops the turn (~1 s, not the 8 s timeout that caught the couch). Rotation needs open space. Bench-run by `scripts/rotate_test.py` (feed-forward drive, no speed loop). **Live-verified
+2026-10-07** in open space: +90° settled at +87.8°, −90° at −93.8° (stop 10° early, ~6–8° coast);
+both cameras agreed with the IMU over clear frames with the check live; the bump stop caught two
+runs against the couch in ~1.7 s each. **Wired into brain.py (2026-10-07, not yet run in the
+service):** state `ROTATE` (`start_rotation(deg, then=...)`); the spin is approved by
+`SafetyController.set_wheels` like any turn; every Directive/stop site aborts it; voice "turn
+around" (180°) and "turn left/right N degrees"; `_avoid()` turns ±45°/±90° by rotation when
+`AVOID_USE_ROTATION`, and a refused or blocked rotation backs off and lets AVOID retry.
+Navigator's own avoidance still skid-turns. The service uses the front camera only.
 
 **Come to me (`come_to_me_task.py`, FR-1000-006) owns no motion.** It sequences
 `Navigator` (room mission, through labelled doorways) and `PursuitTask` (`come_here`, with

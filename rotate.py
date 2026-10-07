@@ -187,7 +187,9 @@ class Rotation:
         if now-self._last_steer>=config.ROTATE_RESTEER_S: self._steer()   # beat the idle release
         if self.state=='SETTLE':
             if now-self._t0>=config.ROTATE_SETTLE_S:
-                self.drive.set_wheels(wheel_targets(self._dir,config.ROTATE_SPEED))
+                res=self.drive.set_wheels(wheel_targets(self._dir,config.ROTATE_SPEED))
+                if res is not None and type(res).__name__=='Rejected':   # SafetyController said no
+                    self._finish('FAILED',f'I am not allowed to move: {res.reason}'); return
                 self.state='SPIN'; self._spin_t0=now; self._hist=[]
             return
         near=min(d.get('front',999),d.get('left',999),d.get('right',999))

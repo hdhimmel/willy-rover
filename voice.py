@@ -80,6 +80,10 @@ _NAME_ROOM=re.compile(r"(?:this is|this room is|we(?:'re| are) in|you(?:'re| are
 # collide; matched first anyway so the order says so.
 _COME_TO_ME=re.compile(r"(?:i'?m|i am) in the ([a-z][a-z ]{1,30}?)[,.]? (?:(?:please|can you|could you) )?"
                        r"come (?:to me|and find me|find me)|come (?:to me|and find me|find me) in the ([a-z][a-z ]{1,30})",re.I)
+# Rotation mode (rotate.py, 2026-10-07): "turn around" = 180 left; "turn left/right 90 degrees".
+# A bare "turn left" stays the short manual nudge -- only an explicit angle or "around" rotates.
+_TURN_AROUND=re.compile(r"(?:turn|spin) (?:yourself )?around",re.I)
+_TURN_DEGREES=re.compile(r"(?:turn|rotate|spin) (left|right) (\d{1,3}) degrees",re.I)
 _MARK_STAIRS=re.compile(r"(?:there are |these are )?(?:the )?(?:stairs|steps)(?: are)? (?:here|ahead|in front of you)",re.I)
 # FR-1900-001/002 demonstrations.
 _DEMO_START=re.compile(r"(?:watch me|follow me)?[\s,]*(?:and )?learn (?:the |this )?(?:way|route|path) (?:to )?(?:the )?([a-z][a-z ]{1,30})",re.I)
@@ -98,7 +102,7 @@ _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
 # deterministic "the local model did not understand" signal.
 _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve',
     'confirm_receipt','map','stop_map','shutdown','status','battery','arm_stow','arm_home','wave',
-    'come_here','come_to_me','follow','diagnostics','where_are_you','what_do_you_see','name_room','mark_stairs',
+    'come_here','come_to_me','rotate','follow','diagnostics','where_are_you','what_do_you_see','name_room','mark_stairs',
     'demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
@@ -733,6 +737,11 @@ class VoicePipeline:
         # LLM rather than risk matching on a fragment (e.g. "don't stop" must never hit 'stop').
         norm=text.strip().rstrip('.!? ')
         norm=re.sub(r'^(?:(?:hey|ok|okay)[\s,]+)?willie[\s,]+','',norm,flags=re.I)
+        if _TURN_AROUND.fullmatch(norm): return {'intent':'rotate','args':{'degrees':180},'reply':''}
+        m=_TURN_DEGREES.fullmatch(norm)
+        if m:
+            deg=min(360,int(m.group(2)))
+            return {'intent':'rotate','args':{'degrees':deg if m.group(1).lower()=='left' else -deg},'reply':''}
         m=_COME_TO_ME.fullmatch(norm)
         if m: return {'intent':'come_to_me','args':{'room':(m.group(1) or m.group(2)).strip().lower()},'reply':''}
         m=_NAME_ROOM.fullmatch(norm)
@@ -827,7 +836,7 @@ class VoicePipeline:
         # consumer" rule as every motion intent.
         motion_intents={'forward','reverse','turn_left','turn_right','go_to','retrieve',
                          'confirm_receipt','map','stop_map','shutdown','status','battery',
-                         'arm_stow','arm_home','wave','come_here','come_to_me','follow','diagnostics',
+                         'arm_stow','arm_home','wave','come_here','come_to_me','rotate','follow','diagnostics',
                          'where_are_you','what_do_you_see','name_room','mark_stairs',
                          'demo_start','demo_stop','demo_replay','enrol','forget_everyone'}
         if name in motion_intents:

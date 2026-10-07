@@ -86,6 +86,21 @@ class SafetyController:
     def turn_left_for(self,duration,speed=None): return self.request('turn_left',speed,duration)
     def turn_right_for(self,duration,speed=None): return self.request('turn_right',speed,duration)
 
+    def set_wheels(self,targets):
+        """Per-wheel targets for rotation mode (rotate.py), approved like any other turn: motion
+        enabled, tilt and battery tier are checked first, so rotation never bypasses this class
+        (§25). A spin turns on the spot, so it is approved as a turn, not as forward motion."""
+        net=sum(v for w,v in targets.items() if w[0]=='r')-sum(v for w,v in targets.items() if w[0]=='l')
+        action='turn_left' if net>=0 else 'turn_right'
+        result=approve_motion(action,max(abs(v) for v in targets.values()),None,**self._ctx)
+        if isinstance(result,Rejected):
+            log.warning(f'rotation rejected: {result.reason}')
+            self._drive.stop(); self._deadline=None; self._active_action=None
+            return result
+        self._deadline=None; self._active_action=None
+        self._drive.set_wheels(targets)
+        return result
+
     @property
     def timed_move_active(self): return self._deadline is not None
 

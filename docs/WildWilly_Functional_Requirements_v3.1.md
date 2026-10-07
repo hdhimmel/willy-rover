@@ -152,12 +152,22 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   the turning circle, spin
                                                   on IMU, sonar/ToF/camera
                                                   watching): built; live
-                                                  2026-10-07: 90 deg left
-                                                  DONE x2 (87-95 deg).
+                                                  2026-10-07: LIVE-
+                                                  VERIFIED both ways in
+                                                  open space: +90 -> +87.8,
+                                                  -90 -> -93.8; front and
+                                                  rear cameras agree with
+                                                  the IMU, check live.
                                                   No rear/diagonal
                                                   sensing: spun into the
-                                                  couch; IMU bump stop
-                                                  added after.
+                                                  couch once; IMU bump
+                                                  stop added and proven
+                                                  (stopped in ~1.7 s).
+                                                  Wired into brain.py
+                                                  (voice turn around/N
+                                                  degrees, roam avoidance
+                                                  turns): built, not yet
+                                                  run in the service.
 
   FR-700 Arm              Not live-verified       Arm current limit
                                                   (release) built
