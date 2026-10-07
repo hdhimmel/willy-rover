@@ -313,7 +313,12 @@ cannot stop a turn the other agrees on. The rear camera's field of view is a typ
 not measured. **Blind spots (2026-10-07, spun into the couch):** nothing senses the rear or the
 corners during a spin — sonars face front/left/right, the ToF forward, and sonar misses soft
 furniture. The backstop is a bump stop: once under way, heading slower than 5°/s for 0.7 s
-stops the turn (~1 s, not the 8 s timeout that caught the couch). Rotation needs open space. Bench-run by `scripts/rotate_test.py` (feed-forward drive, no speed loop). **Live-verified
+stops the turn (~1 s, not the 8 s timeout that caught the couch). Rotation needs open space.
+**Pre-spin clearance (2026-10-07, outside review P0):** a rotation is refused before anything
+moves unless front, left and right all read ≥ `ROTATE_START_CLEAR_CM` (20 cm: the corners sweep
+~9 cm beyond the estimated 0.42 × 0.41 m body), or if the sensors cannot be read; he says which
+side is short. In `_avoid()` a refused rotation backs up instead of skid-turning, since a skid
+turn sweeps the same circle. The rear is still unseen — that is what the bump stop is for. Bench-run by `scripts/rotate_test.py` (feed-forward drive, no speed loop). **Live-verified
 2026-10-07** in open space: +90° settled at +87.8°, −90° at −93.8° (stop 10° early, ~6–8° coast);
 both cameras agreed with the IMU over clear frames with the check live; the bump stop caught two
 runs against the couch in ~1.7 s each. **Wired into brain.py (2026-10-07, not yet run in the

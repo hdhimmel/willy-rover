@@ -1,0 +1,30 @@
+# Simulated test suite on every push and pull request (outside review 2026-10-07: "no CI workflow
+# is reporting against the latest commit"). Everything here runs under WILLY_SIMULATE=1, the same
+# as `pytest` on willie -- no I2C, UART, camera or Hailo. Passing here proves the logic, never the
+# hardware: live checks still happen on the rover.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      WILLY_SIMULATE: "1"
+      SDL_VIDEODRIVER: dummy      # pygame imports without a display
+      SDL_AUDIODRIVER: dummy
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"   # matches willie (Python 3.13.5)
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip && pip install pytest numpy networkx pygame-ce scipy smbus2
+      - name: Syntax check every Python file
+        run: python -m compileall -q -x '(\.venv|venv)' .
+      - name: Simulated test suite
+        run: python -m pytest -q -p no:cacheprovider

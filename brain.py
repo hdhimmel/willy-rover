@@ -242,7 +242,7 @@ class RoverBrain:
         # Rotation mode (rotate.py, live-verified 2026-10-07). Drives THROUGH SafetyController
         # (set_wheels is approved like a turn). Front camera only here: the rear camera is not
         # opened by the service, and opening a USB camera on the tick thread would stall it.
-        self.rotation=Rotation(self.steering,self.safety,self.imu,None,
+        self.rotation=Rotation(self.steering,self.safety,self.imu,lambda: self.sonars.distances,
                                camera_grab=self.detector.capture_frame,encoders=self.encoders,
                                say=self._say)
         self._after_rotate='IDLE'
@@ -1672,8 +1672,12 @@ class RoverBrain:
         if self._avoid_phase=='turn_after_reverse':
             self._avoid_phase=None
             turn=self._avoid_turn(d) or 'turn_right'
-            if not (config.AVOID_USE_ROTATION and self.start_rotation(90 if turn=='turn_left' else -90,then='AVOID')[0]):
+            if not config.AVOID_USE_ROTATION:
                 self.safety.request(turn,None,config.TURN_TIME_90)
+            elif not self.start_rotation(90 if turn=='turn_left' else -90,then='AVOID')[0]:
+                # No room to spin even after backing up: back up again rather than skid-turn,
+                # which sweeps the same circle (outside review, rotation envelope).
+                self.safety.request('reverse',None,config.BACK_UP_TIME)
             self._last_action='back_turn'
             self._upd('stop',f'Avoiding l={l:.0f} r={r:.0f}',d,tilt); return
         if time.time()-self._avoid_start>config.STUCK_TIMEOUT:
@@ -1685,8 +1689,12 @@ class RoverBrain:
         turn=self._avoid_turn(d)
         if turn:
             # Rotation mode (live-verified 2026-10-07) when allowed; the skid turn if it will not start.
-            if not (config.AVOID_USE_ROTATION and self.start_rotation(45 if turn=='turn_left' else -45,then='AVOID')[0]):
+            if not config.AVOID_USE_ROTATION:
                 self.safety.request(turn,None,config.TURN_TIME_90*0.5)
+            elif not self.start_rotation(45 if turn=='turn_left' else -45,then='AVOID')[0]:
+                # Refused (usually: not enough room). A skid turn sweeps the same circle, so back
+                # off and let AVOID choose again from further away.
+                self.safety.request('reverse',None,config.BACK_UP_TIME)
             self._last_action=turn
         else:
             self.safety.request('reverse',None,config.BACK_UP_TIME)

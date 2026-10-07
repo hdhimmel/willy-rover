@@ -56,7 +56,7 @@ def main():
     enc=Encoders(); enc.start()            # bump-stop wording only; NOT attached to the drive
     time.sleep(2.0)
     print('corner pulses:',{k:round(v) for k,v in rotation_pulses().items()})
-    r=Rotation(steer,drive,imu,None,camera_grab=grab,rear_grab=rear,encoders=enc,
+    r=Rotation(steer,drive,imu,lambda: son.distances,camera_grab=grab,rear_grab=rear,encoders=enc,
                say=lambda t:print('SAY:',t))
     ok,msg=r.start(a.degrees); print('start:',msg)
     t0=time.time()

@@ -183,6 +183,11 @@ ROTATE_RESTEER_S=0.5          # re-assert the corner pulses, ahead of STEER_RELE
 ROTATE_STOP_EARLY_DEG=10.0    # stop this short; live 2026-10-07 he coasted ~6 deg past a 5 deg early stop
 ROTATE_TIMEOUT_S=8.0          # a turn that is not happening, not a turn that is slow
 ROTATE_CLEAR_CM=15.0          # anything nearer than this on any sonar/ToF stops the spin
+# Pre-spin clearance on front/left/right (rotate.py _room_to_turn). Footprint ~0.42 x 0.41 m (length
+# ESTIMATED as wheelbase + one wheel diameter; width owner-measured 41 cm): the corners sweep a
+# 0.29 m radius, ~9 cm beyond the body on each side, plus margin. Arm or anything else sticking out
+# is NOT included -- re-check if the arm rests outside the body.
+ROTATE_START_CLEAR_CM=20.0
 ROTATE_WRONG_WAY_DEG=10.0     # heading moving this far the wrong way = stop
 # Blocked-turn stop (2026-10-07: spun into the couch, pushed 8 s until the timeout). After the spin
 # has had ROTATE_STALL_ARM_S to break away and ramp, heading moving slower than this rate across

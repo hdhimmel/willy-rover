@@ -138,6 +138,8 @@ class Rotation:
         """degrees > 0 = left (CCW), < 0 = right (CW)."""
         if self.active: return False,'already rotating'
         if abs(degrees)<config.ROTATE_MIN_DEG: return False,'too small to rotate for'
+        room=self._room_to_turn()
+        if room: return False,room
         self._goal=float(degrees); self._dir=1 if degrees>0 else -1
         self._h0=self.imu.heading; self._h_last=self._h0; self._acc=0.0
         self._t0=self.clock(); self._last_steer=0.0
@@ -155,6 +157,21 @@ class Rotation:
     def _steer(self):
         for c,us in self._pulses.items(): self.steering.set_pulse(c,us)
         self._last_steer=self.clock()
+
+    def _room_to_turn(self):
+        """Pre-spin clearance (outside review 2026-10-07, P0 "rotation safety envelope"): '' when
+        front, left and right all read beyond ROTATE_START_CLEAR_CM, else why not. The chassis
+        corners sweep a circle wider than the body, so a spin needs room on every side it can
+        see. It CANNOT see behind -- no rear sensor -- which is why the bump stop exists; this
+        check covers the sides that can be checked before moving, not the one that cannot."""
+        if self.distances is None: return ''
+        try: d=self.distances()
+        except Exception: return 'I cannot read my distance sensors'
+        for side in ('front','left','right'):
+            v=d.get(side,0.0)
+            if v<config.ROTATE_START_CLEAR_CM:
+                return f'not enough room to turn, only {v:.0f} centimetres on my {side}'
+        return ''
 
     def _blocked_reason(self):
         try:

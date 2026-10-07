@@ -87,6 +87,21 @@ def test_turns_past_180_are_counted_not_wrapped():
 
 def _wrap_h(a): return (a+180.0)%360.0-180.0
 
+def test_no_room_on_a_visible_side_refuses_before_moving():
+    s,dr,imu,clk=_Steer(),_Drive(),_IMU(0.0),_Clock()
+    d={'front':80,'left':12,'right':90}
+    r=Rotation(s,dr,imu,lambda: d,clock=clk)
+    ok,msg=r.start(90)
+    assert not ok and 'left' in msg and r.state=='IDLE' and not s.pulses and dr.wheels is None
+    d['left']=60
+    assert r.start(90)[0]
+
+def test_unreadable_sensors_refuse_rather_than_spin_blind():
+    def boom(): raise IOError('pico b')
+    r=Rotation(_Steer(),_Drive(),_IMU(0.0),boom,clock=_Clock())
+    ok,msg=r.start(90)
+    assert not ok and 'distance sensors' in msg
+
 def test_something_close_stops_the_spin_and_says_so():
     r,s,dr,imu,clk,said=_task()
     r.start(90); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
