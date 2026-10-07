@@ -151,8 +151,13 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   Rotation mode (corners on
                                                   the turning circle, spin
                                                   on IMU, sonar/ToF/camera
-                                                  watching): built, not
-                                                  yet run on the rover.
+                                                  watching): built; live
+                                                  2026-10-07: 90 deg left
+                                                  DONE x2 (87-95 deg).
+                                                  No rear/diagonal
+                                                  sensing: spun into the
+                                                  couch; IMU bump stop
+                                                  added after.
 
   FR-700 Arm              Not live-verified       Arm current limit
                                                   (release) built

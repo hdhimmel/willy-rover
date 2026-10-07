@@ -31,6 +31,12 @@ log=logsetup.setup('rotate')
 #     moved (or the reverse), one of them is wrong: stop and say so. Magnitudes only -- the
 #     image's sign convention is not measured.
 #   - encoders: Directive 5 stall detection in brain.py still runs every tick for commanded wheels.
+#   - BLOCKED TURN (2026-10-07: he spun into the couch and pushed for 8 s until the timeout). Once
+#     the spin is under way, a heading rate below ROTATE_STALL_MIN_RATE_DPS for ROTATE_STALL_WINDOW_S
+#     stops him; the encoders only say whether the wheels were still turning. THIS IS THE ONLY
+#     THING THAT SEES THE REAR AND THE CORNERS: the sonars face front/left/right, the ToF faces
+#     forward, there is no rear sensor, and sonar is known to miss soft furniture. Rotation needs
+#     open space; the bump stop is the backstop, not a clearance check.
 #
 # Shape: tick-serviced, like the other tasks. abort() is the preemption contract.
 
@@ -117,9 +123,9 @@ class CameraYaw:
 
 class Rotation:
     def __init__(self,steering,drive,imu,distances,camera_grab=None,say=None,clock=time.time,
-                 rear_grab=None):
+                 rear_grab=None,encoders=None):
         self.steering=steering; self.drive=drive; self.imu=imu; self.distances=distances
-        self.camera_grab=camera_grab; self.rear_grab=rear_grab; self.say=say or (lambda t:None); self.clock=clock
+        self.camera_grab=camera_grab; self.rear_grab=rear_grab; self.encoders=encoders; self.say=say or (lambda t:None); self.clock=clock
         self.state='IDLE'   # IDLE|SETTLE|SPIN|DONE|FAILED|ABORTED
         self._fail_reason=''
 
@@ -149,6 +155,14 @@ class Rotation:
         for c,us in self._pulses.items(): self.steering.set_pulse(c,us)
         self._last_steer=self.clock()
 
+    def _blocked_reason(self):
+        try:
+            cps=self.encoders.counts_per_sec if self.encoders is not None else None
+        except Exception: cps=None
+        if cps and sum(abs(v) for v in cps.values())/max(1,len(cps))>config.ROTATE_STALL_WHEEL_CPS:
+            return 'something is in the way, my wheels are turning but I am not'
+        return 'something is stopping me turning'
+
     def _turned(self):
         return _wrap(self.imu.heading-self._h0)
 
@@ -174,12 +188,18 @@ class Rotation:
         if self.state=='SETTLE':
             if now-self._t0>=config.ROTATE_SETTLE_S:
                 self.drive.set_wheels(wheel_targets(self._dir,config.ROTATE_SPEED))
-                self.state='SPIN'; self._spin_t0=now
+                self.state='SPIN'; self._spin_t0=now; self._hist=[]
             return
         near=min(d.get('front',999),d.get('left',999),d.get('right',999))
         if near<config.ROTATE_CLEAR_CM:
             self._finish('FAILED',f'something is {near:.0f} centimetres away'); return
         turned=self._turned()
+        self._hist.append((now,turned))
+        while self._hist and now-self._hist[0][0]>config.ROTATE_STALL_WINDOW_S: self._hist.pop(0)
+        if (now-self._spin_t0>=config.ROTATE_STALL_ARM_S and
+                now-self._hist[0][0]>=config.ROTATE_STALL_WINDOW_S*0.9 and
+                abs(turned-self._hist[0][1])<config.ROTATE_STALL_MIN_RATE_DPS*config.ROTATE_STALL_WINDOW_S):
+            self._finish('FAILED',self._blocked_reason()); return
         for c in self._cams: c.update(turned)
         self.trace.append((now,turned,{c.name:(c.deg,c.imu_deg) for c in self._cams if c.ok}))
         judged=[c for c in self._cams if c.judged]

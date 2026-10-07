@@ -310,7 +310,10 @@ shift, but only over clear frames (phase-correlation quality ≥ 0.5) and agains
 those same frames — motion-blurred frames had read as "no movement" and turned 87° into 17°.
 It stops only if every camera with enough clear frames disagrees, so one blurred or dark camera
 cannot stop a turn the other agrees on. The rear camera's field of view is a typical figure,
-not measured. Bench-run by `scripts/rotate_test.py` (feed-forward drive, no speed loop). Not
+not measured. **Blind spots (2026-10-07, spun into the couch):** nothing senses the rear or the
+corners during a spin — sonars face front/left/right, the ToF forward, and sonar misses soft
+furniture. The backstop is a bump stop: once under way, heading slower than 5°/s for 0.7 s
+stops the turn (~1 s, not the 8 s timeout that caught the couch). Rotation needs open space. Bench-run by `scripts/rotate_test.py` (feed-forward drive, no speed loop). Not
 yet run on the rover, and not yet wired into brain.py's turns.
 
 **Come to me (`come_to_me_task.py`, FR-1000-006) owns no motion.** It sequences

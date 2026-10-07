@@ -143,6 +143,36 @@ def test_blurred_frames_are_no_measurement_not_no_movement(monkeypatch):
     assert abs(c.deg-(4.4+4.5)*66/160)<0.01           # only the two clear frames
     assert abs(c.imu_deg-3.6)<0.01                     # IMU over the same two frames
 
+def test_a_blocked_turn_stops_within_a_second_not_at_the_timeout():
+    """2026-10-07: he spun into the couch and pushed for 8 s until the timeout stopped him."""
+    r,s,dr,imu,clk,said=_task()
+    r.start(90); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
+    for _ in range(20):                       # turning nicely for 0.5 s ...
+        clk.t+=0.05; imu.heading+=1.5; r.tick(_CLEAR,0)
+    assert r.state=='SPIN'
+    for _ in range(30):                       # ... then held by the couch
+        clk.t+=0.05; imu.heading+=0.05; r.tick(_CLEAR,0)
+        if r.state!='SPIN': break
+    assert r.state=='FAILED' and 'stopping me turning' in said[-1]
+    assert clk.t-1000-config.ROTATE_SETTLE_S < config.ROTATE_STALL_ARM_S+config.ROTATE_STALL_WINDOW_S+0.3
+
+def test_no_bump_stop_while_breaking_away():
+    r,s,dr,imu,clk,said=_task()
+    r.start(90); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
+    while clk.t-1000-config.ROTATE_SETTLE_S < config.ROTATE_STALL_ARM_S-0.1:
+        clk.t+=0.05; r.tick(_CLEAR,0)          # not moving yet, inside the arm time
+    assert r.state=='SPIN'
+
+def test_blocked_with_wheels_still_turning_says_so():
+    import types
+    r,s,dr,imu,clk,said=_task()
+    r.encoders=types.SimpleNamespace(counts_per_sec={w:800.0 for w in ('lf','lm','lr','rf','rm','rr')})
+    r.start(90); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
+    for _ in range(40):
+        clk.t+=0.05; r.tick(_CLEAR,0)
+        if r.state!='SPIN': break
+    assert r.state=='FAILED' and 'wheels are turning' in said[-1]
+
 def test_abort_stops_and_recentres():
     r,s,dr,imu,clk,_=_task()
     r.start(90); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)

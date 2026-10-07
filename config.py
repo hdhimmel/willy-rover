@@ -184,6 +184,13 @@ ROTATE_STOP_EARLY_DEG=10.0    # stop this short; live 2026-10-07 he coasted ~6 d
 ROTATE_TIMEOUT_S=8.0          # a turn that is not happening, not a turn that is slow
 ROTATE_CLEAR_CM=15.0          # anything nearer than this on any sonar/ToF stops the spin
 ROTATE_WRONG_WAY_DEG=10.0     # heading moving this far the wrong way = stop
+# Blocked-turn stop (2026-10-07: spun into the couch, pushed 8 s until the timeout). After the spin
+# has had ROTATE_STALL_ARM_S to break away and ramp, heading moving slower than this rate across
+# the window = something is in the way. Live good turns ran ~25-50 deg/s.
+ROTATE_STALL_ARM_S=1.0
+ROTATE_STALL_WINDOW_S=0.7
+ROTATE_STALL_MIN_RATE_DPS=5.0
+ROTATE_STALL_WHEEL_CPS=100.0  # mean |counts/s| above this = wheels still turning (slip, not stall)
 ROTATE_MIN_DEG=5.0
 ROTATE_USE_CAMERA=True
 ROTATE_CAMERA_HFOV_DEG=66.0   # imx708 standard lens, horizontal (datasheet), not bench-measured

@@ -52,9 +52,12 @@ def main():
                 ok,f=cap.read(); return f if ok else None
         else: print(f'Rear camera {config.CAMERA_DEVICE} would not open')
     steer=Steering(); drive=DriveBase()
+    from sensors import Encoders
+    enc=Encoders(); enc.start()            # bump-stop wording only; NOT attached to the drive
     time.sleep(2.0)
     print('corner pulses:',{k:round(v) for k,v in rotation_pulses().items()})
-    r=Rotation(steer,drive,imu,None,camera_grab=grab,rear_grab=rear,say=lambda t:print('SAY:',t))
+    r=Rotation(steer,drive,imu,None,camera_grab=grab,rear_grab=rear,encoders=enc,
+               say=lambda t:print('SAY:',t))
     ok,msg=r.start(a.degrees); print('start:',msg)
     t0=time.time()
     try:
