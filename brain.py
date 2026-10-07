@@ -27,6 +27,7 @@ from identity import IdentityStore,RECOGNISED,UNCERTAIN,UNKNOWN
 from recognition import FaceRecognizer
 from witty_pi import WittyPi
 if config.ENABLE_HAILO_LLM:
+    import hailo_llm
     from hailo_llm import HailoIntentModel
 log=logsetup.setup('brain')
 
@@ -228,6 +229,8 @@ class RoverBrain:
         # same Anthropic endpoint (ClaudeClient + CloudAIClient).
         self.memory=MemoryStore(); self.cloud_ai=CloudAIProvider(); self.smart_home=SmartHomeClient()
         self.hailo_llm=HailoIntentModel() if config.ENABLE_HAILO_LLM else None  # Primary on-device reasoning (STUCK state)
+        # Brake before every Hailo generation: it freezes every thread for seconds (hailo_llm.py).
+        if config.ENABLE_HAILO_LLM: hailo_llm.set_before_generate(self._brake_before_hailo)
         self.voice=VoicePipeline(memory=self.memory,cloud_ai=self.cloud_ai,display=self.display,
                                   smart_home=self.smart_home)
         self.detector=ObjectDetector()
@@ -1464,6 +1467,17 @@ class RoverBrain:
         if self.retrieval.state in('DONE','FAILED','ABORTED'):
             if self.retrieval.state=='DONE' and self.voice.available: self.voice.speak('All done!')
             self.retrieval.reset(); self._go('IDLE')
+
+    def _brake_before_hailo(self):
+        """Runs on whichever thread is about to call the Hailo model (voice or the STUCK worker),
+        right before the process freezes. Brakes directly on DriveBase -- a synchronous write --
+        because a request through SafetyController would only set a target for the ramp thread,
+        which is about to freeze too. The tick loop re-issues motion after the call returns; this
+        does not change state, it only makes sure nothing is moving through the blind seconds."""
+        if any(self.motors.commanded.values()):
+            self.motors.brake()
+            log_event(log,'HAILO_BRAKE',severity='warning',subsystem='drive',status='braked',
+                      reason='Hailo generation freezes every thread; braked before it')
 
     def start_rotation(self,degrees,then='IDLE'):
         """Turn on the spot by `degrees` (+ left) in rotation mode, then go to state `then`."""

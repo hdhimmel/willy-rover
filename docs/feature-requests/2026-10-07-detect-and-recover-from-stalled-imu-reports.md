@@ -23,3 +23,14 @@ Please add a watchdog that treats a stale IMU stream as invalid data, instead of
 - `EVENT=IMU_FAULT subsystem=imu status=fault value=tilt 8.9deg held, no fresh IMU report expected=quaternion or acceleration changing within 3.0s`
 
 *Machine-proposed by Willie from his own logs and approved by the owner by email. Approval is not a specification: anything non-trivial goes through design before implementation.*
+
+## Root cause (found 2026-10-07, after approval)
+
+Not a stalled IMU. At 10:08:35 "Explore." went to the Hailo model, which took 5.4 s; the moment it
+returned, the IMU, encoders, current monitors, battery ADC and sonars all faulted and all recovered
+within 0.1 s. Five devices on two UARTs and an I2C bus cannot fail together: Hailo's
+`generate_all()` holds Python's GIL and freezes every thread, so every freshness check expired at
+once. The IMU watchdog and RST recovery this request asks for already exist and worked; what it saw
+was the freeze. Interim fix: brake synchronously before every generation (`hailo_llm.set_before_
+generate`, brain `_brake_before_hailo`). Real fix: the model in its own process -- needs design,
+because the Hailo VDevice is shared with vision.

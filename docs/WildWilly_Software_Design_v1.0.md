@@ -323,6 +323,15 @@ around" (180°) and "turn left/right N degrees"; `_avoid()` turns ±45°/±90° 
 `AVOID_USE_ROTATION`, and a refused or blocked rotation backs off and lets AVOID retry.
 Navigator's own avoidance still skid-turns. The service uses the front camera only.
 
+**Hailo generation freezes the process (found 2026-10-07).** `generate_all()` holds the GIL for
+the whole call (5.4 s measured): tick loop, sensor readers and the motor ramp thread all stop, and
+every freshness check fails at once when it returns (IMU, encoders, current, battery ADC, sonars,
+all within 0.1 s). A rover driving when a call starts would keep its last duty, unwatched. Interim:
+`hailo_llm.set_before_generate()` runs brain's `_brake_before_hailo()` first, which brakes on
+DriveBase synchronously if anything is commanded (fast-path voice never reaches the model). Real
+fix open: the model in its own process, which needs design because the VDevice is shared with
+vision (why hailo-ollama was rejected, 2026-08-21).
+
 **Come to me (`come_to_me_task.py`, FR-1000-006) owns no motion.** It sequences
 `Navigator` (room mission, through labelled doorways) and `PursuitTask` (`come_here`, with
 its search sweep) under one `COME_TO_ME` state. Directive aborts reach the legs through the

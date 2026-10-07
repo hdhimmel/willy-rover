@@ -25,6 +25,23 @@ log=logsetup.setup('hailo_llm')
 # pins its exact shape.
 _QWEN_DEFAULT_SYSTEM='You are Qwen, created by Alibaba Cloud. You are a helpful assistant.'
 
+# ⚠ generate_all() FREEZES THE WHOLE PROCESS while it runs (2026-10-07, live). "Explore." went to
+# the model, which took 5.4 s; at the instant it returned, the IMU, encoders, current monitors,
+# battery ADC and sonars ALL faulted and ALL recovered within 0.1 s. They live on two UARTs and an
+# I2C bus and share nothing but this process: the call holds Python's GIL, so no other thread --
+# tick loop, sensor readers, the motor ramp thread -- runs until it returns. A rover driving when
+# it starts keeps its last motor duty, unwatched, for the whole call.
+# Interim (brake first): every call runs the hook below first; brain.py installs one that brakes
+# the drive SYNCHRONOUSLY if anything is commanded, so the wheels are stopped before the freeze.
+# Real fix still open: the model in its own process (shares the Hailo VDevice with vision -- the
+# reason hailo-ollama was rejected, design doc 2026-08-21 -- so it needs design).
+_before_generate=None
+
+def set_before_generate(fn):
+    """Install a callable run just before every generate_all() (brain.py's brake)."""
+    global _before_generate
+    _before_generate=fn
+
 def _chatml(prompt,system=None):
     sys_msg=system if system else _QWEN_DEFAULT_SYSTEM
     return (f'<|im_start|>system\n{sys_msg}<|im_end|>\n'
@@ -86,6 +103,9 @@ class HailoIntentModel(AIProvider):
             # Generation parameters are passed explicitly -- see config.py. Leaving them unset
             # means None for all four, which is the runtime's prose-oriented default sampling and
             # is measurably worse at producing parseable, correct JSON (2026-09-14).
+            if _before_generate is not None:
+                try: _before_generate()
+                except Exception: log.warning('before-generate hook failed',exc_info=True)
             txt=self._llm.generate_all(full_prompt,
                                        temperature=config.HAILO_LLM_TEMPERATURE,
                                        top_p=config.HAILO_LLM_TOP_P,
