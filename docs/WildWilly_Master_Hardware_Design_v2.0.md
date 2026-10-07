@@ -928,7 +928,7 @@ the bus budget. It has no per-pin LEDs.
 | Device | Interface |
 |--------|-----------|
 | Front camera — imx708 (CSI) | CSI FFC, mounted 15° downward |
-| Rear camera — USB | USB, mounted 15° downward; not used by software (CPU vision backend disabled) |
+| Rear camera — USB, Arducam OV9281 global shutter | USB, mounted 15° downward; opened by `/dev/v4l/by-id` (video node numbers move between boots); used by rotation's camera check only |
 | Display — 5" DSI touch, 800×480 | DSI ribbon; powered from the Pi's 5 V header |
 | AI HAT+ 2 | PCIe FFC |
 
@@ -1539,7 +1539,9 @@ Item numbers are stable; closed items are removed, not renumbered.
     it draws; camera mount height. Confirmed
     2026-10-02: two GODIY hubs daisy-chained; the EPLZON upper power board carries the voltage
     rails; INA260s on the power tray; no LEDs on the GeeekPi breakout; LTC4311 fitted; rear
-    USB camera is a Microdia "Webcam Vitade AF" by lsusb (check the label); BNO085 INT is on
+    USB camera is an **Arducam OV9281 (UC599), global shutter** — `0c45:6366` is its USB bridge's
+    ID, which lsusb reported as Microdia "Webcam Vitade AF" (v4l2 and /dev/v4l/by-id, 2026-10-07);
+    BNO085 INT is on
     the Pi (GP15, phys 10, unused by software) and its RST on Pico B GP15.
 
 ---
@@ -1556,7 +1558,7 @@ Current components only.
 | AI HAT+ 2 (Hailo-10H, 8 GB) | NPU — vision, intent model | 1 | Installed |
 | 5" DSI touch display, 800×480 | Face / UI | 1 | Installed |
 | imx708 camera module (CSI) | Front camera | 1 | Installed |
-| USB camera — Microdia "Webcam Vitade AF" (`0c45:6366`, by lsusb) | Rear camera | 1 | Installed, unused by software |
+| USB camera — Arducam OV9281 (UC599), global shutter, MJPG to 1280×800 @ 120 fps (`0c45:6366` bridge) | Rear camera | 1 | Installed; used by rotation mode's camera check (2026-10-07) |
 | USB PnP **Audio** Device puck (`0c76:1203`) | Speaker; its mic unused | 1 | Installed |
 | USB PnP **Sound** Device (`08bb:2902`) | Microphone, 48 kHz | 1 | Installed |
 | GeeekPi Micro GPIO Terminal Block breakout | Passive 40-pin breakout, 12 lines (§5.3) | 1 | Installed |

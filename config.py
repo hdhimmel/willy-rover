@@ -180,14 +180,14 @@ AVOID_USE_CAMERA=True
 ROTATE_SPEED=1.0              # fraction of the mph cap for the corners; a skid turn needed full duty
 ROTATE_SETTLE_S=0.6           # steering reaches its angle before any wheel drives
 ROTATE_RESTEER_S=0.5          # re-assert the corner pulses, ahead of STEER_RELEASE_AFTER_S
-ROTATE_STOP_EARLY_DEG=5.0     # stop this short of the goal; he coasts the rest (tune live)
+ROTATE_STOP_EARLY_DEG=10.0    # stop this short; live 2026-10-07 he coasted ~6 deg past a 5 deg early stop
 ROTATE_TIMEOUT_S=8.0          # a turn that is not happening, not a turn that is slow
 ROTATE_CLEAR_CM=15.0          # anything nearer than this on any sonar/ToF stops the spin
 ROTATE_WRONG_WAY_DEG=10.0     # heading moving this far the wrong way = stop
 ROTATE_MIN_DEG=5.0
 ROTATE_USE_CAMERA=True
 ROTATE_CAMERA_HFOV_DEG=66.0   # imx708 standard lens, horizontal (datasheet), not bench-measured
-ROTATE_REAR_CAMERA_HFOV_DEG=65.0  # rear USB webcam (Microdia "Vitade AF") -- NOT measured, a typical figure
+ROTATE_REAR_CAMERA_HFOV_DEG=70.0  # rear Arducam OV9281 (UC599), global shutter -- NOT measured, a typical figure
 ROTATE_CAMERA_MIN_RESPONSE=0.5    # phase-correlation quality; below it a frame is blurred = no measurement
 ROTATE_CAMERA_MIN_MATCHED_DEG=20.0  # IMU rotation over a camera's clear frames before it may judge
 ROTATE_CAMERA_MAX_DISAGREE_DEG=25.0
@@ -1085,7 +1085,10 @@ ENABLE_OBJECT_RETRIEVAL=False  # 2026-08-20: briefly flipped True and live-verif
                                # forward-facing. Do not re-enable until CAMERA_DEVICE points at
                                # the actual front camera (CSI imx708, /dev/video0) and that
                                # capture path is verified working — untested as of this note.
-CAMERA_DEVICE='/dev/video8'
+# 2026-10-07: by-id, NOT /dev/videoN. The rear camera was /dev/video8 when this was written and
+# /dev/video0 on 2026-10-07 -- Linux renumbers video nodes across boots, and the rotation test
+# opened the wrong node and got no frames. The by-id name follows the camera itself.
+CAMERA_DEVICE='/dev/v4l/by-id/usb-Arducam_Technology_Co.__Ltd._Arducam_OV9281_USB_Camera_UC599-video-index0'
 YOLO_MODEL_PATH='models/yolov8n.pt'
 YOLO_CONF_THRESHOLD=0.5
 # --- Hailo-10H vision backend, 2026-08-21. Pre-installed HEF confirmed present on this exact
