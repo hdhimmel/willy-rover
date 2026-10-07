@@ -1179,8 +1179,13 @@ critical defect, not a tuning issue.
                     self-test                           
 
   FR-100-004        Prevent motion    High              Test
-                    until startup                       
-                    checks pass                         
+                    until startup
+                    checks pass
+
+  FR-100-005        Start on a        High              Test
+                    correct clock
+                    (network time,
+                    else the RTC)
   -----------------------------------------------------------------------
 
 # Acceptance Criteria
@@ -1292,6 +1297,17 @@ resistance matrix in Master Hardware Design §4.5, which **passed 2026-09-16**,
 followed by the powered divider check, which **has not been run**. Note in
 particular that P1-14↔P1-17 must read **3.2k** — 4.7k or 10k means one leg of
 the parallel pair is unseated and battery voltage reads about a third high.
+
+-   **FR-100-005 (clock).** Added 2026-10-07 — built before it was required. The control
+    software starts on a correct wall-clock time: it waits a bounded time for network time
+    and, once synced, writes it to the Witty Pi RTC so the next boot starts right without a
+    network; with no network in time it starts anyway on the RTC's time and logs that. Never
+    blocks startup. *Why:* the Witty Pi daemon sets the system clock from its own RTC at boot,
+    the Pi 5's RTC has no battery, and on 2026-10-06 that RTC was a week and 36 minutes fast —
+    the service started on 2026-10-13, so logs, retention ages and email times were wrong until
+    `timesyncd` corrected it. Implemented by `scripts/clock_sync.sh` as the unit's `ExecStartPre`
+    (`CLOCK_SYNC_WAIT_S`, default 45 s). ✅ **Live-verified 2026-10-06** on a power-on boot
+    (`clock: internet time …, written to the Witty Pi RTC`). Not yet tried: the no-network path.
 
 # FR-200 Power Monitoring and Protection
 
@@ -1717,7 +1733,12 @@ Pico A a-0.3 reports signed counts.
                     travel                              
 
   FR-600-004        Support manual    High              Test
-                    override                            
+                    override
+
+  FR-600-005        Turn on the spot  High              Test
+                    with the corners
+                    steered onto the
+                    turning circle
   -----------------------------------------------------------------------
 
 # Acceptance Criteria
@@ -1745,9 +1766,12 @@ steering motion, and the "servo V+ current path" item stays open with that as it
 -   **FR-600-004 (manual override).** Override takes effect within one control
     cycle and is itself subject to the travel limits above.
 
+⛔ **Superseded in part 2026-10-07 — point turn built (FR-600-005, owner request).** Crab-walk
+and coordinated arc turning remain deferred. Original note:
+
 **Owner decision 2026-08-18:** per-corner steering kinematics during normal drive
 (crab-walk, point-turn, or coordinated arc turning) are deliberately deferred, not
-an oversight. Skid-steer (differential wheel speed only, wheels held centered) is
+an oversight.Skid-steer (differential wheel speed only, wheels held centered) is
 the only turning mechanism for now, same as today. Revisit once basic drive is
 live-verified — see `motors.py::Steering`'s own comment.
 
@@ -1756,6 +1780,33 @@ live-verified — see `motors.py::Steering`'s own comment.
     moving together approaches the 5V rail's supply rating. Verify the board's
     current path before running all six under load simultaneously, and monitor
     the 5V INA260 during the first such test.
+
+-   **FR-600-005 (rotation mode).** Added 2026-10-07 — built before it was required. A turn
+    on the spot steers the four corner wheels onto the circle round the rover's centre
+    (front-left and rear-right right, front-right and rear-left left, middles straight;
+    atan(wheelbase/2 ÷ track/2) = 46°, clamped to the allowed servo range, ~37°), lets them
+    settle, then spins with the corners faster than the middles by the radius ratio. All of:
+    -   **Through the safety gate.** The spin is approved by `SafetyController` like any
+        turn (motion enabled, tilt, battery tier); a refusal fails the turn and says why.
+    -   **Room first.** Refused before anything moves unless front, left and right all read
+        at least `ROTATE_START_CLEAR_CM` (20 cm), or if the sensors cannot be read; he says
+        which side is short. In obstacle avoidance a refused turn backs up rather than
+        skid-turning, which sweeps the same circle.
+    -   **Stops on heading, not time.** IMU heading, summed tick by tick so turns past 180°
+        are counted; stops `ROTATE_STOP_EARLY_DEG` short to allow for coast.
+    -   **Watched while turning.** Any sonar/ToF reading inside `ROTATE_CLEAR_CM`, heading
+        moving the wrong way, a blocked turn (turn rate under 5°/s for 0.7 s once under
+        way), a timeout, or the cameras disagreeing with the IMU over clear frames stops it,
+        and he says which. Every Directive/stop path aborts it.
+    -   **Known limit, stated:** nothing senses the rear or the corners during a spin. The
+        bump stop is the backstop; rotation needs open space.
+
+    Commands: voice "turn around" (180°), "turn left/right N degrees"; roam avoidance turns
+    (±45°/±90°) when `AVOID_USE_ROTATION`. Code: `rotate.py`, `brain.start_rotation()`,
+    `SafetyController.set_wheels()`; `tests/test_rotate.py`. ✅ **Live-verified 2026-10-07:**
+    bench +90° → +87.8°, −90° → −93.8°; voice "turn around" +174° and 178°; bump stop caught
+    two turns against the couch in ~1.7 s; avoidance turns of +42°/+41° while roaming. Not
+    yet tried: the pre-spin refusal and turns past 180° on the rover.
 
 # FR-700 Robotic Arm Control
 
@@ -2679,10 +2730,29 @@ CC session to date.
                     personal                            
                     account);                           
                     credentials                         
-                    stored securely                     
-                    on-device per                       
-                    FR-2000                             
+                    stored securely
+                    on-device per
+                    FR-2000
+
+  FR-1400-006       Never leave the   High              Test
+                    drive moving
+                    unwatched during
+                    an on-board model
+                    call
   -----------------------------------------------------------------------
+
+-   **FR-1400-006 (no blind motion during a model call).** Added 2026-10-07 — built before it
+    was required. Found live: "Explore." went to the on-board Hailo model (5.4 s), and when it
+    returned the IMU, encoders, current monitors, battery ADC and sonars had all faulted at
+    once and all recovered within 0.1 s. `generate_all()` holds the Python GIL, so the tick
+    loop, sensor readers and motor ramp thread all stop for the whole call; a rover driving
+    when it starts keeps its last motor duty with no checks running. Requirement: no on-board
+    model call may begin while the drive is commanded. **Interim (built):** every Hailo
+    generation first runs a hook that brakes synchronously through
+    `SafetyController.brake_now()` when any wheel is commanded; the tick resumes afterwards.
+    Fast-path voice never reaches the model. **Real fix (open, needs design):** the model in
+    its own process, which must share the Hailo VDevice with vision — why `hailo-ollama` was
+    rejected (design 2026-08-21). `tests/test_hailo_brake.py`. Not yet tried while driving.
 
 # FR-1500 Voice Interaction
 

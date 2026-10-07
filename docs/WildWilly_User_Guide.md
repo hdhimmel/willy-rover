@@ -4,153 +4,198 @@
 `WildWilly_Functional_Requirements_v3.1.md`, `WildWilly_Master_Hardware_Design_v2.0.md`, and
 `WildWilly_Software_Design_v1.0.md`.*
 
-**Status as of 2026-09-10.** Willie now drives on his own, which is the big change since the
-last version of this guide. He asks permission first — see the next section, it's the thing
-most worth reading.
+**Status as of 2026-10-07.** Since the last version of this guide (2026-09-10): his arm moves,
+his wheel sensors count, he can turn on the spot properly, he can learn rooms, routes and faces,
+and he looks around for you when you call him. Everything below was checked against the code on
+that date. Things built but not yet tried on the real rover are marked *(not yet tried for real)*.
 
-Two honest caveats, not fine print:
+Honest caveats, not fine print:
 
-- **He avoids obstacles using sonar only.** Sonar sees hard, flat, straight-on surfaces well.
-  It is poor at chair legs, anything low, anything soft, and anything at an angle. He has a
-  camera and it is working, but it is deliberately *not* what stops him — so assume he can and
-  will bump into things he can't hear.
-- **Don't leave him roaming unattended around anything you care about**, or anywhere a fall
-  matters — top of stairs, near pets, near a toddler. He has no drop sensor.
-
-The emergency stop is real and works: it's a physical switch that cuts power to the motors and
-arm directly, with no software involved, so it works even if he's frozen or confused.
+- **He can still bump into things.** He watches ahead with sonar plus a close-range depth
+  sensor, and to the sides with sonar. Sonar is poor at soft furniture, chair legs and anything
+  at an angle. **Nothing watches behind him**, which matters most when he turns on the spot.
+  His cameras help him choose which way to turn, but they never decide whether to stop.
+- **Don't leave him roaming unattended** around anything you care about, near pets or a
+  toddler, or near the top of stairs. His depth sensor can now see a drop just in front of him,
+  but only close up, and it has not been tested at a real edge.
+- **The emergency stop is the main power switch.** It cuts everything, Willie's computer
+  included, with no software involved, so it works even if he's frozen. It is not gentle — see
+  "If something seems wrong".
 
 ---
 
 ## Willie asking to go exploring
 
-**New on 2026-09-09.** Willie no longer wanders off by himself. When he's been idle a while and
-wants to explore, he asks:
+When he's been idle a while and wants to explore, he asks:
 
 > *"I would like to go explore. Is that okay?"*
 
-At the same time, a green **LET ME ROAM** button appears on his screen.
+and a green **LET ME ROAM** button appears on his screen.
 
-**To say yes:** say *"yes"* (or "sure", "okay", "go ahead"), **or** tap the button. Either
-works — useful, because his hearing isn't reliable yet.
+**To say yes:** say *"yes"* (or "sure", "okay", "go ahead"), **or** tap the button.
 
-**To say no:** say *"no"*, or just ignore him. Both do the same thing — he stays put and asks
-again in about ten minutes. Saying no isn't permanent; he assumes "no" means "not right now".
+**To say no:** say *"no"*, or ignore him. He stays put and asks again in about ten minutes.
 
-**Once you say yes, it lasts until he's restarted.** He won't ask again that session — he'll
-just go when he feels like it. To take permission back, say **"stop"**: that halts him *and*
-revokes it, so he has to ask again.
-
-He always starts up with permission switched off, so a reboot never leaves him roaming.
+**Yes lasts until he's restarted.** To take it back, say **"stop"** — that halts him *and*
+revokes permission. He always starts up without permission, so a reboot never leaves him roaming.
 
 ## Waking Willie up
 
-Say **"Hey Willie"**, then your request, the same way you'd talk to any voice assistant. Wait
-for a response before your next request — talking over him won't help.
+Say **"Hey Willie"**, then your request. Wait for him to answer before the next one.
 
-If voice doesn't seem to respond at all, that's a known open item, not something you're doing
-wrong. His microphone was replaced on 2026-09-09 to try to improve this; whether it actually
-fixed it hasn't been confirmed yet. Check with whoever's maintaining Willie.
+Common commands (the ones listed in **bold** below) are recognised instantly. Anything else he
+has to think about, which takes several seconds — and **if he is driving when he starts thinking,
+he stops first** and carries on afterwards. That pause is deliberate: while he thinks, nothing
+else in him runs, so he brakes rather than drive blind.
 
 ## What you can ask him
 
+**Anything, really.** Questions and conversation that aren't one of the commands below are
+answered by his on-board model, or — with internet — a cloud model. He can't *do* anything
+through conversation that the commands below don't allow; talking is just talking.
+
+**His personality:** in casual conversation he sometimes answers playfully, and he goes a bit
+shy if you compliment him or ask him personal questions. Anything about safety or faults is
+always said plainly.
+
 **Checking in on him:**
-- *"How are you?"* / *"Status report"*
-- *"How's your battery?"* / *"How much charge do you have left?"*
-- *"Where are you?"* / *"What room are you in?"*
-- *"What do you see?"* / *"What's in front of you?"*
-- *"What time is it?"*
-- *"Run diagnostics"* / *"Self test"*
+- **"How are you?"** / **"Status report"**
+- **"How's your battery?"**
+- **"Where are you?"** / **"What room is this?"**
+- **"What do you see?"** / **"What's in front of you?"**
+- **"What time is it?"** / **"What's the date?"**
+- **"Run diagnostics"** / **"Self test"**
 
 **Driving him yourself:**
-- *"Forward"* / *"Back"* / *"Turn left"* / *"Turn right"* — a short, slow nudge in that
-  direction, not a continuous drive. Repeat for more.
+- **"Forward"** / **"Back up"** / **"Turn left"** / **"Turn right"** — a short, slow nudge, not
+  a continuous drive. Repeat for more.
+
+**Turning on the spot:**
+- **"Turn around"** — a half turn.
+- **"Turn left 90 degrees"** / **"Turn right 45 degrees"** — any angle you name.
+
+  He angles his corner wheels first, then spins, and stops on his compass. **He needs room:**
+  if anything is closer than about 20 cm in front or to either side he refuses and tells you
+  which side. He can't see behind, so give him space there too; if something stops him turning,
+  he notices within about a second and stops.
 
 **Coming to you:**
-- *"Come here"* / *"Come over here"* — he approaches and stops a short distance away.
+- *"Come here"* — he looks around for you if you're not in view, approaches, and stops a short
+  distance away. *(The looking-around is not yet tried for real.)*
 - *"Follow me"* — the same, then he keeps pace with you until you say stop.
+- **"I'm in the kitchen, come to me"** / **"Come to me in the kitchen"** — he drives to that
+  room, through the doorways he knows, then looks for you. *(Not yet tried for real.)* He has to
+  have been taught the room first (next section); if a doorway is shut he asks to be let in.
 
-  **The catch:** he can only come to you if he can *already see you* when you ask. He doesn't
-  yet turn around and look for you, so if you're behind him or in another room, he'll simply
-  report that he can't see anyone. Stand where he's facing. He also tends to stop further away
-  than he should — both are known and being worked on.
+**Teaching him your home:**
+- **"This is the kitchen"** — with him standing in a room, names it. Do each room you want him
+  to know. Until you do, he'll say he doesn't know where the kitchen is.
+- **"The stairs are here"** — with him facing a staircase, marks it so he keeps back from it.
+- **"Learn the way to the kitchen"** — then lead him (or drive him) there and say **"That's
+  it"**. Later, **"Show me the way to the kitchen"** follows that route — but only from near
+  where you started teaching it.
+
+  Where he thinks he is comes from counting wheel turns, which drifts over distance and has not
+  been checked on the floor yet. Expect labelled places to be approximate.
+
+**People:**
+- **"This is Carolyn"** — with that person in front of him, he learns their face and greets
+  them by name afterwards. New faces need Howard's approval by email.
+- **Someone he doesn't know:** if he's confident he has never seen a person, he asks who they
+  are. If he's only unsure (bad light, a turned head) he stays quiet rather than treat a family
+  member as a stranger.
+- **"Forget everyone"** — deletes every face he has learned.
+
+**Remembering things:**
+- *"Remember that [something]"* — stores a fact.
+- **"What do you remember?"** / **"What do you know about [something]?"**
+- **"Forget [something]"**
+- **"What do I usually ask?"** — the routines he has noticed.
+- *"When I say '[phrase]', do [thing]"* — experimental; he re-works out what you meant each time.
 
 **Mapping:**
-- *"Start mapping"* / *"Stop mapping"* — he records what he sees and bumps into while he drives
-  around, building up a picture of the place.
+- **"Start mapping"** / **"Stop mapping"** — he records what he sees and bumps into as he drives.
 
-**Small gestures:**
-- *"Wave hello"* / *"Say hi"*
-- *"Stow your arm"* / *"Home your arm"*
-
-  **Note:** the arm currently doesn't physically move — a connector came loose inside and hasn't
-  been reconnected yet. He'll acknowledge the command and nothing will happen. That's this
-  fault, not you.
+**His arm:**
+- **"Wave hello"** / **"Say hi"** — raises the arm and waves.
+- **"Stow your arm"** / **"Put your arm away"** — moves it to the rest position, opening the
+  elbow first so it doesn't hit him. If the arm strains, he lets it go limp and says so.
 
 **Saying stop:**
-- *"Stop"* / *"Halt"* / *"Freeze"* — recognised instantly, without waiting for him to "think".
-  This is the one command that skips the queue entirely. It also revokes roaming permission.
+- **"Stop"** / **"Halt"** / **"Freeze"** / **"Whoa"** — recognised instantly and handled before
+  anything else. It also revokes roaming permission.
+
+**After a fault — "reset":**
+- If he stops with a fault (a stuck wheel, a tilt, a sensor dropping out), he **stays stopped
+  even after the cause clears** and ignores driving commands until you reset him. Say **"Reset"**
+  or **"All clear"**, or **tap his screen**. This is on purpose: he never restarts moving by
+  himself after something went wrong.
 
 **Shutting down:**
-- *"Shut down"* / *"Power off"* / *"Go to sleep"* — he'll ask you to confirm first. Say *"yes"*
-  to go ahead. If you don't answer within about thirty seconds he cancels it himself.
+- **"Shut down"** / **"Power off"** / **"Go to sleep"** — he asks you to confirm. Say
+  **"confirm"** or **"yes"** within **15 seconds**, or he cancels.
 
-**Email:** if new mail arrives, Willie reads out who it's from and the subject.
+**Email:** when new mail arrives, he reads out who it's from and the subject.
 
-**He also now acts on email from Howard — including driving.** Nobody else's mail can make
-him do anything, and he checks the message really came from Howard's account rather than
-just claiming to. He says out loud what he's about to do before he does it, so if he starts
-moving on his own there'll be an audible reason. Old messages are ignored rather than obeyed
-late.
+**He also acts on email from Howard — including driving.** Nobody else's mail can make him do
+anything, and he checks the message really came from Howard's account (DKIM), not just that it
+claims to. He says out loud what he's about to do first. Email can't answer his questions for
+you — it can't confirm a shutdown or give him permission to roam.
 
-**He may also email Howard asking for a new feature**, usually when something has failed a
-few times. Howard approves or ignores it; nothing changes until someone writes the code.
+**From Home Assistant / Google Home:** four commands work remotely — **status**, **battery**,
+**stop** and **come here** — and nothing else. They go through exactly the same safety checks
+as speaking to him. (Google Home needs linking to Home Assistant first.)
 
-**Teaching him something:**
-- *"Remember that [something]"* — stores a fact he can recall later.
-- *"When I say '[phrase],' do [thing]"* — experimental. He stores what you said and re-works out
-  what you meant each time, rather than reliably repeating fixed steps. A more dependable
-  version is planned; see `docs/superpowers/specs/2026-08-20-dynamic-command-learning-design.md`.
+**He may email Howard asking for a feature**, usually when something has failed several times.
+Howard approves by replying with the subject line **"Willie: approve <code>"** from the email;
+a plain reply doesn't count. Approval files the request — nothing changes until someone builds it.
 
 ## What doesn't work yet
 
-- **"Go to the kitchen."** The command exists, but nobody has taught him where any room *is*
-  yet, so he'll tell you he doesn't know where it is. Teaching him rooms is designed but not
-  built — see `docs/superpowers/specs/2026-09-10-come-to-me-design.md`.
-- **Fetching an object.** Switched off, and blocked by the arm fault above.
-- **Anything needing the arm.** Same fault — waving, stowing, and fetching all currently do
-  nothing physically.
-- **Smart home control** ("turn on the lights"). The code exists but needs its own dedicated
-  Google account set up first.
-- **Knowing how far he's travelled.** His wheel sensors have produced nothing since
-  2026-08-25, so he can't tell how far he's gone or where he is. It doesn't affect his driving
-  or his ability to stop — it's why he can't yet navigate to a named place.
+- **Fetching an object.** Switched off on purpose: the grasp moves need re-doing with measured
+  positions before the arm is trusted to reach for things.
+- **Smart home control** ("turn on the lights"). Needs its own Google account set up first.
+- **Knowing his position accurately.** He counts wheel turns, which drifts, and one front wheel's
+  sensor has been unreliable (if he stops with a "wheel stall" fault for no reason, that's likely
+  it — reset him and tell the maintainer).
+- **Driving himself to his charger.** Not built.
 
 ## If something seems wrong
 
-- Say **"stop"** first. It's the fastest path and the one most carefully checked in code.
-- **There's a physical emergency-stop cutoff on the unit.** It kills power to the motors and arm
-  outright, with no software involved, so it works even if he's frozen or ignoring you. Ask
-  whoever maintains Willie where it is if you don't know — worth knowing *before* you need it.
-- **Don't yank the power** if you can avoid it — an abrupt cut can corrupt his storage, the same
-  as any small computer. If he needs turning off and voice isn't working, ask the maintainer for
-  the safe shutdown steps.
-- If he trips over something, gets stuck, or repeatedly stops with a fault, tell the maintainer
+- Say **"stop"** first. It's the fastest path and the most carefully checked one.
+- If he's stopped and won't drive, he's probably **waiting for a reset** — say **"reset"** or tap
+  the screen. His screen shows why he stopped.
+- **The STOP SVC button on his screen** (tap it, then tap again to confirm) brakes him and stops
+  his software altogether. Use it if voice isn't working. He stays inert afterwards, screen and
+  all, until he's restarted — the maintainer, or switching him off and on.
+- **The emergency stop (main power switch)** kills everything at once, his computer included.
+  Use it if he's doing something dangerous and won't stop. Otherwise prefer **"shut down"**: a
+  sudden power cut can corrupt his storage like any small computer.
+- If he trips over something, gets stuck, or keeps stopping with a fault, tell the maintainer
   roughly *when* — his logs are easier to read against a time.
+
+## Privacy
+
+To switch off his **microphone and camera** completely, ask the maintainer: it's done with a
+setting on his computer, and stays off across restarts until it's removed. There is no voice
+command or screen button for it yet. With it on he can't hear "Hey Willie", see you, or
+recognise faces — "stop" still works from his screen button and the power switch.
 
 ## Battery
 
-Ask *"how's your battery?"* any time. If it gets low he'll stop what he's doing and shift to a
-low-power state well before it's actually empty, without you doing anything. His battery
-measurement was wired up properly on 2026-09-14, so the percentage he reports is now real —
-before that the sensor wasn't connected.
+Ask **"how's your battery?"** any time. He reads it from the motor supply monitor, which is
+accurate while the motor switch is on. Below 11.4 V he warns. From 10.8 V down he stops moving,
+and if it stays low he shuts himself down cleanly, well before the battery is damaged.
 
-He can't yet reliably drive himself somewhere to be plugged in — that needs the wheel sensors
-mentioned above. **For now, low battery means "go and find him and plug him in", not "he'll
-come and find you".**
+**Known problem (2026-10-07):** his second battery sensor is wired wrong and reads too low. While
+the motor switch is **on** this doesn't matter. With the motor switch **off**, he can't tell if
+the battery is low, so don't leave him running for long with the motors switched off until the
+maintainer fixes it.
+
+**Low battery means "go and find him and plug him in"** — he can't drive himself to a charger.
 
 ---
 
-*This guide describes current, real capability only — deliberately not a wishlist. If Willie's
-capabilities change, update this file alongside that work rather than leaving it describing an
-older version of him. Last reviewed against the code on 2026-09-10.*
+*This guide describes current, real capability only — not a wishlist. When Willie's
+capabilities change, update this file alongside that work. Last reviewed against the code on
+2026-10-07.*
