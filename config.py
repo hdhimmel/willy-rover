@@ -189,6 +189,9 @@ ROTATE_USE_CAMERA=True
 ROTATE_CAMERA_HFOV_DEG=66.0   # imx708 standard lens, horizontal (datasheet), not bench-measured
 ROTATE_CAMERA_GRACE_S=1.0     # let the image estimate catch up before comparing
 ROTATE_CAMERA_MAX_DISAGREE_DEG=25.0
+# First live run 2026-10-07: IMU 46 deg (owner: the turn was good) vs camera 17 deg -> stopped. The
+# camera estimate under-reads; until the cause is found it can be set to log-only (False).
+ROTATE_CAMERA_STOP=True
 AVOID_CAMERA_CENTRE_DEG=5.0   # a detection this close to dead ahead counts for neither side
 
 # --- FR-1000-002 / FR-1200-005 multi-zone ToF (DFRobot SEN0628, Master Hardware Design §6.5).

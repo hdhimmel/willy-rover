@@ -69,8 +69,10 @@ def _wrap(a): return (a+180.0)%360.0-180.0
 class CameraYaw:
     """Integrated horizontal image shift -> degrees. Frame-to-frame (phase correlation on a small
     greyscale copy), because a whole turn soon leaves the first frame's view entirely."""
-    def __init__(self,grab):
+    def __init__(self,grab,clock=time.time):
         self.grab=grab; self.prev=None; self.deg=0.0; self.ok=grab is not None
+        self.clock=clock; self._t_prev=None
+        self.samples=[]   # (t, dt_s, dx_px, response) per frame pair -- diagnosing the estimate
     def _small(self,f):
         import cv2,numpy as np
         g=cv2.cvtColor(f,cv2.COLOR_BGR2GRAY)
@@ -83,10 +85,12 @@ class CameraYaw:
             if f is None: return None
             import cv2
             s=self._small(f)
+            now=self.clock()
             if self.prev is not None:
-                (dx,_dy),_resp=cv2.phaseCorrelate(self.prev,s)
+                (dx,_dy),resp=cv2.phaseCorrelate(self.prev,s)
                 self.deg+=abs(dx)*config.ROTATE_CAMERA_HFOV_DEG/160.0
-            self.prev=s
+                self.samples.append((now,now-self._t_prev,dx,resp))
+            self.prev=s; self._t_prev=now
             return self.deg
         except Exception:
             log.warning('Camera yaw estimate failed; continuing on IMU alone',exc_info=True)
@@ -111,7 +115,8 @@ class Rotation:
         if abs(degrees)<config.ROTATE_MIN_DEG: return False,'too small to rotate for'
         self._goal=float(degrees); self._dir=1 if degrees>0 else -1
         self._h0=self.imu.heading; self._t0=self.clock(); self._last_steer=0.0
-        self._cam=CameraYaw(self.camera_grab if config.ROTATE_USE_CAMERA else None)
+        self._cam=CameraYaw(self.camera_grab if config.ROTATE_USE_CAMERA else None,clock=self.clock)
+        self.trace=[]     # (t, imu_turned, camera_deg) each spin tick
         self._pulses=rotation_pulses(); self._steer()
         self.state='SETTLE'; self._fail_reason=''
         log.info(f'Rotation start: {degrees:+.0f} deg from heading {self._h0:.1f}, corners {self._pulses}')
@@ -153,7 +158,8 @@ class Rotation:
             self._finish('FAILED',f'something is {near:.0f} centimetres away'); return
         turned=self._turned()
         cam=self._cam.update()
-        if (cam is not None and now-self._spin_t0>=config.ROTATE_CAMERA_GRACE_S and
+        self.trace.append((now,turned,cam))
+        if (cam is not None and config.ROTATE_CAMERA_STOP and now-self._spin_t0>=config.ROTATE_CAMERA_GRACE_S and
                 abs(abs(turned)-cam)>config.ROTATE_CAMERA_MAX_DISAGREE_DEG):
             self._finish('FAILED',f'my gyro says {abs(turned):.0f} degrees but my camera says {cam:.0f}'); return
         if turned*self._dir<-config.ROTATE_WRONG_WAY_DEG:

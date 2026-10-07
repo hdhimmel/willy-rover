@@ -22,7 +22,11 @@ from rotate import Rotation,rotation_pulses
 
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument('degrees',type=float)
-    ap.add_argument('--no-camera',action='store_true'); a=ap.parse_args()
+    ap.add_argument('--no-camera',action='store_true')
+    ap.add_argument('--camera-log-only',action='store_true',
+                    help='record the camera estimate without letting it stop the turn')
+    a=ap.parse_args()
+    if a.camera_log_only: config.ROTATE_CAMERA_STOP=False
     son=SonarArray(); son.start()
     if config.ENABLE_TOF:
         try:
@@ -54,6 +58,15 @@ def main():
           f'in {time.time()-t0:.1f}s; camera estimate '
           f'{"n/a" if cam is None or not cam.ok else f"{cam.deg:.0f} deg"}')
     time.sleep(1.0); print(f'heading after settling: {r._turned():+.1f} deg (coast included)')
+    if cam is not None and cam.samples:
+        t0s=cam.samples[0][0]
+        print('camera frames: t(s) dt(ms) dx(px) response')
+        for t,dt,dx,resp in cam.samples:
+            print(f'  {t-t0s:5.2f} {dt*1000:6.0f} {dx:+7.2f} {resp:.3f}')
+        dts=[s[1] for s in cam.samples]
+        print(f'frames {len(cam.samples)}, mean dt {sum(dts)/len(dts)*1000:.0f} ms, max dt {max(dts)*1000:.0f} ms')
+    if r.trace:
+        print('imu vs camera (deg): ' + ' '.join(f'{t:.0f}/{c:.0f}' for _,t,c in r.trace[::5] if c is not None))
     return 0 if r.state=='DONE' else 1
 
 
