@@ -139,7 +139,8 @@ class Rotation:
         if self.active: return False,'already rotating'
         if abs(degrees)<config.ROTATE_MIN_DEG: return False,'too small to rotate for'
         self._goal=float(degrees); self._dir=1 if degrees>0 else -1
-        self._h0=self.imu.heading; self._t0=self.clock(); self._last_steer=0.0
+        self._h0=self.imu.heading; self._h_last=self._h0; self._acc=0.0
+        self._t0=self.clock(); self._last_steer=0.0
         use=config.ROTATE_USE_CAMERA
         # Front and back cameras (owner: "include willie's back camera"). The back one looks the
         # other way, so its image moves the other way -- only magnitudes are compared.
@@ -164,7 +165,12 @@ class Rotation:
         return 'something is stopping me turning'
 
     def _turned(self):
-        return _wrap(self.imu.heading-self._h0)
+        """Rotation so far, UNWRAPPED: heading changes are summed tick by tick. 2026-10-07, live:
+        a 180 deg "turn around" logged "-178.4 deg" -- heading wraps at +-180, so start-to-now
+        cannot tell 182 from -178, and a turn past 190 would have tripped the wrong-way stop."""
+        h=self.imu.heading
+        self._acc+=_wrap(h-self._h_last); self._h_last=h
+        return self._acc
 
     def _finish(self,state,reason=''):
         self.drive.stop(); self.state=state; self._fail_reason=reason

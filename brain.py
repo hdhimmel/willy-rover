@@ -1953,18 +1953,26 @@ class RoverBrain:
         except Exception: log.warning('Retention purge of memory.db failed',exc_info=True)
 
     def _battery_reading_disputed(self):
-        """True when the +12V bus monitor is live and disagrees with the ADC right now.
+        """True when the reading a halt would act on cannot be trusted. A halt powers the Pi off.
 
-        A halt powers the Pi off, so it needs more than the ADC's word. 2026-10-01: a stale
-        divider scale read a healthy 11.37V pack as 8.53V while 0x45 read 11.26V, and the rover
-        walked to SHUTDOWN on the ADC alone. With the bus down (motor cut, base off) there is
-        nothing to compare against, and the ADC stays the authority."""
+        WHICH READING IS THE AUTHORITY (made explicit 2026-10-07 after an outside review found
+        this check had silently become a no-op):
+          - Bus LIVE: battery_volts IS the +12V bus INA260 (+BUS_TO_PACK_DROP_V), since b47f7d7.
+            The comparison below is then only a consistency guard -- it fires if that wiring is
+            ever undone. The 2026-10-01 incident (stale divider scale read 11.37V as 8.53V, rover
+            walked to SHUTDOWN) cannot recur this way, because the divider is not being read.
+          - Bus DEAD (motor switch off, base off): battery_volts falls back to the ADS1115
+            divider, the ONLY reading left. It is disputed when the cross-check last caught the
+            divider disagreeing with the bus (_bat_xcheck_flagged, kept while the bus is down).
+            2026-10-06/07 the divider read 7.2V and then 15.4V on a 12V pack: halting -- or not
+            halting -- on that would be acting on a number already known to be wrong."""
         try:
             bus=self.current.rail('bus_12v')['voltage_v']
         except Exception:
-            return False
-        if bus<config.MOTOR_RAIL_MIN_V: return False
-        return abs(self.adc.battery_volts-bus)>config.BAT_CROSSCHECK_MAX_DIFF_V
+            bus=0.0
+        if bus>=config.MOTOR_RAIL_MIN_V:
+            return abs(self.adc.battery_volts-bus)>config.BAT_CROSSCHECK_MAX_DIFF_V
+        return getattr(self,'_bat_xcheck_flagged',False)
 
     def _battery_halt(self,reason,bat_v,threshold,d,tilt):
         """FR-200-004/005: the FR-900-005 graceful halt, once the reading has stayed under
@@ -1985,12 +1993,14 @@ class RoverBrain:
                   +(f' in {left:.0f}s' if left>0 else ''),d,tilt)
 
     def _check_battery_crosscheck(self):
-        """Compare the ADS1115 pack reading against the +12V bus INA260. DETECTION ONLY.
+        """Compare the ADS1115 divider against the +12V bus INA260. DETECTION, plus one effect.
 
-        The ADS1115 divider is the AUTHORITY and this never overrides it. The divider taps V21 on
-        the pack side, so it keeps reading true pack voltage no matter what is switched off
-        downstream; the bus monitor does not. This only ever says "these two disagree, stop
-        trusting the number on the face" -- it does not decide which one is right.
+        AUTHORITY (corrected 2026-10-07; this said "the divider is the AUTHORITY", untrue since
+        b47f7d7): while the bus is live, battery_volts follows the BUS, and the divider is only the
+        fallback for a dead bus (motor cut, base off) -- the one case where the pack-side divider
+        still reads and the bus does not. So this check is about that FALLBACK: when the two
+        disagree, the divider is suspect, the face says so, and _battery_reading_disputed() will
+        not let a dead-bus halt act on the divider alone while the flag stands.
 
         Why it exists: on 2026-09-15 the divider went open and read 0.09V while the bus read
         10.97V, for hours, with nothing comparing them. That particular fault was caught by

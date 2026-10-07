@@ -412,11 +412,18 @@ once, announces, and enters `LOW_BATTERY`. Two guards:
   `BAT_HALT_CONFIRM_S` (10 s) with the rover stopped; recovery above the threshold restarts
   the clock, and recovery past the hysteresis band (`BAT_HYSTERESIS_V` 0.2) returns to
   `IDLE`.
-- **Cross-check veto.** `_battery_reading_disputed()`: while the +12V bus monitor (0x45)
-  is live (≥ `MOTOR_RAIL_MIN_V`) and differs from the ADC by more than
-  `BAT_CROSSCHECK_MAX_DIFF_V` (1.5 V), the halt is blocked and the face says so. With the
-  bus down there is nothing to compare and the ADC is the authority. This is the one place
-  the cross-check changes behaviour, and it can only prevent a halt.
+- **Which reading is the authority (made explicit 2026-10-07).** While the +12V bus monitor
+  (0x45) is live (≥ `MOTOR_RAIL_MIN_V`), `battery_volts` **is** the bus plus
+  `BUS_TO_PACK_DROP_V` (since `b47f7d7`), so the halt acts on the bus. The ADS1115 divider is
+  only the fallback for a dead bus (motor cut, base off), where it is the one reading left.
+- **Cross-check veto.** `_battery_reading_disputed()`: with the bus live it is only a
+  consistency guard (`battery_volts` vs the bus, which can differ only if that wiring is
+  undone). With the bus dead, the halt is blocked while `_check_battery_crosscheck()` last
+  caught the divider disagreeing with the bus by more than `BAT_CROSSCHECK_MAX_DIFF_V`
+  (1.5 V) — a divider already known wrong (7.2 V, then 15.4 V, on a 12 V pack on 2026-10-06/07)
+  must not power the Pi off, or be trusted to. This is the one place the cross-check changes
+  behaviour, and it can only prevent a halt. Until the divider is fixed, a dead-bus low
+  battery is therefore not caught by software.
 
 Battery ladder: `BAT_WARN_V` 11.4, `BAT_RTH_V` 10.8, `BAT_SAFE_V` 10.5, `BAT_SHUTDOWN_V`
 10.2. `BAT_FULL_V` 11.58 is a display-only 100% anchor for `battery_pct`; every safety

@@ -88,6 +88,16 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   See Master Hardware
                                                   Design §6.2 / §14 item
                                                   12.
+                                                  2026-10-07: authority
+                                                  explicit -- bus live =
+                                                  bus is the reading;
+                                                  bus dead = divider,
+                                                  and a halt is vetoed
+                                                  while the divider is
+                                                  flagged suspect. The
+                                                  divider reads 0.31 vs
+                                                  0.242 design: resistor
+                                                  values being metered.
 
   FR-300 Safety / E-stop  SATISFIED by hardware   The E-stop IS the main power
                           (owner decision          switch: it cuts all power,

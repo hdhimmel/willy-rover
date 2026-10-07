@@ -5,7 +5,8 @@ sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # graceful sequence. Because that is irreversible, it is gated three ways, all pinned here:
 #   - the reading must stay under the tier threshold for BAT_HALT_CONFIRM_S (sag recovery resets it)
 #   - a live +12V bus monitor that disagrees with the ADC blocks it (the 2026-10-01 8.53V incident)
-#   - a dead bus (motor cut / base off) leaves the ADC as the authority
+#   - a dead bus (motor cut / base off) leaves the ADC as the authority -- unless the cross-check
+#     last caught the divider disagreeing with the bus (2026-10-07)
 
 _REPO_ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -55,6 +56,14 @@ f=fb(10.0,0.0)
 f._battery_halt("critical battery",10.0,config.BAT_SHUTDOWN_V,{},0.0); clock[0]+=C+1
 f._battery_halt("critical battery",10.0,config.BAT_SHUTDOWN_V,{},0.0)
 assert f.halts==["critical battery"], f.halts
+
+# 6. Bus down AND the divider was last caught disagreeing with the bus (2026-10-06/07: it read
+#    7.2V then 15.4V on a 12V pack): the divider is the only reading left and is known bad, so
+#    no halt acts on it.
+f=fb(10.0,0.0); f._bat_xcheck_flagged=True
+for _ in range(3):
+    f._battery_halt("critical battery",10.0,config.BAT_SHUTDOWN_V,{},0.0); clock[0]+=C+1
+assert f.halts==[] and "disputed" in f.shown[-1], f.shown[-1]
 
 # 5. Docking is deferred, so the rth tier must never select DOCK.
 assert config.ENABLE_DOCKING is False

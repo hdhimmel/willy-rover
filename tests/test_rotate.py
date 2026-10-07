@@ -76,6 +76,17 @@ def test_heading_wraps_across_180():
     clk.t+=0.2; r.tick(_CLEAR,0)
     assert r.state=='DONE'
 
+def test_turns_past_180_are_counted_not_wrapped():
+    """Live 2026-10-07: a 180 turn logged -178.4. A 270 would have hit the wrong-way stop."""
+    r,s,dr,imu,clk,_=_task(); imu.heading=0.0
+    r.start(270); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
+    for _ in range(26):                        # +10 deg a tick, through +180 and on
+        clk.t+=0.2; imu.heading=_wrap_h(imu.heading+10); r.tick(_CLEAR,0)
+        if r.state!='SPIN': break
+    assert r.state=='DONE' and abs(r._turned())>=270-config.ROTATE_STOP_EARLY_DEG
+
+def _wrap_h(a): return (a+180.0)%360.0-180.0
+
 def test_something_close_stops_the_spin_and_says_so():
     r,s,dr,imu,clk,said=_task()
     r.start(90); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
