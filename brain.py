@@ -1,4 +1,4 @@
-import json,math,time,socket,os,subprocess,threading,config,logsetup,storage
+import json,math,time,socket,os,subprocess,threading,logging,config,logsetup,storage
 from logsetup import log_event
 if not config.SIMULATE_HARDWARE: import board,busio
 from motors import DriveBase,Steering
@@ -26,9 +26,18 @@ from feature_requests import FeatureRequests
 from identity import IdentityStore,RECOGNISED,UNCERTAIN,UNKNOWN
 from recognition import FaceRecognizer
 from witty_pi import WittyPi
+hailo_llm=None; HailoIntentModel=None
 if config.ENABLE_HAILO_LLM:
-    import hailo_llm
-    from hailo_llm import HailoIntentModel
+    # Tolerated, not required: the Hailo runtime (picamera2.devices, hailo_platform) exists only on
+    # the rover. Without it brain.py still imports and runs, with no on-board model -- STUCK falls
+    # back to the cloud. Found 2026-10-07 by the first CI run, where this import alone stopped
+    # test collection on a machine without picamera2.
+    try:
+        import hailo_llm
+        from hailo_llm import HailoIntentModel
+    except ImportError as e:
+        logging.getLogger('brain').warning(f'Hailo runtime not importable ({e}); running without the on-board model')
+        hailo_llm=None; HailoIntentModel=None
 log=logsetup.setup('brain')
 
 # Intents that must never be dropped for age in _drain_voice_commands(). confirm_receipt answers
@@ -228,9 +237,9 @@ class RoverBrain:
         # and voice.py's free-text fallback — was two separate, un-unified clients hitting the
         # same Anthropic endpoint (ClaudeClient + CloudAIClient).
         self.memory=MemoryStore(); self.cloud_ai=CloudAIProvider(); self.smart_home=SmartHomeClient()
-        self.hailo_llm=HailoIntentModel() if config.ENABLE_HAILO_LLM else None  # Primary on-device reasoning (STUCK state)
+        self.hailo_llm=HailoIntentModel() if (config.ENABLE_HAILO_LLM and HailoIntentModel) else None  # Primary on-device reasoning (STUCK state)
         # Brake before every Hailo generation: it freezes every thread for seconds (hailo_llm.py).
-        if config.ENABLE_HAILO_LLM: hailo_llm.set_before_generate(self._brake_before_hailo)
+        if hailo_llm is not None: hailo_llm.set_before_generate(self._brake_before_hailo)
         self.voice=VoicePipeline(memory=self.memory,cloud_ai=self.cloud_ai,display=self.display,
                                   smart_home=self.smart_home)
         self.detector=ObjectDetector()
