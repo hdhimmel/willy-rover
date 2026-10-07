@@ -1654,7 +1654,7 @@ class RoverBrain:
             self.safety.stop(); self._go('IDLE')
             self._upd('idle','Not roaming: can\'t check the stair map (no fresh position)',d,tilt); return
         if tilt>config.IMU_TILT_WARN: self._go('WARN'); return
-        if f<config.DIST_STOP: self._go('AVOID'); return
+        if f<config.DIST_STOP: self.safety.obstacle_stop(); self._go('AVOID'); return   # brake, not ramp
         if f<config.DIST_SLOW: self._go('SLOW'); return
         self.safety.forward(config.SPEED_ROAM); self._last_action='forward'
         self._upd('roam',f'Cruising f={f:.0f}cm bat={self.adc.battery_pct}%',d,tilt,config.SPEED_ROAM)
@@ -1663,7 +1663,7 @@ class RoverBrain:
         f,ok=self._stair_planning_front(d)
         if not ok: self.safety.stop(); self._go('IDLE'); return
         if f>config.DIST_CLEAR: self._go('ROAM'); return
-        if f<config.DIST_STOP: self._go('AVOID'); return
+        if f<config.DIST_STOP: self.safety.obstacle_stop(); self._go('AVOID'); return   # brake, not ramp
         self.safety.forward(config.SPEED_SLOW); self._upd('slow',f'Slowing f={f:.0f}cm',d,tilt,config.SPEED_SLOW)
 
     def _avoid(self,d,tilt):

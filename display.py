@@ -26,6 +26,15 @@ STATUS_Y=600
 # FR-1600-005 (rendering must never delay FR-000 Directives or the FR-100 self-test):
 # this class runs its own render loop on a dedicated daemon thread (see start() below),
 # never on brain.py's tick thread, so a slow frame here cannot block Directive checks.
+
+def mouth_openness(env,step_s,elapsed_s):
+    """0..1 mouth opening for `elapsed_s` into speech whose loudness envelope is `env` (one value
+    per `step_s`), or None when not talking (no envelope, or past its end). Pure, for tests."""
+    if not env or elapsed_s<0: return None
+    i=int(elapsed_s/step_s)
+    if i>=len(env): return None
+    return max(0.0,min(1.0,float(env[i])))
+
 class WillyFace:
     def __init__(self):
         self._state='idle';self._status='Initialising...';self._dists={'front':999,'left':999,'right':999}
@@ -36,6 +45,7 @@ class WillyFace:
         # base state above — see _PERSONALITY_SAFE_STATES for when it's actually shown.
         self._personality=None;self._personality_until=0.0
         self._idle_cycle_t=config.IDLE_PERSONALITY_CYCLE_S
+        self._talk_env=None; self._talk_step=0.05; self._talk_t0=0.0   # talking mouth (set_talking)
         self._heard_until=0.0  # note_heard() flashes a small corner icon, separate from state='listening'
         # FR-300-003, applied to all faults not just E-stop (owner decision 2026-08-18): once a
         # fault condition clears, brain.py stops calling _go('IDLE') automatically and instead
@@ -296,9 +306,21 @@ class WillyFace:
             self._draw(); clk.tick(config.DISPLAY_FPS)
         pygame.quit()
 
+    # FR-1600-009 (owner 2026-10-07): "when Willie speaks have his mouth open and close like he is
+    # talking". voice.py hands over the loudness envelope of the exact audio it is about to play;
+    # the mouth follows it frame by frame, so it moves with the syllables and shuts in the pauses,
+    # rather than flapping on a timer.
+    def set_talking(self,envelope,step_s):
+        with self._lock:
+            self._talk_env=list(envelope) if envelope else None
+            self._talk_step=step_s; self._talk_t0=time.monotonic()
+    def stop_talking(self):
+        with self._lock: self._talk_env=None
+
     def _draw(self):
         s=self.screen; t=self._t; s.fill(C_BG)
         with self._lock:
+            talk_open=mouth_openness(self._talk_env,self._talk_step,time.monotonic()-self._talk_t0)
             state=self._state; status=self._status
             dists=dict(self._dists); tilt=self._tilt; speed=self._speed
             personality=self._personality if self._t<self._personality_until else None
@@ -350,7 +372,14 @@ class WillyFace:
         # mean "happy" states (roam/idle/speak/...), so it must map to the bottom-half arc —
         # was previously inverted (happy states frowned, fault states smiled).
         sa,ea=(math.pi*1.1,math.pi*1.9) if ms>=0 else (math.pi*0.1,math.pi*0.9)
-        pygame.draw.arc(s,C_MOUTH,mr,sa,ea,7)
+        if talk_open is not None:
+            # Talking: an open mouth whose height follows the speech envelope; closed (a thin
+            # line) in the gaps between words.
+            mh=max(10,int(MOUTH_H*0.95*talk_open)); mw=int(MOUTH_W*0.55)
+            om=pygame.Rect(MOUTH_CX-mw//2,MOUTH_CY-mh//2,mw,mh)
+            pygame.draw.ellipse(s,(20,20,30),om); pygame.draw.ellipse(s,C_MOUTH,om,7)
+        else:
+            pygame.draw.arc(s,C_MOUTH,mr,sa,ea,7)
         # FR-1600-003/004: badge always reflects the true `state` (never `vis`/personality) so
         # fault/low-battery is always the unambiguous, non-decorated signal an operator sees.
         bc={'roam':C_GREEN,'slow':C_AMBER,'stop':C_RED,'warn':C_RED,'stuck':C_RED,'fault':C_RED,

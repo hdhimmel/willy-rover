@@ -76,3 +76,24 @@ def test_stop_rejected_like_any_other_action_but_harmlessly_so():
     # just documents approve_motion()'s own behavior in isolation.
     r=approve_motion('stop',None,None,tilt_deg=999,bat_tier='shutdown',motion_enabled=False)
     assert isinstance(r,Rejected)
+
+
+def test_obstacle_stop_brakes_instead_of_ramping():
+    """2026-10-07: the ramped stop let him roll ~10 cm past a first-seen obstacle."""
+    import types
+    from safety import SafetyController
+    calls=[]
+    s=SafetyController(types.SimpleNamespace(brake=lambda: calls.append('brake'),
+                                             stop=lambda: calls.append('stop')))
+    s._deadline=9e9; s._active_action='forward'
+    s.obstacle_stop()
+    assert calls==['brake'] and s._deadline is None and s._active_action is None
+
+def test_mid_flight_obstacle_abort_brakes():
+    import types
+    from safety import SafetyController
+    calls=[]
+    s=SafetyController(types.SimpleNamespace(brake=lambda: calls.append('brake'),
+                                             stop=lambda: calls.append('stop')))
+    s._deadline=9e9; s._active_action='forward'; s._ctx['front_cm']=5.0
+    assert s.tick() is False and calls==['brake']

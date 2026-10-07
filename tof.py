@@ -146,9 +146,21 @@ class ToFSensor:
         if frame is None: return None
         best=None
         for i,v in enumerate(frame):
-            if self.profile.classify(i,v)!=OBSTACLE: continue
+            if not self._is_obstacle(i,v): continue
             if best is None or v<best: best=v
         return None if best is None else best/10.0
+
+    def _is_obstacle(self,i,v):
+        """A floor row: shorter than its floor baseline (the profile). Any OTHER row: anything
+        nearer than TOF_NOFLOOR_OBSTACLE_MM. 2026-10-07: only floor rows carry a profile, which
+        left the upper rows -- the ones that see a couch edge or table top at body height --
+        saying nothing at all. Those rows never see floor this close (row 5, the nearest of them,
+        first meets floor at ~86 cm), so a near return there is something in the way, with no
+        baseline needed."""
+        if self.profile.classify(i,v)==OBSTACLE: return True
+        rows=config.TOF_FLOOR_ROWS
+        if rows is None or v is None: return False
+        return (i//config.TOF_ZONE_COLUMNS) not in rows and v<config.TOF_NOFLOOR_OBSTACLE_MM
 
     def side_obstacles_cm(self):
         """(left_cm,right_cm): nearest obstacle zone in the left and right column halves, or
@@ -164,7 +176,7 @@ class ToFSensor:
         if frame is None: return None,None
         left=right=None; cols=config.TOF_ZONE_COLUMNS; left_cols=set(config.TOF_LEFT_COLUMNS)
         for i,v in enumerate(frame):
-            if self.profile.classify(i,v)!=OBSTACLE: continue
+            if not self._is_obstacle(i,v): continue
             cm=v/10.0
             if i%cols in left_cols: left=cm if left is None else min(left,cm)
             else: right=cm if right is None else min(right,cm)

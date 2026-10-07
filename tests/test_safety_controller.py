@@ -69,7 +69,8 @@ def test_tick_aborts_forward_move_if_obstacle_appears():
     sc.update_context(front_cm=config.DIST_STOP-1)  # obstacle appears mid-flight
     still_active=sc.tick()
     assert still_active is False and sc.timed_move_active is False
-    assert ('stop',) in drive.calls
+    # 2026-10-07: a BRAKE, not the ramped stop -- the ramp let him roll ~10 cm into things.
+    assert ('brake',) in drive.calls
 
 def test_tick_does_not_abort_non_forward_move_on_obstacle():
     sc,drive=_sc()

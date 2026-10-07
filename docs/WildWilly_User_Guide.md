@@ -56,7 +56,7 @@ through conversation that the commands below don't allow; talking is just talkin
 
 **His personality:** in casual conversation he sometimes answers playfully, and he goes a bit
 shy if you compliment him or ask him personal questions. Anything about safety or faults is
-always said plainly.
+always said plainly. When he talks, his mouth moves with the words. *(New, not yet seen for real.)*
 
 **Checking in on him:**
 - **"How are you?"** / **"Status report"**

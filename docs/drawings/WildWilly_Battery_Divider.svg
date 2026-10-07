@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 640" width="900" height="640" font-family="Segoe UI, Arial, sans-serif">
+  <title>WildWilly battery divider — what to solder and where to measure</title>
+  <rect width="900" height="640" fill="#ffffff"/>
+  <text x="30" y="40" font-size="24" font-weight="700" fill="#111">Battery divider (signal board) — solder and measure</text>
+  <text x="30" y="66" font-size="14" fill="#444">Master Hardware Design §6.2 · 2026-10-07 · black meter lead on P1-17 (GND) for every voltage</text>
+
+  <!-- feed -->
+  <text x="70" y="112" font-size="15" font-weight="600" fill="#111">+12 V bus (pack 12.09 V)</text>
+  <line x1="150" y1="122" x2="150" y2="150" stroke="#111" stroke-width="3"/>
+  <!-- fuse -->
+  <rect x="132" y="150" width="36" height="44" rx="6" fill="#fff" stroke="#111" stroke-width="3"/>
+  <text x="180" y="178" font-size="14" fill="#333">inline fuse</text>
+  <line x1="150" y1="194" x2="150" y2="230" stroke="#111" stroke-width="3"/>
+  <!-- P1-13 node -->
+  <circle cx="150" cy="230" r="7" fill="#111"/>
+  <text x="165" y="226" font-size="16" font-weight="700" fill="#111">P1-13</text>
+
+  <!-- upper resistor 10k -->
+  <line x1="150" y1="230" x2="150" y2="258" stroke="#111" stroke-width="3"/>
+  <rect x="128" y="258" width="44" height="90" rx="4" fill="#f4f4f4" stroke="#111" stroke-width="3"/>
+  <text x="150" y="300" font-size="15" font-weight="700" text-anchor="middle" fill="#111">10k</text>
+  <text x="150" y="318" font-size="11" text-anchor="middle" fill="#555">upper</text>
+  <line x1="150" y1="348" x2="150" y2="380" stroke="#111" stroke-width="3"/>
+
+  <!-- midpoint P1-14 -->
+  <circle cx="150" cy="380" r="7" fill="#111"/>
+  <text x="165" y="376" font-size="16" font-weight="700" fill="#111">P1-14 (midpoint)</text>
+  <!-- to ADS1115 -->
+  <line x1="150" y1="380" x2="430" y2="380" stroke="#111" stroke-width="3"/>
+  <rect x="430" y="350" width="150" height="60" rx="8" fill="#eef3fb" stroke="#1d4f91" stroke-width="3"/>
+  <text x="505" y="376" font-size="15" font-weight="700" text-anchor="middle" fill="#1d4f91">ADS1115 A0</text>
+  <text x="505" y="396" font-size="12" text-anchor="middle" fill="#1d4f91">3.3 V chip, max ~3.6 V in</text>
+
+  <!-- split to lower parallel pair -->
+  <line x1="150" y1="380" x2="150" y2="420" stroke="#111" stroke-width="3"/>
+  <line x1="90" y1="420" x2="230" y2="420" stroke="#111" stroke-width="3"/>
+  <line x1="90" y1="420" x2="90" y2="440" stroke="#111" stroke-width="3"/>
+  <line x1="230" y1="420" x2="230" y2="440" stroke="#111" stroke-width="3"/>
+  <!-- 4.7k -->
+  <rect x="68" y="440" width="44" height="80" rx="4" fill="#f4f4f4" stroke="#111" stroke-width="3"/>
+  <text x="90" y="485" font-size="15" font-weight="700" text-anchor="middle" fill="#111">4.7k</text>
+  <!-- 10k suspect -->
+  <rect x="200" y="432" width="60" height="96" rx="8" fill="none" stroke="#d1242f" stroke-width="3" stroke-dasharray="7 5"/>
+  <rect x="208" y="440" width="44" height="80" rx="4" fill="#fdecec" stroke="#d1242f" stroke-width="3"/>
+  <text x="230" y="485" font-size="15" font-weight="700" text-anchor="middle" fill="#d1242f">10k</text>
+  <text x="272" y="460" font-size="14" font-weight="700" fill="#d1242f">SOLDER THIS ONE</text>
+  <text x="272" y="478" font-size="12" fill="#d1242f">not connected live → midpoint 4.07 V</text>
+  <text x="272" y="494" font-size="12" fill="#d1242f">(read 3.2k powered off: intermittent)</text>
+  <line x1="90" y1="520" x2="90" y2="545" stroke="#111" stroke-width="3"/>
+  <line x1="230" y1="520" x2="230" y2="545" stroke="#111" stroke-width="3"/>
+  <line x1="90" y1="545" x2="230" y2="545" stroke="#111" stroke-width="3"/>
+  <line x1="150" y1="545" x2="150" y2="570" stroke="#111" stroke-width="3"/>
+  <circle cx="150" cy="570" r="7" fill="#111"/>
+  <text x="165" y="575" font-size="16" font-weight="700" fill="#111">P1-17 (GND)</text>
+  <line x1="128" y1="590" x2="172" y2="590" stroke="#111" stroke-width="3"/>
+  <line x1="136" y1="598" x2="164" y2="598" stroke="#111" stroke-width="3"/>
+  <line x1="144" y1="606" x2="156" y2="606" stroke="#111" stroke-width="3"/>
+  <line x1="150" y1="577" x2="150" y2="590" stroke="#111" stroke-width="3"/>
+
+  <!-- measurement table -->
+  <rect x="610" y="96" width="270" height="520" rx="10" fill="#fafafa" stroke="#bbb" stroke-width="1.5"/>
+  <text x="625" y="124" font-size="17" font-weight="700" fill="#111">Measure</text>
+
+  <text x="625" y="154" font-size="13" font-weight="700" fill="#1a7f37">POWER ON, charger unplugged</text>
+  <text x="625" y="178" font-size="14" font-weight="600" fill="#111">① P1-13 → P1-17</text>
+  <text x="640" y="196" font-size="13" fill="#333">expect ≈ pack (11.9–12.6 V)</text>
+  <text x="640" y="212" font-size="12" fill="#666">today: 11.98 V ✓</text>
+  <text x="625" y="240" font-size="14" font-weight="600" fill="#111">② P1-14 → P1-17</text>
+  <text x="640" y="258" font-size="13" fill="#333">expect 2.9–3.1 V at 12 V</text>
+  <text x="640" y="274" font-size="12" fill="#d1242f">today: 4.07 V ✗ (10k missing)</text>
+  <text x="625" y="302" font-size="14" font-weight="600" fill="#111">③ A0 pin → ADS1115 GND</text>
+  <text x="640" y="320" font-size="13" fill="#333">must equal ②</text>
+  <text x="640" y="336" font-size="12" fill="#666">never above ~3.6 V</text>
+
+  <text x="625" y="374" font-size="13" font-weight="700" fill="#9a6700">POWER OFF (main switch)</text>
+  <text x="625" y="398" font-size="14" font-weight="600" fill="#111">④ P1-14 ↔ P1-17</text>
+  <text x="640" y="416" font-size="13" fill="#333">expect 3.2 kΩ (4.7k ∥ 10k)</text>
+  <text x="640" y="432" font-size="12" fill="#666">4.7 kΩ = the 10k is open</text>
+  <text x="625" y="460" font-size="14" font-weight="600" fill="#111">⑤ P1-13 ↔ P1-14</text>
+  <text x="640" y="478" font-size="13" fill="#333">expect ≈ 10 kΩ</text>
+  <text x="640" y="494" font-size="12" fill="#666">reads ~9.2k in-circuit: OK</text>
+
+  <text x="625" y="530" font-size="13" font-weight="700" fill="#111">After soldering</text>
+  <text x="625" y="550" font-size="12" fill="#333">wiggle the 10k while reading ④ —</text>
+  <text x="625" y="566" font-size="12" fill="#333">it must stay at 3.2 kΩ</text>
+  <text x="625" y="590" font-size="12" fill="#333">then power on and check ② and ③</text>
+</svg>

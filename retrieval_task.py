@@ -87,7 +87,7 @@ class RetrievalTask:
         # (the camera frame during a turn is stale anyway, so waiting costs nothing real).
         if self.safety.timed_move_active: return
         if d['front']<config.DIST_STOP:
-            self.safety.stop(); return
+            getattr(self.safety,'obstacle_stop',self.safety.stop)()   # brake, not ramp (2026-10-07); return
         det=self._best(self.detector.detect(classes=[self._target_class]))
         if det is None:
             self._lost_count+=1

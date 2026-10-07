@@ -75,7 +75,7 @@ class PursuitTask:
         # obstacle still takes priority over the pursuit path.
         if self.safety.timed_move_active: return
         if d['front']<config.DIST_STOP:
-            self.safety.stop(); return
+            getattr(self.safety,'obstacle_stop',self.safety.stop)()   # brake, not ramp (2026-10-07); return
         det=self._best(self.detector.detect(classes=['person']))
         if det is None:
             self._lost_count+=1

@@ -566,6 +566,12 @@ unused.
 
 The SEN0628 stays on the Pi (uart3-pi5), not behind Pico B.
 
+**rf encoder (2026-10-07, open).** rf counts near zero while its wheel visibly turns (−39, 0,
+1, 16, −10 in runs where the other wheels counted thousands), which latches a false
+STALL_FAULT while roaming. Owner checked the plug and leads: fine. Its signals are J3-5
+(yellow, Phase A → Pico A GP4, phys 6) and J3-6 (green, Phase B → GP5, phys 7). Next: rf
+driven alone on the blocks, reading its count.
+
 #### Pico A pinout — encoders
 
 Pin numbers are Pico 2 W physical; the Pi column is Pi physical.
@@ -984,9 +990,17 @@ represents up to 16.8 V, so a full or on-charger pack does not clip.
 Calibrate rather than trusting the nominal: resistor tolerance alone shifts it ~5%, which
 is ~600 mV at the pack — more than the gap between adjacent battery tiers.
 
-**Cross-check.** INA260 0x45 on the +12 V bus reads pack voltage less ~0.19 V
-(fuse-and-switch drop). Software compares the two (`⚠BATTERY SENSE SUSPECT`) and blocks a
-battery halt while they disagree by more than 1.5 V (Software Design §4.2). A reading below
+**Cross-check and authority (corrected 2026-10-07).** INA260 0x45 on the +12 V bus reads pack
+voltage less a small fuse-and-switch drop (`BUS_TO_PACK_DROP_V` 0.08 V; 0.16 V measured
+2026-10-07 against a metered 12.1 V). **While the bus is live it is the battery reading**; the
+divider is the fallback for a dead bus. Software compares the two (`⚠BATTERY SENSE SUSPECT`);
+with the bus dead, a halt on the divider is blocked while that flag stands (Software Design
+§4.2).
+
+**Open fault (2026-10-06/07).** The divider read 7.2 V, then 15.4 V (after resistors touching
+were separated), now a **steady 1.77 V at A0** for a 11.7 V pack — ratio 0.150 against 0.242.
+Powered off the legs meter right (3.2 kΩ lower, 9.2 kΩ upper in-circuit). Next: live
+P1-13→P1-17 (feed) and P1-14→P1-17 (tap) to split feed / board / ADC wiring.A reading below
 5.0 V (`BAT_IMPLAUSIBLE_V`) is treated as a failed read, not a flat pack.
 
 ### 6.3 IMU
@@ -1031,7 +1045,27 @@ Front obstacle and drop sensing **alongside** the front sonar. Read by `tof.py`
 columns 0–1: `TOF_LEFT_COLUMNS=(0,1,2,3)`; row 7 is the bottom of the view (near floor).
 Any remount re-opens this — repeat the test. The old cover's window edge (0–5 cm returns in
 one corner) is gone with the new housing. Rows 6–7 see floor at 37–60 cm; rows 0–5 see the
-room (`TOF_FLOOR_ROWS=(6,7)`, the only rows the floor profile keeps). Profile not yet saved.
+room (`TOF_FLOOR_ROWS=(6,7)`, the only rows the floor profile keeps). Profile saved
+2026-10-07 (rows 6–7 only).
+
+**Second SEN0628 — on order (2026-10-07), same model. Planned wiring, not yet fitted:**
+
+| Pi pin | GPIO | UART0 | To |
+|---|---|---|---|
+| 8 | GPIO14 | TXD0 | ToF #2 **RX** |
+| 10 | GPIO15 | RXD0 | ToF #2 **TX** |
+
+- **Pin 10 is freed by moving the BNO085 INT wire**, which software never read. INT moves to
+  **Pico B GP14 (physical pin 19)**, next to RST on GP15 — 3.3 V both sides, needs a new J4-3
+  or a flying lead. (Later: Pico B can count INT pulses into its frame as an IMU-alive check
+  independent of I²C.)
+- `config.txt` gains `dtoverlay=uart0-pi5` → `/dev/ttyAMA0`. Not UART1: GPIO0/1 are the HAT
+  EEPROM pins the Witty Pi uses. Both wires required, as for #1 — the sensor never streams.
+- **Power from the 3.3 V rail** (owner), not the Pi's pin 1 3V3 that feeds #1 and the I²C
+  logic. Ground: all grounds on Willie meet at a common star point (owner, 2026-10-07), so the
+  UART shares the Pi's reference.
+- Mount position not decided (rear, or angled to a front corner); it decides how software uses
+  it. Each sensor needs its own orientation test and floor capture.
 
 | | |
 |---|---|

@@ -58,7 +58,8 @@ the bug. On any disagreement, fix the loser.
 
 - Off-hardware, always: `WILLY_SIMULATE=1` (gates every real I²C/GPIO/UART open; needs
   `pygame` and `networkx`). On willie:
-  `cd ~/rover && WILLY_SIMULATE=1 venv/bin/python3 -m pytest tests/`.
+  `cd ~/rover && WILLY_SIMULATE=1 venv/bin/python3 -m pytest tests/`. CI runs the same suite on
+  every push (`.github/workflows/tests.yml`); read results from the public annotations API.
 - The suite's home is willie. On Windows a subset fails for environment reasons only
   (no `board`, SQLite file locking, no `AF_UNIX`, no `picamera2`).
 - `config.SIMULATE_HARDWARE` is frozen at first import of `config`; setting the env var
@@ -99,7 +100,7 @@ Pi header pin 1 (3V3). Any device holding SDA or SCL low takes the whole bus dow
 
 | Addr | Device | Function |
 |------|--------|----------|
-| 0x40 | INA260 | R2 5 V rail — steering servos, sonar (`INA260_5V_ADDR`, `steering_5v`) |
+| 0x40 | INA260 | R2 5 V rail — sonar; **does not see steering servo current** (flat while a servo swung, 2026-10-06) |
 | 0x42 | PCA9685 | Steering servos CH0–3, CH8–9 (2026-10-05) |
 | 0x43 | PCA9685 | Arm servos CH0–CH6 (CH7 empty) |
 | 0x44 | INA260 | R3 6 V arm servo rail (`INA260_ARM_6V_ADDR`, `arm_6v`) |
@@ -150,6 +151,9 @@ Other header pins:
 - GP0 **ID_SD** / GP1 **ID_SC** (phys 27/28) — reserved for the AI HAT EEPROM.
 - GP14 **UART0 TXD** (phys 8) — unused. **The serial console stays disabled**; no Pico
   goes on `uart0`.
+- **Planned (2026-10-07): a second SEN0628 on `uart0`** (`dtoverlay=uart0-pi5`, `/dev/ttyAMA0`):
+  phys 8 TXD0 → ToF RX, ToF TX → phys 10 RXD0. Pin 10 is freed by moving the BNO085 INT wire
+  to Pico B GP14 (pin 19). Powered from the 3.3 V rail; grounds are a common star.
 - **SPI0 stays disabled** (`dtparam=spi=off`) — GP8/GP9 carry `uart3-pi5`.
 
 ---

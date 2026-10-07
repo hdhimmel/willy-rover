@@ -170,7 +170,7 @@ class Navigator:
         if self.safety.timed_move_active: return
         f=d['front']
         if f<config.DIST_STOP:
-            self.safety.stop()
+            getattr(self.safety,'obstacle_stop',self.safety.stop)()   # brake, not ramp (2026-10-07)
             if self._at_blocked_doorway():
                 self.state='DOOR_WAIT'; self._ask_at_door(); return
             self.state='AVOIDING'

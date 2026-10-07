@@ -44,6 +44,28 @@ def downsample_to_16k(samples,factor):
     return decimate(samples,factor,ftype='fir',zero_phase=True).astype(np.int16)
 
 
+def speech_envelope(wav_path,step_s):
+    """FR-1600-009: loudness per `step_s` of a 16-bit WAV, scaled 0..1 for the talking mouth.
+    RMS per window, normalised to the 95th percentile so a loud word does not make every other
+    word look shut; anything under MOUTH_TALK_GATE is 0 (mouth closed in the gaps). [] on any
+    problem -- the mouth is decoration and must never stop him speaking."""
+    import wave
+    try:
+        with wave.open(wav_path,'rb') as w:
+            if w.getsampwidth()!=2: return []
+            rate=w.getframerate(); ch=w.getnchannels()
+            pcm=np.frombuffer(w.readframes(w.getnframes()),dtype=np.int16).astype(np.float32)
+        if ch>1: pcm=pcm.reshape(-1,ch).mean(axis=1)
+        n=max(1,int(rate*step_s)); k=len(pcm)//n
+        if k==0: return []
+        rms=np.sqrt((pcm[:k*n].reshape(k,n)**2).mean(axis=1))
+        ref=float(np.percentile(rms,95)) or 1.0
+        env=np.clip(rms/ref,0.0,1.0)
+        env[env<config.MOUTH_TALK_GATE]=0.0
+        return [round(float(x),3) for x in env]
+    except Exception:
+        return []
+
 _SAFETY_PATTERN=re.compile(
     r'\b(e-?stop|estop|emergency|fault|shutdown|shutting down|battery critical|low battery|'
     r'safe mode|stall|tilt|obstacle detected|confirm.*(move|drive|forward|reverse))\b',re.I)
@@ -901,9 +923,16 @@ class VoicePipeline:
             # card exclusively under this user session (confirmed 2026-08-15: bare aplay
             # fails with "Device or resource busy", caught here as a silent no-op).
             # pw-play goes through pipewire instead and reaches the same default sink.
+            env=speech_envelope(wav_path,config.MOUTH_TALK_STEP_S) if config.ENABLE_TALKING_MOUTH else None
+            if env and self.display is not None:
+                try: self.display.set_talking(env,config.MOUTH_TALK_STEP_S)   # FR-1600-009
+                except Exception: log.warning('talking mouth unavailable',exc_info=True)
             subprocess.run(['pw-play',wav_path],capture_output=True,timeout=15)
         except Exception as e:
             log.warning(f'TTS playback failed: {e}')
         finally:
+            if self.display is not None:
+                try: self.display.stop_talking()
+                except Exception: pass
             try: os.remove(wav_path)
             except OSError: pass

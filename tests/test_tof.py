@@ -204,3 +204,21 @@ def test_decode_frame_and_background_reader():
     time.sleep(0.05)
     assert bg()==[100]*config.TOF_ZONES
     bg.stop()
+
+
+def test_upper_rows_report_near_things_without_a_floor_baseline(monkeypatch):
+    """2026-10-07: only floor rows carried a profile, so a couch edge at body height -- seen by
+    the upper rows -- reported nothing. Near returns there are obstacles; the far room is not."""
+    import config
+    monkeypatch.setattr(config, 'TOF_FLOOR_ROWS', (6, 7))
+    cols = config.TOF_ZONE_COLUMNS
+    frame = [1500.0] * config.TOF_ZONES                       # the room, 1.5 m away
+    for i in range(6 * cols, 8 * cols): frame[i] = 500.0      # floor rows at their baseline
+    profile = [None] * config.TOF_ZONES
+    for i in range(6 * cols, 8 * cols): profile[i] = 500.0
+    s = ToFSensor(source=lambda: list(frame)); s.profile = FloorProfile(profile)
+    assert s.nearest_obstacle_cm() is None                    # room far, floor at baseline
+    frame[2 * cols + 1] = 300.0                               # couch edge, row 2
+    assert s.nearest_obstacle_cm() == 30.0
+    frame[2 * cols + 1] = config.TOF_NOFLOOR_OBSTACLE_MM + 50 # just beyond the threshold
+    assert s.nearest_obstacle_cm() is None

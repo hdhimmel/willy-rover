@@ -86,6 +86,13 @@ class SafetyController:
     def turn_left_for(self,duration,speed=None): return self.request('turn_left',speed,duration)
     def turn_right_for(self,duration,speed=None): return self.request('turn_right',speed,duration)
 
+    def obstacle_stop(self):
+        """Stop for an obstacle inside DIST_STOP: a hard BRAKE, not the ramped stop(). 2026-10-07
+        ("why does he still bump into things"): stop() ramps at SPEED_RAMP_PER_S, ~0.3 s from
+        1 mph, and with a sonar refreshing only every ~90 ms he rolled ~10 cm past the point an
+        obstacle was first seen. Clears any timed move -- this is the tick thread's own call."""
+        self._drive.brake(); self._deadline=None; self._active_action=None
+
     def brake_now(self,reason):
         """Immediate hard brake from ANY thread, for a caller about to block every thread for
         seconds (brain.py's brake-before-generation; the deliberative layer is named there, not
@@ -125,7 +132,7 @@ class SafetyController:
         if self._active_action=='forward' and self._ctx['front_cm']<config.DIST_STOP:
             log_event(log,'OBSTACLE_STOP',severity='warning',subsystem='safety',
                       status='mid_flight_abort',front_cm=f'{self._ctx["front_cm"]:.0f}')
-            self._drive.stop(); self._deadline=None; self._active_action=None; return False
+            self.obstacle_stop(); return False
         if time.time()>=self._deadline:
             self._drive.stop(); self._deadline=None; self._active_action=None; return False
         return True

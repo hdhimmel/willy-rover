@@ -292,6 +292,14 @@ own `_go('ROAM')` transitions would silently exit mapping.
 `_avoid()`**, for the same reason. The constants are shared. `Navigator` does own a
 top-level state, because driving needs one.
 
+**Stopping for an obstacle brakes (2026-10-07).** Crossing `DIST_STOP` calls
+`SafetyController.obstacle_stop()` — a hard brake that also clears any timed move — instead of
+the ramped `stop()`, which at 1 mph took ~0.3 s and, with each sonar refreshed only every ~90 ms,
+let him roll ~10 cm past a first-seen obstacle. Used by ROAM/SLOW, the timed-move abort,
+Navigator, pursuit and retrieval. The ToF's rows outside the floor band also now count any
+return nearer than `TOF_NOFLOOR_OBSTACLE_MM` (40 cm) as an obstacle, so things at body height
+(a couch edge, a table top) feed `front` and the turn choice.
+
 **Both avoiders take their turn direction from `avoidance.py`** (2026-10-06). Left and
 right clearance are each the min() of the side sonar, the ToF's column half
 (`TOF_LEFT_COLUMNS=(0,1,2,3)`, re-measured 2026-10-07 after a 180° remount; only the floor
@@ -327,6 +335,13 @@ service):** state `ROTATE` (`start_rotation(deg, then=...)`); the spin is approv
 around" (180°) and "turn left/right N degrees"; `_avoid()` turns ±45°/±90° by rotation when
 `AVOID_USE_ROTATION`, and a refused or blocked rotation backs off and lets AVOID retry.
 Navigator's own avoidance still skid-turns. The service uses the front camera only.
+
+**Talking mouth (FR-1600-009, 2026-10-07).** `_synthesize_and_play()` computes the loudness
+envelope of the WAV Piper just wrote (`speech_envelope`, 50 ms windows, normalised and gated)
+and hands it to `display.set_talking()` immediately before `pw-play`; `stop_talking()` runs in
+the `finally`. The display draws an open mouth whose height follows the envelope by elapsed time
+(`mouth_openness`), so the face needs no audio access and no extra thread. Any failure leaves
+the normal mouth; speech is never delayed by it.
 
 **Hailo generation freezes the process (found 2026-10-07).** `generate_all()` holds the GIL for
 the whole call (5.4 s measured): tick loop, sensor readers and the motor ramp thread all stop, and
@@ -852,8 +867,13 @@ Untagged: `WATCHDOG_FAULT` (a killed process cannot self-log).
 
 ## 10. Testing
 
-73 test files, 404 test functions, all off-hardware under `WILLY_SIMULATE=1`; the suite's
-home is willie. On the Windows dev box a subset fails for environment reasons only (no
+All off-hardware under `WILLY_SIMULATE=1`. **CI (2026-10-07):** `.github/workflows/tests.yml`
+runs `compileall` and the full suite on every push and pull request (Ubuntu, Python 3.13, only
+pytest/numpy/networkx/pygame-ce/scipy/smbus2 installed); failures are published as annotations,
+which the public API returns without a login. First green run: 520 passed on `3a288d5`. The
+first runs found code that imported rover-only modules at the top (`hailo_llm` via `brain`,
+`board` in `diagnostics`) and a direct `DriveBase.brake()` — all fixed. The suite's other home
+is willie.On the Windows dev box a subset fails for environment reasons only (no
 `board` module, Windows file locking on temp SQLite files, no `socket.AF_UNIX`, no real
 `picamera2` Hailo class).
 

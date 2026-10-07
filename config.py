@@ -238,6 +238,11 @@ TOF_LEFT_COLUMNS=(0,1,2,3)
 # TRADE-OFF: NO_DATA zones never report an obstacle, so the ToF now sees only what blocks its view of
 # the floor band (anything nearer than ~60 cm low down). Sonar still covers the rest.
 TOF_FLOOR_ROWS=(6,7)
+# Rows OUTSIDE the floor band (tof.py _is_obstacle, 2026-10-07: "why does he still bump into things"):
+# anything nearer than this is an obstacle, no floor baseline needed. Those rows see the room at
+# 1.3-1.8 m and meet the floor no nearer than ~86 cm, so 40 cm is well clear of both and matches
+# DIST_SLOW. Catches a couch edge or table top at body height that the floor rows never see.
+TOF_NOFLOOR_OBSTACLE_MM=400.0
 # Floor-profile margin. A zone counts as an obstacle only when it returns this much SHORTER than
 # its own stored floor distance, and as a drop when it returns this much LONGER (or nothing).
 # Wide enough to absorb carpet pile, a rug edge and a few mm of ride height -- without a margin
@@ -1070,6 +1075,11 @@ VOICE_DONE_PATH='models/done.wav'  # generated on first use, not provisioned
 # --- FR-1600 display expressions. Pure software, layered on the existing WillyFace state
 # machine (display.py) — no new hardware/model dependency, safe to default on.
 ENABLE_DISPLAY_EXPRESSIONS=True
+# FR-1600-009 talking mouth (owner 2026-10-07): the mouth opens and closes with the loudness of the
+# speech actually being played (voice.speech_envelope -> display.set_talking).
+ENABLE_TALKING_MOUTH=True
+MOUTH_TALK_STEP_S=0.05        # one mouth frame per 50 ms of audio
+MOUTH_TALK_GATE=0.15          # quieter than this (fraction of the loud parts) = mouth closed
 IDLE_PERSONALITY_CYCLE_S=90  # FR-1600-007: how often the idle 'silly' animation may recur
 
 # --- FR-1700 object detection/retrieval. Arducam OV9281 (USB) confirmed present 2026-08-06.

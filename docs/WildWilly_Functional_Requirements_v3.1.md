@@ -98,6 +98,14 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   divider reads 0.31 vs
                                                   0.242 design: resistor
                                                   values being metered.
+                                                  2026-10-07 later: legs
+                                                  meter right powered off
+                                                  (3.2k / 9.2k in-circuit)
+                                                  but live A0 reads a
+                                                  steady 1.77 V for ~2.9
+                                                  expected (ratio 0.15).
+                                                  Next: live P1-13 and
+                                                  P1-14 to P1-17.
 
   FR-300 Safety / E-stop  SATISFIED by hardware   The E-stop IS the main power
                           (owner decision          switch: it cuts all power,
@@ -143,6 +151,15 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   forward + bounded PI):
                                                   built 2026-10-02, not
                                                   yet run on the rover.
+                                                  2026-10-07: rf encoder
+                                                  counts near zero while
+                                                  the wheel turns (-39,
+                                                  0, 1, 16, -10 in runs
+                                                  where others counted
+                                                  thousands) -> false
+                                                  STALL_FAULT latches
+                                                  while roaming. Plug
+                                                  checked OK; open.
 
   FR-600 Steering         Not live-verified       Servo V+ current path
                                                   unconfirmed
@@ -207,6 +224,17 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   live-proven 2026-10-02
                                                   (53 false recoveries
                                                   -> 0).
+                                                  2026-10-07: ToF
+                                                  remounted 180 deg, new
+                                                  housing, orientation
+                                                  re-measured, floor
+                                                  profile saved (rows
+                                                  6-7); upper rows report
+                                                  anything < 40 cm.
+                                                  Second ToF on order.
+                                                  7 IMU_FAULTs were the
+                                                  Hailo freeze, not the
+                                                  IMU (FR-1400-006).
 
   FR-1500 Voice           PARTIAL --- live-       Wake word/STT/fast-path
                           verified repeatedly,    live-verified and
@@ -316,7 +344,9 @@ items are physical, not requirement-level: the steering servo V+ current path (~
 
 The software is 26 modules / ~4,160 lines with 144 off-hardware tests, all
 passing under `WILLY_SIMULATE=1`. ⚠ **Stale counts — 2026-10-02:** 33 modules /
-~8,490 lines; **476 tests** collected across 66 files under `WILLY_SIMULATE=1`.
+~8,490 lines; **476 tests** collected across 66 files under `WILLY_SIMULATE=1`. **Updated 2026-10-07:** CI (GitHub
+Actions, `.github/workflows/tests.yml`, Ubuntu, Python 3.13) runs the whole simulated suite on
+every push — **520 passed, 0 failed** on `3a288d5`, the first green run.
 Later 2026-10-02: +5 test functions (`test_rooms_stairs_memory.py` new, 2;
 `test_sensor_gaps.py` +3), so **481 across 67 files** by count — not re-collected;
 ~8,720 lines.
@@ -2160,7 +2190,15 @@ separately under FR-1200.
     repeatable); rows 0–5 see the room at 1.3–1.8 m, and baked into the profile they would
     read as DROP anywhere else. The capture keeps `TOF_FLOOR_ROWS=(6,7)` only; the rest are
     NO_DATA, so the ToF sees what blocks the low floor band and sonar covers the rest. The
-    profile is not yet saved on the rover.
+    profile was **saved on the rover 2026-10-07** (rows 6–7, 37–62 cm). A **second SEN0628**
+    is on order (same model, UART0, mount position not decided; Master Hardware Design §6.5).
+    **2026-10-07, "why does he still bump into things":** (1) the upper rows now report any
+    return nearer than `TOF_NOFLOOR_OBSTACLE_MM` (40 cm) as an obstacle with no baseline —
+    they meet the floor no nearer than ~86 cm, so this catches a couch edge or table top at
+    body height that the floor rows never see; (2) crossing `DIST_STOP` now **brakes**
+    (`SafetyController.obstacle_stop()`) instead of the ramped stop, in ROAM/SLOW, the timed-
+    move abort, Navigator, pursuit and retrieval — the ramp plus a ~90 ms sonar refresh let him
+    roll ~10 cm past a first-seen obstacle. Built, not yet run on the rover.
 
 -   **FR-1000-003 (route maintenance).** The planned route is followed within
     tolerance, with odometry drift corrected against IMU heading.
@@ -2668,7 +2706,10 @@ thinking), server-side refusal fallback on. Background: Willie's account's Gemin
 a zero free-tier quota even with billing linked (2026-08-06) and the provider was swapped
 then. **Wherever this register says "Gemini" — the FR-1400 table, FR-1800-003,
 FR-2000-001, M-014, the Willie-account notes — read "Claude (Anthropic API key)".** The
-requirement text is kept as written for traceability; the provider is decided.
+requirement text is kept as written for traceability; the provider is decided. **Likewise
+"Llama 3.2 3B" (2026-10-07):** the on-board model has been the Hailo-10H `qwen2:1.5b` since
+2026-09-01 (`hailo_llm.py`), with llama.cpp Llama-3.2-3B kept as the CPU fallback; and every
+Hailo call freezes the whole process — see FR-1400-006.
 
 ✅ **FR-1400-001, built 2026-10-02 (`4f59034`), not yet run on the rover:** escalation
 no longer rests on the local model's self-reported confidence alone (G-6 measured it as
@@ -2964,6 +3005,10 @@ anywhere in the FRD or master doc. Added 2026-08-02, v1.4.
                     (FR-1600-003/004) - those                    
                     always take immediate                        
                     visual priority                              
+
+  FR-1600-009       Move the mouth in time     Medium            Test
+                    with speech while Willie
+                    is talking
   --------------------------------------------------------------------------------
 
 ✅ **Built 2026-10-02, simulated tests only — not yet run on the rover:**
@@ -2971,6 +3016,17 @@ anywhere in the FRD or master doc. Added 2026-08-02, v1.4.
 (`🔋BATTERY LOW <V>`), not a face state; rth/critical show the `lowbatt` face with the
 halt countdown (FR-200-004/005). **FR-1600-006** — the bashful trigger
 (FR-1500-009) sets the `bashful` expression (look away and down).
+
+-   **FR-1600-009 (talking mouth).** Added 2026-10-07 (owner: "when Willie speaks have his
+    mouth open and close like he is talking"). While speech audio plays, the mouth is drawn
+    open, its height following the loudness of that same audio in 50 ms steps — open on
+    syllables, shut in the gaps between words — and returns to the normal expression the moment
+    playback ends. It is decoration: a failure to compute it never delays or stops speech, and
+    the fault/low-battery states of FR-1600-003/004 still own the status badge. Built:
+    `voice.speech_envelope()` (RMS per window, normalised to the 95th percentile, gated below
+    `MOUTH_TALK_GATE`) → `display.set_talking()` just before `pw-play`, `stop_talking()` after;
+    `display.mouth_openness()` per frame. `ENABLE_TALKING_MOUTH`. `tests/test_talking_mouth.py`.
+    Not yet seen on the rover.
 
 # FR-1700 Object Detection and Retrieval Task
 
