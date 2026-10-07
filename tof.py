@@ -181,10 +181,18 @@ class ToFSensor:
         if frame is None: return False
         return any(self.profile.classify(i,v)==DROP for i,v in enumerate(frame))
 
-    def capture_profile(self,samples=None):
+    def capture_profile(self,samples=None,floor_rows=None):
         """Average several frames of clear floor into a new profile. Does NOT save -- the caller
-        decides, so a bad capture is not written over a good one by accident."""
+        decides, so a bad capture is not written over a good one by accident.
+
+        Only `floor_rows` (default config.TOF_FLOOR_ROWS) are kept; every other zone is stored as
+        None -> NO_DATA. 2026-10-07: the rows above the floor band see the ROOM (desk, boxes, a
+        person, 1.3-1.8 m away), not floor. Baked in as "floor", the same zones elsewhere would
+        see open space where the profile expects a return -- DROP -- and he would stop for
+        nothing. This is not the bottom-row mask the header warns against: it keeps exactly the
+        rows that see floor and drops the ones that never do."""
         samples=samples or config.TOF_PROFILE_SAMPLES
+        if floor_rows is None: floor_rows=config.TOF_FLOOR_ROWS
         sums=[0.0]*config.TOF_ZONES; counts=[0]*config.TOF_ZONES
         for _ in range(samples):
             frame=self._frame()
@@ -196,7 +204,8 @@ class ToFSensor:
             log.warning('Floor profile capture got no usable frames'); return None
         # A zone that never returned anything over the whole capture has no floor to expect --
         # stored as None, and classify() reports NO_DATA for it rather than guessing a baseline.
-        zones=[(sums[i]/counts[i]) if counts[i] else None for i in range(config.TOF_ZONES)]
+        keep=lambda i: floor_rows is None or i//config.TOF_ZONE_COLUMNS in floor_rows
+        zones=[(sums[i]/counts[i]) if counts[i] and keep(i) else None for i in range(config.TOF_ZONES)]
         missing=sum(1 for z in zones if z is None)
         if missing:
             log.warning(f'Floor profile: {missing} zone(s) never returned a reading; they will '

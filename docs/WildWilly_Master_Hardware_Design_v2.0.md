@@ -1026,12 +1026,12 @@ perfectly — its absence blinds monitoring without causing a power fault.
 Front obstacle and drop sensing **alongside** the front sonar. Read by `tof.py`
 (Software Design §6.5); `ENABLE_TOF=True`.
 
-**Orientation, measured 2026-10-06:** the zone image is mirrored — an object on Willie's
-left (front-camera photo as witness) lands in columns 5–7. `TOF_LEFT_COLUMNS=(4,5,6,7)`.
-Row 0 is the top of the view; rows 4–7 see floor. ⚠ Zones r0–r2 × c0–c2 read 0–5 cm with
-nothing ahead — the cover's window edge clips the field of view (owner, 2026-10-06). A cover
-with a bigger window is being printed; capture the floor profile only after it is fitted, or
-the profile bakes the edge in.
+**Orientation, re-measured 2026-10-07:** refitted in a new bigger-window housing, rotated
+180° from before. An object on Willie's left (front-camera photo as witness) lands in
+columns 0–1: `TOF_LEFT_COLUMNS=(0,1,2,3)`; row 7 is the bottom of the view (near floor).
+Any remount re-opens this — repeat the test. The old cover's window edge (0–5 cm returns in
+one corner) is gone with the new housing. Rows 6–7 see floor at 37–60 cm; rows 0–5 see the
+room (`TOF_FLOOR_ROWS=(6,7)`, the only rows the floor profile keeps). Profile not yet saved.
 
 | | |
 |---|---|

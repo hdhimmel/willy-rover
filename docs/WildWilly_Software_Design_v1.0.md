@@ -294,7 +294,8 @@ top-level state, because driving needs one.
 
 **Both avoiders take their turn direction from `avoidance.py`** (2026-10-06). Left and
 right clearance are each the min() of the side sonar, the ToF's column half
-(`TOF_LEFT_COLUMNS=(4,5,6,7)`: the sensor's image is mirrored, measured 2026-10-06) and the nearest front-camera detection
+(`TOF_LEFT_COLUMNS=(0,1,2,3)`, re-measured 2026-10-07 after a 180° remount; only the floor
+rows `TOF_FLOOR_ROWS=(6,7)` carry a profile, so obstacles count only where they block that band) and the nearest front-camera detection
 on that side. It runs only after something has already stopped him, so the camera picks a
 side and never gates a stop (Master Hardware Design §12 rule 15). A source that raises or
 has nothing to say contributes nothing.

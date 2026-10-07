@@ -192,14 +192,20 @@ TOF_PORT='/dev/ttyAMA3'     # UART, not I2C -- keeps it off a bus that took the 
 TOF_BAUD=115200             # fixed in the sensor's firmware, not configurable
 TOF_ZONES=64                # 8x8. A frame of any other length is a desynchronised UART, not data
 TOF_ZONE_COLUMNS=8          # zone index % this = column
-# Which zone columns look LEFT (FR-1000-002 turn choice, avoidance.py). MEASURED 2026-10-06: a hand,
-# then an upright tin, on Willie's left (confirmed in the front-camera photo) showed in columns 5-7
-# only -- the image is mirrored, high columns are LEFT. Row 0 is the TOP of the view; rows 4-7 are
-# floor. None would mean "unknown" and turn the ToF's side input off -- never guess it.
-# ⚠ Zones r0-r2 x c0-c2 (top of the RIGHT side) read 0-5 cm in every frame with nothing in front:
-# the cover's window edge (owner, 2026-10-06); a cover with a bigger window is being printed.
-# Re-take a frame after fitting it, and capture the floor profile only after that.
-TOF_LEFT_COLUMNS=(4,5,6,7)
+# Which zone columns look LEFT (FR-1000-002 turn choice, avoidance.py). RE-MEASURED 2026-10-07 after
+# the sensor was refitted in a new housing ROTATED 180 deg: an upright tin on Willie's left (front-
+# camera photo as witness) showed in columns 0-1 only. LEFT = columns 0-3; row 7 is the BOTTOM of the
+# view (near floor). Before the rotation it was columns 4-7 and row 0 at the bottom. ANY remount
+# re-opens this -- re-run the tin test. None means "unknown" and turns the ToF's side input off.
+# New housing: the 0-5 cm window-edge returns are gone (2026-10-07 baseline, nothing under 36 cm).
+TOF_LEFT_COLUMNS=(0,1,2,3)
+# Rows the floor profile keeps (scripts/calibrate_tof_floor.py); all others are NO_DATA. MEASURED
+# 2026-10-07 in this mounting: rows 6-7 see floor at 37-60 cm, even across all columns, repeatable to
+# a cm or two between captures; rows 0-5 see the room at 1.3-1.8 m. Tied to the mount like the
+# columns -- re-check after a remount. None = keep every row.
+# TRADE-OFF: NO_DATA zones never report an obstacle, so the ToF now sees only what blocks its view of
+# the floor band (anything nearer than ~60 cm low down). Sonar still covers the rest.
+TOF_FLOOR_ROWS=(6,7)
 # Floor-profile margin. A zone counts as an obstacle only when it returns this much SHORTER than
 # its own stored floor distance, and as a drop when it returns this much LONGER (or nothing).
 # Wide enough to absorb carpet pile, a rug edge and a few mm of ride height -- without a margin

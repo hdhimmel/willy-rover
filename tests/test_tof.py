@@ -172,9 +172,22 @@ def test_capturing_a_profile_averages_several_frames(tmp_path):
     frames = [_frame(1000.0), _frame(1010.0), _frame(990.0)]
     it = iter(frames)
     s = ToFSensor(source=lambda: next(it))
-    p = s.capture_profile(samples=3)
+    p = s.capture_profile(samples=3, floor_rows=tuple(range(8)))
     assert p is not None
     assert p.classify(0, 1000.0) == FLOOR
+
+
+def test_capture_keeps_only_the_floor_rows():
+    """2026-10-07: upper rows see the room, not floor. Kept, they read as DROP anywhere the room
+    is different; dropped, they are NO_DATA."""
+    import config
+    s = ToFSensor(source=lambda: _frame(1000.0))
+    p = s.capture_profile(samples=2, floor_rows=(6, 7))
+    cols = config.TOF_ZONE_COLUMNS
+    assert p.classify(0, None) == NO_DATA                       # row 0: not floor, never a drop
+    assert p.classify(5 * cols, 1000.0) == NO_DATA
+    assert p.classify(6 * cols, 1000.0) == FLOOR
+    assert p.classify(7 * cols + 3, None) == DROP               # a floor row losing its floor
 
 
 def test_decode_frame_and_background_reader():

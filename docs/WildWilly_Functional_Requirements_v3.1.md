@@ -2067,13 +2067,16 @@ separately under FR-1200.
     `brain._avoid()` and `Navigator._avoiding()` from the side sonars, the ToF's column
     halves and the front camera's detections — min() per side, the same fail-safe rule as
     `'front'`. The stop is unchanged: sonar + ToF only, the camera never gates it.
-    **ToF orientation measured 2026-10-06:** a hand and then an upright tin on his left,
-    confirmed by front-camera photo, appeared in columns 5–7 only — the image is mirrored,
-    `TOF_LEFT_COLUMNS=(4,5,6,7)`; row 0 is the top of the view. ⚠ Zones r0–r2 × c0–c2 (top
-    of the right side) read 0–5 cm in every frame with nothing ahead: something is in the
-    sensor's view at the lens: the cover's window edge (owner); a bigger-window cover is being printed. The floor profile is still not captured,
-    so the ToF reports nothing to avoidance until `scripts/calibrate_tof_floor.py` runs on
-    clear floor.
+    **ToF orientation re-measured 2026-10-07:** the sensor was refitted in a new housing
+    with a bigger window, rotated 180°. An upright tin on his left, confirmed by
+    front-camera photo, appeared in columns 0–1 only: `TOF_LEFT_COLUMNS=(0,1,2,3)`, row 7
+    is the bottom of the view. (Before the rotation: columns 4–7, row 0 at the bottom —
+    the 2026-10-06 note here had the rows backwards.) The new housing removed the 0–5 cm
+    window-edge returns. **Floor rows (2026-10-07):** only rows 6–7 see floor (37–60 cm,
+    repeatable); rows 0–5 see the room at 1.3–1.8 m, and baked into the profile they would
+    read as DROP anywhere else. The capture keeps `TOF_FLOOR_ROWS=(6,7)` only; the rest are
+    NO_DATA, so the ToF sees what blocks the low floor band and sonar covers the rest. The
+    profile is not yet saved on the rover.
 
 -   **FR-1000-003 (route maintenance).** The planned route is followed within
     tolerance, with odometry drift corrected against IMU heading.

@@ -34,6 +34,9 @@ def main():
     ap.add_argument('--show', action='store_true', help='print the stored profile and exit')
     ap.add_argument('--samples', type=int, default=config.TOF_PROFILE_SAMPLES)
     ap.add_argument('--yes', action='store_true', help='save without asking')
+    ap.add_argument('--floor-rows', default=None,
+                    help='comma-separated rows that see floor (default config.TOF_FLOOR_ROWS); '
+                         '"all" keeps every row')
     args = ap.parse_args()
 
     path = os.path.join(config.WILLY_MEMORY_ROOT, config.TOF_FLOOR_PROFILE_PATH)
@@ -50,7 +53,12 @@ def main():
     print('The rover must be on CLEAR, LEVEL floor — the surface it actually roams.\n')
 
     sensor = ToFSensor(source=SerialFrameSource(), profile_path=path)
-    profile = sensor.capture_profile(samples=args.samples)
+    rows = config.TOF_FLOOR_ROWS
+    if args.floor_rows == 'all': rows = None
+    elif args.floor_rows: rows = tuple(int(r) for r in args.floor_rows.split(','))
+    print(f'Keeping floor rows: {"all" if rows is None else rows}; every other zone is NO_DATA.')
+    profile = sensor.capture_profile(samples=args.samples,
+                                     floor_rows=rows if rows is not None else tuple(range(8)))
     if profile is None:
         print('Capture failed: no usable frames. Check the DIP switch is set to UART, the '
               'protective film is off the optics, and the port above is right.')
