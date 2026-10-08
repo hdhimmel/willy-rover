@@ -161,8 +161,10 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   while roaming. Plug
                                                   checked OK; open.
 
-  FR-600 Steering         Not live-verified       Servo V+ current path
-                                                  unconfirmed
+  FR-600 Steering         Not live-verified       Servo V+ power path
+                                                  CONFIRMED (owner,
+                                                  2026-10-07); peak current
+                                                  on R2 still unmeasured.
                                                   Channel map MEASURED
                                                   2026-10-06, one at a
                                                   time: LF3 RF2 LM0 RM1
@@ -337,8 +339,9 @@ Motion-related groups (FR-400 through FR-700) were gated behind FR-300 passing
 --- Directive 2. **That gate is released as of 2026-08-24** by the owner decision
 recorded in FR-300's Acceptance Criteria: the E-stop's physical power cut
 satisfies FR-300-001/002/003 without a Pi-side sense line. Remaining pre-drive
-items are physical, not requirement-level: the steering servo V+ current path (~9A worst case against an
-8A UBEC, Master Hardware Design §12 rule 13).
+items are physical, not requirement-level: the steering servo V+ current path — **power path
+confirmed by the owner 2026-10-07**; the ~9 A worst-case peak against the R2 supply's rating is
+still unmeasured (Master Hardware Design §12 rule 13, §14 item 3).
 
 ## V.1 Implementation and test coverage (2026-08-18)
 
@@ -1778,7 +1781,8 @@ measured 2026-10-06 by swinging it 1000↔2000 µs alone while the owner named t
 six sit straight at 1500 µs. **FR-600-001's "moves the expected wheel" is met for all six.**
 ⚠ **The steering servo supply is not on INA260 0x40's path:** six full swings of a servo
 that visibly moved left the 0x40 reading flat at 0.51–0.54 A. Current cannot confirm
-steering motion, and the "servo V+ current path" item stays open with that as its evidence.
+steering motion. **The servo V+ power path itself was confirmed by the owner 2026-10-07**;
+what stays open is measuring its peak current, which 0x40 cannot do.
 
 -   **FR-600-001 (servo control).** Each corner responds on its own channel
     and moves the expected wheel. Verified one channel at a time.
@@ -2579,6 +2583,11 @@ tolerated); the body is never interpreted.
     else fails closed. Only `OWNER_EMAIL` is considered at all. A failure is logged
     `EMAIL_COMMAND status=refused_dkim` and surfaced as "someone claiming to be …", never
     acted on. SPF and DMARC are not checked — DKIM alone gates.
+-   **FR-2000-012, owner decision 2026-10-07: email MAY command motion.** Raised by the
+    move-path audit (an email can queue "forward", "turn around", "come to me" with nobody
+    necessarily watching). Kept as built: DKIM-verified owner mail only, freshness-checked,
+    queued through exactly the same Directive 1–5 gates as voice, announced aloud before it
+    acts, and unable to answer a pending ask (shutdown confirm, roam permission).
 -   **FR-2000-012.** Freshness against `EMAIL_COMMAND_MAX_AGE_S` (600 s) from the `Date`
     header (missing → refused); a stale command is logged, surfaced aloud with the
     other inbox summaries, and answered by reply. An accepted one is interpreted by
@@ -2883,9 +2892,23 @@ section behind it until now. Added 2026-08-02, v1.4.
                     unambiguous tone                         
                     regardless of                            
                     personality mode                         
+
+  FR-1500-011       Answer "what are you       Medium            Test
+                    doing?" and "what are you
+                    looking at?" in one brief
+                    sentence
   ----------------------------------------------------------------------------
 
 # Acceptance Criteria
+
+-   **FR-1500-011 (what are you doing / looking at).** Added 2026-10-07 (owner). "What are you
+    doing?" (also "what are you up to", "what's going on") answers with ONE short sentence
+    from his current state — exploring, turning left, on the way to the kitchen, looking for
+    you, backing up as asked, waiting, or stopped and why ("Say reset when it's safe"). It is
+    answered even while he is moving (speech-only pass) and only reads state, never changes it.
+    "What are you looking at?" joins "what do you see?" and names at most the three most
+    confident things in view, plus "and more". Built: `brain._activity_phrase()`, intent
+    `what_doing`; `tests/test_what_doing.py`. Not yet tried on the rover.
 
 -   Wake-word detection, speech-to-text and response run on-device using the
     NPU accelerator, with no network dependency for core interaction.

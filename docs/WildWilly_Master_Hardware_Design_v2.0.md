@@ -1532,10 +1532,12 @@ Standing rules.
 Bench procedures with blank result fields are in `docs/WildWilly_Bench_Test_Procedures.md`.
 Item numbers are stable; closed items are removed, not renumbered.
 
-3. **PCA9685 V+ current path and R2 capacity.** Steering servo current flows through each
-   board's V+ terminal, trace and headers; worst-case steering draw is near 9 A, which is
-   also the software `steering_5v` trip (9.0 A for 1.0 s). Record the DROK-5V rating and
-   measure the real peak (item 5) before trusting either number.
+3. **PCA9685 V+ current path and R2 capacity.** Power path **confirmed by the owner
+   2026-10-07.** Still open: worst-case steering draw is near 9 A, which is also the software
+   `steering_5v` trip (9.0 A for 1.0 s) — ⚠ **but that trip reads INA260 0x40, which measured
+   flat while a steering servo swung (2026-10-06), so it cannot see steering current and will
+   not fire for it.** Record the DROK-5V rating and measure the real peak with a meter or clamp
+   before trusting either number.
 4. **AI HAT+ 2 power budget** — not measured against the Pi 5 V feed.
 5. **Runtime measurement** — log the three INA260s through a representative run and
    integrate.

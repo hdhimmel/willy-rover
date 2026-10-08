@@ -62,7 +62,9 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
 - **"How are you?"** / **"Status report"**
 - **"How's your battery?"**
 - **"Where are you?"** / **"What room is this?"**
-- **"What do you see?"** / **"What's in front of you?"**
+- **"What are you doing?"** / **"What are you up to?"** — one short sentence: exploring,
+  turning, on his way somewhere, waiting, or stopped and why. Works even while he's moving.
+- **"What do you see?"** / **"What are you looking at?"** — up to three things he recognises.
 - **"What time is it?"** / **"What's the date?"**
 - **"Run diagnostics"** / **"Self test"**
 

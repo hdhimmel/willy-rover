@@ -59,14 +59,14 @@ _NON_EXPIRING_INTENTS=frozenset({'confirm_receipt'})
 #                     hundred ms on the CPU-YOLO fallback, which is precisely when the rover is
 #                     already under strain.
 # Both belong here once they are made non-blocking, and not before.
-_SPEECH_ONLY_INTENTS=frozenset({'status','battery','where_are_you'})
+_SPEECH_ONLY_INTENTS=frozenset({'status','battery','where_are_you','what_doing'})
 # Command sources that are not someone in the room speaking: they never answer a pending
 # yes/no ask (the shutdown confirmation, the roam permission). See answers_ask.
 _NON_SPOKEN_SOURCES=frozenset({'remote','email'})
 # What an email may queue: everything a spoken command could, through the same gating.
 _EMAIL_QUEUEABLE=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve','map',
     'stop_map','status','battery','arm_stow','arm_home','wave','come_here','come_to_me','rotate','follow','diagnostics',
-    'where_are_you','what_do_you_see','name_room','mark_stairs','shutdown','demo_replay'})
+    'where_are_you','what_do_you_see','what_doing','name_room','mark_stairs','shutdown','demo_replay'})
 
 # Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
 # that state, before either drain pass, so Willie heard every command and answered none -- with
@@ -1451,14 +1451,23 @@ class RoverBrain:
             pose=self.world_model.get_robot_pose()
             room=self.world_model.get_room(pose.x,pose.y)
             self._say(f"I'm in the {room.name}." if room else "I'm not sure which room I'm in.")
+        elif cmd.get('intent')=='what_doing':
+            self._say(self._activity_phrase())
         elif cmd.get('intent')=='what_do_you_see':
-            # v1: names detected object classes from the existing CPU-YOLO detector, not a real
-            # VLM caption (no Hailo-backed VLM wired into vision.py yet -- see its module docstring).
+            # v1: names detected object classes from the existing detector, not a real VLM caption.
+            # Kept BRIEF (owner 2026-10-07): the three most confident distinct things, "and more".
             if not self.detector.available:
                 reply="My camera isn't available right now."
             else:
-                classes=sorted({det['class'] for det in self.detector.detect()})
-                reply=f"I can see {', '.join(classes)}." if classes else "I don't see anything right now."
+                best={}
+                for det in self.detector.detect():
+                    c=det['class']; best[c]=max(best.get(c,0.0),det.get('conf',0.0))
+                names=[c for c,_ in sorted(best.items(),key=lambda kv:-kv[1])]
+                if not names: reply="Nothing in particular."
+                else:
+                    shown=names[:3]
+                    said=shown[0] if len(shown)==1 else ', '.join(shown[:-1])+' and '+shown[-1]
+                    reply=f"I can see {said}{', and more' if len(names)>3 else ''}."
             self._say(reply)
         elif cmd.get('intent')=='shutdown':
             self._say('Are you sure you want me to shut down? Say confirm to proceed.')
@@ -1486,6 +1495,44 @@ class RoverBrain:
         does not change state, it only makes sure nothing is moving through the blind seconds."""
         if any(self.motors.commanded.values()):
             self.safety.brake_now('Hailo generation freezes every thread; braked before it')
+
+    def _activity_phrase(self):
+        """One brief sentence for "what are you doing?" (owner 2026-10-07). Read-only: it only
+        looks at state that already exists, so asking never changes what he is doing."""
+        st=self._state
+        faults={'STALL_FAULT':'a wheel got stuck','SENSOR_FAULT':'a sensor stopped answering',
+                'TILT_FAULT':'I was tipped too far','OVERCURRENT_FAULT':'something drew too much current',
+                'SAFE_MODE':'my battery is very low','LOW_BATTERY':'my battery is low'}
+        if st in faults: return f"I've stopped because {faults[st]}. Say reset when it's safe."
+        if st=='SHUTDOWN': return "I'm shutting down."
+        if st=='INIT': return "I'm just starting up."
+        if not getattr(self,'_motion_enabled',True) and st=='IDLE':
+            return "I'm waiting. I can't move until my self-test passes."
+        if st=='ROTATE':
+            d=getattr(self.rotation,'_dir',1)
+            return f"I'm turning {'left' if d>0 else 'right'}."
+        if st=='COME_TO_ME':
+            room=getattr(self.come_to_me,'room',None) or 'room'
+            return (f"I'm looking for you in the {room}." if self.come_to_me.state=='LEG_FIND'
+                    else f"I'm on my way to the {room}.")
+        if st=='PURSUE':
+            return "I'm following you." if getattr(self.pursuit,'_mode','')=='follow' else "I'm coming to you."
+        if st=='NAVIGATE':
+            room=getattr(self.navigator,'_target_room',None)
+            if getattr(self.navigator,'state','')=='DOOR_WAIT': return "I'm waiting for someone to open the door."
+            return f"I'm heading to the {room}." if room else "I'm driving to a spot I know."
+        if st=='MANUAL':
+            act={'forward':'moving forward','reverse':'backing up','turn_left':'turning left',
+                 'turn_right':'turning right'}.get(getattr(self,'_manual_action',''),'moving')
+            return f"I'm {act}, like you asked."
+        phrase={'ROAM':"I'm exploring.",'SLOW':"I'm exploring, slowly, something's close.",
+                'AVOID':"I'm getting around something in my way.",'WARN':"I'm being careful, the floor's uneven.",
+                'STUCK':"I'm stuck and working out what to do.",'WAVE':"I'm moving my arm.",
+                'RETRIEVE':"I'm fetching something.",'DOCK':"I'm heading home to charge."}.get(st)
+        if phrase is None:
+            phrase="Nothing much, just waiting." if st=='IDLE' else f"I'm busy ({st.lower()})."
+        if getattr(self.mapping,'active',False): phrase=phrase[:-1]+", and mapping as I go."
+        return phrase
 
     def start_rotation(self,degrees,then='IDLE'):
         """Turn on the spot by `degrees` (+ left) in rotation mode, then go to state `then`."""

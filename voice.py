@@ -186,7 +186,7 @@ _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
 # deterministic "the local model did not understand" signal.
 _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve',
     'confirm_receipt','map','stop_map','shutdown','status','battery','arm_stow','arm_home','wave',
-    'come_here','come_to_me','rotate','follow','diagnostics','where_are_you','what_do_you_see','name_room','mark_stairs',
+    'come_here','come_to_me','rotate','follow','diagnostics','where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
     'demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
@@ -287,7 +287,11 @@ _FAST_PATH_PATTERNS=[
     (_fp(r'where are you|what room (?:is this|are you in)|which room (?:is this|are you in)|'
          r"where(?:'?s| is) this|do you know where you are"),'where_are_you','Checking.'),
     (_fp(r'what (?:do|can) you see|what'r"'"r's (?:in front of you|out there|there)|'
-         r'look around|describe what you see|tell me what you see'),'what_do_you_see','Looking.'),
+         r'look around|describe what you see|tell me what you see|'
+         r'what are you looking at|what(?:'r"'"r're| are) you staring at'),'what_do_you_see','Looking.'),
+    # 2026-10-07 (owner): "what are you doing?" gets a brief answer about his current activity.
+    (_fp(r'what(?:'r"'"r're| are) you doing|whatcha doing|what are you up to|what(?:'r"'"r's| is) going on'),
+         'what_doing',''),
     (_fp(r'wave(?: hello| hi| at me)?|say (?:hi|hello)|give (?:me )?a wave'),'wave',''),
     (_fp(_ARM_STOW_V+r' '+_ARM+r'|put '+_ARM+r' away|'+_ARM+r' away'),'arm_stow','Stowing the arm.'),
     (_fp(_ARM_HOME_V+r' '+_ARM+r'|'+_ARM+r' '+_ARM_HOME_V),'arm_home','Homing the arm.'),
@@ -930,7 +934,7 @@ class VoicePipeline:
         motion_intents={'forward','reverse','turn_left','turn_right','go_to','retrieve',
                          'confirm_receipt','map','stop_map','shutdown','status','battery',
                          'arm_stow','arm_home','wave','come_here','come_to_me','rotate','follow','diagnostics',
-                         'where_are_you','what_do_you_see','name_room','mark_stairs',
+                         'where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
                          'demo_start','demo_stop','demo_replay','enrol','forget_everyone'}
         if name in motion_intents:
             # FR-1500-007: queued only — brain.py applies full Directive 1-5 gating before this
