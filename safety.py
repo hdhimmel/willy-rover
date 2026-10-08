@@ -36,6 +36,17 @@ def approve_motion(action,speed=None,duration=None,*,front_cm=0.0,tilt_deg=0.0,
     dur=None if duration is None else max(0.0,min(config.MAX_COMMAND_DURATION_S,float(duration)))
     return ApprovedMotion(action,spd,dur)
 
+def approve_steer(deg,*,wheels_moving,tilt_deg=0.0,bat_tier='normal',motion_enabled=True,**_):
+    """FR-600-004 manual steering override, parked only (steer_override.py). Same gates as any
+    motion, plus: no wheel may be turning -- steered driving is deferred (owner 2026-08-18).
+    Returns ApprovedMotion('steer', clamped degrees) or Rejected."""
+    if not motion_enabled: return Rejected('motion disabled (self-test failed)')
+    if tilt_deg>config.IMU_TILT_LIMIT: return Rejected(f'tilt {tilt_deg:.1f}deg exceeds limit')
+    if bat_tier in('shutdown','safe'): return Rejected(f'battery tier {bat_tier!r} forbids motion')
+    if wheels_moving: return Rejected('the wheels are moving; I only steer when stopped')
+    d=max(-config.STEER_OVERRIDE_MAX_DEG,min(config.STEER_OVERRIDE_MAX_DEG,float(deg)))
+    return ApprovedMotion('steer',d,None)
+
 class SafetyController:
     def __init__(self,drive_base):
         self._drive=drive_base
@@ -118,6 +129,13 @@ class SafetyController:
         self._deadline=None; self._active_action=None
         self._drive.set_wheels(targets)
         return result
+
+    def approve_steer(self,deg):
+        """FR-600-004: approve a parked steering override against the cached context."""
+        moving=self._deadline is not None or any(getattr(self._drive,'commanded',{}).values())
+        r=approve_steer(deg,wheels_moving=moving,**self._ctx)
+        if isinstance(r,Rejected): log.warning(f'steering override rejected: {r.reason}')
+        return r
 
     @property
     def timed_move_active(self): return self._deadline is not None

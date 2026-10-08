@@ -172,6 +172,11 @@ _COME_TO_ME=re.compile(r"(?:i'?m|i am) in the ([a-z][a-z ]{1,30}?)[,.]? (?:(?:pl
 # A bare "turn left" stays the short manual nudge -- only an explicit angle or "around" rotates.
 _TURN_AROUND=re.compile(r"(?:turn|spin) (?:yourself )?around",re.I)
 _TURN_DEGREES=re.compile(r"(?:turn|rotate|spin) (left|right) (\d{1,3}) degrees",re.I)
+# FR-600-004 steering override (2026-10-08): wheels only, parked. "steer" never drives, so it
+# cannot be confused with the "turn left" nudge.
+_STEER=re.compile(r"steer (?:your wheels |the wheels )?(left|right)(?: (\d{1,2})(?: degrees)?)?",re.I)
+_STEER_STRAIGHT=re.compile(r"(?:(?:wheels|steering) straight|straighten (?:your |the )?(?:wheels|steering)|"
+                           r"cent(?:er|re) (?:your |the )?(?:wheels|steering))",re.I)
 # FR-1800-005 privacy (2026-10-08). Turning it ON by voice only: once on he cannot hear, so the
 # way back is the screen (two-tap RESUME) or an owner email "privacy off".
 _PRIVACY_ON=re.compile(r"(?:privacy mode(?: on)?|turn on privacy(?: mode)?|go private|stop listening(?: to (?:me|us))?|"
@@ -196,7 +201,7 @@ _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
 # deterministic "the local model did not understand" signal.
 _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve',
     'confirm_receipt','map','stop_map','shutdown','status','battery','arm_stow','arm_home','wave',
-    'come_here','come_to_me','rotate','follow','diagnostics','where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
+    'come_here','come_to_me','rotate','steer','follow','diagnostics','where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
     'privacy_on','privacy_off','demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
@@ -890,6 +895,11 @@ class VoicePipeline:
         norm=re.sub(r'^(?:(?:hey|ok|okay)[\s,]+)?willie[\s,]+','',norm,flags=re.I)
         if _PRIVACY_ON.fullmatch(norm): return {'intent':'privacy_on','args':{},'reply':''}
         if _PRIVACY_OFF.fullmatch(norm): return {'intent':'privacy_off','args':{},'reply':''}
+        m=_STEER.fullmatch(norm)
+        if m:
+            deg=float(m.group(2)) if m.group(2) else config.STEER_OVERRIDE_DEFAULT_DEG
+            return {'intent':'steer','args':{'degrees':deg if m.group(1).lower()=='right' else -deg},'reply':''}
+        if _STEER_STRAIGHT.fullmatch(norm): return {'intent':'steer','args':{'degrees':0},'reply':''}
         if _TURN_AROUND.fullmatch(norm): return {'intent':'rotate','args':{'degrees':180},'reply':''}
         m=_TURN_DEGREES.fullmatch(norm)
         if m:
@@ -995,7 +1005,7 @@ class VoicePipeline:
         # consumer" rule as every motion intent.
         motion_intents={'forward','reverse','turn_left','turn_right','go_to','retrieve',
                          'confirm_receipt','map','stop_map','shutdown','status','battery',
-                         'arm_stow','arm_home','wave','come_here','come_to_me','rotate','follow','diagnostics',
+                         'arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','follow','diagnostics',
                          'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs',
                          'demo_start','demo_stop','demo_replay','enrol','forget_everyone'}
         if name in motion_intents:

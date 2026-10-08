@@ -314,6 +314,11 @@ STEER_CENTER_US={'lf':1500,'rf':1500,'lm':1500,'rm':1500,'lr':1500,'rr':1500}
 # Middles not measured (rotation keeps them straight). 1 = +us turns the wheel right.
 STEER_RIGHT_SIGN={'lf':1,'rf':1,'lr':1,'rr':1}
 STEER_US_PER_DEG=200/15.0
+# FR-600-004 manual steering override (steer_override.py, 2026-10-08): parked only, held until
+# "wheels straight", a stop, or leaving IDLE. 37 deg = the full SERVO_MIN..MAX span at the
+# measured scale (500 us / 13.3 us per deg); corner_us() clamps to the servo range as well.
+STEER_OVERRIDE_MAX_DEG=37.0
+STEER_OVERRIDE_DEFAULT_DEG=15.0  # "steer left" with no angle
 SERVO_PWM_FREQ=50
 
 # Arm — PCA9685 @0x43. Wider nominal range than steering (manufacturer spec 500-2500us) though

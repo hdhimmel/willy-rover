@@ -72,6 +72,15 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
 - **"Forward"** / **"Back up"** / **"Turn left"** / **"Turn right"** — a short, slow nudge, not
   a continuous drive. Repeat for more.
 
+**Pointing his wheels (parked only):**
+- **"Steer left"** / **"Steer right 20 degrees"**: the front wheels point that way and the
+  back wheels the other way. He doesn't drive. With no angle given it's 15 degrees, and the
+  most is 37.
+- **"Wheels straight"**: back to straight.
+
+  He holds them there until you say "wheels straight" or "stop", or until he moves off. When
+  he moves off he straightens them first. He refuses while his wheels are turning.
+
 **Turning on the spot:**
 - **"Turn around"** — a half turn.
 - **"Turn left 90 degrees"** / **"Turn right 45 degrees"** — any angle you name.

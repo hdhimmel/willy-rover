@@ -310,6 +310,12 @@ on that side. It runs only after something has already stopped him, so the camer
 side and never gates a stop (Master Hardware Design §12 rule 15). A source that raises or
 has nothing to say contributes nothing.
 
+**Steering override (`steer_override.py`, FR-600-004, 2026-10-08).** "steer left/right N",
+"wheels straight": front corners take the angle and rear corners the opposite, clamped to
+`STEER_OVERRIDE_MAX_DEG`. `SafetyController.approve_steer()` allows it only parked. It is
+written in the same tick and held in `IDLE` by re-asserting the pulses. Leaving `IDLE` centres
+the wheels; a fault or "stop" releases them where they are.
+
 **Rotation mode (`rotate.py`, 2026-10-07).** Turning on the spot steers the four corners onto
 the turning circle (FL and RR right, FR and RL left, middles straight), waits for the servos,
 then spins with corners 1.44× the middles' speed (`DriveBase.set_wheels`). It stops on IMU

@@ -19,6 +19,7 @@ from retrieval_task import RetrievalTask
 from pursuit_task import PursuitTask
 from come_to_me_task import ComeToMeTask
 from rotate import Rotation
+from steer_override import SteerOverride
 import avoidance
 import grip
 from email_client import EmailClient
@@ -66,7 +67,7 @@ _SPEECH_ONLY_INTENTS=frozenset({'status','battery','where_are_you','what_doing',
 _NON_SPOKEN_SOURCES=frozenset({'remote','email'})
 # What an email may queue: everything a spoken command could, through the same gating.
 _EMAIL_QUEUEABLE=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve','map',
-    'stop_map','status','battery','arm_stow','arm_home','wave','come_here','come_to_me','rotate','follow','diagnostics',
+    'stop_map','status','battery','arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','follow','diagnostics',
     'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs','shutdown','demo_replay'})
 
 # Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
@@ -262,6 +263,7 @@ class RoverBrain:
         self.rotation=Rotation(self.steering,self.safety,self.imu,lambda: self.sonars.distances,
                                camera_grab=self.detector.capture_frame,encoders=self.encoders,
                                say=self._say)
+        self.steer_override=SteerOverride(self.steering)   # FR-600-004
         self._after_rotate='IDLE'
         self.come_to_me=ComeToMeTask(self.navigator,self.pursuit,self.world_model,self.detector,
                                      say=self._say)  # FR-1000-006
@@ -868,6 +870,7 @@ class RoverBrain:
             self._running=False
             return
         self._thermal_tick()
+        self.steer_override.tick(self._state)   # FR-600-004: held in IDLE, ended on leaving it
         if self.voice.stop_requested.is_set():
             # Checked before any Directive gating below — see voice.py's stop_requested docstring.
             # This is the only place that ever clears it, and this is the tick thread, so
@@ -878,6 +881,7 @@ class RoverBrain:
             if self.navigator.active: self.navigator.abort('voice stop')
             if self.pursuit.active: self.pursuit.abort('voice stop')
             if self.rotation.active: self.rotation.abort('voice stop')
+            self.steer_override.end('release','voice stop')
             self._abandon_stuck_if_active()
             self.safety.emergency_stop('voice stop')
             self._revoke_roam_permission()  # stop means stop, not "pause for 30 seconds"
@@ -1431,6 +1435,19 @@ class RoverBrain:
             ok,msg=self.start_rotation(deg)
             if not ok: self._say(f"I can't turn: {msg}")
             log.info(f'Voice-triggered rotation {deg:+.0f} deg ({msg})')
+        elif cmd.get('intent')=='steer':
+            # FR-600-004. Applied in this same tick (one control cycle), parked only, clamped.
+            r=self.safety.approve_steer(cmd.get('args',{}).get('degrees',0))
+            if isinstance(r,Rejected):
+                self._say(f"I can't steer: {r.reason}.")
+            elif r.speed==0:
+                if self.steer_override.active: self.steer_override.end('centre','wheels straight')
+                else: self.steering.center_all()
+                self._say('Wheels straight.')
+            else:
+                d=self.steer_override.apply(r.speed)
+                self._say(f"Wheels {abs(d):.0f} degrees {'right' if d>0 else 'left'}. Say wheels straight to undo.")
+            log.info(f'Steering override command {cmd.get("args")} ({r})')
         elif cmd.get('intent')=='come_to_me':
             ok,msg=self.come_to_me.start(cmd.get('args',{}).get('room',''))
             if ok: self._go('COME_TO_ME')

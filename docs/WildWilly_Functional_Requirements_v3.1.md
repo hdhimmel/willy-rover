@@ -183,9 +183,10 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   in the service. Servo V+ path
                                                   confirmed (owner 2026-10-07);
                                                   peak current unmeasured, 0x40
-                                                  does not see it. Not built:
-                                                  FR-600-004 live operator
-                                                  override (bench script only).
+                                                  does not see it. FR-600-004
+                                                  operator override ("steer
+                                                  left 20", "wheels straight"):
+                                                  built 2026-10-08, not yet run.
                                                   Steering gears being
                                                   redesigned (spring anti-
                                                   backlash): re-check centres
@@ -1874,6 +1875,17 @@ what stays open is measuring its peak current, which 0x40 cannot do.
 
 -   **FR-600-004 (manual override).** Override takes effect within one control
     cycle and is itself subject to the travel limits above.
+    ✅ **Built 2026-10-08 (`steer_override.py`), not yet run on the rover.** Voice or email
+    "steer left/right [N degrees]" (default 15) and "wheels straight". The front corners take
+    the angle, the rear corners the opposite, the middles stay straight. The pulses are
+    written in the same tick the command is handled. Two travel limits apply:
+    `STEER_OVERRIDE_MAX_DEG` 37 and the servo range via `corner_us()`. Approved by
+    `SafetyController.approve_steer()`: the same gates as motion, plus **parked only**,
+    refused while any wheel is commanded, because steered driving is still deferred (below).
+    The wheels are **held** while he stays in `IDLE`, the pulses re-asserted every
+    `ROTATE_RESTEER_S`, so it doubles as a service-side hold for gear fitting. Leaving `IDLE`
+    for anything centres them. A fault state releases them where they are, so a fault never
+    moves a servo, and "stop" releases them too. `tests/test_steer_override.py`.
 
 ⛔ **Superseded in part 2026-10-07 — point turn built (FR-600-005, owner request).** Crab-walk
 and coordinated arc turning remain deferred. Original note:
