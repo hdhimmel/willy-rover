@@ -3795,6 +3795,10 @@ Added v3.3 (2026-09-14). Design:
 (`tests/test_feature_requests.py`). `feature_requests.py`, to the approved design, on its
 own low-frequency thread (first look 10 min after start, then every 6 h);
 `ENABLE_FEATURE_REQUESTS` True.
+✅ **Live-verified 2026-10-07/08:** Willie proposed two requests from his own logs (stalled
+IMU reports; battery reading reliability), the owner approved each with a DKIM-verified
+`Willie: approve <code>` email, and Willie committed and pushed each Markdown file himself
+(`2ca37ec`, `9abdad7`). Both root causes were found afterwards and recorded in the files.
 
   -----------------------------------------------------------------------
   Requirement ID    Requirement                  Priority     Verification
@@ -3850,6 +3854,64 @@ own low-frequency thread (first look 10 min after start, then every 6 h);
     confirming the only artefact produced is a Markdown file.
     ✅ **Built 2026-10-02:** the module writes that Markdown file and its `secrets/`
     state JSON, and nothing else.
+
+# FR-2300 GPS: Position, Home and Finding Willie
+
+Added 2026-10-08 (owner). Part on order: **Adafruit Mini GPS PA1010D (#4415)**, on I²C at
+**0x10** through its STEMMA QT socket (all Pi UARTs are used once ToF #2 is on UART0); about 3 m
+accuracy, 1 Hz. **Nothing below is built.** GPS needs open sky: indoors, no fix is the normal
+state, and the room map (FR-1000) remains the indoor answer to "where".
+
+  -----------------------------------------------------------------------
+  Requirement ID    Requirement                  Priority     Verification
+  ----------------- ---------------------------- ------------ ------------
+  FR-2300-001       Report position by voice     Medium       Test
+                    and email, with a map link
+
+  FR-2300-002       Learn home on command        Medium       Test
+                    ("this is home")
+
+  FR-2300-003       Alert the owner by email     High         Test
+                    when he leaves the home
+                    area, and keep updating
+
+  FR-2300-004       Use GPS time as a clock      Low          Test
+                    backup when there is no
+                    network
+
+  FR-2300-005       Never let GPS block motion   High         Test
+                    or startup
+
+  FR-2300-006       Go home outdoors on command  Low          Test
+                    (stretch)
+  -----------------------------------------------------------------------
+
+# Acceptance Criteria
+
+-   **FR-2300-001 (where are you).** With a fix, "where are you?" by voice adds the position
+    relative to home ("about 30 metres north of home") and an email "where are you?" replies with
+    latitude/longitude, the fix age and accuracy, and a map link. With no fix he says so plainly
+    ("I can't see the sky; I'm in the kitchen" when the room map knows) — never a stale position
+    presented as current.
+-   **FR-2300-002 (learn home).** "This is home", said outdoors, averages fixes for about a
+    minute (a single fix wanders by metres) and stores the result as home, with how many fixes
+    and their spread. Refused, with the reason, if there is no fix or the spread is too large.
+-   **FR-2300-003 (wander alert).** When a fresh fix puts him more than `GPS_HOME_RADIUS_M`
+    (default 50 m) from home, he emails the owner his position and map link, then repeats every
+    few minutes while outside, and sends one "back home" email on return. This is the "find
+    Willie if he wanders off" case. Debounced so one wild fix cannot raise it.
+-   **FR-2300-004 (time backup).** If the startup clock sync (FR-100-005) gets no network time,
+    a GPS fix's UTC time is used and written to the Witty Pi RTC instead.
+-   **FR-2300-005 (never blocks).** 0x10 is an OPTIONAL device in the self-test: a missing GPS
+    is reported, never safety-critical, and no fix is normal. GPS never feeds the stop or the
+    Directive checks.
+-   **FR-2300-006 (go home, stretch).** "Go home" outdoors drives toward the stored home point,
+    stopping within ~5 m (GPS accuracy) and saying so. **Prerequisites, all open:** outdoor
+    driving and obstacle sensing qualified on real ground (sonar/ToF outdoors, uneven terrain,
+    kerbs and drops), a heading source that works outdoors (IMU magnetometer near motors is
+    biased), and a rule for what to do when the fix drops out on the way. Until those exist,
+    "go home" outdoors must refuse and say why, rather than attempt it. Indoors, "go home" means
+    the charger/dock, which is a separate, deferred feature.
 
 # Mission-Level Functional Requirements (M-001--M-012)
 

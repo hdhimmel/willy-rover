@@ -36,3 +36,21 @@ def test_answers_say_what_and_where():
 def test_what_doing_is_answered_even_while_moving():
     import brain
     assert 'what_doing' in brain._SPEECH_ONLY_INTENTS
+
+def test_how_is_your_battery_is_a_fixed_phrase():
+    import voice
+    r=voice.VoicePipeline._fast_path(None,"How is your battery?")
+    assert r and r['intent']=='battery'
+
+def test_the_model_never_answers_a_sensor_question_itself():
+    """2026-10-08: the model's own reply "I am at 80%" was spoken before the real "I can't read
+    my battery right now". Its reply text is dropped for sensor-answered intents."""
+    import queue, voice
+    v=object.__new__(voice.VoicePipeline)
+    said=[]; v.speak=lambda text,tone='neutral': said.append(text)
+    v.pending_commands=queue.Queue(); v.smart_home=None; v._reply_tone='neutral'
+    v.stop_requested=type('E',(),{'set':lambda self:None})()
+    v._act_on_intent({'intent':'battery','args':{},'reply':'I am at 80%'},'how is your battery')
+    assert said==[] and v.pending_commands.get_nowait()['intent']=='battery'
+    v._act_on_intent({'intent':'battery','args':{},'reply':'Checking.'},'hows your battery')
+    assert said==['Checking.']

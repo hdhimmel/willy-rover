@@ -106,6 +106,10 @@ class PiperEngine:
             except OSError: pass
 
 
+# Intents whose answer comes from brain.py reading sensors/state -- never from the model's text.
+_SENSOR_ANSWERED=frozenset({'status','battery','where_are_you','what_do_you_see','what_doing','diagnostics'})
+_NEUTRAL_ACKS=frozenset({'','Checking.','Looking.'})
+
 def speech_envelope(wav_path,step_s):
     """FR-1600-009: loudness per `step_s` of a 16-bit WAV, scaled 0..1 for the talking mouth.
     RMS per window, normalised to the 95th percentile so a loud word does not make every other
@@ -279,7 +283,7 @@ _FAST_PATH_PATTERNS=[
     (_fp(r'turn right'),'turn_right','Turning right.'),
     (_fp(r'shut down|power off|go to sleep'),'shutdown',''),
     # --- tier 1: speech-only, widened ---
-    (_fp(r"(?:how'?s|hows|what'?s|whats|check) (?:your |the )?battery(?: (?:level|status|at|doing))?|"
+    (_fp(r"(?:how'?s|hows|how is|what'?s|whats|what is|check) (?:your |the )?battery(?: (?:level|status|at|doing))?|"
          r"battery (?:status|level|check)|how much (?:charge|battery|power)(?: (?:left|is left|do you have))?|"
          r"are you charged"),'battery','Checking.'),
     (_fp(r'status(?: report)?|how are you(?: doing| feeling)?|are you (?:ok|okay|alright|good)|'
@@ -936,6 +940,12 @@ class VoicePipeline:
     def _act_on_intent(self,intent,original_text):
         reply=intent.get('reply','') if intent else ''
         name=(intent or {}).get('intent',''); args=(intent or {}).get('args',{})
+        # 2026-10-08, live: "How is your battery?" missed the fixed phrases, went to the Hailo
+        # model, and Willie said the model's own reply -- "I am at 80%" -- then brain's real
+        # answer, "I can't read my battery right now". The model cannot know sensor facts. For
+        # intents brain.py answers from his sensors, drop any reply that is not one of the fast
+        # path's fixed acknowledgements; brain speaks the real answer.
+        if name in _SENSOR_ANSWERED and reply not in _NEUTRAL_ACKS: reply=''
         if name=='stop':
             # Immediate, not queued — see stop_requested's docstring in __init__. brain.py's tick
             # thread picks this up and does the actual emergency_stop()/task-abort work; nothing
