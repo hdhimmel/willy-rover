@@ -23,77 +23,85 @@ class _FakeSafety:
     def timed_move_active(self): return self._timed
 
 class _FakeArm:
-    def __init__(self): self.pulses=[]
-    def set_pulse(self,joint,us): self.pulses.append((joint,us))
+    def __init__(self): self.pulses=[]; self._p={}
+    def set_pulse(self,joint,us): self.pulses.append((joint,us)); self._p[joint]=us
+    def pulse(self,joint): return self._p.get(joint,1500)
+    def was_driven(self,joint): return joint in self._p
 
 class _FakeDetector:
     def __init__(self,dets=None): self._dets=dets or []
     def detect(self,classes=None): return self._dets
     def localize(self,det): return (0.0,0.0)
 
+import pytest
+_REACH={'shoulder':1210,'elbow':1300,'wrist_pitch':1500}   # a stand-in; the real one is unmeasured
+
+@pytest.fixture(autouse=True)
+def _reach(monkeypatch): monkeypatch.setattr(config,'ARM_POSE_REACH',dict(_REACH))
+
 def _grasp_task():
     rt=RetrievalTask(_FakeSafety(),_FakeArm(),_FakeDetector())
     rt.state='GRASP'; rt._bearing_deg=0.0
     return rt
 
-# --- non-blocking (the actual safety fix) ---
+def _run(rt,limit=200):
+    n=0
+    while rt.state=='GRASP' and n<limit:
+        rt.tick({'front':999},0.0); n+=1
+        if rt._grasp_deadline is not None: rt._grasp_deadline=0   # fast-forward each wait
+    return n
+
+# --- non-blocking (the 2026-08-18 safety fix, kept through the 2026-10-08 rebuild) ---
 
 def test_grasp_tick_returns_immediately_not_blocking():
     rt=_grasp_task()
     t0=time.perf_counter()
     rt.tick({'front':999},0.0)
-    assert time.perf_counter()-t0<0.05  # old code blocked here for up to 0.5s per step
+    assert time.perf_counter()-t0<0.05
 
-def test_grasp_first_tick_only_issues_open_step_pulses():
+def test_grasp_first_tick_only_opens_the_gripper_to_its_measured_open():
     rt=_grasp_task()
     rt.tick({'front':999},0.0)
-    assert rt.arm.pulses==[('base',config.ARM_SERVO_CENTER_US),('gripper',config.ARM_SERVO_MIN_US)]
-    assert rt.state=='GRASP'  # not yet complete
+    assert rt.arm.pulses==[('gripper',config.GRIP_OPEN_US)]
+    assert rt.state=='GRASP'
 
 def test_grasp_retick_before_deadline_is_a_noop():
     rt=_grasp_task()
     rt.tick({'front':999},0.0)
     before=list(rt.arm.pulses)
-    rt.tick({'front':999},0.0)  # deadline (0.3s) has not elapsed
+    rt.tick({'front':999},0.0)
     assert rt.arm.pulses==before
 
-def test_grasp_full_sequence_completes_in_exactly_four_ticks():
-    rt=_grasp_task()
-    steps=0
-    while rt.state=='GRASP' and steps<10:
-        rt.tick({'front':999},0.0); steps+=1
-        if rt._grasp_deadline is not None: rt._grasp_deadline=0  # fast-forward past the wait
-    assert steps==4
-    assert rt.state=='VERIFY'
-    assert rt.arm.pulses==[
-        ('base',config.ARM_SERVO_CENTER_US),('gripper',config.ARM_SERVO_MIN_US),
-        ('shoulder',config.ARM_SERVO_CENTER_US-300),('elbow',config.ARM_SERVO_CENTER_US-300),
-        ('gripper',config.ARM_SERVO_MAX_US),
-        ('shoulder',config.ARM_SERVO_CENTER_US),('elbow',config.ARM_SERVO_CENTER_US),
-    ]
+def test_full_grasp_obeys_the_arm_rules_and_reaches_verify():
+    rt=_grasp_task(); _run(rt)
+    assert rt.state=='VERIFY' and rt._grip_result=='unsensed'      # no feedback in this fake
+    P=rt.arm.pulses; joints=[j for j,_ in P]
+    assert joints.index('elbow')<joints.index('shoulder')            # elbow opens first
+    assert ('elbow',config.ARM_SERVO_CENTER_US) not in P              # never the 1500 us elbow
+    sh=[u for j,u in P if j=='shoulder']
+    assert max(abs(b-a) for a,b in zip([config.ARM_POSE_REST['shoulder']]+sh,sh))<=config.ARM_WAVE_APPROACH_STEP_US
+    g=[u for j,u in P if j=='gripper']
+    assert all(config.GRIP_OPEN_US<=u<=config.GRIP_CLOSED_US for u in g)
 
-# --- abort() can now land mid-grasp (this is the point of the fix) ---
+# --- abort() can land mid-grasp ---
 
 def test_abort_mid_grasp_stops_before_later_steps_run():
     rt=_grasp_task()
-    rt.tick({'front':999},0.0)  # only the OPEN step has run
-    pulses_before_abort=len(rt.arm.pulses)
+    rt.tick({'front':999},0.0)
+    n=len(rt.arm.pulses)
     rt.abort('simulated tilt fault')
-    assert rt.state=='ABORTED'
-    assert ('stop',) in rt.safety.calls
-    # the LOWER/CLOSE/RAISE steps must never run once aborted
+    assert rt.state=='ABORTED' and ('stop',) in rt.safety.calls
     for _ in range(5): rt.tick({'front':999},0.0)
-    assert len(rt.arm.pulses)==pulses_before_abort
+    assert len(rt.arm.pulses)==n
 
-def test_abort_resets_grasp_step_and_deadline():
+def test_abort_resets_grasp_state():
     rt=_grasp_task()
     rt.tick({'front':999},0.0)
-    assert rt._grasp_step!=0 or rt._grasp_deadline is not None
     rt.abort('reason')
-    assert rt._grasp_step==0 and rt._grasp_deadline is None
+    assert rt._phase is None and rt._plan==[] and rt._grasp_deadline is None
 
 def test_abort_when_not_active_still_resets_grasp_state():
     rt=RetrievalTask(_FakeSafety(),_FakeArm(),_FakeDetector())
-    rt.abort('reason')  # never started -- state is IDLE, not one of _MOTION_STATES
+    rt.abort('reason')
     assert rt.state=='ABORTED'
     assert rt._grasp_step==0 and rt._grasp_deadline is None

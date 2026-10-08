@@ -1436,7 +1436,8 @@ conditions:
 
     ✅ **Built 2026-10-02, not yet run on the rover:**
     - **FR-200-002, overcurrent** (`15bfc77`). A rail above `OVERCURRENT_LIMIT_A`
-      (`bus_12v` 9.0 A, `steering_5v` 9.0 A) for `OVERCURRENT_S` (1.0 s) stops the
+      (`bus_12v` 9.0 A; the `steering_5v` trip was **dropped 2026-10-08** — 0x40 cannot see
+      steering current, so it could never fire) for `OVERCURRENT_S` (1.0 s) stops the
       rover and latches **`OVERCURRENT_FAULT`** until an operator reset, like a stall.
       The arm rail has its own limit (FR-700-001).
     - **FR-200-003, warn** (`a8077b9`). The warn tier (`BAT_WARN_V`) logs and announces
@@ -2818,8 +2819,12 @@ CC session to date.
     tokens (~0.12 s each); the only long freeze left is reading the prompt, **2.2 s** for the real
     prompt. Saving/restoring a pre-read prompt prefix (`save_context`/`load_context`) was measured
     and rejected: restoring the 44 MB context took ~1 s and the call was no faster. Removing the
-    last 2.2 s needs the model out of this process: Hailo multi-process service (`hailort.service`
-    is masked on willie; unproven for GenAI) or a dedicated Hailo server process.
+    last 2.2 s needs the model out of this process. **Multi-process sharing ruled out
+    2026-10-08:** the installed Hailo-10H runtime (`h10-hailort` 5.1.1) ships no multi-process
+    service — the masked `hailort.service` was a leftover of the removed Hailo-8 `hailort` 4.23
+    package — and `VDevice(multi_process_service=True)` fails with HAILO_INVALID_OPERATION. The
+    remaining route is **one Hailo server process owning the chip for both vision and the
+    model**, which Willie talks to over a pipe (re-masked; nothing else changed).
 
 # FR-1500 Voice Interaction
 
@@ -3203,6 +3208,19 @@ capability in the spec and was not previously captured anywhere. Added
     at about a sixth of their true distance. Widths are nominal and the focal length is
     still an estimate (FR-1000-006), so the gate remains uncalibrated.
 
+
+-   **FR-1700-004/005/006 grasp rebuilt, 2026-10-08 (`grip.py`), not yet run on the rover.** The
+    old fixed sequence drove the gripper to 500/2500 µs (it stalls at 1050/2210), jumped the
+    shoulder 300 µs and sent the elbow to 1500 µs. Now: REACH opens the elbow before the shoulder
+    moves and steps the shoulder 50 µs at a time to `ARM_POSE_REACH` — **which is not measured,
+    so the fetch refuses aloud until it is** (jog with `scripts/arm_jog.py`); CLOSE steps the
+    gripper within the measured 1150–2205 µs against its position feedback (A2 wiper ÷ arm rail,
+    which removes the 10-05 run-to-run shift): *gripped* when the jaw stops following, *empty*
+    when it shuts on nothing (retry), *unsensed* without feedback (closes only to 1800 µs; vision
+    verifies); LIFT steps the shoulder back. **Hand-off is sensed (FR-1700-006):** the jaw is held
+    40 µs past the object, so it moves when the person takes it. Feedback thresholds are starting
+    values to check against the A2 curve. `tests/test_grip.py`, `tests/test_retrieval_task.py`.
+    `ENABLE_RETRIEVAL_TASK` stays False until the reach pose and thresholds are verified.
 # FR-1800 Privacy and Data Handling
 
 Covers microphone, camera, and cloud-fallback data handling --- relevant

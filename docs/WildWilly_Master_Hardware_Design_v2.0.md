@@ -1541,10 +1541,10 @@ Item numbers are stable; closed items are removed, not renumbered.
 
 3. **PCA9685 V+ current path and R2 capacity.** Power path **confirmed by the owner
    2026-10-07.** Still open: worst-case steering draw is near 9 A, which is also the software
-   `steering_5v` trip (9.0 A for 1.0 s) — ⚠ **but that trip reads INA260 0x40, which measured
-   flat while a steering servo swung (2026-10-06), so it cannot see steering current and will
-   not fire for it.** Record the DROK-5V rating and measure the real peak with a meter or clamp
-   before trusting either number.
+   `steering_5v` trip — **which was dropped 2026-10-08 (owner)**: it read INA260 0x40, which
+   measured flat while a steering servo swung (2026-10-06), so it could never fire. The F4 10 A
+   fuse is the steering rail's protection. Record the DROK-5V rating and measure the real peak
+   with a meter or clamp.
 4. **AI HAT+ 2 power budget** — not measured against the Pi 5 V feed.
 5. **Runtime measurement** — log the three INA260s through a representative run and
    integrate.

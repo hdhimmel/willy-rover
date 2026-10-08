@@ -169,7 +169,8 @@ Order within `_tick()`:
    - `_check_battery_crosscheck()` — ADC vs INA260 0x45 (§4.2).
 9. **Battery tier** (§4.2), then the **stall check** (`STALL_FAULT`) and the
    **overcurrent check** (`_check_overcurrent()`: a rail in `OVERCURRENT_LIMIT_A` —
-   `bus_12v` 9.0 A, `steering_5v` 9.0 A — held `OVERCURRENT_S` 1.0 s → stop, latched
+   `bus_12v` 9.0 A only — the `steering_5v` trip was dropped 2026-10-08 because 0x40 does not see
+   steering current — held `OVERCURRENT_S` 1.0 s → stop, latched
    `OVERCURRENT_FAULT` until operator reset).
 10. **State dispatch** — the Directive 6 layer.
 
@@ -973,8 +974,9 @@ Bench procedures with blank result fields are in `docs/WildWilly_Bench_Test_Proc
    curve, consult it in `RetrievalTask._await_confirm()` (S-5).
 8. **Steering** — steering servos are centred and held; kinematics (crab, point-turn,
    arc) are deferred. Skid steer is the only turning mechanism (`motors.py::Steering`).
-9. **Overcurrent limits** — the 9.0 A `steering_5v` and `bus_12v` limits are 90% of the
-   fuses, not measured against real load; a six-servo slew may reach 9 A.
+9. **Overcurrent limits** — the 9.0 A `bus_12v` limit is 90% of the fuse, not measured against
+   real load. (The `steering_5v` limit was dropped 2026-10-08: its monitor cannot see steering
+   current; the F4 10 A fuse protects that rail.)
 10. **Hailo LLM** — `ENABLE_HAILO_LLM=True`; it labels some intents with synonyms
     (`fetch`, `halt`) at high confidence. Whether to keep it on is the owner's call (§6.7.3).
 11. **systemd watchdog** — not armed (S-6).

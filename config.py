@@ -396,7 +396,10 @@ ARM_CURRENT_LIMIT_S=0.4
 # (MHD §2.1: F2 10A motors, F4 10A DROK-5V), so software stops the load before the fuse goes.
 # Held for OVERCURRENT_S, so a motor start or a steering slew does not trip it. The arm rail
 # has its own, tighter limit above (servo protection, releases the arm).
-OVERCURRENT_LIMIT_A={'bus_12v':9.0,'steering_5v':9.0}
+# steering_5v trip DROPPED 2026-10-08 (owner): INA260 0x40 does not see steering servo current
+# (flat while a servo visibly swung, 2026-10-06), so a 9 A trip on it could never fire -- it only
+# looked like protection. The rail is still read and reported; the F4 10 A fuse remains the limit.
+OVERCURRENT_LIMIT_A={'bus_12v':9.0}
 OVERCURRENT_S=1.0
 
 # Wheel encoders — Pico A over uart4-pi5 (§4.7). SIGNED x2 quadrature since firmware a-0.3
@@ -637,6 +640,20 @@ GRIP_FB_DIVIDER_SCALE=0.5  # 47k/(47k+47k); ADS1115 input impedance pulls the re
 # Gripper end points with the longer fingers, measured 2026-10-05 (see the CH5 note above).
 GRIP_OPEN_US=1150; GRIP_CLOSED_US=2205
 GRIP_OPEN_WIDTH_MM=73   # jaw gap at GRIP_OPEN_US, owner-measured; 0 at GRIP_CLOSED_US
+# Grasp with feedback (grip.py, 2026-10-08). Feedback = A2 wiper / arm rail volts (ratio), so the
+# 10-05 run-to-run shift with the rail drops out. Starting values -- to be checked against the A2
+# curve (scripts/grip_feedback_curve.py) on the rover before fetch is switched on.
+GRIP_CLOSE_STEP_US=30         # close this far per tick
+GRIP_STALL_STEPS=3            # jaw not following for this many steps = blocked by the object
+GRIP_FB_MIN_DELTA=0.004       # ratio change that counts as "the jaw moved" over those steps
+GRIP_MIN_TRAVEL_US=90         # ignore the first few steps (servo starting to move)
+GRIP_SQUEEZE_US=40            # hold this far past where the jaw stopped: grips, and lets hand-off be sensed
+GRIP_UNSENSED_US=1800         # no feedback: close only this far (well short of the 2210 stall)
+GRIP_HANDOFF_DELTA=0.01       # feedback change while holding that means the person took it
+GRIP_RAIL_MIN_V=5.0           # arm rail below this = no trustworthy ratio
+# Reach-down pose for the floor: NOT MEASURED. Jog it with scripts/arm_jog.py, owner watching, then
+# set e.g. {'shoulder':..,'elbow':..,'wrist_pitch':..}. Until then the fetch refuses to reach.
+ARM_POSE_REACH=None
 # Re-trimmed 2026-10-01: AIN0 read 2.7653V (raw ~22120, 40 samples) against the pack metered at
 # 11.37V at the divider input. Scale = 2.7653/11.37 = 0.2432 -- within 0.4% of the 10k/3.197k
 # = 0.2423 that Master Hardware Design §16 specifies. The divider now matches its design.

@@ -1,4 +1,4 @@
-import time,config,logsetup
+import time,config,logsetup,grip
 log=logsetup.setup('retrieval')
 
 # FR-1700 Object Detection and Retrieval Task — the "core mission" per the FRD. This is a
@@ -8,25 +8,22 @@ log=logsetup.setup('retrieval')
 # before _retrieve() is ever called; abort() below is what brain.py calls on any of those firing
 # mid-task (FR-1700-007) rather than this module re-checking them independently.
 #
-# GRASP PLANNING IS A FIXED PRIMITIVE SEQUENCE, NOT INVERSE KINEMATICS: no per-joint calibration
-# has been run on the arm (§20.6 pending, same gap noted in arm.py/config.py since the baseline
-# pass) — there is no reach-envelope model to plan a real grasp pose against. This sequence
-# (rotate base toward bearing, open gripper, lower by a fixed offset, close, raise) is a rough
-# working approximation, not a calibrated motion. Bench-calibrate §20.6 before trusting this
-# near anything fragile.
+# GRASP (rebuilt 2026-10-08 on grip.py). REACH: elbow opened before the shoulder moves, shoulder
+# in 50 us steps -- the owner's self-collision rule, as wave/stow -- to ARM_POSE_REACH, which is NOT
+# YET MEASURED: until it is, the grasp refuses and says why rather than guess a pose. CLOSE: the
+# gripper closes in steps against its position feedback (A2 wiper / arm rail): "gripped" when the
+# jaw stops following before shut, "empty" when it shuts on nothing, "unsensed" without feedback
+# (then vision verifies). Never commanded outside the measured GRIP_OPEN_US..GRIP_CLOSED_US.
+# LIFT: shoulder stepped back. No 1500 us elbow anywhere.
 #
-# HAND-OFF CONFIRMATION IS TIME-BASED, NOT SENSED (FR-1700-006). The gripper servo's pot wiper
-# is wired to ADS1115 A2 (2026-10-04, replacing the FSR402) and sensors.ADC.grip_feedback_volts()
-# reads it, but it has no curve yet, so nothing here consults it. Until then this waits for an explicit
-# voice confirmation or a fixed timeout before releasing -- a real gap, flagged rather than
-# papered over. The whole task is also gated off by config.ENABLE_RETRIEVAL_TASK (2026-10-02)
-# until the arm is safe: the grasp below drives the elbow to 1500/1200us, and config.py records
-# that ARM_SERVO_CENTER_US on the elbow drives it into the top of Willy.
-
+# HAND-OFF IS SENSED (FR-1700-006): the jaw is held GRIP_SQUEEZE_US past the object, so it moves
+# when the person takes the object -- that, a spoken "got it", or the timeout releases it.
+# The whole task stays gated off by config.ENABLE_RETRIEVAL_TASK until the reach pose is measured
+# and the feedback thresholds are checked on the rover.
 _MOTION_STATES=('LOCALIZE','APPROACH','GRASP','VERIFY','DELIVER','AWAIT_CONFIRM')
 
 class RetrievalTask:
-    def __init__(self,safety,arm,detector,display=None,voice=None):
+    def __init__(self,safety,arm,detector,display=None,voice=None,feedback=None):
         # safety: a safety.SafetyController — the same single authoritative motor gate brain.py's
         # own FSM routes through (docs/WildWilly_Claude_Fix_Implementation_Plan.md §3). Nothing in
         # this class talks to DriveBase directly.
@@ -36,6 +33,9 @@ class RetrievalTask:
         self._dist_cm=999.0; self._bearing_deg=0.0; self._lost_count=0; self._retries=0
         self._fail_reason=''; self._confirm_deadline=0.0
         self._grasp_step=0; self._grasp_deadline=None
+        # 2026-10-08: gripper feedback (grip.read_feedback: A2 wiper / arm rail), None = no sensing
+        self.feedback=feedback or (lambda: None)
+        self._phase=None; self._plan=[]; self._closer=None; self._grip_result=None; self._fb_hold=None
 
     @property
     def active(self): return self.state in _MOTION_STATES
@@ -44,6 +44,7 @@ class RetrievalTask:
         if self.active: return False,'retrieval task already in progress'
         self.state='LOCALIZE'; self._target_class=target_class; self._requester_hint=requester_hint
         self._lost_count=0; self._retries=0; self._fail_reason=''
+        self._phase=None; self._plan=[]; self._grip_result=None; self._fb_hold=None
         log.info(f'Retrieval task started: target={target_class}')
         return True,'started'
 
@@ -54,7 +55,7 @@ class RetrievalTask:
             self.safety.stop()
             log.warning(f'Retrieval task ABORTED: {reason}')
         self.state='ABORTED'; self._fail_reason=reason
-        self._grasp_step=0; self._grasp_deadline=None
+        self._grasp_step=0; self._grasp_deadline=None; self._phase=None; self._plan=[]
 
     def reset(self): self.state='IDLE'
 
@@ -114,37 +115,65 @@ class RetrievalTask:
     # control-loop guarantee Phase 1 (§2) established for drive motion. Splitting it into steps
     # serviced from the normal ~20Hz tick means abort() (called by brain.py's Directive 1-4 checks)
     # can land between any two steps instead of only after all of them.
-    _GRASP_OPEN,_GRASP_LOWER,_GRASP_CLOSE,_GRASP_RAISE=range(4)
-    _GRASP_DELAY_S=(0.3,0.5,0.3,0.0)
+    # 2026-10-08: rebuilt on grip.py. REACH (elbow opened first, shoulder stepped -- the owner's
+    # self-collision rule), CLOSE with position feedback (gripped / empty / unsensed), LIFT
+    # (shoulder stepped back). One step per tick, so abort() can land between any two.
+    def _joint_now(self,joint,default):
+        return int(self.arm.pulse(joint)) if self.arm.was_driven(joint) else default
+
+    def _start_grasp(self):
+        half=(config.ARM_SERVO_MAX_US-config.ARM_SERVO_MIN_US)/2
+        base_us=max(config.ARM_SERVO_MIN_US,min(config.ARM_SERVO_MAX_US,
+                    config.ARM_SERVO_CENTER_US+(self._bearing_deg/90.0)*half))
+        plan=grip.reach_plan(base_us,self._joint_now('shoulder',config.ARM_POSE_REST['shoulder']),
+                             self._joint_now('elbow',None))
+        if plan is None:
+            self.state='FAILED'; self._fail_reason='reach pose not measured'
+            log.warning('Grasp refused: ARM_POSE_REACH is not measured (scripts/arm_jog.py)')
+            if self.voice: self.voice.speak("I can't reach down yet: my arm's reach position hasn't been measured.")
+            return False
+        self._plan=plan; self._phase='reach'; self._grasp_deadline=None
+        log.info(f'Attempting grasp (retry {self._retries}/{config.RETRIEVAL_GRASP_RETRIES})')
+        return True
+
+    def _run_plan(self,now):
+        """One arm step per call; True when the plan is finished."""
+        if self._grasp_deadline is not None and now<self._grasp_deadline: return False
+        if not self._plan: return True
+        joint,us,delay=self._plan.pop(0)
+        self.arm.set_pulse(joint,us); self._grasp_deadline=now+delay
+        return False
 
     def _grasp(self,d,tilt):
         now=time.time()
-        if self._grasp_deadline is not None:
+        if self._phase is None:
+            if not self._start_grasp(): return
+        if self._phase=='reach':
+            if self._run_plan(now):
+                self._phase='close'
+                self._closer=grip.GripCloser(lambda us: self.arm.set_pulse('gripper',us),self.feedback)
+                self._grasp_deadline=now
+            return
+        if self._phase=='close':
             if now<self._grasp_deadline: return
-            self._grasp_deadline=None
-        step=self._grasp_step
-        if step==self._GRASP_OPEN:
-            log.info(f'Attempting grasp (retry {self._retries}/{config.RETRIEVAL_GRASP_RETRIES})')
-            half=(config.ARM_SERVO_MAX_US-config.ARM_SERVO_MIN_US)/2
-            base_us=config.ARM_SERVO_CENTER_US+(self._bearing_deg/90.0)*half
-            self.arm.set_pulse('base',base_us)
-            self.arm.set_pulse('gripper',config.ARM_SERVO_MIN_US)  # open
-        elif step==self._GRASP_LOWER:
-            self.arm.set_pulse('shoulder',config.ARM_SERVO_CENTER_US-300)  # rough "lower toward table"
-            self.arm.set_pulse('elbow',config.ARM_SERVO_CENTER_US-300)
-        elif step==self._GRASP_CLOSE:
-            self.arm.set_pulse('gripper',config.ARM_SERVO_MAX_US)  # close
-        elif step==self._GRASP_RAISE:
-            self.arm.set_pulse('shoulder',config.ARM_SERVO_CENTER_US)
-            self.arm.set_pulse('elbow',config.ARM_SERVO_CENTER_US)
-            self._grasp_step=self._GRASP_OPEN; self.state='VERIFY'; return
-        self._grasp_deadline=now+self._GRASP_DELAY_S[step]; self._grasp_step=step+1
+            r=self._closer.step(); self._grasp_deadline=now+config.ARM_WAVE_STEP_S
+            if r:
+                self._grip_result=r; self._fb_hold=self.feedback() if r=='gripped' else None
+                self._plan=grip.lift_plan(self._joint_now('shoulder',config.ARM_POSE_REST['shoulder']))
+                self._phase='lift'; self._grasp_deadline=None
+            return
+        if self._phase=='lift':
+            if self._run_plan(now):
+                self._phase=None; self.state='VERIFY'
 
     def _verify(self,d,tilt):
-        # FR-1700-005: if the target is still visible on the ground, the grasp didn't take —
-        # report/retry rather than proceeding as if it succeeded.
-        det=self._best(self.detector.detect(classes=[self._target_class]))
-        if det is not None:
+        # FR-1700-005. The gripper's own feedback first: 'empty' means it closed on nothing;
+        # 'gripped' means something stopped the jaw. Vision only decides when it was unsensed.
+        if self._grip_result=='gripped':
+            self.state='DELIVER'; return
+        det=None if self._grip_result=='empty' else self._best(self.detector.detect(classes=[self._target_class]))
+        if self._grip_result=='empty' or det is not None:
+            self.arm.set_pulse('gripper',config.GRIP_OPEN_US)
             self._retries+=1
             if self._retries>=config.RETRIEVAL_GRASP_RETRIES:
                 self.state='FAILED'; self._fail_reason='grasp failed after max retries'
@@ -176,9 +205,13 @@ class RetrievalTask:
                         self.voice.pending_commands.put(cmd); break  # not for us, put back
             except Exception:
                 pass
+        # FR-1700-006: sensed hand-off -- the jaw is held GRIP_SQUEEZE_US past the object, so it
+        # moves when the person pulls the object out.
+        if not confirmed and grip.released_by_person(self._fb_hold,self.feedback()):
+            confirmed=True; log.info('Hand-off sensed: the gripper jaw moved as the object was taken')
         if confirmed or time.time()>self._confirm_deadline:
             if not confirmed:
                 log.warning('Hand-off released on timeout, no confirmation received — no tactile '
                             'sensor exists to verify receipt (see module docstring).')
-            self.arm.set_pulse('gripper',config.ARM_SERVO_MIN_US)  # release
+            self.arm.set_pulse('gripper',config.GRIP_OPEN_US)  # release, to the measured open
             self.state='DONE'
