@@ -2926,7 +2926,11 @@ section behind it until now. Added 2026-08-02, v1.4.
     answered even while he is moving (speech-only pass) and only reads state, never changes it.
     "What are you looking at?" joins "what do you see?" and names at most the three most
     confident things in view, plus "and more". Built: `brain._activity_phrase()`, intent
-    `what_doing`; `tests/test_what_doing.py`. Not yet tried on the rover.
+    `what_doing`; `tests/test_what_doing.py`. ✅ **Tried on the rover 2026-10-08.** Fixed after:
+    with the self-test failing he said "I'm just starting up" (state INIT) — the self-test reason
+    now comes first; and he transcribed his own reply from a capture opened off the audio backlog —
+    captures are now abandoned if he starts speaking, and the backlog is dropped after each
+    utterance.
 
 -   Wake-word detection, speech-to-text and response run on-device using the
     NPU accelerator, with no network dependency for core interaction.
@@ -3067,7 +3071,7 @@ halt countdown (FR-200-004/005). **FR-1600-006** — the bashful trigger
     `voice.speech_envelope()` (RMS per window, normalised to the 95th percentile, gated below
     `MOUTH_TALK_GATE`) → `display.set_talking()` just before `pw-play`, `stop_talking()` after;
     `display.mouth_openness()` per frame. `ENABLE_TALKING_MOUTH`. `tests/test_talking_mouth.py`.
-    Not yet seen on the rover.
+    ✅ **Seen on the rover 2026-10-08** (owner: "looked good").
 
 # FR-1700 Object Detection and Retrieval Task
 
@@ -3280,7 +3284,7 @@ Nothing yet calls `privacy.purge_expired()` for files on disk.
 -   **FR-1800-005 controls, built 2026-10-08 (owner request).** ON by voice ("privacy mode",
     "stop listening", "turn off your microphone/camera") or owner email "privacy on"; OFF by a
     two-tap RESUME button on the face (shown with a "PRIVACY" banner) or owner email "privacy
-    off" — never by voice. `tests/test_privacy_control.py`. Not yet tried on the rover.
+    off" — never by voice. `tests/test_privacy_control.py`. ✅ **Live-verified 2026-10-08** (owner: "privacy mode" by voice, banner shown, wake word ignored, two-tap RESUME restored both).
 # FR-1900 Learning from Observation and Instruction
 
 Covers learning from watched demonstrations, observed

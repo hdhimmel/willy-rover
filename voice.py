@@ -569,9 +569,23 @@ class VoicePipeline:
                     hb['peak']=max(hb['peak'],float(np.sqrt(np.mean((flat.astype(np.float32)/32768.0)**2))))
                     if max(scores.values(),default=0.0)>=config.WAKEWORD_THRESHOLD:
                         self._handle_wake(stream,frame_len,time.time())
+                        self._drop_backlog()
         except Exception as e:
             log.error(f'Voice input stream failed, pipeline stopping: {e}')
             self._running=False
+
+    def _drop_backlog(self):
+        """After an utterance is handled: discard audio queued while he was transcribing and
+        thinking, and reset the wake model's smoothing. That backlog is stale -- scored late, it
+        can open a new listen just as his reply starts (2026-10-08, he heard himself)."""
+        q=getattr(self,'_audio_q',None)
+        n=0
+        while q is not None:
+            try: q.get_nowait(); n+=1
+            except queue.Empty: break
+        try: self._wakeword.reset()
+        except Exception: pass
+        if n: log.debug(f'dropped {n} stale audio blocks after the utterance')
 
     def _heartbeat(self):
         hb=self._hb; now=time.time()
@@ -678,6 +692,14 @@ class VoicePipeline:
         audio=[]; heard=False; silent=0; loud=0
         for i in range(max_frames):
             s=self._read_frame(stream); audio.append(s)
+            if self._speaking.is_set():
+                # 2026-10-08, live: a capture opened from the audio backlog just as his reply
+                # began, recorded the reply, and he answered himself ("Heard: I'm just starting
+                # up."). Anything captured while he is speaking is his own voice: drop it.
+                log.info('capture abandoned: I started speaking')
+                if self.display: self.display.update_state(state='idle',status='')
+                if on_text is not None: on_text(None)
+                return
             rms=float(np.sqrt(np.mean((s.astype(np.float32)/32768.0)**2)))
             if i<deaf_frames: continue
             if rms>=thresh:

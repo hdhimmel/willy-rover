@@ -67,3 +67,17 @@ def test_phrasings_the_model_got_wrong_are_fixed_phrases_now():
     assert fp("are you doing okay buddy")=='status'
     for t in ("don't power yourself off","say hi to grandma tomorrow","put that arm away later maybe"):
         assert fp(t) is None, t                                       # near-misses still go to the model
+
+def test_failing_self_test_beats_starting_up():
+    """Live 2026-10-08 on Pi-only power: state stays INIT, and he said "I'm just starting up"."""
+    assert 'self-test' in _b('INIT',_motion_enabled=False)._activity_phrase()
+    assert _b('INIT')._activity_phrase()=="I'm just starting up."
+
+def test_backlog_is_dropped_and_wake_model_reset():
+    import queue,types,voice
+    v=object.__new__(voice.VoicePipeline)
+    v._audio_q=queue.Queue()
+    for _ in range(5): v._audio_q.put(b'x')
+    resets=[]; v._wakeword=types.SimpleNamespace(reset=lambda: resets.append(1))
+    v._drop_backlog()
+    assert v._audio_q.empty() and resets==[1]

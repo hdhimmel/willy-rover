@@ -1522,9 +1522,11 @@ class RoverBrain:
                 'SAFE_MODE':'my battery is very low','LOW_BATTERY':'my battery is low'}
         if st in faults: return f"I've stopped because {faults[st]}. Say reset when it's safe."
         if st=='SHUTDOWN': return "I'm shutting down."
-        if st=='INIT': return "I'm just starting up."
-        if not getattr(self,'_motion_enabled',True) and st=='IDLE':
+        # A failing self-test first: on Pi-only power he never leaves INIT, and "just starting up"
+        # (2026-10-08, live) hid the real reason he will not move.
+        if not getattr(self,'_motion_enabled',True) and st in('IDLE','INIT'):
             return "I'm waiting. I can't move until my self-test passes."
+        if st=='INIT': return "I'm just starting up."
         if st=='ROTATE':
             d=getattr(self.rotation,'_dir',1)
             return f"I'm turning {'left' if d>0 else 'right'}."
