@@ -3693,6 +3693,14 @@ expand who\'s trusted enough to be read.
     run on the rover:** the STUCK alert's camera capture and SMTP send (15 s timeout)
     run on their own thread. They used to run on the tick thread inside `_go()`, so
     every fault and obstacle check stalled for as long as the mail server took.
+-   **FR-2000-007 (retention).** ✅ **Met, checked 2026-10-08.** On the rover, email
+    bodies and summaries are held only in memory (`email_client._inbox_summaries`),
+    spoken from `IDLE`, then gone; nothing is written to disk. The log keeps sender,
+    subject and at most 80 characters of a command, and rotated logs expire after
+    `DATA_RETENTION_DAYS` under FR-1800-004. **Owner decision 2026-10-08:** mail in
+    Willie's Gmail account (inbox and Sent, including stuck-alert photos) is NOT
+    purged. It stays there as the owner's audit trail, outside the on-device retention
+    period.
 -   Credentials are held outside the repository and are not present in any
     committed file or commit history.
 -   Failures degrade gracefully --- loss of email connectivity does not affect
