@@ -106,10 +106,21 @@ class HailoIntentModel(AIProvider):
             if _before_generate is not None:
                 try: _before_generate()
                 except Exception: log.warning('before-generate hook failed',exc_info=True)
-            txt=self._llm.generate_all(full_prompt,
-                                       temperature=config.HAILO_LLM_TEMPERATURE,
-                                       top_p=config.HAILO_LLM_TOP_P,
-                                       max_generated_tokens=config.HAILO_LLM_MAX_TOKENS)
+            # STREAMING, not generate_all() (FR-1400-006, measured on willie 2026-10-08 with a
+            # 20 ms heartbeat thread): generate_all() holds the GIL for the whole call -- every
+            # other thread froze for 7.7 s on a realistic 2,900-char prompt. generate() releases
+            # it between tokens: same total time, longest freeze 2.2 s (reading the prompt, one
+            # uninterruptible step) and ~0.12 s per token after that. The remaining prompt-read
+            # freeze needs the model out of this process; until then the brake hook above stays.
+            # (save_context/load_context of a pre-read prompt prefix was also measured and
+            # rejected: restoring the 44 MB context costs ~1 s and the call was no faster.)
+            toks=[]
+            with self._llm.generate(full_prompt,
+                                    temperature=config.HAILO_LLM_TEMPERATURE,
+                                    top_p=config.HAILO_LLM_TOP_P,
+                                    max_generated_tokens=config.HAILO_LLM_MAX_TOKENS) as gen:
+                for tok in gen: toks.append(tok)
+            txt=''.join(toks)
         except Exception as e:
             log.info(f'Hailo LLM call failed: {type(e).__name__}: {e}')
             return AIResult(False,0.0,None,False,None,f'{type(e).__name__}: {e}')

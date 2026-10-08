@@ -368,7 +368,9 @@ all within 0.1 s). A rover driving when a call starts would keep its last duty, 
 `hailo_llm.set_before_generate()` runs brain's `_brake_before_hailo()` first, which brakes
 synchronously through `SafetyController.brake_now()` if anything is commanded (fast-path voice never reaches the model). Real
 fix open: the model in its own process, which needs design because the VDevice is shared with
-vision (why hailo-ollama was rejected, 2026-08-21).
+vision (why hailo-ollama was rejected, 2026-08-21). **Streaming (2026-10-08):** `hailo_llm`
+now uses `generate()` instead of `generate_all()`; measured on willie, the longest freeze of
+other threads fell from 7.7 s to 2.2 s (the prompt read), ~0.12 s per token after it.
 
 **Come to me (`come_to_me_task.py`, FR-1000-006) owns no motion.** It sequences
 `Navigator` (room mission, through labelled doorways) and `PursuitTask` (`come_here`, with

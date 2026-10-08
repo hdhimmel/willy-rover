@@ -52,6 +52,15 @@ class _StubLLM:
             return self.replies[i]
         return '{"intent":"status","args":{},"reply":"ok","confidence":0.9}'
 
+    def generate(self, prompt, **kw):
+        # Streaming API (2026-10-08): hailo_llm streams to release the GIL between tokens. Same
+        # bookkeeping as generate_all; an exception raised here surfaces on entering the stream.
+        text = self.generate_all(prompt, **kw)
+        class _G:
+            def __enter__(s): return iter([text])
+            def __exit__(s, *a): return False
+        return _G()
+
     def clear_context(self):
         self.events.append('clear')
         self.clears += 1

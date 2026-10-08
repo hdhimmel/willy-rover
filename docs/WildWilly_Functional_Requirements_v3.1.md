@@ -2803,6 +2803,14 @@ CC session to date.
     Fast-path voice never reaches the model. **Real fix (open, needs design):** the model in
     its own process, which must share the Hailo VDevice with vision — why `hailo-ollama` was
     rejected (design 2026-08-21). `tests/test_hailo_brake.py`. Not yet tried while driving.
+    **Measured 2026-10-08 (20 ms heartbeat thread, service stopped):** `generate_all()` froze every
+    other thread for the whole call — 4.6 s on a short prompt, **7.7 s** on a realistic 2,900-char
+    one. **Streaming `generate()` is now used** (same total time): the GIL is released between
+    tokens (~0.12 s each); the only long freeze left is reading the prompt, **2.2 s** for the real
+    prompt. Saving/restoring a pre-read prompt prefix (`save_context`/`load_context`) was measured
+    and rejected: restoring the 44 MB context took ~1 s and the call was no faster. Removing the
+    last 2.2 s needs the model out of this process: Hailo multi-process service (`hailort.service`
+    is masked on willie; unproven for GenAI) or a dedicated Hailo server process.
 
 # FR-1500 Voice Interaction
 

@@ -42,6 +42,14 @@ class _RecordingLLM:
     def clear_context(self):
         pass
 
+    def generate(self, prompt, **kw):
+        # Streaming API (2026-10-08): hailo_llm now streams to release the GIL between tokens.
+        text = self.generate_all(prompt, **kw)
+        class _G:
+            def __enter__(s): return iter([text])
+            def __exit__(s, *a): return False
+        return _G()
+
 
 @pytest.fixture
 def model():

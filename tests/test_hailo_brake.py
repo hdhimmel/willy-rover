@@ -19,7 +19,13 @@ def test_the_hook_runs_before_every_generation(monkeypatch):
     hl=_import_hailo_llm(monkeypatch)
     order=[]
     class _LLM:
-        def generate_all(self,prompt,**k): order.append('generate'); return '{"intent":"chat","args":{},"reply":"","confidence":0.9}'
+        def generate_all(self,prompt,**k): raise AssertionError('generate_all freezes every thread')
+        def generate(self,prompt,**k):
+            order.append('generate')
+            class _G:
+                def __enter__(s): return iter(['{"intent":"chat",','"args":{},"reply":"","confidence":0.9}'])
+                def __exit__(s,*a): return False
+            return _G()
         def clear_context(self): pass
     m=object.__new__(hl.HailoIntentModel)
     m._enabled=True; m._llm=_LLM()
@@ -35,7 +41,12 @@ def test_a_failing_hook_does_not_stop_the_generation(monkeypatch):
     hl=_import_hailo_llm(monkeypatch)
     called=[]
     class _LLM:
-        def generate_all(self,prompt,**k): called.append(1); return '{}'
+        def generate(self,prompt,**k):
+            called.append(1)
+            class _G:
+                def __enter__(s): return iter(['{}'])
+                def __exit__(s,*a): return False
+            return _G()
         def clear_context(self): pass
     m=object.__new__(hl.HailoIntentModel); m._enabled=True; m._llm=_LLM()
     def boom(): raise RuntimeError('bus')
