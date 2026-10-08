@@ -38,14 +38,19 @@ def wheel_duty(w,target_rpm,meas_rpm,integ,dt):
 
 class DriveBase:
     _WHEELS=('lf','lm','lr','rf','rm','rr')
-    def __init__(self):
-        if config.SIMULATE_HARDWARE:
+    def __init__(self,offline=False):
+        # offline=True (2026-10-08): the motor FeatherWings are unreachable -- typically the 12 V
+        # supply is off and only the Pi is powered. Writes go nowhere, is_healthy is False, and the
+        # self-test (which expects 0x60/0x61) keeps motion disabled; voice, face and everything
+        # else still run. Before this, a missing driver crashed RoverBrain() and systemd looped.
+        self.offline=offline
+        if config.SIMULATE_HARDWARE or offline:
             self._motors={w:hw_sim.SimMotor() for w in self._WHEELS}
         else:
             kits={a:MotorKit(i2c=_i2c,address=a) for a in (config.MOTORKIT_LEFT_ADDR,config.MOTORKIT_RIGHT_ADDR)}
             self._motors={w:getattr(kits[a],f'motor{p}') for w,(a,p) in config.MOTOR_PORT.items()}
             self._pcas=[k._pca for k in kits.values()]   # for sleep/wake; MotorKit holds it here
-        if config.SIMULATE_HARDWARE: self._pcas=[]
+        if config.SIMULATE_HARDWARE or offline: self._pcas=[]
         self._target=dict.fromkeys(self._WHEELS,0.0); self._actual=dict.fromkeys(self._WHEELS,0.0)
         self._lock=threading.Lock(); self.current_speed=0.0
         self._coasting=False; self._idle_since=time.monotonic()
@@ -137,7 +142,8 @@ class DriveBase:
                 log.warning(f'motor driver write failed ({w})',exc_info=True)
     @property
     def is_healthy(self):
-        """Ramp thread alive and no failed driver write in the last second."""
+        """Ramp thread alive and no failed driver write in the last second. Never when offline."""
+        if self.offline: return False
         if not self._thread.is_alive(): return False
         t=self._write_fail_t
         return t is None or time.monotonic()-t>1.0

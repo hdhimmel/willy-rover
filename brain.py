@@ -200,7 +200,13 @@ class RoverBrain:
     def __init__(self):
         log.info('Initialising WildWilly v2...')
         self.display=_init_device(WillyFace,'display')
-        self.motors=_init_device(DriveBase,'motors')
+        try:
+            self.motors=_init_device(DriveBase,'motors')
+        except (OSError,ValueError) as e:
+            # Pi powered without the 12 V supply: the motor drivers do not answer. Start without
+            # them (motion stays disabled by the self-test) instead of crash-looping (2026-10-08).
+            log.error(f'Motor drivers unreachable ({e}) -- starting with the drive OFFLINE; no motion')
+            self.motors=DriveBase(offline=True)
         self.steering=_init_device(Steering,'steering')
         self.safety=SafetyController(self.motors)
         self.sonars=_init_device(SonarArray,'sonars')

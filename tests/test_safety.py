@@ -97,3 +97,15 @@ def test_mid_flight_obstacle_abort_brakes():
                                              stop=lambda: calls.append('stop')))
     s._deadline=9e9; s._active_action='forward'; s._ctx['front_cm']=5.0
     assert s.tick() is False and calls==['brake']
+
+
+def test_an_offline_drive_reports_unhealthy_and_moves_nothing():
+    """2026-10-08: Pi powered without 12 V -> motor drivers absent -> RoverBrain() crashed and
+    systemd looped. The drive now starts OFFLINE: unhealthy, writes go nowhere."""
+    from motors import DriveBase
+    d=DriveBase(offline=True)
+    try:
+        assert d.offline and d.is_healthy is False
+        d.forward(0.5); d.brake()                    # must not raise
+    finally:
+        d._running=False
