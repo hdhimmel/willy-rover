@@ -295,7 +295,9 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   (off), come-here sweep, come
                                                   to me (FR-1000-006), doorway
                                                   routing, ask at a shut door.
-                                                  The knock is not built.
+                                                  Knock built 2026-10-08
+                                                  (knock.py), off until
+                                                  ARM_POSE_KNOCK is measured.
 
   FR-900 Manual           PARTIAL                 Voice drive commands live
                                                   2026-10-07 (after the on-
@@ -2318,8 +2320,23 @@ separately under FR-1200.
     `Navigator._resolve_room()` now routes doorway → centroid → doorway; voice
     "I'm in the kitchen, come to me" / "come to me in the kitchen" on the fast path.
     A blocked **labelled** doorway asks to be let in (`DOOR_WAIT_S`, `DOOR_MAX_ASKS`)
-    and resumes when it clears. **The knock is not built** — no tap motion with measured
-    joint limits exists — so it runs the spec's own no-arm rule: ask aloud, same retries.
+    and resumes when it clears. ✅ **Knock built 2026-10-08 (`knock.py`), not yet run, and
+    OFF until `ARM_POSE_KNOCK` is measured** (None, like `ARM_POSE_REACH`). Until then each
+    attempt is ask-only, the spec's own no-arm rule. Once the pose is set, each of the
+    `DOOR_MAX_ASKS` attempts is: knock, then ask. The knock is a **fixed, timed step list**:
+    open the elbow first; stepped shoulder to the pose; `ARM_KNOCK_TAPS` (3) wrist-pitch taps
+    of `ARM_KNOCK_TAP_US` at `ARM_KNOCK_TAP_S`; back to rest the same way. It starts only from
+    a sonar front distance inside `ARM_KNOCK_STANDOFF_CM` (15–35 cm, not measured); outside
+    that he asks only and **never drives to fix the standoff**. Wheels are stopped every tick of
+    `DOOR_WAIT`, knocking included. Never move-until-contact.
+    -   If the arm is released mid-knock (`ARM_CURRENT_LIMIT_A`), the knock stops at once
+        and the rest of that mission is ask-only.
+    -   If the door opens mid-knock, the arm goes home before the route resumes.
+    -   If the mission is aborted mid-knock, no more steps are sent and the arm holds where
+        it is.
+
+    Open: jog `ARM_POSE_KNOCK` with the owner watching, and confirm the tap's sign (toward
+    the door) and the standoff band. `tests/test_knock.py`.
     Refuses before moving if the room is unknown or the camera is unavailable.
 
     One spoken command --- *"Willie, I'm in the kitchen, come to me"* --- routes him to

@@ -659,6 +659,16 @@ GRIP_RAIL_MIN_V=5.0           # arm rail below this = no trustworthy ratio
 # Reach-down pose for the floor: NOT MEASURED. Jog it with scripts/arm_jog.py, owner watching, then
 # set e.g. {'shoulder':..,'elbow':..,'wrist_pitch':..}. Until then the fetch refuses to reach.
 ARM_POSE_REACH=None
+# FR-1000-006 knock at a shut door (knock.py, 2026-10-08). Pose NOT MEASURED: jog it with
+# scripts/arm_jog.py, owner watching, arm pointing at a door from ARM_KNOCK_STANDOFF_CM, then set
+# e.g. {'shoulder':..,'elbow':..,'wrist_pitch':..}. Until then the navigator asks only. The tap
+# is a fixed wrist-pitch flick: low current, and its sign (toward the door) is checked with the pose.
+ARM_POSE_KNOCK=None
+ARM_KNOCK_TAP_JOINT='wrist_pitch'
+ARM_KNOCK_TAP_US=150            # tap amplitude; sign = direction, confirm when the pose is measured
+ARM_KNOCK_TAPS=3
+ARM_KNOCK_TAP_S=0.25            # per half-tap
+ARM_KNOCK_STANDOFF_CM=(15,35)   # sonar front distance a knock may start from; not measured
 # Re-trimmed 2026-10-01: AIN0 read 2.7653V (raw ~22120, 40 samples) against the pack metered at
 # 11.37V at the divider input. Scale = 2.7653/11.37 = 0.2432 -- within 0.4% of the 10k/3.197k
 # = 0.2423 that Master Hardware Design §16 specifies. The divider now matches its design.

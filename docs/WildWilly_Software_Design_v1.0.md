@@ -388,6 +388,10 @@ its search sweep) under one `COME_TO_ME` state. Directive aborts reach the legs 
 existing navigator/pursuit abort sites, so the task's `active` is read from its current
 leg, not from its own state. A blocked labelled doorway puts `Navigator` in `DOOR_WAIT`
 (stopped, still `active`), asking aloud until the way clears or `DOOR_MAX_ASKS` runs out.
+Each attempt knocks first once `ARM_POSE_KNOCK` is measured (`knock.py`, 2026-10-08). The knock
+is a fixed, timed step list played from `DOOR_WAIT`, wheels stopped every tick. It is only
+started from a sonar standoff inside `ARM_KNOCK_STANDOFF_CM`. An arm release ends it, and the
+mission is ask-only after that. A door opening mid-knock sends the arm home before driving.
 
 ---
 

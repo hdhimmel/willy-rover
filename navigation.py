@@ -1,4 +1,4 @@
-import math,time,config,logsetup
+import math,time,config,logsetup,knock
 import networkx as nx
 import avoidance
 from logsetup import log_event
@@ -37,8 +37,10 @@ def _wrap_deg(a):
     return (a+180)%360-180
 
 class Navigator:
-    def __init__(self,safety,odometry,world_model,sonars=None,detector=None,say=None):
+    def __init__(self,safety,odometry,world_model,sonars=None,detector=None,say=None,arm=None):
         self.safety=safety; self.odometry=odometry; self.world_model=world_model
+        # arm: the knock at a shut door (knock.py). None, or ARM_POSE_KNOCK unmeasured = ask only.
+        self.arm=arm; self._knock=None; self._knock_off=False
         # sonars/detector feed only the avoidance TURN choice (avoidance.py); say speaks the
         # doorway request. All optional: without them he turns on side sonar and asks silently.
         self.sonars=sonars; self.detector=detector; self.say=say
@@ -65,6 +67,7 @@ class Navigator:
             self.state='FAILED'; self._fail_reason='could not resolve a route for mission'
             return False,self._fail_reason
         self._waypoints=waypoints; self._wp_index=0; self._fail_reason=''; self._door_asks=0
+        self._knock=None; self._knock_off=False
         self.state='SEEKING'
         log.info(f'Navigation started: {mission} -> {len(waypoints)} waypoint(s)')
         return True,'started'
@@ -77,6 +80,11 @@ class Navigator:
             self.safety.stop()
             log_event(log,'NAVIGATION_ABORT',severity='warning',subsystem='navigation',
                       status='aborted',reason=reason)
+        # A knock in progress stops issuing steps: the arm HOLDS where it is (no further motion,
+        # no limp fall). "Put that arm away" stows it; Arm's own idle release applies as always.
+        if self._knock is not None:
+            log.warning(f'Knock abandoned mid-move ({reason}); arm holding where it is.')
+            self._knock=None
         self.state='ABORTED'; self._fail_reason=reason
 
     def reset(self): self.state='IDLE'
@@ -149,11 +157,39 @@ class Navigator:
             where=f' the {self._target_room}' if self._target_room else ' through'
             self.say(f"Can someone let me in? I'm trying to get to{where}.")
 
-    # Design §4.7, ask-only. THE KNOCK IS NOT BUILT: it needs a tap motion with measured joint
-    # limits, and nothing defines one yet. The spec's own rule for a missing arm -- "skip the
-    # knock, still ask aloud, then apply the same retry rule" -- is what runs here.
+    def _attempt_at_door(self,front_cm):
+        """One attempt (design §4.7): knock, then ask -- or ask only when the knock is not
+        possible: no arm, ARM_POSE_KNOCK unmeasured, a release earlier this mission, or the
+        sonar standoff outside ARM_KNOCK_STANDOFF_CM. He never drives to fix the standoff."""
+        plan=None
+        if self.arm is not None and not self._knock_off and knock.standoff_ok(front_cm):
+            sh=int(self.arm.pulse('shoulder')) if self.arm.was_driven('shoulder') else config.ARM_POSE_REST['shoulder']
+            el=int(self.arm.pulse('elbow')) if self.arm.was_driven('elbow') else None
+            plan=knock.knock_plan(sh,el)
+        elif self.arm is not None and config.ARM_POSE_KNOCK and not self._knock_off:
+            log.info(f'No knock: front {front_cm:.0f} cm is outside the knock standoff {config.ARM_KNOCK_STANDOFF_CM}')
+        if plan is None:
+            self._ask_at_door(); return
+        log_event(log,'DOOR_KNOCK',severity='info',subsystem='navigation',status='knocking',
+                  attempt=self._door_asks+1,front_cm=f'{front_cm:.0f}')
+        self._knock=knock.KnockPlayer(self.arm,plan)
+
+    # Design §4.7: knock, then ask, up to DOOR_MAX_ASKS attempts. The wheels are stopped every
+    # tick of DOOR_WAIT, knocking included -- never drive while knocking.
     def _door_wait(self,d,tilt):
         self.safety.stop()
+        if self._knock is not None:
+            if d['front']>config.DIST_CLEAR: self._knock.go_home()   # door opened: arm home first
+            r=self._knock.tick()
+            if r=='running': return
+            self._knock=None
+            if r=='released':
+                self._knock_off=True
+                log.warning('Knock stopped: the arm was released (current limit). Asking only from now on.')
+            if d['front']>config.DIST_CLEAR:
+                log.info('Doorway cleared during the knock -- arm home, resuming the route.')
+                self.state='SEEKING'; return
+            self._ask_at_door(); return
         if d['front']>config.DIST_CLEAR:
             log.info('Doorway cleared -- resuming the route at the same waypoint.')
             self.state='SEEKING'; return
@@ -163,7 +199,7 @@ class Navigator:
             log.warning('Navigation FAILED: doorway stayed blocked.')
             if self.say: self.say("I asked, but nobody let me in.")
             return
-        self._ask_at_door()
+        self._attempt_at_door(d['front'])
 
     # FR-1000-003 (route maintenance): drives toward the next waypoint, arrival tolerance
     # is config.NAV_ARRIVAL_RADIUS_M. Straight-line waypoint following, no obstacle-aware
@@ -174,7 +210,7 @@ class Navigator:
         if f<config.DIST_STOP:
             getattr(self.safety,'obstacle_stop',self.safety.stop)()   # brake, not ramp (2026-10-07)
             if self._at_blocked_doorway():
-                self.state='DOOR_WAIT'; self._ask_at_door(); return
+                self.state='DOOR_WAIT'; self._attempt_at_door(d['front']); return
             self.state='AVOIDING'
             self._avoid_start=time.time(); self._avoid_phase=None
             return

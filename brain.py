@@ -253,7 +253,8 @@ class RoverBrain:
         self.detector=ObjectDetector()
         self.mapping=MappingSession(self.world_model,self.detector)  # §10
         self.navigator=Navigator(self.safety,self.odometry,self.world_model,  # §11
-                                 sonars=self.sonars,detector=self.detector,say=self._say)
+                                 sonars=self.sonars,detector=self.detector,say=self._say,
+                                 arm=self.arm)   # arm: the knock at a shut door (knock.py)
         self.retrieval=RetrievalTask(self.safety,self.arm,self.detector,display=self.display,voice=self.voice,
                                      feedback=lambda: grip.read_feedback(self.adc,self.current))
         self.pursuit=PursuitTask(self.safety,self.detector,display=self.display,voice=self.voice)  # FR-1000

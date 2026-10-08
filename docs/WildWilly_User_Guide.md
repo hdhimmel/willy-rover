@@ -96,7 +96,9 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
 - *"Follow me"* — the same, then he keeps pace with you until you say stop.
 - **"I'm in the kitchen, come to me"** / **"Come to me in the kitchen"** — he drives to that
   room, through the doorways he knows, then looks for you. *(Not yet tried for real.)* He has to
-  have been taught the room first (next section); if a doorway is shut he asks to be let in.
+  have been taught the room first (next section); if a doorway is shut he asks to be let in,
+  up to three times. *(He can also knock with his arm first, but that stays off until his
+  knocking position has been measured.)*
 
 **Teaching him your home:**
 - **"This is the kitchen"** — with him standing in a room, names it. Do each room you want him
