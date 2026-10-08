@@ -81,3 +81,9 @@ def test_backlog_is_dropped_and_wake_model_reset():
     resets=[]; v._wakeword=types.SimpleNamespace(reset=lambda: resets.append(1))
     v._drop_backlog()
     assert v._audio_q.empty() and resets==[1]
+
+def test_self_test_names_a_low_encoder_rail():
+    """FR-100-003 (2026-10-08): R5 low refuses motion at boot, by name."""
+    import inspect, brain
+    src=inspect.getsource(brain.RoverBrain._self_test)
+    assert "r5_low" in src and "encoder supply rail R5 low" in src

@@ -46,7 +46,12 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   20 consecutive scans,
                                                   zero errors, 2026-09-08.
                                                   Encoder and IMU checks
-                                                  outstanding.
+                                                  BUILT and live-proven
+                                                  (pass 10-06/07; fail
+                                                  path 10-08: "encoders
+                                                  not reporting" on Pi-
+                                                  only power). R5 added
+                                                  to the gate 10-08.
                                                   Roll-call is TEN since
                                                   2026-09-30 (0x27 gone).
                                                   Self-test retry probes
@@ -1307,8 +1312,12 @@ signal conditioning board (Master Hardware Design §4.5). Pass conditions:
 
     ⚠ **Under §4.7 the encoder half of this check stops being an I²C read.** It
     becomes a query to Pico A over `uart4-pi5`, which can additionally report R5
-    from its own ADC --- the rail that killed the encoders on 2026-08-25 and that
-    nothing observes today.
+    from its own ADC --- the rail that killed the encoders on 2026-08-25. ⛔ **Superseded
+    2026-10-08:** done. `_self_test()` checks `imu.is_healthy` and `encoders.is_healthy` (Pico A
+    frames fresh) and, since 2026-10-08, **R5 low** (`encoders.r5_low`) — all three refuse motion
+    and name the cause. R5 is also watched every tick (`_check_r5`). **Live:** passes with full
+    power (10-06/07); with only the Pi powered (10-08) it reported "encoders not reporting" and
+    kept motion disabled. Not yet seen on the rover: the IMU-missing and R5-low failure paths.
 
 -   **FR-100-004 (motion inhibit).** Motion stays inhibited unless the two
     preceding checks both pass. This is Directive 2 in FR-000; a release of

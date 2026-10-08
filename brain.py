@@ -454,6 +454,10 @@ class RoverBrain:
         if not self.imu.is_healthy: critical.append('IMU not reporting')
         if self.adc.battery_volts<=0: critical.append('battery ADC not reporting')
         if not self.encoders.is_healthy: critical.append('encoders not reporting')
+        # FR-100-003 (2026-10-08): Pico A also reports the encoder supply rail R5 -- the rail
+        # whose loss killed every encoder on 2026-08-25. Watched every tick already
+        # (_check_r5); now the boot gate refuses motion on it too, naming the rail.
+        elif getattr(self.encoders,'r5_low',False): critical.append('encoder supply rail R5 low')
         if not self.current.is_healthy: critical.append('current monitors not reporting')
         if not self.sonars.is_healthy: critical.append('sonar link (Pico B) not reporting')
         if not self.motors.is_healthy: critical.append('motor drivers not responding')
