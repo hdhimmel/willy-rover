@@ -3305,7 +3305,12 @@ FR-1800-002's "diagnostic logging" clause. See FR-2000-004 for the email side.
 history off-device; previously only the voice path did. **FR-1800-004 / FR-1900-010**
 — `brain.py::_retention_sweep()` runs from `IDLE` at most once a day (first at the
 first IDLE tick after start) and calls `memory.purge_expired()` on `memory.db`.
-Nothing yet calls `privacy.purge_expired()` for files on disk.
+**2026-10-08:** the same sweep now also calls `privacy.purge_expired()` on the rotated log
+backups (`willy.log.*`, never the live file) older than `DATA_RETENTION_DAYS` (30): the log
+was capped by size only (`LOG_MAX_BYTES` 2 MB × `LOG_BACKUP_COUNT` 5), now by time as well.
+Raw audio and camera frames are not kept at all (`RAW_AUDIO_CAMERA_PERSIST` False; TTS temp
+WAVs are deleted after playing; the stuck-alert photo is sent from memory, never written).
+Off-hardware tests: `tests/test_retention.py`.
 
 
 -   **FR-1800-005 controls, built 2026-10-08 (owner request).** ON by voice ("privacy mode",

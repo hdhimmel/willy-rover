@@ -504,7 +504,9 @@ command token, the privacy flag.
 
 **Retention.** `brain.py::_retention_sweep()` calls `memory.purge_expired()` from `IDLE`
 at most once a day (`DATA_RETENTION_DAYS` 30; FR-1800-004 / FR-1900-010).
-`world_model.db` and files on disk (`privacy.purge_expired()`) are not swept.
+Since 2026-10-08 it also calls `privacy.purge_expired()` on rotated log backups
+(`willy.log.*`, never the live file) older than that. Raw audio and camera frames are never
+written. `world_model.db` is not swept: rooms, routes and doorways are kept on purpose.
 
 Off-rover backup (nightly restic to the NAS) and the SD-card refresh are system timers on
 willie, not repository code — Master Hardware Design §5.1.

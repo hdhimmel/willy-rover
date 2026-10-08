@@ -2046,13 +2046,17 @@ class RoverBrain:
 
     def _retention_sweep(self):
         """FR-1800-004 / FR-1900-010: enforce DATA_RETENTION_DAYS. Both purge functions existed
-        and nothing called them. Runs from IDLE, at most once a day; the first run is at the
+        and nothing called them; privacy.purge_expired() (log files) was added 2026-10-08. Runs from IDLE, at most once a day; the first run is at the
         first IDLE tick after start."""
         now=time.time()
         if now-self._retention_t<86400: return
         self._retention_t=now
         try: self.memory.purge_expired()
         except Exception: log.warning('Retention purge of memory.db failed',exc_info=True)
+        # The rotating log is capped by SIZE (LOG_MAX_BYTES x LOG_BACKUP_COUNT); this adds the
+        # TIME cap FR-1800-004 asks for. Rotated backups only -- never the live file.
+        try: privacy.purge_expired(config.WILLY_LOG_ROOT,pattern=f'{config.LOG_FILE}.*')
+        except Exception: log.warning('Retention purge of the logs failed',exc_info=True)
 
     def _battery_reading_disputed(self):
         """True when the reading a halt would act on cannot be trusted. A halt powers the Pi off.
