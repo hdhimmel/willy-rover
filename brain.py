@@ -505,6 +505,9 @@ class RoverBrain:
         if self.pursuit.active: self.pursuit.abort('shutdown')
         if self.rotation.active: self.rotation.abort('shutdown')
         self.faces.stop(); self.feature_requests.stop(); self.remote.stop(); self.voice.stop(); self.email.stop(); self.detector.close()
+        try:
+            import hailo_server; hailo_server.close_client()   # FR-1400-006: release the chip
+        except Exception: log.warning('Hailo server close failed',exc_info=True)
         self.memory.close()  # FR-1900-011: persist any new/updated memory before power-off
         self.world_model.close()  # §9/§10: persist rooms/landmarks/objects/routes before power-off
         self.motors.cleanup(); self.sonars.stop(); self.imu.stop(); self.adc.stop()

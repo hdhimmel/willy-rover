@@ -8,6 +8,7 @@ import config
 import logsetup
 from ai_provider import AIProvider, AIResult, _parse_response
 from logsetup import log_event
+import hailo_server
 from picamera2.devices import Hailo
 from hailo_platform.genai import LLM
 
@@ -25,6 +26,8 @@ log=logsetup.setup('hailo_llm')
 # pins its exact shape.
 _QWEN_DEFAULT_SYSTEM='You are Qwen, created by Alibaba Cloud. You are a helpful assistant.'
 
+# 2026-10-08: with ENABLE_HAILO_SERVER the model runs in hailo_server.py's child process and
+# none of what follows applies -- no freeze here, no brake. It stays for the in-process fallback.
 # ⚠ generate_all() FREEZES THE WHOLE PROCESS while it runs (2026-10-07, live). "Explore." went to
 # the model, which took 5.4 s; at the instant it returned, the IMU, encoders, current monitors,
 # battery ADC and sonars ALL faulted and ALL recovered within 0.1 s. They live on two UARTs and an
@@ -38,7 +41,7 @@ _QWEN_DEFAULT_SYSTEM='You are Qwen, created by Alibaba Cloud. You are a helpful 
 _before_generate=None
 
 def set_before_generate(fn):
-    """Install a callable run just before every generate_all() (brain.py's brake)."""
+    """Install a callable run just before every in-process generation (brain.py's brake)."""
     global _before_generate
     _before_generate=fn
 
@@ -60,7 +63,15 @@ class HailoIntentModel(AIProvider):
     # with it.
     def __init__(self):
         super().__init__()
-        self._enabled=False; self._llm=None
+        self._enabled=False; self._llm=None; self._remote=None
+        # FR-1400-006 real fix: the model runs in the Hailo server process when it is up.
+        client=hailo_server.get_client()
+        if client is not None:
+            if client.info.get('llm'):
+                self._remote=client; self._enabled=True
+            else:
+                log.warning('Hailo server is up without the LLM -- staying disabled.')
+            return
         model_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),config.HAILO_LLM_MODEL_PATH)
         if not os.path.exists(model_path):
             log.warning(f'Hailo LLM HEF missing at {model_path} -- staying disabled.')
@@ -99,6 +110,16 @@ class HailoIntentModel(AIProvider):
         # this is not a behavior change, just documented here since the shape differs from
         # LocalAIProvider's messages-list call.
         full_prompt=_chatml(prompt,system)
+        if getattr(self,'_remote',None) is not None:
+            # Out of process: this thread waits on a pipe, the GIL is free, nothing freezes, so
+            # no brake. A dead or hung server raises ServerDown -> a failed result, as below.
+            try:
+                txt=self._remote.generate(full_prompt,config.HAILO_LLM_TEMPERATURE,
+                                          config.HAILO_LLM_TOP_P,config.HAILO_LLM_MAX_TOKENS)
+            except Exception as e:
+                log.info(f'Hailo server call failed: {type(e).__name__}: {e}')
+                return AIResult(False,0.0,None,False,None,f'{type(e).__name__}: {e}')
+            return self._finish(txt,schema)
         try:
             # Generation parameters are passed explicitly -- see config.py. Leaving them unset
             # means None for all four, which is the runtime's prose-oriented default sampling and
@@ -133,6 +154,9 @@ class HailoIntentModel(AIProvider):
             # in `finally` so a failed/exception call doesn't leave stale context for the next one.
             try: self._llm.clear_context()
             except Exception as e: log.warning(f'Hailo LLM clear_context failed: {e}')
+        return self._finish(txt,schema)
+
+    def _finish(self,txt,schema):
         # Confirmed live: real output can carry leading junk before the JSON and a trailing
         # <|endoftext|> token after it (e.g. ".\n\n{...}\n<|endoftext|>"). _parse_response()'s
         # existing txt[txt.index('{'):txt.rindex('}')+1] slicing already handles both --

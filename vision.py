@@ -99,8 +99,14 @@ class ObjectDetector:
             self._enabled=False; return
         try:
             from picamera2 import Picamera2
-            from picamera2.devices import Hailo
-            self._hailo=Hailo(config.HAILO_YOLO_MODEL_PATH)
+            import hailo_server
+            client=hailo_server.get_client()
+            if client is not None and client.info.get('yolo'):
+                # FR-1400-006: the chip lives in the Hailo server process; frames go to it.
+                self._hailo=hailo_server.RemoteYolo(client)
+            else:
+                from picamera2.devices import Hailo
+                self._hailo=Hailo(config.HAILO_YOLO_MODEL_PATH)
             model_h,model_w,_=self._hailo.get_input_shape()
             self._hailo_input_hw=(model_h,model_w)
             labels_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),config.HAILO_COCO_LABELS_PATH)

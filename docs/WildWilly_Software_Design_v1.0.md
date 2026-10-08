@@ -72,6 +72,7 @@ stubbed, disabled, approximate or not yet run on the rover, it says so.
 | `privacy.py` | 59 | Mic/camera disable flag; cloud-send notes; file purge |
 | `steer_override.py` | 65 | FR-600-004: parked steering override, held in IDLE, ended on leaving it |
 | `knock.py` | 70 | FR-1000-006: fixed timed knock step list and player; off until `ARM_POSE_KNOCK` is measured |
+| `hailo_server.py` | 255 | FR-1400-006: child process owning the Hailo chip (YOLO + LLM); client, restart, in-process fallback |
 | `thermal.py` | 70 | M-009: SoC temperature and fan tach, warm/hot levels, fan-stopped check |
 | `storage.py` | 53 | Data root resolution and availability check |
 | `logsetup.py` | 42 | Logging config and `log_event` structured tags |
@@ -383,6 +384,12 @@ now uses `generate()` instead of `generate_all()`; measured on willie, the longe
 other threads fell from 7.7 s to 2.2 s (the prompt read), ~0.12 s per token after it. Multi-process
 VDevice sharing was ruled out the same day (`h10-hailort` 5.1.1 has no multi-process service);
 the remaining fix is one Hailo server process owning the chip for vision and the model.
+**Built 2026-10-08 (`hailo_server.py`, `ENABLE_HAILO_SERVER`), not yet run on the rover.** The
+child owns the VDevice with YOLO and the LLM on it; vision (`RemoteYolo`) and both intent models
+call it over two Unix-socket channels, each with its own lock and timeout (detect 5 s, generate
+60 s). A timeout or dead pipe kills the child; the next call restarts it, at most once a minute.
+If it never starts, that run uses the in-process path and the brake hook. The child logs to
+stderr (the journal), never to the rover's rotating file.
 
 **Come to me (`come_to_me_task.py`, FR-1000-006) owns no motion.** It sequences
 `Navigator` (room mission, through labelled doorways) and `PursuitTask` (`come_here`, with

@@ -1008,6 +1008,15 @@ LOCAL_LLM_CONFIDENCE_FLOOR=0.55  # FR-1400-001: below this, offer cloud AI fallb
 # intent-reliability batch (experiments/llm_reliability_batch.py) -- that is the number this
 # backend's own pass rate needs to be judged against before treating it as safe to leave on,
 # not an assumed-good ~100%.
+# FR-1400-006 real fix (hailo_server.py, 2026-10-08): one child process owns the Hailo chip for
+# vision AND the model, so the model's prompt read (2.2 s holding the GIL) no longer freezes the
+# rover process. False = the old in-process path (and its brake-before-every-call). If the child
+# will not start, the in-process path is used for that run automatically.
+ENABLE_HAILO_SERVER=True
+HAILO_SERVER_START_TIMEOUT_S=90.0     # child loads YOLO + the 1.6 GB LLM before answering
+HAILO_SERVER_DETECT_TIMEOUT_S=5.0     # a prompt read (~2.2 s) can delay a detection; 5 s = dead
+HAILO_SERVER_GENERATE_TIMEOUT_S=60.0
+HAILO_SERVER_RESTART_S=60.0           # after a crash or timeout, at most one restart a minute
 ENABLE_HAILO_LLM=True   # PRIMARY on-device reasoning (Hailo-10H NPU). 2026-09-01: enabled for autonomous thinking.
                         # STUCK state tries this first; falls back to Claude only if confidence < HAILO_LLM_CONFIDENCE_FLOOR.
 HAILO_LLM_MODEL_PATH='models/hailo_qwen2_1_5b.hef'  # qwen2:1.5b, Hailo GenAI Model Zoo. ~1.6GB, not tracked in git.

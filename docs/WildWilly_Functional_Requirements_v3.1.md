@@ -317,16 +317,19 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   Tailscale Funnel; the Google
                                                   account link is not made.
 
-  FR-1400 Cloud AI        PARTIAL --- freeze      Fallback is Claude (claude-
-                          fix open                sonnet-5-5), owner 2026-10-02.
-                                                  FR-1400-006: brake before
-                                                  every Hailo call (built);
-                                                  streaming generate() cut the
-                                                  process freeze from 7.7 s to
-                                                  2.2 s (measured 2026-10-08);
+  FR-1400 Cloud AI        PARTIAL --- server      Fallback is Claude (claude-
+                          process built, not run  sonnet-5-5), owner 2026-10-02.
+                                                  FR-1400-006: streaming cut the
+                                                  freeze 7.7 s -> 2.2 s (10-08);
                                                   multi-process sharing ruled
-                                                  out; a Hailo server process is
-                                                  the remaining fix, not built.
+                                                  out; Hailo server process
+                                                  (hailo_server.py) BUILT
+                                                  2026-10-08, not yet run on the
+                                                  rover: the chip, YOLO and the
+                                                  model live in one child
+                                                  process, so the rover process
+                                                  no longer freezes. In-process
+                                                  path + brake kept as fallback.
 
   FR-1800 Privacy         PARTIAL --- 1800-005    Privacy controls live
                           live                    2026-10-08. Retention
@@ -2927,6 +2930,21 @@ stays primary (Hailo qwen2 1.5B, faster-whisper, Piper).
     package — and `VDevice(multi_process_service=True)` fails with HAILO_INVALID_OPERATION. The
     remaining route is **one Hailo server process owning the chip for both vision and the
     model**, which Willie talks to over a pipe (re-masked; nothing else changed).
+    ✅ **Built 2026-10-08, not yet run on the rover (`hailo_server.py`,
+    `tests/test_hailo_server.py`):** with `ENABLE_HAILO_SERVER` on, a child process
+    (`python hailo_server.py`, started by the first user) owns the one VDevice. It loads
+    YOLO and the LLM on it and answers over two authenticated Unix-socket connections, one
+    per job, each served by its own thread, so a 5 s generation never queues a detection.
+    The camera stays in the rover process, which sends the 640×640 frame across. The
+    prompt read still holds a GIL, but the child's, so the tick, sensors and motors keep
+    running and no brake is needed. Detection pauses up to ~2.2 s while a prompt is read,
+    which is acceptable because detection is never a stop sensor. A timeout or dead pipe
+    kills the child, and the next call restarts it (at most once a minute,
+    `HAILO_SERVER_RESTART_S`). If the child will not start at all, that run falls back to
+    the in-process path and its brake. One model is now loaded instead of two (brain's and
+    voice's intent models share it). **To verify on the rover:** service restart → log
+    `EVENT=HAILO_SERVER status=up yolo=True llm=True`; a model-path voice command while a
+    20 ms heartbeat runs shows no gap; detection still works ("what do you see").
 
 # FR-1500 Voice Interaction
 
