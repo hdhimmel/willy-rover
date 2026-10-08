@@ -915,7 +915,7 @@ too tight for a full-size 40-pin terminal HAT. Twelve lines land on it:
 | 4 | Pico B link — `uart2-pi5` RXD2 | GP5, phys 29 | |
 | 5 | Pico A link — `uart4-pi5` TXD4 | GP12, phys 32 | |
 | 6 | Pico A link — `uart4-pi5` RXD4 | GP13, phys 33 | |
-| 7 | BNO085 INT | GP15, phys 10 | wired, unused by software |
+| 7 | BNO085 INT | not connected (owner 2026-10-08: Pi pins 8 and 10 are free) | unused by software |
 | 8 | SEN0628 — sensor TX → Pi `uart3-pi5` RXD3 | GP9, phys 21 | terminal silkscreened `MISO` |
 | 9 | SEN0628 — Pi `uart3-pi5` TXD3 → sensor RX | GP8, phys 24 | terminal silkscreened `CE0`. **Required** — the sensor only answers requests |
 | 10 | 5 V | pins 2/4 net | Pico B VSYS |
@@ -1000,7 +1000,10 @@ with the bus dead, a halt on the divider is blocked while that flag stands (Soft
 **Open fault (2026-10-06/07).** The divider read 7.2 V, then 15.4 V (after resistors touching
 were separated), now a **steady 1.77 V at A0** for a 11.7 V pack — ratio 0.150 against 0.242.
 Powered off the legs meter right (3.2 kΩ lower, 9.2 kΩ upper in-circuit). Next: live
-P1-13→P1-17 (feed) and P1-14→P1-17 (tap) to split feed / board / ADC wiring.A reading below
+P1-13→P1-17 (feed) and P1-14→P1-17 (tap) to split feed / board / ADC wiring. **Update:** the open lower-leg 10 kΩ was found
+and soldered (midpoint 4.07 V → 2.89 V); the overdriven ADS1115 was replaced and the new one is
+fully installed (owner, 2026-10-08). Still to verify on the rover: A0 reads the same as the
+midpoint (the first reading after the swap was 1.72 V, taken mid-install).A reading below
 5.0 V (`BAT_IMPLAUSIBLE_V`) is treated as a failed read, not a flat pack.
 
 ### 6.3 IMU
@@ -1013,7 +1016,7 @@ magnetometer-referenced, so the motors can bias it) and the accelerometer.
 | VIN | R4 3.3 V (Pi pin 1) |
 | GND | GND |
 | SDA / SCL | I²C hub |
-| INT | Pi GP15, phys 10 — wired, not read by software |
+| INT | not connected (owner 2026-10-08) — never read by software |
 | RST | Pico B GP15 (pin 20) via J4-2; 10 k pull-up to Pi 3V3 |
 | DI, P0, P1, BT, 3Vo | unconnected (DI low fixes 0x4A) |
 
@@ -1048,17 +1051,16 @@ one corner) is gone with the new housing. Rows 6–7 see floor at 37–60 cm; ro
 room (`TOF_FLOOR_ROWS=(6,7)`, the only rows the floor profile keeps). Profile saved
 2026-10-07 (rows 6–7 only).
 
-**Second SEN0628 — on order (2026-10-07), same model. Planned wiring, not yet fitted:**
+**Second SEN0628 — on order (2026-10-07), same model. Harness wired in place 2026-10-08 (owner); sensor plugs in on arrival:**
 
 | Pi pin | GPIO | UART0 | To |
 |---|---|---|---|
-| 8 | GPIO14 | TXD0 | ToF #2 **RX** |
+| 8 | GPIO14 | TXD0 | ToF #2 **RX** (green wire) |
 | 10 | GPIO15 | RXD0 | ToF #2 **TX** |
 
-- **Pin 10 is freed by moving the BNO085 INT wire**, which software never read. INT moves to
-  **Pico B GP14 (physical pin 19)**, next to RST on GP15 — 3.3 V both sides, needs a new J4-3
-  or a flying lead. (Later: Pico B can count INT pulses into its frame as an IMU-alive check
-  independent of I²C.)
+- **Pins 8 and 10 are free** (owner, 2026-10-08) — the BNO085 INT wire documented on pin 10 is
+  not there. INT can later go to **Pico B GP14 (physical pin 19)**, next to RST on GP15, for an
+  IMU-alive check independent of I²C; nothing needs it now.
 - `config.txt` gains `dtoverlay=uart0-pi5` → `/dev/ttyAMA0`. Not UART1: GPIO0/1 are the HAT
   EEPROM pins the Witty Pi uses. Both wires required, as for #1 — the sensor never streams.
 - **Power from the 3.3 V rail** (owner), not the Pi's pin 1 3V3 that feeds #1 and the I²C
@@ -1083,7 +1085,7 @@ room (`TOF_FLOOR_ROWS=(6,7)`, the only rows the floor profile keeps). Profile sa
 | VCC | Pi header pin 1 (3V3, R4) |
 | GND | Pi header pin 6 or 9 |
 | TX | Pi GP9 `uart3-pi5` RXD3, phys 21 |
-| RX | Pi GP8 `uart3-pi5` TXD3, phys 24 — **required** |
+| RX — **green** wire (owner 2026-10-08) | Pi GP8 `uart3-pi5` TXD3, phys 24 — **required** |
 
 **Protocol** (from `DFRobot_MatrixLidar.cpp`; implemented in `tof.py` and
 `scripts/tof_probe.py`):
@@ -1256,6 +1258,11 @@ supply: a swinging steering servo left its reading flat. Each plugs
 into a 3-pin channel header; the board takes V+ from R2. All six were re-horned straight at
 1500 µs on 2026-10-05; the earlier per-corner trims are void.
 
+**Gear redesign in progress (2026-10-08, owner):** the steering servo-to-wheel gear pair is being
+redesigned with a **spring tethering the two gears of each wheel**, so backlash cannot let the
+alignment slip (wheels have needed re-setting by hand after bumps and moves). When fitted,
+re-check each corner straight at its `STEER_CENTER_US` and the ~15°/200 µs scale.
+
 **Direction and scale (2026-10-07, each corner alone to 1700 µs, owner by eye):** all four corner
 wheels point **right** for +µs, about 15° per 200 µs — including the rears, whose servos are
 mounted reversed (the linkage undoes it). Middles not measured. Wheelbase 0.32 m front-to-rear
@@ -1363,7 +1370,7 @@ current; do not derive one from the other.
 | 6, 9 | GND | star; Pico A pin 18, Pico B ground, ToF GND |
 | 7 | GP4 — `uart2-pi5` TXD2 | → Pico B GP13 (UART0 RX, pin 17) |
 | 8 | GP14 — UART0 TXD | unused, permanently |
-| 10 | GP15 — UART0 RXD | BNO085 INT (unused by software) |
+| 10 | GP15 — UART0 RXD | free (owner 2026-10-08) → ToF #2 TX, planned |
 | 21 | GP9 — `uart3-pi5` RXD3 (SPI0 MISO name) | ← SEN0628 TX |
 | 24 | GP8 — `uart3-pi5` TXD3 (SPI0 CE0 name) | → SEN0628 RX |
 | 27, 28 | GP0 ID_SD / GP1 ID_SC | reserved — AI HAT EEPROM |
@@ -1577,8 +1584,8 @@ Item numbers are stable; closed items are removed, not renumbered.
     rails; INA260s on the power tray; no LEDs on the GeeekPi breakout; LTC4311 fitted; rear
     USB camera is an **Arducam OV9281 (UC599), global shutter** — `0c45:6366` is its USB bridge's
     ID, which lsusb reported as Microdia "Webcam Vitade AF" (v4l2 and /dev/v4l/by-id, 2026-10-07);
-    BNO085 INT is on
-    the Pi (GP15, phys 10, unused by software) and its RST on Pico B GP15.
+    BNO085 INT is not connected (corrected 2026-10-08, owner: Pi pins 8 and 10 are free) and its
+    RST is on Pico B GP15.
 
 ---
 

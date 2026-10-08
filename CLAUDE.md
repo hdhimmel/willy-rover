@@ -147,13 +147,12 @@ Other header pins:
 
 - Pin 1 **3V3** — R4: all I²C device logic, SEN0628, BNO085 RST pull-up.
 - Pins 2/4 **5V** — from the Witty Pi output; display tap; Pico B VSYS.
-- GP15 **UART0 RXD** (phys 10) — BNO085 INT, wired, not read by software.
+- GP15 **UART0 RXD** (phys 10) — free (owner 2026-10-08; the BNO085 INT wire is not connected).
 - GP0 **ID_SD** / GP1 **ID_SC** (phys 27/28) — reserved for the AI HAT EEPROM.
 - GP14 **UART0 TXD** (phys 8) — unused. **The serial console stays disabled**; no Pico
   goes on `uart0`.
 - **Planned (2026-10-07): a second SEN0628 on `uart0`** (`dtoverlay=uart0-pi5`, `/dev/ttyAMA0`):
-  phys 8 TXD0 → ToF RX, ToF TX → phys 10 RXD0. Pin 10 is freed by moving the BNO085 INT wire
-  to Pico B GP14 (pin 19). Powered from the 3.3 V rail; grounds are a common star.
+  phys 8 TXD0 → ToF RX, ToF TX → phys 10 RXD0 (both free). Powered from the 3.3 V rail; grounds are a common star.
 - **SPI0 stays disabled** (`dtparam=spi=off`) — GP8/GP9 carry `uart3-pi5`.
 
 ---
