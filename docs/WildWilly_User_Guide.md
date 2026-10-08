@@ -178,10 +178,15 @@ a plain reply doesn't count. Approval files the request — nothing changes unti
 
 ## Privacy
 
-To switch off his **microphone and camera** completely, ask the maintainer: it's done with a
-setting on his computer, and stays off across restarts until it's removed. There is no voice
-command or screen button for it yet. With it on he can't hear "Hey Willie", see you, or
-recognise faces — "stop" still works from his screen button and the power switch.
+- **To switch his microphone and camera off:** say **"Privacy mode"**, **"Stop listening"** or
+  **"Turn off your microphone and camera"**. He says so, then both go off. His screen shows
+  **"PRIVACY: microphone and camera OFF"**. It stays off, even across restarts, until you turn
+  it back on.
+- **To turn them back on:** tap **RESUME LISTENING** on his screen **twice** (the first tap
+  arms it, the second confirms — so a brush against the screen can't do it). Howard can also
+  send the email command **"privacy off"**. You can't do it by voice — he can't hear you.
+- **While it's on:** he can't hear "Hey Willie" or **"stop"**, can't see you or recognise faces.
+  To stop him, use the **STOP SVC** button on his screen or the power switch.
 
 ## Battery
 

@@ -172,6 +172,12 @@ _COME_TO_ME=re.compile(r"(?:i'?m|i am) in the ([a-z][a-z ]{1,30}?)[,.]? (?:(?:pl
 # A bare "turn left" stays the short manual nudge -- only an explicit angle or "around" rotates.
 _TURN_AROUND=re.compile(r"(?:turn|spin) (?:yourself )?around",re.I)
 _TURN_DEGREES=re.compile(r"(?:turn|rotate|spin) (left|right) (\d{1,3}) degrees",re.I)
+# FR-1800-005 privacy (2026-10-08). Turning it ON by voice only: once on he cannot hear, so the
+# way back is the screen (two-tap RESUME) or an owner email "privacy off".
+_PRIVACY_ON=re.compile(r"(?:privacy mode(?: on)?|turn on privacy(?: mode)?|go private|stop listening(?: to (?:me|us))?|"
+                       r"turn off your (?:microphone|mic|camera|cameras)(?: and (?:your )?(?:microphone|mic|camera|cameras))?)",re.I)
+_PRIVACY_OFF=re.compile(r"(?:privacy (?:mode )?off|turn off privacy(?: mode)?|resume listening|"
+                        r"turn (?:on|back on) your (?:microphone|mic|camera|cameras)(?: and (?:your )?(?:microphone|mic|camera|cameras))?)",re.I)
 _MARK_STAIRS=re.compile(r"(?:there are |these are )?(?:the )?(?:stairs|steps)(?: are)? (?:here|ahead|in front of you)",re.I)
 # FR-1900-001/002 demonstrations.
 _DEMO_START=re.compile(r"(?:watch me|follow me)?[\s,]*(?:and )?learn (?:the |this )?(?:way|route|path) (?:to )?(?:the )?([a-z][a-z ]{1,30})",re.I)
@@ -191,7 +197,7 @@ _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
 _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve',
     'confirm_receipt','map','stop_map','shutdown','status','battery','arm_stow','arm_home','wave',
     'come_here','come_to_me','rotate','follow','diagnostics','where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
-    'demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date'})
+    'privacy_on','privacy_off','demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
 def _fp(core):
@@ -860,6 +866,8 @@ class VoicePipeline:
         # LLM rather than risk matching on a fragment (e.g. "don't stop" must never hit 'stop').
         norm=text.strip().rstrip('.!? ')
         norm=re.sub(r'^(?:(?:hey|ok|okay)[\s,]+)?willie[\s,]+','',norm,flags=re.I)
+        if _PRIVACY_ON.fullmatch(norm): return {'intent':'privacy_on','args':{},'reply':''}
+        if _PRIVACY_OFF.fullmatch(norm): return {'intent':'privacy_off','args':{},'reply':''}
         if _TURN_AROUND.fullmatch(norm): return {'intent':'rotate','args':{'degrees':180},'reply':''}
         m=_TURN_DEGREES.fullmatch(norm)
         if m:
@@ -966,7 +974,7 @@ class VoicePipeline:
         motion_intents={'forward','reverse','turn_left','turn_right','go_to','retrieve',
                          'confirm_receipt','map','stop_map','shutdown','status','battery',
                          'arm_stow','arm_home','wave','come_here','come_to_me','rotate','follow','diagnostics',
-                         'where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
+                         'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs',
                          'demo_start','demo_stop','demo_replay','enrol','forget_everyone'}
         if name in motion_intents:
             # FR-1500-007: queued only — brain.py applies full Directive 1-5 gating before this

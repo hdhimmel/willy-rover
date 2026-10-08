@@ -3276,6 +3276,11 @@ history off-device; previously only the voice path did. **FR-1800-004 / FR-1900-
 first IDLE tick after start) and calls `memory.purge_expired()` on `memory.db`.
 Nothing yet calls `privacy.purge_expired()` for files on disk.
 
+
+-   **FR-1800-005 controls, built 2026-10-08 (owner request).** ON by voice ("privacy mode",
+    "stop listening", "turn off your microphone/camera") or owner email "privacy on"; OFF by a
+    two-tap RESUME button on the face (shown with a "PRIVACY" banner) or owner email "privacy
+    off" — never by voice. `tests/test_privacy_control.py`. Not yet tried on the rover.
 # FR-1900 Learning from Observation and Instruction
 
 Covers learning from watched demonstrations, observed

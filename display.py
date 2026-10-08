@@ -92,6 +92,11 @@ class WillyFace:
         # choice that changes nothing.
         self._offer_roam=False
         self._roam_event=threading.Event()
+        # FR-1800-005 privacy (2026-10-08): while mic+camera are off, a banner and a two-step
+        # RESUME button. Voice cannot be the way back on -- he cannot hear -- so the screen is.
+        self._privacy_event=threading.Event(); self._privacy_armed_until=0.0
+        self._privacy_on=False; self._privacy_check_t=0.0
+        self._privacy_button_rect=pygame.Rect(W//2-230,H//2-150,460,96)
         self._roam_button_rect=pygame.Rect(W//2-230,H//2+60,460,96)
 
     def reset_tapped(self):
@@ -110,6 +115,26 @@ class WillyFace:
         if self._override_event.is_set():
             self._override_event.clear(); return True
         return False
+
+    def privacy_resume_tapped(self):
+        """True once per confirmed (two-tap) RESUME press while privacy mode is on."""
+        if self._privacy_event.is_set():
+            self._privacy_event.clear(); return True
+        return False
+
+    def _handle_privacy_tap(self,x,y):
+        # Two-step, same shape as _handle_stop_tap: re-enabling the microphone and camera must
+        # never happen from one stray touch. A tap elsewhere while armed cancels.
+        with self._lock:
+            if not self._privacy_on: return
+            inside=self._privacy_button_rect.collidepoint(x,y)
+            if inside and self._t<self._privacy_armed_until:
+                self._privacy_armed_until=0.0; fire=True
+            elif inside:
+                self._privacy_armed_until=self._t+_STOP_ARM_S; fire=False
+            else:
+                self._privacy_armed_until=0.0; fire=False
+        if fire: self._privacy_event.set()
 
     def roam_tapped(self):
         # Same contract as reset_tapped()/override_tapped(): True exactly once per press,
@@ -287,6 +312,7 @@ class WillyFace:
                     self._handle_stop_tap(e.x*W,e.y*H)
                     self._handle_override_tap(e.x*W,e.y*H)
                     self._handle_roam_tap(e.x*W,e.y*H)
+                    self._handle_privacy_tap(e.x*W,e.y*H)
                 elif e.type==pygame.MOUSEBUTTONDOWN:
                     with self._lock: awaiting=self._awaiting_reset
                     if awaiting and self._reset_button_rect.collidepoint(e.pos):
@@ -294,6 +320,7 @@ class WillyFace:
                     self._handle_stop_tap(*e.pos)
                     self._handle_override_tap(*e.pos)
                     self._handle_roam_tap(*e.pos)
+                    self._handle_privacy_tap(*e.pos)
             fps=config.DISPLAY_FPS_QUIET if self._quiet else config.DISPLAY_FPS
             dt=1.0/fps; self._t+=dt
             if config.ENABLE_DISPLAY_EXPRESSIONS:
@@ -476,6 +503,24 @@ class WillyFace:
         # suppressed under awaiting_reset: the two share this part of the screen and can only
         # collide if something has gone wrong, in which case the fault reset is the one that
         # matters. Single tap -- see _handle_roam_tap().
+        # FR-1800-005: privacy state straight from the flag file, checked once a second (an
+        # os.path.exists every frame is cheap, but there is no need).
+        if self._t>=self._privacy_check_t:
+            self._privacy_check_t=self._t+1.0
+            try:
+                import privacy
+                on=privacy.mic_camera_disabled()
+            except Exception: on=False
+            with self._lock: self._privacy_on=on
+        if self._privacy_on:
+            banner=self.f_md.render('PRIVACY: microphone and camera OFF',True,C_AMBER)
+            s.blit(banner,(W//2-banner.get_width()//2,24))
+            r=self._privacy_button_rect
+            armed=self._t<self._privacy_armed_until
+            pygame.draw.rect(s,C_AMBER if armed else C_DIM,r,border_radius=16)
+            pygame.draw.rect(s,C_BG,r,4,border_radius=16)
+            label=self.f_md.render('TAP AGAIN TO RESUME' if armed else 'RESUME LISTENING',True,C_BG if armed else C_TEXT)
+            s.blit(label,(r.centerx-label.get_width()//2,r.centery-label.get_height()//2))
         if offer_roam and not awaiting_reset:
             r=self._roam_button_rect
             pulse=0.5+0.5*math.sin(t*3)

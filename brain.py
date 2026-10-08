@@ -1,4 +1,4 @@
-import json,math,time,socket,os,subprocess,threading,logging,config,logsetup,storage
+import json,math,time,socket,os,subprocess,threading,logging,config,logsetup,storage,privacy
 from logsetup import log_event
 if not config.SIMULATE_HARDWARE: import board,busio
 from motors import DriveBase,Steering
@@ -59,14 +59,14 @@ _NON_EXPIRING_INTENTS=frozenset({'confirm_receipt'})
 #                     hundred ms on the CPU-YOLO fallback, which is precisely when the rover is
 #                     already under strain.
 # Both belong here once they are made non-blocking, and not before.
-_SPEECH_ONLY_INTENTS=frozenset({'status','battery','where_are_you','what_doing'})
+_SPEECH_ONLY_INTENTS=frozenset({'status','battery','where_are_you','what_doing','privacy_on'})
 # Command sources that are not someone in the room speaking: they never answer a pending
 # yes/no ask (the shutdown confirmation, the roam permission). See answers_ask.
 _NON_SPOKEN_SOURCES=frozenset({'remote','email'})
 # What an email may queue: everything a spoken command could, through the same gating.
 _EMAIL_QUEUEABLE=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve','map',
     'stop_map','status','battery','arm_stow','arm_home','wave','come_here','come_to_me','rotate','follow','diagnostics',
-    'where_are_you','what_do_you_see','what_doing','name_room','mark_stairs','shutdown','demo_replay'})
+    'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs','shutdown','demo_replay'})
 
 # Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
 # that state, before either drain pass, so Willie heard every command and answered none -- with
@@ -844,6 +844,9 @@ class RoverBrain:
         # whole reason it exists (2026-08-24: Willie sat healthy but unreachable with no way to
         # stop him from the panel). display.py's two-step confirm means this only fires on a
         # deliberate second tap. Brake first, then let main.py's normal shutdown path run.
+        if self.display.privacy_resume_tapped():
+            privacy.enable_mic_camera()
+            self._say("My microphone and camera are back on.")
         if self.display.stop_tapped():
             log.warning('STOP SVC tapped on screen — braking and stopping the service.')
             self.safety.emergency_stop('operator stop button')
@@ -1457,6 +1460,14 @@ class RoverBrain:
             pose=self.world_model.get_robot_pose()
             room=self.world_model.get_room(pose.x,pose.y)
             self._say(f"I'm in the {room.name}." if room else "I'm not sure which room I'm in.")
+        elif cmd.get('intent')=='privacy_on':
+            # FR-1800-005. Said BEFORE the flag goes down: speaking uses the speaker, not the mic.
+            self._say("Privacy on. My microphone and camera are off. Tap the button on my screen "
+                      "twice to turn them back on.")
+            privacy.disable_mic_camera(f'{cmd.get("source","voice")} command')
+        elif cmd.get('intent')=='privacy_off':
+            # Owner email only in practice -- by voice he cannot hear it, the screen has its own button.
+            privacy.enable_mic_camera(); self._say("My microphone and camera are back on.")
         elif cmd.get('intent')=='what_doing':
             self._say(self._activity_phrase())
         elif cmd.get('intent')=='what_do_you_see':
