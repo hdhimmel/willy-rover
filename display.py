@@ -76,6 +76,7 @@ class WillyFace:
         # under-voltage/throttling is ACTUALLY happening, dim amber for "happened earlier this
         # boot", dim for clean. Sampled on the same background thread as the network status.
         self._pwr_text=''; self._pwr_color=C_DIM
+        self._temp_text=''; self._temp_color=C_DIM   # M-009: only shown from THERMAL_WARM_C up
         # Self-test override button (owner request 2026-08-24). Offered by brain.py only after
         # the startup self-test has failed SELFTEST_OVERRIDE_AFTER times for the same reason.
         # Two-step like the stop button -- this enables motion on a rover that failed its own
@@ -226,9 +227,18 @@ class WillyFace:
                 elif val&0x50000: ptext,pcolor='pwr dip @boot',C_DIM  # sticky only -- informational
             except Exception:
                 ptext,pcolor='PWR ?',C_AMBER
+            # M-009 thermal: silent below THERMAL_WARM_C, amber warm, red from THERMAL_HOT_C.
+            ttext,tcolor='',C_DIM
+            try:
+                import thermal
+                tc=thermal.read_cpu_c()
+                if tc is not None and tc>=config.THERMAL_WARM_C:
+                    ttext,tcolor=f'CPU {tc:.0f}C',(C_RED if tc>=config.THERMAL_HOT_C else C_AMBER)
+            except Exception: pass
             with self._lock:
                 self._net_text=text; self._net_color=color
                 self._pwr_text=ptext; self._pwr_color=pcolor
+                self._temp_text=ttext; self._temp_color=tcolor
             for _ in range(int(_NET_POLL_S*2)):
                 if not self._running: return
                 time.sleep(0.5)
@@ -363,6 +373,7 @@ class WillyFace:
             heard=self._t<self._heard_until
             net_text=self._net_text; net_color=self._net_color
             pwr_text=self._pwr_text; pwr_color=self._pwr_color
+            temp_text=self._temp_text; temp_color=self._temp_color
             offer_override=self._offer_override
             offer_roam=self._offer_roam
             override_armed=self._t<self._override_armed_until
@@ -460,6 +471,9 @@ class WillyFace:
         if pwr_text:
             pwr_surf=self.f_sm.render(pwr_text,True,pwr_color)
             s.blit(pwr_surf,(W-pwr_surf.get_width()-12,self._stop_button_rect.bottom+30))
+        if temp_text:
+            temp_surf=self.f_sm.render(temp_text,True,temp_color)
+            s.blit(temp_surf,(W-temp_surf.get_width()-12,self._stop_button_rect.bottom+52))
         # Self-test override button. Only drawn once brain.py has actually offered it (repeated
         # failures, same reason) -- never during a normal fault, so it can't be mistaken for a
         # general "dismiss this" control. Amber not green: this enables motion on a rover that

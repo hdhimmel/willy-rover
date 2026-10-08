@@ -1167,6 +1167,16 @@ MIC_CAMERA_DISABLE_FLAG_PATH='secrets/privacy_disable.flag'
 DATA_RETENTION_DAYS=30          # FR-1800-004
 RAW_AUDIO_CAMERA_PERSIST=False  # FR-1800-002
 
+# M-009 thermal monitoring (thermal.py, 2026-10-08). Visibility only -- the Pi 5 firmware
+# throttles itself (soft ~80 C, hard 85 C). Measured on willie 10-08: 58 C idle, fan ~5700 rpm.
+THERMAL_ZONE_PATH='/sys/class/thermal/thermal_zone0/temp'
+THERMAL_POLL_S=5.0
+THERMAL_WARM_C=70.0             # shown on the face
+THERMAL_HOT_C=80.0              # firmware soft-throttle point: logged as a warning, said once
+THERMAL_HYSTERESIS_C=3.0        # a level clears only this far below its threshold
+THERMAL_FAN_CHECK_C=60.0        # fan reading 0 rpm at or above this = fan stopped
+THERMAL_TREND_LOG_S=600.0       # one temperature/fan line in the log every 10 minutes
+
 # --- FR-1900 local memory store. SQLite, no external dependency — safe to default on.
 ENABLE_LEARNING=True
 MEMORY_DB_PATH='memory.db'

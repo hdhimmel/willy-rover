@@ -1,4 +1,4 @@
-import json,math,time,socket,os,subprocess,threading,logging,config,logsetup,storage,privacy
+import json,math,time,socket,os,subprocess,threading,logging,config,logsetup,storage,privacy,thermal
 from logsetup import log_event
 if not config.SIMULATE_HARDWARE: import board,busio
 from motors import DriveBase,Steering
@@ -296,6 +296,8 @@ class RoverBrain:
         # Encoder-rail (R5) warning, 2026-10-01 -- see _check_r5(). Warn only, never a stop.
         self._r5_low_since=None; self._r5_low=False
         self._bat_halt_since=None   # battery-tier halt confirmation clock, see _battery_halt()
+        self.thermal=thermal.ThermalMonitor()   # M-009, polled from _tick(), see _thermal_tick()
+        self._fan_warned=False
         self._retention_t=0.0       # FR-1800-004: last retention sweep, see _retention_sweep()
         self._arm_over_since=None   # FR-700-001: arm over-current clock, see _check_arm_current()
         self._oc_since={}           # FR-200-002: per-rail overcurrent clocks, see _check_overcurrent()
@@ -865,6 +867,7 @@ class RoverBrain:
             self.display.update_state('warn','STOPPING SERVICE…')
             self._running=False
             return
+        self._thermal_tick()
         if self.voice.stop_requested.is_set():
             # Checked before any Directive gating below — see voice.py's stop_requested docstring.
             # This is the only place that ever clears it, and this is the tick thread, so
@@ -1439,7 +1442,8 @@ class RoverBrain:
             elif bat_v<=0:
                 self._say(f"I'm currently {self._state.lower()}, and I can't read my battery.")
             else:
-                self._say(f"I'm currently {self._state.lower()}, battery at {bat_v:.1f} volts, {bat_pct} percent.")
+                self._say(f"I'm currently {self._state.lower()}, battery at {bat_v:.1f} volts, {bat_pct} percent."
+                          +(" I'm running hot." if getattr(self,'thermal',None) and self.thermal.level=='hot' else ''))
         elif cmd.get('intent')=='battery':
             bat_v=self.adc.battery_volts; bat_pct=self.adc.battery_pct
             self._say("I can't read my battery right now." if bat_v<=0 else
@@ -2043,6 +2047,19 @@ class RoverBrain:
             return (f'encoder rail R5 low ({self.encoders.r5_millivolts} mV) -- '
                     f'{wheels} reading zero is likely the rail, not the wheels')
         return f'wheel stall: {wheels}'
+
+    def _thermal_tick(self):
+        """M-009. Visibility only: logs, and says once when he reaches HOT or the fan stops.
+        Never touches motion -- the Pi 5 firmware throttles itself."""
+        try: level=self.thermal.poll(time.time())
+        except Exception: return
+        if level=='hot':
+            self._say(f"My processor is running hot, {self.thermal.temp_c:.0f} degrees.")
+        if self.thermal.fan_stopped and not self._fan_warned:
+            self._fan_warned=True
+            self._say("My cooling fan has stopped.")
+        elif not self.thermal.fan_stopped:
+            self._fan_warned=False
 
     def _retention_sweep(self):
         """FR-1800-004 / FR-1900-010: enforce DATA_RETENTION_DAYS. Both purge functions existed

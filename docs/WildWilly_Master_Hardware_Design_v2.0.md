@@ -870,7 +870,8 @@ Edit the repo file and republish to the same URL — printed copies carry the li
 
 Powered through the header 5 V pins from Witty Pi 5, not USB-C. The GPIO path bypasses
 the Pi's onboard input protection. There is no brownout protection for the Pi in software
-or hardware; rail overcurrent trips exist for `bus_12v` and `steering_5v`, and the arm
+or hardware; a rail overcurrent trip exists for `bus_12v` only (`steering_5v` dropped
+2026-10-08: 0x40 cannot see servo current), and the arm
 rail has its own current guard (Software Design §2.3).
 
 **Boot and storage** (configured on willie itself, not in the repository):

@@ -6,9 +6,9 @@ Version 3.1**
   -----------------------------------------------------------------------
   Field                   Value
   ----------------------- -----------------------------------------------
-  Revision                3.4
+  Revision                3.5
 
-  Date                    2026-09-24
+  Date                    2026-10-08
 
   Owner                   Howard Himmel
 
@@ -23,8 +23,8 @@ Version 3.1**
 
   -----------------------------------------------------------------------
 
-**This document carries 128 requirement IDs** (distinct FR-xxx-yyy rows, recounted
-2026-10-02; it said 117). §V is the verification-status
+**This document carries 139 requirement IDs** (distinct FR-xxx-yyy rows, recounted
+2026-10-08; it said 128), plus the 20 mission-level IDs M-001..M-020. §V is the verification-status
 register; §V.1 records which requirement groups have implementing modules and test
 coverage, and §V.2 lists the known gaps where a requirement cannot currently be
 satisfied as written.
@@ -37,8 +37,20 @@ Requirements are implemented and unit-tested off-hardware unless noted.
   -----------------------------------------------------------------------
   Group                   Status                  Notes
   ----------------------- ----------------------- -----------------------
-  FR-000 Prime Directives Implemented, not        Requires E-stop and
-                          live-verified           motion testing
+  FR-000 Prime Directives PARTIAL --- parts live  The E-stop is the main power
+                                                  switch: it cuts everything,
+                                                  the Pi included, so there is
+                                                  nothing to sense (FR-300,
+                                                  G-1). Live: rotation bump stop
+                                                  (couch, ~1.7 s, 2026-10-07);
+                                                  low-battery halt (2026-10-02);
+                                                  self-test refuses motion on
+                                                  Pi-only power (2026-10-08).
+                                                  Not yet run: obstacle brake at
+                                                  20 cm with the ToF upper rows,
+                                                  tilt limit against the real
+                                                  tipping angle, bus overcurrent
+                                                  trip, link-loss stop.
 
   FR-100 Startup          PARTIAL --- I²C         Eleven-device roll-call
                           enumeration             passes on the single
@@ -71,46 +83,36 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   2026-10-06; the RTC had
                                                   been a week fast).
 
-  FR-200 Power            PARTIAL --- rail        Pi rail 5.144V,
-                          measurement, and the      throttled 0x0. Divider
-                          BATTERY DIVIDER IS       fed and in spec since
-                          READING (2026-09-14);     2026-09-14.
-                          scale trimmed           `BATTERY_DIVIDER_SCALE`
-                          2026-10-01               = 0.2432, ONE-POINT trim
-                                                  2026-10-01 (A0 2.7653V
-                                                  vs 11.37V metered);
-                                                  second point open. The
-                                                  unfed-divider (0.0146V,
-                                                  2026-09-02..14) and
-                                                  0.3237-scale states
-                                                  recorded here earlier
-                                                  are both over.
-                                                  Ladder halts (rth and
-                                                  shutdown tiers) and
-                                                  per-rail overcurrent:
-                                                  built 2026-10-02, not
-                                                  yet run on the rover.
-                                                  See Master Hardware
-                                                  Design §6.2 / §14 item
-                                                  12.
-                                                  2026-10-07: authority
-                                                  explicit -- bus live =
-                                                  bus is the reading;
-                                                  bus dead = divider,
-                                                  and a halt is vetoed
-                                                  while the divider is
-                                                  flagged suspect. The
-                                                  divider reads 0.31 vs
-                                                  0.242 design: resistor
-                                                  values being metered.
-                                                  2026-10-07 later: legs
-                                                  meter right powered off
-                                                  (3.2k / 9.2k in-circuit)
-                                                  but live A0 reads a
-                                                  steady 1.77 V for ~2.9
-                                                  expected (ratio 0.15).
-                                                  Next: live P1-13 and
-                                                  P1-14 to P1-17.
+  FR-200 Power            PARTIAL --- ADS1115     Reading authority
+                          replaced 2026-10-08;    (2026-10-07): bus live = the
+                          calibration open        +12V bus INA260 (0x45) IS the
+                                                  battery reading; bus dead =
+                                                  the ADS1115 divider, and a
+                                                  halt is vetoed while the
+                                                  divider is flagged suspect.
+                                                  Divider fault found
+                                                  2026-10-07: the lower-leg 10 k
+                                                  of 4.7k||10k was open, the
+                                                  midpoint read 4.07 V on a
+                                                  12.09 V pack, over-ranged A0
+                                                  and killed the old ADS1115. 10
+                                                  k resoldered: midpoint 2.89 V
+                                                  at P1-14. New ADS1115 fitted
+                                                  2026-10-08 (0x48, self-test
+                                                  passes); A0 against the
+                                                  midpoint under 12 V not yet
+                                                  checked. BATTERY_DIVIDER_SCALE
+                                                  0.2432 is the old one-point
+                                                  trim: redo, both points. Low-
+                                                  battery halt fired live
+                                                  2026-10-02 at ~10 V (tier not
+                                                  recorded). Overcurrent:
+                                                  bus_12v 9 A only (steering_5v
+                                                  trip dropped 2026-10-08,
+                                                  owner), built, not yet run. Pi
+                                                  rail 5.144 V, throttled 0x0.
+                                                  See Master Hardware Design
+                                                  §6.2.
 
   FR-300 Safety / E-stop  SATISFIED by hardware   The E-stop IS the main power
                           (owner decision          switch: it cuts all power,
@@ -166,42 +168,29 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   while roaming. Plug
                                                   checked OK; open.
 
-  FR-600 Steering         Not live-verified       Servo V+ power path
-                                                  CONFIRMED (owner,
-                                                  2026-10-07); peak current
-                                                  on R2 still unmeasured.
-                                                  Channel map MEASURED
-                                                  2026-10-06, one at a
-                                                  time: LF3 RF2 LM0 RM1
-                                                  LR9 RR8. All six centre
-                                                  straight at 1500. INA260
-                                                  0x40 saw no current
-                                                  while a servo swung:
-                                                  servo V+ is not on its
-                                                  path (see FR-600).
-                                                  2026-10-07: +us turns
-                                                  all four corners RIGHT,
-                                                  ~15 deg/200 us (by eye).
-                                                  Rotation mode (corners on
-                                                  the turning circle, spin
-                                                  on IMU, sonar/ToF/camera
-                                                  watching): built; live
-                                                  2026-10-07: LIVE-
-                                                  VERIFIED both ways in
-                                                  open space: +90 -> +87.8,
-                                                  -90 -> -93.8; front and
-                                                  rear cameras agree with
-                                                  the IMU, check live.
-                                                  No rear/diagonal
-                                                  sensing: spun into the
-                                                  couch once; IMU bump
-                                                  stop added and proven
-                                                  (stopped in ~1.7 s).
-                                                  Wired into brain.py
-                                                  (voice turn around/N
-                                                  degrees, roam avoidance
-                                                  turns): built, not yet
-                                                  run in the service.
+  FR-600 Steering         PARTIAL --- map,        Channel map MEASURED
+                          direction and           2026-10-06: LF3 RF2 LM0 RM1
+                          rotation live-          LR9 RR8, all six straight at
+                          verified                1500. +us turns all four
+                                                  corners RIGHT, ~15 deg/200 us
+                                                  by eye (2026-10-07). Rotation
+                                                  mode LIVE 2026-10-07 both ways
+                                                  (+90 -> +87.8, -90 -> -93.8),
+                                                  front and rear cameras agree
+                                                  with the IMU, bump stop proven
+                                                  (~1.7 s); voice "turn around"
+                                                  and roam avoidance turns run
+                                                  in the service. Servo V+ path
+                                                  confirmed (owner 2026-10-07);
+                                                  peak current unmeasured, 0x40
+                                                  does not see it. Not built:
+                                                  FR-600-004 live operator
+                                                  override (bench script only).
+                                                  Steering gears being
+                                                  redesigned (spring anti-
+                                                  backlash): re-check centres
+                                                  and the 15 deg/200 us scale
+                                                  once fitted.
 
   FR-700 Arm              Not live-verified       Arm current limit
                                                   (release) built
@@ -215,130 +204,170 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   built 2026-10-06, not
                                                   yet run on the rover.
 
-  FR-800 Sensors          PARTIAL --- sonars      Sonar re-proven through
-                          connected               Pico B 2026-09-29; IMU
-                                                  RST recovery proven
-                                                  2026-10-01. Per-channel
-                                                  SONAR_FAULT and
-                                                  IMU.heading built
-                                                  2026-10-02, not yet run
-                                                  on the rover.
-                                                  SONAR_FAULT debounce
-                                                  (2 s): built 2026-10-02,
-                                                  not yet run. IMU
-                                                  freshness on quat +
-                                                  accel, IMU_STALE_S 3.0:
-                                                  live-proven 2026-10-02
-                                                  (53 false recoveries
-                                                  -> 0).
-                                                  2026-10-07: ToF
-                                                  remounted 180 deg, new
-                                                  housing, orientation
-                                                  re-measured, floor
-                                                  profile saved (rows
-                                                  6-7); upper rows report
-                                                  anything < 40 cm.
-                                                  Second ToF on order.
-                                                  7 IMU_FAULTs were the
-                                                  Hailo freeze, not the
+  FR-800 Sensors          PARTIAL --- sonar,      Sonar re-proven through Pico B
+                          IMU and ToF live        2026-09-29; IMU RST recovery
+                                                  proven 2026-10-01; IMU
+                                                  freshness on quat + accel
+                                                  (IMU_STALE_S 3.0) live-proven
+                                                  2026-10-02. IMU heading is
+                                                  live: rotation mode steers by
+                                                  it (2026-10-07, IMU_YAW_SIGN
+                                                  +1); odometry does not yet
+                                                  (ODOM_USE_IMU_HEADING False).
+                                                  ToF (SEN0628) wired into the
+                                                  stop with the sonars and into
+                                                  avoidance; remounted 180 deg
+                                                  2026-10-07, orientation re-
+                                                  measured, floor profile rows
+                                                  6-7, upper rows report
+                                                  anything < 40 cm. Per-channel
+                                                  SONAR_FAULT + 2 s debounce:
+                                                  built, not yet run. Tilt
+                                                  threshold against the real
+                                                  tipping angle (arm out): not
+                                                  checked. Second ToF (rear,
+                                                  UART0) on order. 7 IMU_FAULTs
+                                                  were the Hailo freeze, not the
                                                   IMU (FR-1400-006).
 
-  FR-1500 Voice           PARTIAL --- live-       Wake word/STT/fast-path
-                          verified repeatedly,    live-verified and
-                          latency real-measured   tuned across several
-                                                  sessions (endpointing,
-                                                  base.en model, widened
-                                                  fast-path matching).
-                                                  Local-LLM intent
-                                                  parsing (non-fast-path)
-                                                  is live-verified on
-                                                  CPU only, 75% pass on
-                                                  a 32-case reliability
-                                                  batch --- see FR-1500
-                                                  section and Software
-                                                  Design v1.0 Section 7.
+  FR-1500 Voice           PARTIAL --- live in     Wake word, STT (faster-whisper
+                          daily use               base.en, ~2.2 s in the
+                                                  service), fast path and spoken
+                                                  replies live across
+                                                  2026-10-06..08. Replies: Piper
+                                                  in-process + reply cache,
+                                                  0.1-0.4 s (2026-10-07).
+                                                  Intent: Hailo qwen2 1.5B
+                                                  primary, live in the service;
+                                                  78.1% usable on the 2026-10-08
+                                                  qualification batch (the
+                                                  model's ceiling); the
+                                                  phrasings it missed are now
+                                                  fast-path, and model replies
+                                                  are dropped for sensor-
+                                                  answered intents. FR-1500-011
+                                                  tried on the rover 2026-10-08.
+                                                  See FR-1500 and Software
+                                                  Design §7.
 
-  FR-1600 Display         Live-verified           Fault-state expressions
-                                                  (frown/red-eyes on
-                                                  self-test failure)
-                                                  directly observed
-                                                  2026-08-23.
+  FR-1600 Display         Live-verified           Fault expressions observed
+                                                  2026-08-23. Talking mouth
+                                                  (FR-1600-009) seen on the
+                                                  rover 2026-10-08. Privacy
+                                                  banner and two-tap RESUME live
+                                                  2026-10-08 (FR-1800-005). CPU
+                                                  temperature on the face from
+                                                  70 C (M-009): built
+                                                  2026-10-08.
 
-  FR-1700 Object          PARTIAL --- detection   Hailo YOLOv8 backend
-  Detection/Retrieval     live-verified,          shipped and enabled
-                          approach/grasp not      2026-08-21 (FR-1700-001).
-                                                  FR-1700-002's range/
-                                                  bearing remains
-                                                  uncalibrated heuristic
-                                                  (per-class widths, not
-                                                  one 8 cm: built
-                                                  2026-10-02, not yet run
-                                                  on the rover).
-                                                  FR-1700-003/004 (approach
-                                                  planning, grasp) not
-                                                  live-verified.
+  FR-1700 Object          PARTIAL --- detection   Hailo YOLOv8 detection live
+  Detection/Retrieval     live; grasp rebuilt,    since 2026-08-21. Grasp
+                          not run                 rebuilt 2026-10-08 on the
+                                                  gripper's own position
+                                                  feedback (grip.py): feedback
+                                                  close, sensed hand-off, elbow-
+                                                  first reach. Not yet run:
+                                                  blocked on measuring
+                                                  ARM_POSE_REACH (None, so a
+                                                  fetch refuses) and the A2
+                                                  feedback curve.
+                                                  ENABLE_RETRIEVAL_TASK False.
+                                                  Range/bearing: per-class
+                                                  widths, built, uncalibrated.
 
-  FR-1000 Autonomous      PARTIAL --- FR-1000-005 Roam-permission gate
-  navigation              logic verified          live-verified in
-                          off-hardware; the rest  simulation
-                          BLOCKED                 (test_brain_roam_
-                                                  permission.py, 13 cases).
-                                                  FR-1000-001/003 and
-                                                  FR-1200-005's standoff are
-                                                  BLOCKED: Navigator steers
-                                                  by odometry.pose and the
-                                                  encoders have produced no
-                                                  edges since 2026-08-25.
-                                                  FR-1000-002's avoidance is
-                                                  SONAR-ONLY today --- the
-                                                  encoder half of the reflex
-                                                  layer is dead. Added to
-                                                  this register 2026-09-13;
-                                                  it had no row at all.
-                                                  Superseded 2026-10-01:
-                                                  encoders count, signed
-                                                  (a-0.3, 763/rev, one-
-                                                  wheel scale); odometry
-                                                  unproven on the floor.
-                                                  Rooms and stairs by
-                                                  voice, stair standoff,
-                                                  IMU-heading odometry
-                                                  (off by default), come-
-                                                  here search sweep:
-                                                  built 2026-10-02, not
-                                                  yet run on the rover.
-                                                  Come to me (FR-1000-006),
-                                                  doorway routing, ask at
-                                                  a shut door, avoidance
-                                                  turn from sonar + ToF +
-                                                  camera: built
-                                                  2026-10-06, not yet run
-                                                  on the rover.
+  FR-1000 Autonomous      PARTIAL --- avoidance   Encoders count (Pico A a-0.3,
+  navigation              turns live; routing     signed x2, 763/rev, one-wheel
+                          not yet run             scale); odometry unproven on
+                                                  the floor. FR-1000-002: the
+                                                  stop is sonar + ToF; the turn
+                                                  side comes from sonar + ToF +
+                                                  camera (avoidance.py);
+                                                  avoidance turns live while
+                                                  roaming 2026-10-07. rf encoder
+                                                  false STALL_FAULTs while
+                                                  roaming (FR-500). Roam-
+                                                  permission gate: 13 off-
+                                                  hardware cases. Built, not yet
+                                                  run on the rover: rooms and
+                                                  stairs by voice, stair
+                                                  standoff, IMU-heading odometry
+                                                  (off), come-here sweep, come
+                                                  to me (FR-1000-006), doorway
+                                                  routing, ask at a shut door.
+                                                  The knock is not built.
 
-  FR-900 through FR-1400, Implemented, off-       FR-1300: inbound
-  FR-1800 onwards         hardware tested only    remote_cmd.py added
-                                                  2026-10-01. FR-1400:
-                                                  Claude, owner
-                                                  decision 2026-10-02
-                                                  (claude-sonnet-5-5).
-                                                  FR-2100: identity.py
-                                                  store/matcher only.
-                                                  Superseded 2026-10-02:
-                                                  faces built
-                                                  (recognition.py,
-                                                  enabled). FR-1900-001/
-                                                  002/003 demonstrations,
-                                                  FR-2000-011/012/013
-                                                  email commands, FR-2200
-                                                  feature requests: built
-                                                  2026-10-02.
-                                                  FR-1400-001 intent gate,
-                                                  FR-1900-005/007/008:
-                                                  built 2026-10-02.
-                                                  Everything dated
-                                                  2026-10-01/02 below is
-                                                  simulated tests only.
+  FR-900 Manual           PARTIAL                 Voice drive commands live
+                                                  2026-10-07 (after the on-
+                                                  screen roam/motion grant).
+                                                  FR-900-005 shutdown releases
+                                                  the arm, it does not stow it.
+                                                  FR-900-003 link-loss stop:
+                                                  built, not yet run.
+
+  FR-1100 Diagnostics     Implemented             Rotating log with EVENT= tags;
+                                                  rotated logs expire after 30
+                                                  days (FR-1800-004).
+
+  FR-1300 Smart home      NOT DONE --- needs      Inbound remote_cmd.py (:8765,
+                          the Google account      2026-10-01); Home Assistant
+                                                  runs on willie behind
+                                                  Tailscale Funnel; the Google
+                                                  account link is not made.
+
+  FR-1400 Cloud AI        PARTIAL --- freeze      Fallback is Claude (claude-
+                          fix open                sonnet-5-5), owner 2026-10-02.
+                                                  FR-1400-006: brake before
+                                                  every Hailo call (built);
+                                                  streaming generate() cut the
+                                                  process freeze from 7.7 s to
+                                                  2.2 s (measured 2026-10-08);
+                                                  multi-process sharing ruled
+                                                  out; a Hailo server process is
+                                                  the remaining fix, not built.
+
+  FR-1800 Privacy         PARTIAL --- 1800-005    Privacy controls live
+                          live                    2026-10-08. Retention
+                                                  (FR-1800-004): memory.db and
+                                                  rotated logs swept daily at 30
+                                                  days, built 2026-10-08. Raw
+                                                  audio and camera frames are
+                                                  never written.
+
+  FR-1900 Learning        Implemented, off-       Demonstrations, facts,
+                          hardware tested         routines. FR-1900-002 replays
+                                                  the recorded path only; it
+                                                  does not adapt to a different
+                                                  start.
+
+  FR-2000 Email           PARTIAL --- DKIM        DKIM-verified approve emails
+                          path live               live 2026-10-07/08 (FR-2200).
+                                                  Motion commands by email are
+                                                  allowed (owner, FR-2000-012),
+                                                  built, not yet run. Mail stays
+                                                  in Gmail as the owner's audit
+                                                  trail (FR-2000-007).
+
+  FR-2100 Recognition     PARTIAL --- faces       recognition.py (YuNet + SFace,
+                          built, pets not         CPU) wired in
+                                                  brain.py/voice.py, enabled;
+                                                  not yet run on the rover. Pets
+                                                  not built.
+
+  FR-2200 Feature         LIVE-VERIFIED           Two requests proposed from his
+  requests                2026-10-07/08           own logs, approved by DKIM-
+                                                  verified email and committed
+                                                  by Willie (2ca37ec, 9abdad7).
+
+  FR-2300 GPS             Specified only          No code. PA1010D on order
+                                                  (I²C, 0x10).
+
+  M-009 Thermal           Built 2026-10-08,       thermal.py: SoC temperature
+                          not run hot             and fan tach, log, spoken
+                                                  warning, face readout.
   -----------------------------------------------------------------------
+
+Anything marked "built 2026-10-01/02" below is simulated tests only unless a later note
+says it ran on the rover.
 
 Motion-related groups (FR-400 through FR-700) were gated behind FR-300 passing
 --- Directive 2. **That gate is released as of 2026-08-24** by the owner decision
@@ -363,6 +392,8 @@ functions across 73 test files** (a plain count of `def test_`, which is lower t
 collected figures above because parametrised cases collect as several items; the new
 2026-10-02 suites run one subprocess script per function with many assertions each).
 Not re-collected on the rover.
+**Recount 2026-10-08:** 40 modules / ~11,350 lines; 499 `def test_` functions across 83
+test files; CI **553 passed** on `62094da`.
 Rows marked 2026-10-02 were added for this; the rest of the table dates from
 2026-08-18 (full module list: Software Design §1.1). Every requirement group below has an
 implementing module. Coverage here means unit tests exist and pass off
@@ -401,8 +432,9 @@ hardware; it is not evidence of live behaviour.
 
   FR-800 Sensors          sensors.py, pico_link.py test_sim_hardware.py,
                           (2026-10-02 row),        test_pico_link.py,
-                          tof.py (not wired in)    test_sensor_gaps.py,
-                                                   test_tof.py
+                          tof.py (wired into the   test_sensor_gaps.py,
+                          stop and avoidance)      test_tof.py,
+                                                   test_sonar_tof_fusion.py
 
   FR-900 Manual           brain.py::_manual,       test_brain_manual_drive.py
                           voice.py
@@ -410,10 +442,11 @@ hardware; it is not evidence of live behaviour.
   FR-1000 Navigation      navigation.py,           test_navigation.py,
                           pursuit_task.py,         test_mapping.py,
                           mapping.py,              test_world_model.py,
-                          world_model.py           test_rooms_stairs_
-                                                   memory.py,
-                                                   test_sensor_gaps.py
-                                                   (2026-10-02 row)
+                          world_model.py,          test_rooms_stairs_
+                          avoidance.py, rotate.py, memory.py,
+                          come_to_me_task.py       test_sensor_gaps.py,
+                          (2026-10-08 row)         test_come_to_me.py,
+                                                   test_rotate.py
 
   FR-1100 Diagnostics     diagnostics.py,          test_logsetup.py
                           logsetup.py::log_event
@@ -422,18 +455,22 @@ hardware; it is not evidence of live behaviour.
                           remote_cmd.py            (2026-10-02 row)
                           (inbound, 2026-10-01)
 
-  FR-1400 Cloud AI        ai_provider.py           test_ai_provider.py
+  FR-1400 Cloud AI        ai_provider.py,          test_ai_provider.py,
+                          hailo_llm.py             test_hailo_*.py
 
   FR-1500 Voice           voice.py                 test_voice_*.py,
                                                    test_brain_voice_*.py,
                                                    test_retrieve_gate.py
                                                    (2026-10-02 row)
 
-  FR-1600 Display         display.py               ---
+  FR-1600 Display         display.py               test_talking_mouth.py,
+                                                   test_privacy_control.py
 
-  FR-1700 Retrieval       retrieval_task.py        test_retrieval_task.py
+  FR-1700 Retrieval       retrieval_task.py,       test_retrieval_task.py,
+                          grip.py                  test_grip.py
 
-  FR-1800 Privacy         privacy.py               ---
+  FR-1800 Privacy         privacy.py               test_privacy_control.py,
+                                                   test_retention.py
 
   FR-1900 Learning        memory_store.py,         test_memory_store.py,
                           world_model.py,          test_storage.py,
@@ -446,15 +483,16 @@ hardware; it is not evidence of live behaviour.
   FR-2000 Email           email_client.py          test_email_commands.py
                           (commands, 2026-10-02)   (2026-10-02)
 
-  FR-2100 Recognition     identity.py (store and   test_identity_store.py
-                          matcher only; nothing    (2026-10-02 row)
-                          imports it)              test_face_recognition_
-                          2026-10-02: +            flow.py (2026-10-02)
-                          recognition.py, wired
-                          in brain.py/voice.py
+  FR-2100 Recognition     identity.py,             test_identity_store.py,
+                          recognition.py (wired    test_face_recognition_
+                          in brain.py/voice.py)    flow.py
 
   FR-2200 Feature         feature_requests.py      test_feature_requests.py
   requests                (2026-10-02)             (2026-10-02)
+
+  FR-2300 GPS             --- (not built)          ---
+
+  M-009 Thermal           thermal.py               test_thermal.py
   -----------------------------------------------------------------------
 
 ## V.2 Known gaps — requirements not currently satisfiable as written
@@ -608,6 +646,11 @@ exists to plan a grasp pose against. The implemented sequence --- rotate base
 toward bearing, open gripper, lower by a fixed offset, close, raise --- is a
 working approximation. `arm_jog.py` is the tool that closes this; nothing else
 does.
+✅ **Rebuilt 2026-10-08 (`grip.py`), not yet run on the rover.** The fixed sequence is gone:
+the reach opens the elbow first and steps the shoulder 50 µs at a time to `ARM_POSE_REACH`,
+and the close stops on the gripper's own feedback (FR-1700 criteria). Still no reach-envelope
+model: `ARM_POSE_REACH` is one jogged pose, **not yet measured** — until it is, a fetch
+refuses aloud.
 
 **G-4 --- FR-1700-006, hand-off confirmation is timed, not sensed.** The
 implementation waits for either an explicit voice confirmation or a fixed
@@ -623,6 +666,10 @@ reads it, but it is **uncalibrated** and nothing consults it —
 This item stays open until `scripts/grip_feedback_curve.py` has produced the
 free-travel curve and `_await_confirm()` uses it: jaw stalled short of its
 command = holding; jaw jumped back to its command = taken.
+✅ **Software half built 2026-10-08, not yet run on the rover:** `_await_confirm()` now calls
+`grip.released_by_person()` — the jaw is held 40 µs past the object, so it moves when the
+person takes it. Feedback is read as wiper ÷ arm rail. The thresholds are starting values
+until the A2 curve has been run on the new ADS1115.
 
 **G-5 --- watchdog and tick-overrun thresholds are inconsistent.**
 `willy-rover.service` now sets `WatchdogSec=500ms`, which requires the process
@@ -1235,7 +1282,7 @@ signal conditioning board (Master Hardware Design §4.5). Pass conditions:
     **eleven** expected devices: 0x27 MCP23017, 0x40/0x44/0x45 INA260, 0x42/0x43
     PCA9685, 0x48 ADS1115, 0x4A BNO085, **0x51 Witty Pi 5**, 0x60/0x61 FeatherWing.
     Any missing address fails the gate; the run must not continue to FR-100-004
-    release. *(`brain.py:71` adds 0x51 to `_EXPECTED_I2C` whenever
+    release. *(`brain.py:112` adds 0x51 to `_EXPECTED_I2C` whenever
     `ENABLE_WITTY_PI` is True, which it is, so the gate has expected eleven since the
     HAT was fitted.)*
 
@@ -1336,7 +1383,8 @@ and the LTC4311 is what makes that viable — §3.2), and **ADS1115 A0 metered i
 band** before power, since an open divider presents pack voltage to the ADC.
 The signal conditioning board has its own commissioning gate: the full
 resistance matrix in Master Hardware Design §4.5, which **passed 2026-09-16**,
-followed by the powered divider check, which **has not been run**. Note in
+followed by the powered divider check, which **has not been run** as a check.
+⚠ **2026-10-07 the fault it guards against happened** — see FR-200-001. Note in
 particular that P1-14↔P1-17 must read **3.2k** — 4.7k or 10k means one leg of
 the parallel pair is unseated and battery voltage reads about a third high.
 
@@ -1427,6 +1475,14 @@ conditions:
     superseded MCP3008 CH7 channel, where the internal clamp diodes were
     absorbing it (raw 1016/1023). Do not power the board to "see what it
     reads."
+
+    ⚠ **It happened, 2026-10-07.** The lower-leg 10 k of the 4.7k∥10k pair was open: the
+    midpoint read **4.07 V on a 12.09 V pack**, over the ADS1115's 3.3 V supply, and the chip
+    dropped off I²C. The 10 k was resoldered (midpoint **2.89 V** at P1-14) and a **new
+    ADS1115 fitted 2026-10-08** (answers at 0x48, self-test passes). Before trusting or
+    calibrating it, confirm A0 ≈ the metered midpoint with the pack connected. Since
+    2026-10-07 the +12V bus INA260 is the battery reading whenever the bus is live; the
+    divider is only the fallback (§V, FR-200 row).
 
 -   **FR-200-002/003/004 (thresholds and shutdown).** Undervoltage, warning and
     critical-cutoff thresholds are verified against the calibrated reading
@@ -1550,7 +1606,8 @@ decision rather than by implementation.
     clears — `brain.py::_await_reset_or_resume()` keeps braking and waits for
     a tap on the button `display.py::WillyFace` now renders whenever any of
     those three faults has cleared but not yet been acknowledged. The same
-    mechanism will cover E-stop once G-1's sense pin is wired; it is real,
+    mechanism would have covered E-stop, but G-1 closed without a sense pin (the E-stop
+    cuts the Pi too, so there is nothing to reset from); it is real,
     live code today for the three faults that already fire, not placeholder
     infrastructure. Verified off-hardware only (`tests/test_brain_reset_gate.
     py`) — the actual touchscreen tap detection needs the physical panel.
@@ -1611,7 +1668,8 @@ name the wheel that actually turned. `config.py`'s `MOTOR_PORT` and `motors.py` 
 corrected that day; this criterion was missed, so the FRD has been contradicting the
 code for nine days. The same left/right transposition was found in the encoder
 landings on the same day, and **both re-open when the 170 RPM motors are fitted** —
-see Master Hardware Design §14 item 18.
+see Master Hardware Design §14 item 18. ✅ **Closed:** encoders mapped per wheel on the
+170 RPM motors 2026-10-01, and drive live-verified on all six 2026-10-06/07.
 
 -   **FR-400-001 (independent control).** Each of the six motors can be
     commanded individually and the correct wheel responds. Verified one motor
@@ -1646,7 +1704,8 @@ see Master Hardware Design §14 item 18.
     (~250 RPM needed); the 1.5 mph cap leaves the speed loop headroom.
 
 -   **Precondition.** Motor crimps must be metered against the as-built colour
-    scheme before first motion. Five of six remain unverified.
+    scheme before first motion. Five of six remain unverified. ✅ **Overtaken 2026-10-06/07:**
+    drive live-verified (owner); after the front wiring fix all six motors drive.
 
 # FR-500 Encoder and Speed Control
 
@@ -1670,7 +1729,8 @@ see Master Hardware Design §14 item 18.
 
 # Acceptance Criteria
 
-Encoders are read through the MCP23017 at 0x27, two channels per motor.
+Encoders are read by **Pico A over `uart4-pi5`** (`/dev/ttyAMA4`), signed x2, two channels
+per motor (since 2026-10-01; the MCP23017 left the bus 2026-09-30).
 
 ⚠ **Under Master Hardware Design §4.7 they are read by Pico A over `uart4-pi5`
 instead**, twelve lines on Pico GP0–GP11 in the same order as MCP23017
@@ -1732,6 +1792,11 @@ Pico A a-0.3 reports signed counts.
     wheels — on 2026-08-25 a sagging R5 looked exactly like six dead channels.
     R5 low is a WARNING only (owner decision): it never stops the rover by
     itself, since nobody has measured the voltage these encoders quit at.
+    (2026-10-08: a low R5 does refuse motion at the startup self-test, FR-100-003.)
+    ⚠ **Open, 2026-10-07: false stalls on rf.** The rf encoder counts near zero while the
+    wheel turns (-39, 0, 1, 16, -10 against thousands on the others), so the stall stop
+    fires falsely while roaming (`STALL_FAULT`; clear with "reset" or a tap). Plug checked;
+    next is rf alone on blocks.
 
     ✅ **Inverse case built 2026-10-02 (`20fc3ab`), not yet run on the rover.** With
     no wheel commanded and encoders healthy, any wheel above
@@ -1752,7 +1817,7 @@ Pico A a-0.3 reports signed counts.
     unhealthy or `WHEEL_SPEED_CONTROL=False` → feed-forward only (open loop).
     `tests/test_wheel_speed_control.py`. The surface-change criterion above is untested.
 
--   **Signal note.** Encoder lines land directly on MCP23017 GPIO with no
+-   **Signal note.** Encoder lines land directly on Pico A GPIO (originally MCP23017) with no
     filtering. If spurious counts appear under motor load, the correct
     responses are firmware debounce or small-value filtering sized to the
     measured pulse rate --- not arbitrary capacitance, which at these rates
@@ -1823,7 +1888,9 @@ live-verified — see `motors.py::Steering`'s own comment.
     terminal, PCB trace and channel headers. Worst-case draw with all six
     moving together approaches the 5V rail's supply rating. Verify the board's
     current path before running all six under load simultaneously, and monitor
-    the 5V INA260 during the first such test.
+    the 5V INA260 during the first such test. ⚠ **2026-10-07/08: it cannot.** Servo V+ is
+    not on 0x40's path (no current seen while a servo swung), and the `steering_5v`
+    overcurrent trip was dropped (owner, 2026-10-08). Peak current is still unmeasured.
 
 -   **FR-600-005 (rotation mode).** Added 2026-10-07 — built before it was required. A turn
     on the spot steers the four corner wheels onto the circle round the rover's centre
@@ -2041,7 +2108,8 @@ and Master Hardware Design §8 / §16.11 carry the same table.
 -   **FR-800-001, heading.** ✅ **Built 2026-10-02 (`20fc3ab`), not yet run on the
     rover:** `sensors.IMU.heading` exposes yaw (−180..180°) from the fused quaternion.
     With the ROTATION_VECTOR report it is magnetometer-referenced, so anything
-    magnetic on the chassis biases it. Nothing steers by it yet. *(2026-10-02: odometry
+    magnetic on the chassis biases it. **Rotation mode (FR-600-005) steers by it, live
+    2026-10-07** (`IMU_YAW_SIGN` +1). *(2026-10-02: odometry
     can take its rotation from it — FR-1000-003 — but `ODOM_USE_IMU_HEADING=False` until
     the yaw sign is checked on the rover, so as configured it is still unused.)*
 
@@ -2131,14 +2199,14 @@ and Master Hardware Design §8 / §16.11 carry the same table.
 
 -   **FR-900-005 (commanded shutdown).** A voice or manual shutdown runs the
     graceful sequence with the rail still powered: motion halts, the arm
-    stows, state is persisted, then `shutdown -h now`. Distinct from the
+    is **released** (not stowed: power is about to go, and a move first only stresses the
+    joints — `brain._begin_shutdown()`, corrected here 2026-10-08), state is persisted, then
+    `shutdown -h now`. Distinct from the
     FR-200-004 critical-battery path in trigger only --- both end in the same
     clean halt. Power is removed afterwards by the operator, so no hold-up
     energy is required or available.
-    ⚠ **2026-10-02:** "the arm stows" is `center_all()` — every joint to 1500 µs except
-    the elbow — because no stow pose is applied anywhere (FR-700-002). Both battery
-    tiers now reach this same halt (FR-200-004/005), built 2026-10-02, not yet run on
-    the rover.
+    Both battery tiers reach this same halt (FR-200-004/005); it fired live on a low
+    battery 2026-10-02.
 
 # FR-1000 Autonomous Navigation
 
@@ -2190,8 +2258,9 @@ separately under FR-1200.
     Vision runs at frame rate with variable latency and informs route choice
     and classification only. Verified by confirming the rover still stops for
     an obstacle with the vision pipeline disabled entirely.
+    *(2026-10-08: the stop is sonar + ToF; the encoders add stall detection.)*
     ✅ **Turn choice built 2026-10-06 (owner: "avoidance needs to use tof and cameras"),
-    not yet run on the rover.** `avoidance.py::choose_turn()` picks the side for both
+    turns live while roaming 2026-10-07.** `avoidance.py::choose_turn()` picks the side for both
     `brain._avoid()` and `Navigator._avoiding()` from the side sonars, the ToF's column
     halves and the front camera's detections — min() per side, the same fail-safe rule as
     `'front'`. The stop is unchanged: sonar + ToF only, the camera never gates it.
@@ -2230,7 +2299,7 @@ separately under FR-1200.
     one control cycle, from any autonomous state.
 
 -   **FR-1000-006 (come to me).** Added v3.3. Design:
-    `docs/superpowers/specs/2026-09-10-come-to-me-design.md`. ⛔ **Built 2026-10-06,
+    `docs/superpowers/specs/2026-09-10-come-to-me-design.md`. ✅ **Built 2026-10-06,
     not yet run on the rover** (`tests/test_come_to_me.py`). `come_to_me_task.py`
     sequences `Navigator` then `PursuitTask(come_here)` under one `COME_TO_ME` state;
     `Navigator._resolve_room()` now routes doorway → centroid → doorway; voice
@@ -2319,7 +2388,7 @@ separately under FR-1200.
 
     `ROAM_PERMISSION_REQUIRED=False` restores the pre-2026-09-09 behavior, in
     which both triggers fire unattended. This requirement does not resolve
-    FR-1000-002's sonar-only limitation or the open `MOTOR_PORT` and G-6 items;
+    FR-1000-002's remaining gaps (no rear sensing until the second ToF) or G-6;
     it puts a human in the loop so those are accepted knowingly rather than
     discovered by a `STALL_FAULT` nobody witnessed.
 
@@ -2447,9 +2516,7 @@ independent of whether climbing is ever built.
     here so the requirement has a stated pass condition rather than none; it was one
     of four in this section with no criteria at all until 2026-09-13.
 
--   **FR-1200-006 (record stairs).** Added v3.3. **NOT IMPLEMENTED** --- `world_model`
-    has no stair, hazard or keep-out concept at all; its tables are rooms, doorways,
-    landmarks, objects and routes. ✅ **Superseded — built 2026-10-02 (`4f59034`), not
+-   **FR-1200-006 (record stairs).** Added v3.3. ✅ **Built 2026-10-02 (`4f59034`), not
     yet run on the rover.** `world_model` has a
     `stairs` table (name, x, y, heading, width_m) and a `Stair` class that is an
     **edge**, not a point: (x, y) is the middle, heading is the direction you face to go
@@ -2497,6 +2564,7 @@ independent of whether climbing is ever built.
     HC-SR04s alone until the VL53L7CX is fitted. This register did not record that
     anywhere; noted 2026-09-13. **Superseded 2026-10-01:** encoders count again (a-0.3,
     signed x2, 763/rev), so stall detection has a signal; it is not yet live-verified.
+    **2026-10-08:** the ToF is fitted and wired into the stop with the sonars (FR-1000-002).
 
     Three sources contribute, and they do different jobs. **Mapping** records
     where the stairs are. **Vision** (both cameras are mounted 15° downward, so
@@ -2582,8 +2650,9 @@ an attacker the ability to drive a robot around an occupied house. That risk is
 accepted by the owner. It is also why `ENABLE_EMAIL_COMMANDS` exists as a single
 switch: if the account is ever suspected compromised, set it `False` and redeploy.
 
-✅ **Built 2026-10-02 (`351f26e`), not yet run on the rover**
-(`tests/test_email_commands.py`). The subject carries the command —
+✅ **Built 2026-10-02 (`351f26e`)** (`tests/test_email_commands.py`). **The DKIM-verified
+path ran live 2026-10-07/08** (feature-request `approve` emails, FR-2200); a motion command
+by email has not been run. The subject carries the command —
 **`Willie: <command>`** (`EMAIL_COMMAND_PREFIX`, `:` or `,` after, a leading `Re:`
 tolerated); the body is never interpreted.
 
@@ -2727,8 +2796,9 @@ then. **Wherever this register says "Gemini" — the FR-1400 table, FR-1800-003,
 FR-2000-001, M-014, the Willie-account notes — read "Claude (Anthropic API key)".** The
 requirement text is kept as written for traceability; the provider is decided. **Likewise
 "Llama 3.2 3B" (2026-10-07):** the on-board model has been the Hailo-10H `qwen2:1.5b` since
-2026-09-01 (`hailo_llm.py`), with llama.cpp Llama-3.2-3B kept as the CPU fallback; and every
-Hailo call freezes the whole process — see FR-1400-006.
+2026-09-01 (`hailo_llm.py`), with llama.cpp Llama-3.2-3B kept as the CPU fallback; and each
+Hailo call still freezes the whole process while it reads the prompt (2.2 s since streaming,
+2026-10-08) — see FR-1400-006.
 
 ✅ **FR-1400-001, built 2026-10-02 (`4f59034`), not yet run on the rover:** escalation
 no longer rests on the local model's self-reported confidence alone (G-6 measured it as
@@ -2744,6 +2814,8 @@ be Willie\'s first cloud-dependent capability if implemented as anything
 more than an optional fallback. Verify this priority with the owner
 before implementation. Added 2026-08-01, v1.3. Not yet in scope for any
 CC session to date.
+✅ **Resolved (owner, 2026-10-02):** the cloud model (Claude) is the fallback only; on-board
+stays primary (Hailo qwen2 1.5B, faster-whisper, Piper).
 
   -----------------------------------------------------------------------
   Requirement ID    Requirement       Priority          Verification
@@ -2950,11 +3022,17 @@ section behind it until now. Added 2026-08-02, v1.4.
     NPU accelerator, with no network dependency for core interaction.
     **Which stage runs where:** wake word (openwakeword) and STT (faster-whisper) run
     on **CPU**; `ENABLE_HAILO_STT` is False. Vision runs on the **Hailo NPU**. Intent
-    parsing is Hailo-primary (`ENABLE_HAILO_LLM=True`) with a Claude fallback, but
-    has only ever been live-verified on the CPU path, which is what §V records. The
-    "no network dependency" claim is therefore aspirational for intent parsing while
-    G-6 stands: a 0%-scoring local model routes essentially every episode to the
-    cloud.
+    parsing is Hailo-primary (`ENABLE_HAILO_LLM=True`) with a Claude fallback, and runs
+    live in the service. G-6's 0% was a prompt bug, fixed; the 2026-10-08 re-qualification
+    scores 78.1% usable. Fast-path phrases never reach a model, so the common commands
+    need no network; free-form requests the model misses still go to the cloud.
+
+-   **Reply speed (2026-10-07).** Piper is loaded once, in-process (`voice.PiperEngine`),
+    and short fixed replies are cached (`TTS_CACHE_MAX` 64, `TTS_CACHE_MAX_CHARS` 60): the
+    reply audio is ready **0.1–0.4 s** after the intent, measured on the rover (was
+    2.6–5.1 s with a piper subprocess per reply). STT stays ~2.2 s (base.en; tiny.en was
+    faster but scored 11/12 and was rejected), with the display throttled to
+    `DISPLAY_FPS_QUIET` while transcribing.
 -   Voice commands are subject to Directives 1--5. A spoken motion command is
     refused if the self-test has not passed, exactly as any other command
     would be.
@@ -2970,8 +3048,9 @@ section behind it until now. Added 2026-08-02, v1.4.
     phrase ("Hey Willie", "Willie.") is not sent for interpretation; he answers "How can
     I help?". On 2026-10-01 the LLM turned a bare "Hey, Willie" into `retrieve`.
 -   **FR-1500-005/007, retrieve gated** (`a8077b9`). `retrieve` is refused aloud unless
-    `ENABLE_RETRIEVAL_TASK` (new, **False**) — FR-1700 is not safe yet (grasp drives the
-    elbow toward its forbidden centre; hand-off releases on a timer, G-4).
+    `ENABLE_RETRIEVAL_TASK` (new, **False**) — FR-1700 was not safe (grasp drove the
+    elbow toward its forbidden centre; hand-off released on a timer, G-4). Both fixed in
+    `grip.py` 2026-10-08; it stays False until `ARM_POSE_REACH` is measured.
     `tests/test_retrieve_gate.py`.
 -   **FR-1500-007, self-test failing** (`5f21108`). See FR-100-004: queries are still
     answered; everything else is refused aloud with the reason.
@@ -3003,6 +3082,8 @@ data captured through the *old* puck mic, so a different capsule and a new
 decimation stage both change what the model is being asked to score. Whether
 this closes that gap, leaves it unmoved, or requires retraining the wake model
 is an open question to be settled live, not a claim made here.
+✅ **2026-10-08:** the wake word works on the rover in daily use — every voice test of
+2026-10-06..08 recorded here started with it. Retraining was not needed.
 
 # FR-1600 Facial Expression / Display Feedback
 
@@ -3200,8 +3281,9 @@ capability in the spec and was not previously captured anywhere. Added
     configuration and the basis of the FR-800-003 tilt threshold.
 -   ⚠ **Task disabled 2026-10-02 (`a8077b9`):** a queued `retrieve` intent (voice) is
     refused aloud while `ENABLE_RETRIEVAL_TASK=False` (new flag, default False), because
-    this section is not safe yet — the grasp drives the elbow toward its forbidden
-    centre and hand-off releases on a timer (G-4). Flip it only when those are fixed.
+    the grasp drove the elbow toward its forbidden centre and hand-off released on a timer
+    (G-4). **Both fixed 2026-10-08 (`grip.py`, below).** The blocker now is that
+    `ARM_POSE_REACH` is not measured and the A2 feedback thresholds are unchecked.
 -   **FR-1700-008, person range.** ✅ **Built 2026-10-02 (`be4922a`), not yet run on
     the rover:** `localize()` now ranges a person against a nominal 45 cm width, not
     8 cm, so the `RETRIEVAL_PERSON_MAX_RANGE_CM` (150 cm) gate no longer reads a person
@@ -3712,19 +3794,15 @@ Added v3.3 (2026-09-14). Design approved 2026-08-25 and extended through 2026-09
 but carried **no requirement at all** until now --- the same gap FR-1500 records for
 itself. Design: `docs/superpowers/specs/2026-08-25-person-pet-recognition-design.md`.
 
-**PARTIALLY BUILT — store and matcher only (corrected 2026-10-02; this said "zero
-lines written").** `identity.py` exists (commit `c65afa2`), with
-`tests/test_identity_store.py` (16 tests), and `config.ENABLE_FACE_RECOGNITION`
-exists (**False**). What it has: a separate SQLite store (FR-2100-005's file boundary),
-multiple vectors per identity, cosine matching into **three bands** —
-recognised / uncertain / unknown (FR-2100-003), **pending-is-inert** enrolment with
-`approve()` (FR-2100-006's data side), `forget_all()`, a presence record and a
-`greeting_due()` debounce (FR-2100-002's timing). What it does **not** have:
-`recognition.py`, any camera capture or face embeddings, any greeting or
-introduction dialogue, and the email-confirmation wiring for enrolment. **No runtime
-module imports it**, so no FR-2100 behaviour exists on the rover.
+**Faces built 2026-10-02, pets not built** (corrected 2026-10-08; this said "store and
+matcher only", `ENABLE_FACE_RECOGNITION` False and "no runtime module imports it" — all
+overtaken). `identity.py` is the store and matcher (`tests/test_identity_store.py`): a
+separate SQLite store (FR-2100-005's file boundary), several vectors per identity, three
+bands — recognised / uncertain / unknown (FR-2100-003) — pending-is-inert enrolment with
+`approve()`, `forget_all()`, a presence record and a `greeting_due()` debounce.
+`recognition.py` supplies the embeddings, below.
 
-⛔ **Superseded 2026-10-02 — faces BUILT (`80c074f`), not yet run on the rover**
+✅ **Faces (`80c074f`), not yet run on the rover**
 (`tests/test_face_recognition_flow.py`). `recognition.py` is the embedding source:
 OpenCV **YuNet** detection + **SFace** 128-d embedding on the **CPU** (not
 ArcFace/SCRFD), models in `models/` — **gitignored, not in the repo**; missing models
@@ -3857,9 +3935,7 @@ already enrolled unless `--force`. **Pets are not built.** Per-criterion notes b
 Added v3.3 (2026-09-14). Design:
 `docs/superpowers/specs/2026-09-11-willie-feature-requests-design.md`.
 
-**NOT IMPLEMENTED.** No `feature_requests.py`, no `docs/feature-requests/` queue.
-⛔ **Superseded 2026-10-02 — BUILT (`55c5596`), not yet run on the rover**
-(`tests/test_feature_requests.py`). `feature_requests.py`, to the approved design, on its
+✅ **Built 2026-10-02 (`55c5596`)** (`tests/test_feature_requests.py`). `feature_requests.py`, to the approved design, on its
 own low-frequency thread (first look 10 min after start, then every 6 h);
 `ENABLE_FEATURE_REQUESTS` True.
 ✅ **Live-verified 2026-10-07/08:** Willie proposed two requests from his own logs (stalled
@@ -3890,8 +3966,8 @@ IMU reports; battery reading reliability), the owner approved each with a DKIM-v
     **A request that cannot cite anything is not sent.** Rate-limited to
     `FEATURE_REQUEST_MAX_PER_DAY`. Verified by feeding synthetic history and asserting
     on what is proposed. Composed by the cloud provider, not the on-device LLM --- G-6
-    has the latter at 0% on intent parsing, and composing a coherent request is harder
-    than parsing an intent, not easier.
+    has the latter at 78.1% usable on intent parsing (2026-10-08), and composing a coherent
+    request is harder than parsing an intent, not easier.
     ✅ **Built 2026-10-02:** `collect_evidence()` scans his own rotating log for
     `MOTOR_STALL` (per wheel set), `TICK_OVERRUN`, any `*_FAULT`, `OVERCURRENT`,
     `UNCOMMANDED_MOTION`, `BATTERY_HALT`, unmatched voice and failed tasks; a category
@@ -3980,7 +4056,7 @@ state, and the room map (FR-1000) remains the indoor answer to "where".
     "go home" outdoors must refuse and say why, rather than attempt it. Indoors, "go home" means
     the charger/dock, which is a separate, deferred feature.
 
-# Mission-Level Functional Requirements (M-001--M-012)
+# Mission-Level Functional Requirements (M-001--M-020)
 
 Moved here from the WildWilly Master Engineering Package (rev 6.0) so
 this document is the single source for all functional-requirement
@@ -4046,3 +4122,18 @@ autonomy.
   M-020          Email account and management --- FR-2000  NEW v2.0 ---
                                                            unassigned
   ------------------------------------------------------------------------
+
+**M-009 thermal monitoring, built 2026-10-08 (`thermal.py`), not yet run hot on the rover.**
+Monitoring only, because the Pi 5 firmware throttles itself (soft cap about 80 °C, hard 85 °C).
+Heat slows him down; it is not a Directive hazard, and nothing here touches motion. The brain
+reads the SoC temperature and the active-cooler tach every 5 s and:
+- logs a trend line every 10 minutes;
+- logs `EVENT=THERMAL` on every level change: ok, warm (70 °C), hot (80 °C), clearing 3 °C below;
+- says once "My processor is running hot, N degrees" on reaching hot, and "My cooling fan has
+  stopped" when the fan reads 0 rpm at 60 °C or more;
+- adds "I'm running hot" to the status reply;
+- shows `CPU N C` on the face from 70 °C (amber, red from 80 °C).
+
+Baseline on willie, 2026-10-08: 58 °C idle, fan about 5,700 rpm. The Hailo-10H's own
+temperature is not read: it needs the device the service holds. Off-hardware tests are in
+`tests/test_thermal.py`.

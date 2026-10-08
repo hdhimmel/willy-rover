@@ -70,6 +70,7 @@ stubbed, disabled, approximate or not yet run on the rover, it says so.
 | `main.py` | 70 | Entry point, I²C pre-probe, signal routing |
 | `mapping.py` | 68 | Learning-mode map recording session |
 | `privacy.py` | 59 | Mic/camera disable flag; cloud-send notes; file purge |
+| `thermal.py` | 70 | M-009: SoC temperature and fan tach, warm/hot levels, fan-stopped check |
 | `storage.py` | 53 | Data root resolution and availability check |
 | `logsetup.py` | 42 | Logging config and `log_event` structured tags |
 | `hailo_stt.py` | 41 | Hailo STT scaffolding (`ENABLE_HAILO_STT=False`, no model) |
@@ -371,7 +372,9 @@ synchronously through `SafetyController.brake_now()` if anything is commanded (f
 fix open: the model in its own process, which needs design because the VDevice is shared with
 vision (why hailo-ollama was rejected, 2026-08-21). **Streaming (2026-10-08):** `hailo_llm`
 now uses `generate()` instead of `generate_all()`; measured on willie, the longest freeze of
-other threads fell from 7.7 s to 2.2 s (the prompt read), ~0.12 s per token after it.
+other threads fell from 7.7 s to 2.2 s (the prompt read), ~0.12 s per token after it. Multi-process
+VDevice sharing was ruled out the same day (`h10-hailort` 5.1.1 has no multi-process service);
+the remaining fix is one Hailo server process owning the chip for vision and the model.
 
 **Come to me (`come_to_me_task.py`, FR-1000-006) owns no motion.** It sequences
 `Navigator` (room mission, through labelled doorways) and `PursuitTask` (`come_here`, with
@@ -454,7 +457,7 @@ dispatched outside the state table.
 
 **Battery halts (FR-200-004/005).** The `rth` tier (with `ENABLE_DOCKING=False`) and the
 `shutdown` tier both end in `_battery_halt()`, which calls the same `_begin_shutdown()` as
-a voice shutdown: emergency stop, `arm.center_all()` (no stow pose exists), "Shutting down
+a voice shutdown: emergency stop, `arm.release()` (power is about to go; no move first), "Shutting down
 now", then `stop()`'s tail runs `sudo shutdown -h now`. `rth` first stops, saves memory
 once, announces, and enters `LOW_BATTERY`. Two guards:
 
@@ -612,13 +615,15 @@ zone **reporting an obstacle**. A zone counts only when it returns more than
 `TOF_FLOOR_MARGIN_MM` (120 mm) shorter than its stored per-zone floor distance; a zone
 returning more than the margin longer (or nothing) where floor is expected is a **drop**,
 which sets `front` to 0.0 so every forward gate stops. The ToF is the only drop detector.
-Sides are sonar only. `DIST_STOP`/`SLOW`/`CLEAR`, `_roam()`, `_slow()` and `_avoid()` see
+Side distances are sonar only; the avoidance turn also weighs the ToF's column halves and the
+camera (`avoidance.py`, FR-1000-002). `DIST_STOP`/`SLOW`/`CLEAR`, `_roam()`, `_slow()` and `_avoid()` see
 the same dict key and do not know the ToF exists.
 
 **Uncalibrated reports nothing.** Without a profile (`tof_floor_profile.json`, 64 values
 averaged over `TOF_PROFILE_SAMPLES` frames on clear floor) the sensor contributes nothing,
-rather than making the floor a permanent obstacle. **No profile has been captured yet**
-(§12), so today the ToF adds nothing to `front`. Re-run the calibration after any bracket
+rather than making the floor a permanent obstacle. **Profile captured 2026-10-07** after the
+180° remount, rows 6–7 only (`TOF_FLOOR_ROWS`); upper rows report anything nearer than
+`TOF_NOFLOOR_OBSTACLE_MM` (400 mm). Re-run the calibration after any bracket
 change or for a different floor surface.
 
 **This is the one stateful input to the reflex layer.** A stale profile degrades
@@ -765,7 +770,8 @@ Perception feeds `world_model.py` for planning only (Master Hardware Design §12
 **Hailo LLM.** `hailo_llm.py::HailoIntentModel` (`ENABLE_HAILO_LLM=True`) runs
 `hailo_platform.genai.LLM` with `qwen2:1.5b` (`models/hailo_qwen2_1_5b.hef`),
 temperature 0.1, top-p 0.9, 256 max tokens. **The prompt must be ChatML-framed**
-(`hailo_llm.py::_chatml`) — `generate_all()` does not apply the chat template, and an
+(`hailo_llm.py::_chatml`) — the genai `generate()` (streaming, used since 2026-10-08) and
+`generate_all()` do not apply the chat template, and an
 unframed prompt makes the model echo the template. `ai_provider.py::_normalise_payload`
 drops placeholder `args` values; prompts carry no angle-bracket placeholders.
 
@@ -885,6 +891,12 @@ Untagged: `WATCHDOG_FAULT` (a killed process cannot self-log).
 `diagnostics.py` is a standalone read-only self-test. It never imports `motors`,
 `steering` or `arm`, so it is safe to run mid-assembly, and reports an itemised table.
 `tests/test_expected_i2c_agreement.py` keeps its expected bus identical to `brain.py`'s.
+
+**Thermal (M-009, `thermal.py`).** `brain._thermal_tick()` polls `ThermalMonitor` every
+`THERMAL_POLL_S` (5 s), reading the SoC temperature from sysfs and the `pwmfan` tach. It logs a
+trend line every 10 min and `EVENT=THERMAL` on each level change (warm 70 °C, hot 80 °C, 3 °C
+hysteresis). It speaks once on hot or on a stopped fan, and `display.py` shows `CPU N C` from
+70 °C. It never touches motion: the Pi 5 firmware throttles itself.
 
 ---
 
@@ -1042,7 +1054,8 @@ oscillated between `ARM_WAVE_WRIST_US` (1380/1620) for `ARM_WAVE_CYCLES` (4) at
 `ARM_WAVE_LEG_S` (0.35 s), then shoulder stepped back to 2010, elbow to 2500, wrist pitch
 to 2300. Non-blocking, one step per tick deadline.
 
-`arm_stow`, `arm_home` and shutdown call `center_all()`; no calibrated stow pose exists.
+`arm_stow` and `arm_home` step to `ARM_POSE_REST` (shoulder first, 50 µs at a time, then elbow,
+then wrist); shutdown releases the arm instead (corrected 2026-10-08).
 
 **Diagnosis.** A current trace describes the motor, never the arm. Before interpreting a
 trace, check whether the joint physically moved. `arm_jog.py` is the calibration tool
