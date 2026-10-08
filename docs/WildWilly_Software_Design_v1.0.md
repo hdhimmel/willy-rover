@@ -70,6 +70,8 @@ stubbed, disabled, approximate or not yet run on the rover, it says so.
 | `main.py` | 70 | Entry point, I²C pre-probe, signal routing |
 | `mapping.py` | 68 | Learning-mode map recording session |
 | `privacy.py` | 59 | Mic/camera disable flag; cloud-send notes; file purge |
+| `steer_override.py` | 65 | FR-600-004: parked steering override, held in IDLE, ended on leaving it |
+| `knock.py` | 70 | FR-1000-006: fixed timed knock step list and player; off until `ARM_POSE_KNOCK` is measured |
 | `thermal.py` | 70 | M-009: SoC temperature and fan tach, warm/hot levels, fan-stopped check |
 | `storage.py` | 53 | Data root resolution and availability check |
 | `logsetup.py` | 42 | Logging config and `log_event` structured tags |
