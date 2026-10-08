@@ -43,3 +43,15 @@ def test_mouth_follows_the_envelope_and_closes_after_it():
     assert mouth_openness(env,0.05,0.11)==1.0
     assert mouth_openness(env,0.05,0.16) is None               # finished speaking: normal face
     assert mouth_openness(None,0.05,0.0) is None               # not talking
+
+def test_display_goes_quiet_only_while_transcribing():
+    import types
+    from voice import VoicePipeline
+    calls=[]
+    v=object.__new__(VoicePipeline); v.display=types.SimpleNamespace(set_quiet=calls.append)
+    with v._display_quiet(): calls.append('transcribe')
+    assert calls==[True,'transcribe',False]
+    try:
+        with v._display_quiet(): raise RuntimeError('whisper')
+    except RuntimeError: pass
+    assert calls[-1] is False                       # restored even when transcription fails

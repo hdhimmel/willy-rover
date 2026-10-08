@@ -343,8 +343,16 @@ voice model from disk. `voice.PiperEngine` now loads the model once (on the spea
 startup) through Piper's Python API — 1.3+ `synthesize_wav`/`SynthesisConfig` or 1.2
 `synthesize` — and caches the finished audio of short replies (≤ `TTS_CACHE_MAX_CHARS`), so
 fixed fast-path answers need no synthesis after first use. Any failure falls back to the old
-subprocess. The timing line now names the path taken (`cache`/`inproc`/`subprocess`). Not yet
-measured on the rover.
+subprocess. The timing line now names the path taken (`cache`/`inproc`/`subprocess`).
+**Measured 2026-10-08:** reply synthesis 2.6–5.1 s → **0.1–0.4 s** (`inproc`); a simple command
+6.5–8.8 s → ~4.5 s end to end. What remains is speech-to-text: ~2 s speaking (incl. the 0.6 s
+end-of-speech wait) + ~2 s transcription. Benchmark on willie (12 Piper-spoken command phrases,
+no recordings): `base.en` 2.19 s / 12 correct; 4 threads or no timestamps no faster; `tiny.en`
+1.13 s but 11/12 ("how's your battery" → "House your battery") — rejected, a mishearing can
+match the wrong command. With the service stopped `base.en` took **1.44 s**: the service competes
+with itself. py-spy put the face display (30 fps redraw + flip) at ~20% of a core and the
+wake-word listener at ~13% (it is the transcribing thread, so it already pauses). So the display
+now drops to `DISPLAY_FPS_QUIET` (5) while transcribing (`display.set_quiet`, `voice._display_quiet`).
 
 **Talking mouth (FR-1600-009, 2026-10-07).** `_synthesize_and_play()` computes the loudness
 envelope of the WAV Piper just wrote (`speech_envelope`, 50 ms windows, normalised and gated)

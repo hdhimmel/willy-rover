@@ -33,6 +33,7 @@ if SIMULATE_HARDWARE:
     os.makedirs(os.path.join(_SIM_ROOT,'logs'),exist_ok=True)
 
 DISPLAY_W=800; DISPLAY_H=480; DISPLAY_FPS=30; DISPLAY_ROTATE=0
+DISPLAY_FPS_QUIET=5   # while voice transcribes (display.set_quiet): frees CPU for speech-to-text
 
 # Drive — 2x Adafruit FeatherWing #2927 MotorKit boards over I2C (§9, §1.3 master doc).
 # Replaces the old GPIO H-bridge pins (freed — no discrete driver chip, no direction/PWM GPIO).

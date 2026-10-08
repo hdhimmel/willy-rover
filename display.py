@@ -46,6 +46,7 @@ class WillyFace:
         self._personality=None;self._personality_until=0.0
         self._idle_cycle_t=config.IDLE_PERSONALITY_CYCLE_S
         self._talk_env=None; self._talk_step=0.05; self._talk_t0=0.0   # talking mouth (set_talking)
+        self._quiet=False   # set_quiet(): low frame rate while voice transcribes
         self._heard_until=0.0  # note_heard() flashes a small corner icon, separate from state='listening'
         # FR-300-003, applied to all faults not just E-stop (owner decision 2026-08-18): once a
         # fault condition clears, brain.py stops calling _go('IDLE') automatically and instead
@@ -293,7 +294,8 @@ class WillyFace:
                     self._handle_stop_tap(*e.pos)
                     self._handle_override_tap(*e.pos)
                     self._handle_roam_tap(*e.pos)
-            dt=1.0/config.DISPLAY_FPS; self._t+=dt
+            fps=config.DISPLAY_FPS_QUIET if self._quiet else config.DISPLAY_FPS
+            dt=1.0/fps; self._t+=dt
             if config.ENABLE_DISPLAY_EXPRESSIONS:
                 with self._lock:
                     idle=self._state=='idle'
@@ -303,7 +305,7 @@ class WillyFace:
                         self.set_expression('silly',2.0); self._idle_cycle_t=config.IDLE_PERSONALITY_CYCLE_S
                 else:
                     self._idle_cycle_t=config.IDLE_PERSONALITY_CYCLE_S
-            self._draw(); clk.tick(config.DISPLAY_FPS)
+            self._draw(); clk.tick(fps)
         pygame.quit()
 
     # FR-1600-009 (owner 2026-10-07): "when Willie speaks have his mouth open and close like he is
@@ -316,6 +318,13 @@ class WillyFace:
             self._talk_step=step_s; self._talk_t0=time.monotonic()
     def stop_talking(self):
         with self._lock: self._talk_env=None
+
+    # Faster replies (2026-10-08): profiling the live service put this render loop at ~20% of a
+    # core -- the biggest thing competing with speech-to-text (transcription 1.44 s with nothing
+    # else running vs ~2.1-2.2 s inside the service). While voice transcribes, draw at
+    # DISPLAY_FPS_QUIET; the 'Thinking...' face barely changes for those 1-2 s anyway.
+    def set_quiet(self,quiet):
+        self._quiet=bool(quiet)
 
     def _draw(self):
         s=self.screen; t=self._t; s.fill(C_BG)

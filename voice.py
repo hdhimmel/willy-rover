@@ -680,20 +680,39 @@ class VoicePipeline:
         if self.display: self.display.update_state(state='processing',status='Thinking...')
         if on_text is not None:   # prompted listen: hand back the words, interpret nothing
             try:
-                segs,_=self._whisper.transcribe(pcm,language='en',beam_size=1,vad_filter=True)
-                text=' '.join(s.text for s in segs).strip()
+                with self._display_quiet():
+                    segs,_=self._whisper.transcribe(pcm,language='en',beam_size=1,vad_filter=True)
+                    text=' '.join(s.text for s in segs).strip()
             except Exception:
                 log.warning('Prompted transcription failed',exc_info=True); text=''
             on_text(text or None); return
         self._process_utterance(pcm,t_wake)
+
+    def _display_quiet(self):
+        """Context: the face draws at DISPLAY_FPS_QUIET while speech is transcribed (2026-10-08)."""
+        import contextlib
+        disp=self.display
+        @contextlib.contextmanager
+        def cm():
+            try:
+                if disp is not None and hasattr(disp,'set_quiet'): disp.set_quiet(True)
+            except Exception: pass
+            try: yield
+            finally:
+                try:
+                    if disp is not None and hasattr(disp,'set_quiet'): disp.set_quiet(False)
+                except Exception: pass
+        return cm()
 
     def _process_utterance(self,pcm,t_wake):
         # FR-1500-002: onboard STT, no cloud dependency. Also satisfies FR-1800-001 (raw
         # audio never transmitted off-device): cloud_ai.ask_sync() below is only ever given
         # already-transcribed text, never the PCM buffer, so no cloud fallback path exists that
         # would need to send raw audio in the first place.
-        segments,_=self._whisper.transcribe(pcm,language='en',beam_size=1,vad_filter=True)
-        text=' '.join(s.text for s in segments).strip()
+        with self._display_quiet():
+            # segments is a lazy generator -- decoding happens in the join, so it stays inside
+            segments,_=self._whisper.transcribe(pcm,language='en',beam_size=1,vad_filter=True)
+            text=' '.join(s.text for s in segments).strip()
         t_stt=time.time()
         if not text:
             self.speak("How can I help?"); return
