@@ -212,7 +212,7 @@ def _fp(core):
 # phrasing nobody predicted still lands.
 # NOTE brain.py runs arm_home AND arm_stow as the same stepped move to ARM_POSE_REST (since
 # 2026-10-02). The intents are distinct; the behaviour is not.
-_ARM=r"(?:the |your )?arm"
+_ARM=r"(?:the |your |that )?arm"   # 'that' 2026-10-08: "put that arm away" reached the model
 _ARM_HOME_V=r"(?:centre|center|home|reset)"
 _ARM_STOW_V=r"(?:stow|park)"
 
@@ -281,12 +281,14 @@ _FAST_PATH_PATTERNS=[
     (_fp(r'(?:go |move |drive )?(?:reverse|backward|back up)'),'reverse','Backing up.'),
     (_fp(r'turn left'),'turn_left','Turning left.'),
     (_fp(r'turn right'),'turn_right','Turning right.'),
-    (_fp(r'shut down|power off|go to sleep'),'shutdown',''),
+    (_fp(r'shut down|power off|go to sleep|power yourself (?:off|down)|shut yourself (?:off|down)|'
+         r'turn yourself off'),'shutdown',''),   # still asks to confirm before anything happens
     # --- tier 1: speech-only, widened ---
     (_fp(r"(?:how'?s|hows|how is|what'?s|whats|what is|check) (?:your |the )?battery(?: (?:level|status|at|doing))?|"
-         r"battery (?:status|level|check)|how much (?:charge|battery|power)(?: (?:left|is left|do you have))?|"
+         r"battery (?:status|level|check)|how much (?:charge|battery|power|juice)(?: (?:left|is left|do you have))?|"
+         r"do you have (?:much |enough |any )?(?:charge|battery|power|juice)(?: left)?|"
          r"are you charged"),'battery','Checking.'),
-    (_fp(r'status(?: report)?|how are you(?: doing| feeling)?|are you (?:ok|okay|alright|good)|'
+    (_fp(r'status(?: report)?|how are you(?: doing| feeling)?|are you (?:doing )?(?:ok|okay|alright|good|well)|'
          r"what'?s your status|report"),'status','Checking.'),
     (_fp(r'where are you|what room (?:is this|are you in)|which room (?:is this|are you in)|'
          r"where(?:'?s| is) this|do you know where you are"),'where_are_you','Checking.'),
@@ -296,7 +298,8 @@ _FAST_PATH_PATTERNS=[
     # 2026-10-07 (owner): "what are you doing?" gets a brief answer about his current activity.
     (_fp(r'what(?:'r"'"r're| are) you doing|whatcha doing|what are you up to|what(?:'r"'"r's| is) going on'),
          'what_doing',''),
-    (_fp(r'wave(?: hello| hi| at me)?|say (?:hi|hello)|give (?:me )?a wave'),'wave',''),
+    (_fp(r'wave(?: hello| hi| at me| at (?:them|him|her|everyone|everybody))?|'
+         r'say (?:hi|hello)(?: to (?:them|him|her|everyone|everybody))?|give (?:me |them )?a wave'),'wave',''),
     (_fp(_ARM_STOW_V+r' '+_ARM+r'|put '+_ARM+r' away|'+_ARM+r' away'),'arm_stow','Stowing the arm.'),
     (_fp(_ARM_HOME_V+r' '+_ARM+r'|'+_ARM+r' '+_ARM_HOME_V),'arm_home','Homing the arm.'),
     (_fp(r'(?:start|begin) (?:mapping|the map)|map this room|start mapping this room'),

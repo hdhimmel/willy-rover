@@ -54,3 +54,16 @@ def test_the_model_never_answers_a_sensor_question_itself():
     assert said==[] and v.pending_commands.get_nowait()['intent']=='battery'
     v._act_on_intent({'intent':'battery','args':{},'reply':'Checking.'},'hows your battery')
     assert said==['Checking.']
+
+def test_phrasings_the_model_got_wrong_are_fixed_phrases_now():
+    """2026-10-08 Hailo qualification: these reached the model and came back wrong or unparseable
+    ("say hi to them" once became come_here -- motion). Now deterministic."""
+    import voice
+    fp=lambda t: (voice.VoicePipeline._fast_path(None,t) or {}).get('intent')
+    assert fp("would you power yourself off now")=='shutdown'      # still asks to confirm
+    assert fp("do you have much juice left")=='battery'
+    assert fp("put that arm away for me")=='arm_stow'
+    assert fp("go ahead and say hi to them")=='wave'
+    assert fp("are you doing okay buddy")=='status'
+    for t in ("don't power yourself off","say hi to grandma tomorrow","put that arm away later maybe"):
+        assert fp(t) is None, t                                       # near-misses still go to the model

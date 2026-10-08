@@ -2909,6 +2909,16 @@ section behind it until now. Added 2026-08-02, v1.4.
 
 # Acceptance Criteria
 
+-   **Hailo intent re-qualification (2026-10-08).** `experiments/hailo_qualification.py hailo
+    --repeats 3` on the current code (ChatML, context clearing, streaming): **78.1% usable, 25.0%
+    strict, 12 wrong intent, 9 unparseable, precision above the 0.7 confidence floor 85.4%,
+    median 4.8 s** — against 80.2% / 27.1% / 10 / 9 / 88.0% / 4.9 s on 2026-09-14. No change
+    beyond noise and stable across repeats: the 1.5 B model's ceiling, not a prompt problem.
+    Response: the phrasings it actually got wrong that reach it in practice ("power yourself
+    off", "much juice left", "put that arm away", "say hi to them" — once read as come_here,
+    i.e. motion — and "are you doing okay") are now fixed phrases; near-misses and negations
+    still go to the model. Artifact: `experiments/results/2026-10-08-hailo-qualification.json`.
+
 -   **FR-1500-011 (what are you doing / looking at).** Added 2026-10-07 (owner). "What are you
     doing?" (also "what are you up to", "what's going on") answers with ONE short sentence
     from his current state — exploring, turning left, on the way to the kitchen, looking for
