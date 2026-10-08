@@ -335,10 +335,11 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   never written.
 
   FR-1900 Learning        Implemented, off-       Demonstrations, facts,
-                          hardware tested         routines. FR-1900-002 replays
-                                                  the recorded path only; it
-                                                  does not adapt to a different
-                                                  start.
+                          hardware tested         routines. FR-1900-002 replay
+                                                  joins the path partway when
+                                                  he is near it, not only at the
+                                                  start: built 2026-10-08, not
+                                                  yet run.
 
   FR-2000 Email           PARTIAL --- DKIM        DKIM-verified approve emails
                           path live               live 2026-10-07/08 (FR-2200).
@@ -3622,8 +3623,16 @@ guaranteed-save requirement in particular had none anywhere in the document.
         route in `world_model.db`. What is captured is a **path**, not an action
         sequence — no arm or object steps.
     -   **FR-1900-002, replay.** *"Do the way to the kitchen"* replays it through the
-        navigator (`Mission(route=...)`). There is **no adaptation** to a changed
-        position: he replays only from near the original start.
+        navigator (`Mission(route=...)`). ✅ **Adapts to a different start, built 2026-10-08,
+        not yet run on the rover.** Near the recorded start he replays all of it, as before.
+        Otherwise, if he is near any recorded point of the path, he **joins at the nearest
+        point**: `Mission(route=name, start=i)`, so the navigator drives to that point first
+        and follows the rest, and he says "Joining the way to the kitchen". "Near" uses the
+        same positional similarity and floor as the start, about 1.3 m. Farther than that
+        from the whole path he refuses as below. Already at the last point, he says so and
+        doesn't move. `replay_demonstration()` now returns
+        `(full waypoints, similarity, start_index)`. Tests: `tests/test_demonstrations.py`
+        and `tests/test_replay_join.py`.
     -   **FR-1900-003, mismatch.** Similarity for a demonstration is **positional**:
         1.0 within `DEMO_START_NEAR_M` (0.5 m) of the recorded start, falling linearly
         to 0 at `DEMO_START_FAR_M` (2.5 m), so the 0.6 floor refuses beyond ~1.3 m and

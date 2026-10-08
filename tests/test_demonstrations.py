@@ -42,10 +42,13 @@ assert "learned the way to the kitchen" in said[-1] and routes["kitchen"][-1]==(
 ns._demo={"name":"nowhere","points":[(2.0,0.0)],"started":0,"context":{"start_x":2.0,"start_y":0.0}}
 ns._finish_demo(); assert "nothing to learn" in said[-1] and "nowhere" not in routes
 
-# replay: near the start -> similarity 1.0; far -> refused (below the floor); unknown -> None
-w,s=mem.replay_demonstration("kitchen",{"start_x":0.2,"start_y":0.1}); assert w and s==1.0
-w,s=mem.replay_demonstration("kitchen",{"start_x":3.0,"start_y":0.0}); assert w is None and s<config.MEMORY_REPLAY_SIMILARITY_FLOOR
-assert mem.replay_demonstration("garage",{})==(None,None)
+# replay: near the start -> all of it; near the path -> joins at the nearest point (FR-1900-002,
+# 2026-10-08); far from the whole path -> refused (below the floor); unknown -> None
+w,s,i=mem.replay_demonstration("kitchen",{"start_x":0.2,"start_y":0.1}); assert w and s==1.0 and i==0
+w,s,i=mem.replay_demonstration("kitchen",{"start_x":1.2,"start_y":0.6}); assert w and i==4 and s>=config.MEMORY_REPLAY_SIMILARITY_FLOOR
+assert tuple(w[0])==(0.0,0.0) and abs(w[i][0]-1.3)<1e-6   # the FULL path comes back; the index says where to join (points 0,.3,.6,1.0,1.3..)
+w,s,i=mem.replay_demonstration("kitchen",{"start_x":1.0,"start_y":3.0}); assert w is None and i is None and s<config.MEMORY_REPLAY_SIMILARITY_FLOOR
+assert mem.replay_demonstration("garage",{})==(None,None,None)
 print("DEMO_OK")
 '''
 

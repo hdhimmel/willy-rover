@@ -103,8 +103,10 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
   to know. Until you do, he'll say he doesn't know where the kitchen is.
 - **"The stairs are here"** — with him facing a staircase, marks it so he keeps back from it.
 - **"Learn the way to the kitchen"** — then lead him (or drive him) there and say **"That's
-  it"**. Later, **"Show me the way to the kitchen"** follows that route — but only from near
-  where you started teaching it.
+  it"**. Later, **"Show me the way to the kitchen"** follows that route. From where you
+  started teaching it, he does the whole way. From somewhere else along it, he joins it at
+  the nearest point, within about a metre, and follows the rest. Farther away than that, he
+  tells you he's too far from it.
 
   Where he thinks he is comes from counting wheel turns, which drifts over distance and has not
   been checked on the floor yet. Expect labelled places to be approximate.

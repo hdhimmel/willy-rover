@@ -26,10 +26,12 @@ log=logsetup.setup('navigation')
 # plan an obstacle-aware global path. "Do not pretend this is full SLAM" (§9) applies here too.
 
 class Mission:
-    __slots__=('room','route','xy')
-    def __init__(self,room=None,route=None,xy=None):
-        self.room=room; self.route=route; self.xy=xy
-    def __repr__(self): return f'Mission(room={self.room!r},route={self.route!r},xy={self.xy!r})'
+    # start: first waypoint of a route to drive (FR-1900-002 joining a learned route partway,
+    # 2026-10-08); the navigator heads for it first, then follows the rest.
+    __slots__=('room','route','xy','start')
+    def __init__(self,room=None,route=None,xy=None,start=0):
+        self.room=room; self.route=route; self.xy=xy; self.start=start
+    def __repr__(self): return f'Mission(room={self.room!r},route={self.route!r},xy={self.xy!r},start={self.start})'
 
 def _wrap_deg(a):
     return (a+180)%360-180
@@ -85,7 +87,7 @@ class Navigator:
             route=self.world_model.get_route(mission.route)
             if route is None:
                 log.warning(f'Navigation: unknown route {mission.route!r}'); return []
-            return list(route.waypoints)
+            return list(route.waypoints)[max(0,int(getattr(mission,'start',0) or 0)):]
         if mission.room is not None:
             return self._resolve_room(mission.room)
         if mission.xy is not None:

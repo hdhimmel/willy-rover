@@ -1360,24 +1360,28 @@ class RoverBrain:
         elif cmd.get('intent')=='demo_stop':
             self._finish_demo()
         elif cmd.get('intent')=='demo_replay':
-            # FR-1900-002/003: replay only from near where it started; otherwise say so.
+            # FR-1900-002/003: replay from near the start, or join the path partway if he is
+            # near it (2026-10-08); otherwise say so.
             name=cmd.get('args',{}).get('name','').strip()
             pose=self.world_model.get_robot_pose()
-            wps,sim=self.memory.replay_demonstration(name,{'start_x':pose.x,'start_y':pose.y})
+            wps,sim,start=self.memory.replay_demonstration(name,{'start_x':pose.x,'start_y':pose.y})
             if sim is None:
                 self._say(f"I haven't learned a way to the {name}.")
             elif wps is None:
                 log_event(log,'DEMO',subsystem='memory',status='replay_refused',name=name,similarity=f'{sim:.2f}')
-                self._say(f"I'm too far from where we started the {name} route to follow it. "
-                          f"Take me back to the start, or show me again from here.")
+                self._say(f"I'm too far from the {name} route to follow it. "
+                          f"Take me nearer to it, or show me again from here.")
+            elif start>=len(wps)-1:
+                self._say(f"I'm already at the end of the way to the {name}.")
             else:
                 if self.world_model.get_route(name) is None:
                     self.world_model.add_route(name,[tuple(p) for p in wps])
-                ok,msg=self.navigator.start(Mission(route=name))
+                ok,msg=self.navigator.start(Mission(route=name,start=start))
                 if ok: self._go('NAVIGATE')
                 log_event(log,'DEMO',subsystem='memory',status='replay' if ok else 'replay_failed',
-                          name=name,similarity=f'{sim:.2f}')
-                self._say(f'Following the way to the {name}.' if ok else f"I can't follow that route: {msg}")
+                          name=name,similarity=f'{sim:.2f}',start=start)
+                said='Following the way to the' if start==0 else 'Joining the way to the'
+                self._say(f'{said} {name}.' if ok else f"I can't follow that route: {msg}")
         elif cmd.get('intent')=='mark_stairs':
             # FR-1200-006: the edge sits STAIR_LABEL_AHEAD_M in front, across his heading.
             pose=self.world_model.get_robot_pose()

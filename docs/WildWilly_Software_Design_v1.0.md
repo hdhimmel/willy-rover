@@ -55,7 +55,7 @@ stubbed, disabled, approximate or not yet run on the rover, it says so.
 | `feature_requests.py` | 239 | FR-2200: evidence from his own log, cloud-composed request emailed with a one-time code; on approval writes `docs/feature-requests/<date>-<slug>.md`, commits that file alone and pushes. Own low-frequency thread |
 | `vision.py` | 228 | Object detection (Hailo NPU backend; CPU backend present but disabled), bearing/range heuristics, `capture_frame()` / `capture_still()` |
 | `pico_link.py` | 214 | One framed-UART reader per Pico (`$<body>*<XX>`); keeps the newest frame and its age; never invents a value |
-| `memory_store.py` | 192 | Conversational and episodic memory (SQLite); routines (`note_routine()`, `top_routines()`); demonstrations; person-scoped facts |
+| `memory_store.py` | 192 | Conversational and episodic memory (SQLite); routines (`note_routine()`, `top_routines()`); demonstrations (replay joins the path at the nearest point, FR-1900-002); person-scoped facts |
 | `retrieval_task.py` | 184 | Object retrieval sub-FSM |
 | `navigation.py` | 165 | Route resolution and local planning |
 | `safety.py` | 143 | The motion authority — sole gate to the motors |

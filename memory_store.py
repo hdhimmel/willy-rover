@@ -68,22 +68,35 @@ class MemoryStore:
         return name
 
     def replay_demonstration(self,name,current_context=None):
-        # FR-1900-002/003: returns (waypoints, similarity) if close enough to replay, else
-        # (None, similarity) so the caller reports a mismatch instead of proceeding blindly.
-        # Similarity is a plain heuristic (fraction of matching context keys/values) — there is
-        # no embedding model on this hardware to do anything fancier.
+        # FR-1900-002/003: returns (waypoints, similarity, start_index). waypoints is always the
+        # FULL recorded path; start_index is where to begin it. (None, sim, None) when too far to
+        # replay, so the caller reports a mismatch instead of proceeding blindly; (None, None,
+        # None) for an unknown name.
+        #
+        # ADAPTING (2026-10-08): near the recorded start he replays all of it, as before. Away
+        # from the start but near the PATH, he joins it at the nearest recorded point and replays
+        # the rest -- the navigator drives to that point first. "Near" is the same positional
+        # scale for both: 1.0 within DEMO_START_NEAR_M, falling to 0 at DEMO_START_FAR_M, with
+        # MEMORY_REPLAY_SIMILARITY_FLOOR (~1.3 m) as the cut-off.
         row=self._conn.execute(
             'SELECT context_json,waypoints_json FROM demonstrations WHERE name=?',(name,)).fetchone()
         if row is None:
             log.warning(f'Replay requested for unknown demonstration: {name}')
-            return None,None   # unknown, as distinct from known-but-too-different (0.0..floor)
+            return None,None,None   # unknown, as distinct from known-but-too-different (0.0..floor)
         stored_ctx=json.loads(row[0]); waypoints=json.loads(row[1])
-        sim=_context_similarity(stored_ctx,current_context or {})
-        if sim<config.MEMORY_REPLAY_SIMILARITY_FLOOR:
-            log.warning(f'Replay of {name} rejected: similarity {sim:.2f} below floor '
-                        f'{config.MEMORY_REPLAY_SIMILARITY_FLOOR}')
-            return None,sim
-        return waypoints,sim
+        cur=current_context or {}
+        sim=_context_similarity(stored_ctx,cur)
+        if sim>=config.MEMORY_REPLAY_SIMILARITY_FLOOR: return waypoints,sim,0
+        if 'start_x' in cur and 'start_y' in cur and waypoints:
+            i,d=_nearest_point(waypoints,float(cur['start_x']),float(cur['start_y']))
+            jsim=_positional_similarity(d)
+            if jsim>=config.MEMORY_REPLAY_SIMILARITY_FLOOR:
+                log.info(f'Replay of {name}: joining at point {i}/{len(waypoints)-1}, {d:.2f} m away')
+                return waypoints,jsim,i
+            sim=max(sim,jsim)
+        log.warning(f'Replay of {name} rejected: similarity {sim:.2f} below floor '
+                    f'{config.MEMORY_REPLAY_SIMILARITY_FLOOR}')
+        return None,sim,None
 
     # --- environment facts (FR-1900-004) ---
     def add_fact(self,key,value):
@@ -177,14 +190,21 @@ class MemoryStore:
         self.save_all_now(); self._conn.close()
 
 
+def _positional_similarity(d):
+    near,far=config.DEMO_START_NEAR_M,config.DEMO_START_FAR_M
+    return 1.0 if d<=near else max(0.0,1.0-(d-near)/(far-near))
+
+def _nearest_point(waypoints,x,y):
+    import math
+    return min(((i,math.hypot(float(p[0])-x,float(p[1])-y)) for i,p in enumerate(waypoints)),key=lambda t:t[1])
+
 def _context_similarity(a,b):
     # FR-1900-003 (2026-10-02): demonstrations carry a start position; that dominates, since
     # replaying a recorded path from somewhere else drives it in the wrong place.
     if all(k in a and k in b for k in ('start_x','start_y')):
         import math
         d=math.hypot(float(a['start_x'])-float(b['start_x']),float(a['start_y'])-float(b['start_y']))
-        near,far=config.DEMO_START_NEAR_M,config.DEMO_START_FAR_M
-        return 1.0 if d<=near else max(0.0,1.0-(d-near)/(far-near))
+        return _positional_similarity(d)
     if not a and not b: return 1.0
     keys=set(a)|set(b)
     if not keys: return 1.0
