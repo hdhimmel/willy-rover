@@ -21,6 +21,11 @@ log=logsetup.setup('hailo_server')
 # Failure: a request that times out or hits a dead pipe kills the child and marks the client
 # down; the next call restarts it, at most every HAILO_SERVER_RESTART_S. Callers see what they
 # already handle: no detections, or a failed AIResult.
+#
+# If the child never starts (2026-10-09, outside review): VISION falls back in-process -- YOLO
+# inference never froze anything -- but the MODEL does not. The in-process model is the 2.2 s
+# freeze this file exists to remove; a run without the server runs without the on-board model
+# (fast-path phrases and the cloud fallback still work).
 
 
 # ------------------------------------------------------------------ server (child process)
@@ -242,8 +247,13 @@ def get_client():
             if c.start(): _client=c
             else:
                 _client_failed=True
-                log.warning('Hailo server failed to start: using the in-process Hailo path this run')
+                log.warning('Hailo server failed to start: vision runs in-process this run, the '
+                            'on-board model stays OFF (it would freeze the rover process)')
         return _client
+
+def server_failed():
+    """True once the server was wanted and would not start this run."""
+    return _client_failed
 
 def close_client():
     global _client

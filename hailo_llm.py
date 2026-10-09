@@ -66,6 +66,11 @@ class HailoIntentModel(AIProvider):
         self._enabled=False; self._llm=None; self._remote=None
         # FR-1400-006 real fix: the model runs in the Hailo server process when it is up.
         client=hailo_server.get_client()
+        if client is None and config.ENABLE_HAILO_SERVER and hailo_server.server_failed():
+            # 2026-10-09: no in-process fallback for the MODEL. It is the 2.2 s whole-process
+            # freeze the server exists to remove; vision still falls back (it never froze).
+            log.warning('Hailo server did not start: on-board model OFF this run (no in-process fallback).')
+            return
         if client is not None:
             if client.info.get('llm'):
                 self._remote=client; self._enabled=True

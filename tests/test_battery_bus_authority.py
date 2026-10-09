@@ -115,3 +115,32 @@ def test_a_divider_that_agrees_again_is_trusted_and_a_real_low_pack_still_halts(
     assert not b._battery_reading_disputed()
     _hold(b,lambda: adc.battery_volts,clock,config.BAT_SHUTDOWN_V)
     assert len(halts)==1
+
+
+def _monitor(bus_v,age_s):
+    import sensors,threading,time
+    m=object.__new__(sensors.CurrentMonitor); m._lock=threading.Lock()
+    m._data={r:{'current_a':0.0,'voltage_v':0.0,'power_w':0.0} for r in sensors.CurrentMonitor._RAILS}
+    m._data['bus_12v']['voltage_v']=bus_v
+    m._rail_ok_t={r:time.perf_counter()-age_s for r in sensors.CurrentMonitor._RAILS}
+    return m
+
+def test_a_stale_bus_reading_is_a_dead_bus_not_a_frozen_battery_value():
+    # Outside review 2026-10-08: rail() holds the last good value forever. If 0x45 stops answering
+    # at 11.9 V, the battery reading must NOT stay at 11.9 V; it falls to the divider.
+    import brain
+    fresh=_monitor(11.9,0.1); stale=_monitor(11.9,config.INA_FRESH_S+1)
+    assert brain._bus_volts(fresh)==pytest.approx(11.9)
+    assert brain._bus_volts(stale)==0.0
+    adc=_adc(9.0,0.0); adc.bus_source=lambda: brain._bus_volts(stale)
+    assert adc.battery_volts==pytest.approx(9.0,abs=0.01)
+
+def test_stale_bus_with_a_suspect_divider_cannot_halt(monkeypatch):
+    import brain
+    clock=[1000.0]
+    stale=_monitor(11.9,config.INA_FRESH_S+1)
+    adc=_adc(7.2,0.0); adc.bus_source=lambda: brain._bus_volts(stale)
+    b,halts=_brain(adc,0.0,clock,monkeypatch); b.current=stale; b._bat_xcheck_flagged=True
+    assert b._battery_reading_disputed()
+    _hold(b,lambda: adc.battery_volts,clock,config.BAT_SHUTDOWN_V,windows=5)
+    assert halts==[]

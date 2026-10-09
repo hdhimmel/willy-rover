@@ -672,6 +672,7 @@ class CurrentMonitor:
         self._data={r:{'current_a':0.0,'voltage_v':0.0,'power_w':0.0} for r in self._RAILS}
         self._lock=threading.Lock(); self._running=False; self._thread=None; self._last_ok=0.0
         self._fail_counts={r:0 for r in self._RAILS}  # consecutive per-rail read failures
+        self._rail_ok_t={r:0.0 for r in self._RAILS}   # per-rail last good read, see fresh_volts()
     def _be16(self,addr,reg):
         d=self._bus.read_i2c_block_data(addr,reg,2)
         v=(d[0]<<8)|d[1]
@@ -682,9 +683,11 @@ class CurrentMonitor:
                 self._be16(addr,self._REG_POWER)*0.01)
     def _update(self):
         if config.SIMULATE_HARDWARE:
+            now=time.perf_counter()
             with self._lock:
-                for rail in self._RAILS: self._data[rail]={'current_a':0.5,'voltage_v':12.0,'power_w':6.0}
-            self._last_ok=time.perf_counter(); return
+                for rail in self._RAILS:
+                    self._data[rail]={'current_a':0.5,'voltage_v':12.0,'power_w':6.0}; self._rail_ok_t[rail]=now
+            self._last_ok=now; return
         # Per-rail isolation. This loop used to let the first failing rail's exception propagate
         # out of _update() entirely, so a single absent INA260 meant the *other* rails were never
         # read at all and every rail's data went stale -- which is how one dead device (0x40)
@@ -709,7 +712,9 @@ class CurrentMonitor:
             if self._fail_counts[rail]:
                 log.info(f'INA260 {rail} rail (0x{addr:02x}) recovered after {self._fail_counts[rail]} failures')
                 self._fail_counts[rail]=0
-            with self._lock: self._data[rail]={'current_a':cur,'voltage_v':volt,'power_w':pwr}
+            with self._lock:
+                self._data[rail]={'current_a':cur,'voltage_v':volt,'power_w':pwr}
+                self._rail_ok_t[rail]=time.perf_counter()
         # Deliberately strict: _last_ok (and therefore is_healthy, which brain.py::_check_health
         # escalates on) still requires ALL rails to read. A missing monitor is a real fault and
         # should keep failing the self-test -- this fix restores the other rails' *data*, it does
@@ -731,6 +736,14 @@ class CurrentMonitor:
             time.sleep(0.1)  # 10Hz per §8.5
     def rail(self,name):
         with self._lock: return dict(self._data[name])
+    def fresh_volts(self,name):
+        """The rail voltage if read within INA_FRESH_S, else None. rail() holds the LAST GOOD value
+        forever (§8.5 "log, hold last"), which is right for diagnostics and wrong for anything that
+        decides on it: a dead 0x45 would freeze the battery reading at its last value (outside
+        review 2026-10-08)."""
+        with self._lock:
+            if time.perf_counter()-self._rail_ok_t[name]>config.INA_FRESH_S: return None
+            return self._data[name]['voltage_v']
     @property
     def all_rails(self):
         with self._lock: return {k:dict(v) for k,v in self._data.items()}

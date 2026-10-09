@@ -198,6 +198,16 @@ def _init_device(ctor,name,attempts=8,delay_s=0.75):
             log.warning(f'{name} init failed ({e}), retrying in {delay_s}s (attempt {attempt+1}/{attempts})')
             time.sleep(delay_s)
 
+def _bus_volts(current):
+    """+12V bus voltage for BATTERY decisions: 0.0 when the 0x45 reading is stale, i.e. a dead
+    monitor counts as a dead bus. Then battery_volts falls back to the divider, which the
+    cross-check flag can veto -- instead of the tiers reading a frozen last-good bus value
+    (outside review 2026-10-08). Plain rail() for monitors without fresh_volts (test fakes)."""
+    fresh=getattr(current,'fresh_volts',None)
+    if fresh is None: return current.rail('bus_12v')['voltage_v']
+    v=fresh('bus_12v')
+    return 0.0 if v is None else v
+
 class RoverBrain:
     def __init__(self):
         log.info('Initialising WildWilly v2...')
@@ -231,7 +241,7 @@ class RoverBrain:
         except Exception: log.warning('Wheel speed control: could not attach encoders',exc_info=True)
         self.current=_init_device(CurrentMonitor,'current')
         # Battery voltage from the +12V bus monitor when the bus is live (see ADC.battery_volts).
-        self.adc.bus_source=lambda: self.current.rail('bus_12v')['voltage_v']
+        self.adc.bus_source=lambda: _bus_volts(self.current)
         self.arm=_init_device(Arm,'arm')
         self.odometry=Odometry(self.encoders,
                                heading_source=lambda: self.imu.heading if self.imu.is_healthy else None)
@@ -2115,7 +2125,7 @@ class RoverBrain:
             2026-10-06/07 the divider read 7.2V and then 15.4V on a 12V pack: halting -- or not
             halting -- on that would be acting on a number already known to be wrong."""
         try:
-            bus=self.current.rail('bus_12v')['voltage_v']
+            bus=_bus_volts(self.current)
         except Exception:
             bus=0.0
         if bus>=config.MOTOR_RAIL_MIN_V:
@@ -2165,7 +2175,7 @@ class RoverBrain:
         if not self.adc.is_healthy:
             return ''   # already stale; _check_health() owns that, and comparing noise is noise
         try:
-            bus=self.current.rail('bus_12v')['voltage_v']
+            bus=_bus_volts(self.current)
         except Exception:
             return ''   # monitor unreadable -- _check_health() owns it
         if bus<config.MOTOR_RAIL_MIN_V:

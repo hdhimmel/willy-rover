@@ -114,3 +114,18 @@ def test_the_real_child_process_starts_answers_and_quits():
     finally:
         c.close()
     assert proc.poll() is not None
+
+def test_a_failed_server_turns_the_model_off_rather_than_running_it_in_process(monkeypatch):
+    import types
+    for name in ('picamera2','picamera2.devices','hailo_platform','hailo_platform.genai'):
+        mod=types.ModuleType(name); mod.Hailo=object
+        mod.LLM=lambda *a,**k: pytest.fail('in-process model loaded after a server failure')
+        monkeypatch.setitem(sys.modules,name,mod)
+    monkeypatch.delitem(sys.modules,'hailo_llm',raising=False)
+    import hailo_server,hailo_llm
+    monkeypatch.setattr(config,'ENABLE_HAILO_SERVER',True)
+    monkeypatch.setattr(hailo_server,'get_client',lambda: None)
+    monkeypatch.setattr(hailo_server,'_client_failed',True)
+    monkeypatch.setattr(hailo_llm.os.path,'exists',lambda p: True)
+    m=hailo_llm.HailoIntentModel()
+    assert not m.available

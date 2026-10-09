@@ -388,7 +388,8 @@ the remaining fix is one Hailo server process owning the chip for vision and the
 child owns the VDevice with YOLO and the LLM on it; vision (`RemoteYolo`) and both intent models
 call it over two Unix-socket channels, each with its own lock and timeout (detect 5 s, generate
 60 s). A timeout or dead pipe kills the child; the next call restarts it, at most once a minute.
-If it never starts, that run uses the in-process path and the brake hook. The child logs to
+If it never starts, vision runs in-process that run and the on-board model stays off
+(2026-10-09: an in-process model is the freeze itself). The child logs to
 stderr (the journal), never to the rover's rotating file.
 
 **Come to me (`come_to_me_task.py`, FR-1000-006) owns no motion.** It sequences
@@ -488,6 +489,9 @@ once, announces, and enters `LOW_BATTERY`. Two guards:
   (0x45) is live (≥ `MOTOR_RAIL_MIN_V`), `battery_volts` **is** the bus plus
   `BUS_TO_PACK_DROP_V` (since `b47f7d7`), so the halt acts on the bus. The ADS1115 divider is
   only the fallback for a dead bus (motor cut, base off), where it is the one reading left.
+  "Live" means FRESH: `brain._bus_volts()` uses `CurrentMonitor.fresh_volts()`, so a 0x45
+  reading older than `INA_FRESH_S` (1 s) counts as a dead bus rather than a frozen last-good
+  value (2026-10-09).
 - **Cross-check veto.** `_battery_reading_disputed()`: with the bus live it is only a
   consistency guard (`battery_volts` vs the bus, which can differ only if that wiring is
   undone). With the bus dead, the halt is blocked while `_check_battery_crosscheck()` last

@@ -90,6 +90,12 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   the ADS1115 divider, and a
                                                   halt is vetoed while the
                                                   divider is flagged suspect.
+                                                  A stale 0x45 reading (> 1 s,
+                                                  INA_FRESH_S) counts as bus
+                                                  dead, never a frozen value
+                                                  (2026-10-09). End-to-end
+                                                  tests: test_battery_bus_
+                                                  authority.py.
                                                   Divider fault found
                                                   2026-10-07: the lower-leg 10 k
                                                   of 4.7k||10k was open, the
@@ -328,8 +334,10 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   rover: the chip, YOLO and the
                                                   model live in one child
                                                   process, so the rover process
-                                                  no longer freezes. In-process
-                                                  path + brake kept as fallback.
+                                                  no longer freezes. If it will
+                                                  not start, vision runs in-
+                                                  process and the model stays
+                                                  OFF (2026-10-09).
 
   FR-1800 Privacy         PARTIAL --- 1800-005    Privacy controls live
                           live                    2026-10-08. Retention
@@ -2940,8 +2948,10 @@ stays primary (Hailo qwen2 1.5B, faster-whisper, Piper).
     running and no brake is needed. Detection pauses up to ~2.2 s while a prompt is read,
     which is acceptable because detection is never a stop sensor. A timeout or dead pipe
     kills the child, and the next call restarts it (at most once a minute,
-    `HAILO_SERVER_RESTART_S`). If the child will not start at all, that run falls back to
-    the in-process path and its brake. One model is now loaded instead of two (brain's and
+    `HAILO_SERVER_RESTART_S`). If the child will not start at all, **vision** runs in-process
+    that run (detection never froze anything) and the **on-board model stays off** --- no
+    in-process fallback for it, since that is the freeze itself (changed 2026-10-09 after an
+    outside review; fast-path phrases and the cloud fallback still work). One model is now loaded instead of two (brain's and
     voice's intent models share it). **To verify on the rover:** service restart → log
     `EVENT=HAILO_SERVER status=up yolo=True llm=True`; a model-path voice command while a
     20 ms heartbeat runs shows no gap; detection still works ("what do you see").

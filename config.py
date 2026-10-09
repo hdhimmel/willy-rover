@@ -860,6 +860,7 @@ SELFTEST_OVERRIDE_AFTER=3
 # then decide about escalation. Threshold is well below any real operating voltage (the bus
 # measured 11.3-11.4V) but above the ~0V a genuine cut produces.
 MOTOR_RAIL_MIN_V=6.0
+INA_FRESH_S=1.0   # an INA260 rail older than this is NOT a reading (sensors.fresh_volts); 10 Hz reader
 BUS_TO_PACK_DROP_V=0.08   # F1 + SW-MAIN + Q1 between the pack and the 0x45 bus monitor (11.98 vs 11.90)
 MOTOR_RAIL_GRACE_S=1.0            # sustained below threshold before it's reported, not a blip
 ENABLE_STUCK_ALERT_EMAIL=True
@@ -1011,7 +1012,8 @@ LOCAL_LLM_CONFIDENCE_FLOOR=0.55  # FR-1400-001: below this, offer cloud AI fallb
 # FR-1400-006 real fix (hailo_server.py, 2026-10-08): one child process owns the Hailo chip for
 # vision AND the model, so the model's prompt read (2.2 s holding the GIL) no longer freezes the
 # rover process. False = the old in-process path (and its brake-before-every-call). If the child
-# will not start, the in-process path is used for that run automatically.
+# will not start, vision runs in-process for that run and the on-board MODEL stays off (2026-10-09:
+# falling back to the in-process model would bring the freeze back).
 ENABLE_HAILO_SERVER=True
 HAILO_SERVER_START_TIMEOUT_S=90.0     # child loads YOLO + the 1.6 GB LLM before answering
 HAILO_SERVER_DETECT_TIMEOUT_S=5.0     # a prompt read (~2.2 s) can delay a detection; 5 s = dead
