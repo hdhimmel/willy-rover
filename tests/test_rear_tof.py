@@ -4,6 +4,12 @@ os.environ.setdefault('WILLY_SIMULATE','1')
 import pytest
 import config
 
+@pytest.fixture(autouse=True)
+def _no_startup_drop_grace(monkeypatch):
+    # These tests judge single frames; the start-up grace (TOF_STARTUP_IGNORE_DROP_S) has its own test.
+    monkeypatch.setattr(config,'TOF_STARTUP_IGNORE_DROP_S',0.0)
+
+
 # Rear ToF (2026-10-10): second SEN0628 facing backward, mounted upside down -- floor rows 0-1,
 # Willie's left = columns 0-3 (measured with a hand, owner confirmed). Reversing stops on it the
 # way forward stops on the front sensor; no reading means "unknown", which leaves reversing as before.
@@ -76,3 +82,13 @@ def test_rear_drop_ignores_the_grazing_row():
     assert not s.drop_detected()
     frame[0*8+3]=None                           # a near floor row loses it: that is a real drop
     assert s.drop_detected()
+
+def test_no_drop_verdict_in_the_first_seconds_after_start(monkeypatch):
+    from tof import ToFSensor,FloorProfile
+    monkeypatch.setattr(config,'TOF_STARTUP_IGNORE_DROP_S',3.0)
+    zones=[300.0]*16+[None]*48; frame=[None]*64          # start-up frame: zones missing
+    s=ToFSensor(source=lambda: frame,profile_path='/nonexistent',floor_rows=(0,1),drop_rows=(0,1))
+    s.profile=FloorProfile(zones)
+    assert not s.drop_detected()                          # inside the grace: ignored
+    s._healthy_since-=3.1
+    assert s.drop_detected()                              # after it: a real drop

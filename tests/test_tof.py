@@ -4,6 +4,12 @@ os.environ.setdefault('WILLY_SIMULATE', '1')
 
 import pytest
 import config
+
+@pytest.fixture(autouse=True)
+def _no_startup_drop_grace(monkeypatch):
+    # These tests judge single frames; the start-up grace (TOF_STARTUP_IGNORE_DROP_S) has its own test.
+    monkeypatch.setattr(config,'TOF_STARTUP_IGNORE_DROP_S',0.0)
+
 from tof import FloorProfile, ToFSensor, OBSTACLE, FLOOR, DROP, NO_DATA
 
 # FR-1000-002 / FR-1200-005. Master Hardware Design §6.5, Software Design §6.5/§6.6.

@@ -268,7 +268,8 @@ TOF_REAR_FLOOR_ROWS=(0,1,2)   # 2026-10-10: row 2 meets floor at 43-46 cm, only 
 TOF_REAR_DROP_ROWS=(0,1)         # drop detection only where floor returns are solid (row 2 grazes)
 TOF_REAR_LEFT_COLUMNS=(0,1,2,3)     # WILLIE's left, not the sensor's
 TOF_REAR_FLOOR_PROFILE_PATH='tof_rear_floor_profile.json'
-TOF_PROFILE_SAMPLES=10      # frames averaged when capturing; one frame carries per-zone noise
+TOF_PROFILE_SAMPLES=10
+TOF_STARTUP_IGNORE_DROP_S=3.0   # no DROP verdicts for this long after a ToF starts giving frames      # frames averaged when capturing; one frame carries per-zone noise
                             # straight into the baseline everything else is measured against
 
 # I2C bus 1 clock. THE KERNEL IS AUTHORITATIVE, NOT THIS CONSTANT -- the bus speed is set by

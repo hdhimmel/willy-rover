@@ -137,6 +137,7 @@ class ToFSensor:
             return None
         if not self._available:
             log.info('ToF frames healthy')
+            self._healthy_since=time.monotonic()
         self._available=True; self._last_error=None
         return frame
 
@@ -207,6 +208,10 @@ class ToFSensor:
         if self.profile is None: return False
         frame=self._frame()
         if frame is None: return False
+        # The first frames after start-up carry missing zones: every false "drop" on 2026-10-10
+        # came within ~6 s of "ToF frames healthy", none after (100 clean frames standalone).
+        if time.monotonic()-getattr(self,'_healthy_since',0.0)<config.TOF_STARTUP_IGNORE_DROP_S:
+            return False
         rows=self.drop_rows; cols=config.TOF_ZONE_COLUMNS
         return any(self.profile.classify(i,v)==DROP for i,v in enumerate(frame)
                    if rows is None or i//cols in rows)
