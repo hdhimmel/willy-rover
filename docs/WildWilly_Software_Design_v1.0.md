@@ -140,6 +140,13 @@ a continuous command re-issued each tick; `duration=<n>` starts a timed move ser
 `tick()`. It has exactly one caller thread — the tick thread. Voice's `stop_requested` is
 an `Event` consumed at the top of `_tick()` to preserve that.
 
+**Straighten before moving (2026-10-10).** `SafetyController(drive, steering=...)`. When an
+approved drive starts from rest (no wheel commanded, no timed move) and `Steering.straight` is
+False (not centred, or released by the 2 s idle timer), it calls `center_all()` and holds the
+drive stopped for `STEER_SETTLE_S` (0.3 s). A continuous caller's next request goes through
+once the time is up; a timed move is started by `tick()`, re-approved first. Stops, rejections,
+`obstacle_stop` and `set_wheels` cancel a held-back start.
+
 ### 2.3 The tick loop
 
 `RoverBrain.run()` loops: tick, record duration, sleep 50 ms — about 20 Hz.

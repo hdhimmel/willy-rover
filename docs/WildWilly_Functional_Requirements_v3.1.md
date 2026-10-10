@@ -201,11 +201,15 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   operator override ("steer
                                                   left 20", "wheels straight"):
                                                   built 2026-10-08, not yet run.
-                                                  Steering gears being
-                                                  redesigned (spring anti-
-                                                  backlash): re-check centres
-                                                  and the 15 deg/200 us scale
-                                                  once fitted.
+                                                  Tension springs holding the
+                                                  steering gears INSTALLED
+                                                  2026-10-10 (owner); all six
+                                                  held at 1500 us for the
+                                                  alignment check. Re-check the
+                                                  15 deg/200 us scale. Wheels
+                                                  straightened before moving
+                                                  (2026-10-10): built, not yet
+                                                  run.
 
   FR-700 Arm              Not live-verified       Arm current limit
                                                   (release) built
@@ -1929,6 +1933,19 @@ live-verified — see `motors.py::Steering`'s own comment.
     the 5V INA260 during the first such test. ⚠ **2026-10-07/08: it cannot.** Servo V+ is
     not on 0x40's path (no current seen while a servo swung), and the `steering_5v`
     overcurrent trip was dropped (owner, 2026-10-08). Peak current is still unmeasured.
+
+-   **Straighten before moving (owner requirement 2026-10-10).** "Willie needs to
+    straighten his wheels before moving." The steering servos are released 2 s after their
+    last command (`STEER_RELEASE_AFTER_S`), and a released wheel can be knocked off line;
+    skid-steer then drives off on it. Now, a drive that starts **from rest** with the wheels
+    not known to be straight first centres all six, holds the drive stopped for
+    `STEER_SETTLE_S` (0.3 s), then goes (`SafetyController._settling`, `Steering.straight`).
+    "Known straight" means centred and still powered. A rover already moving is never
+    interrupted. Rotation mode and the steering override set their own angles. Any stop or
+    rejection cancels a held-back start. ✅ Built 2026-10-10, not yet run on the rover
+    (`tests/test_straighten_before_moving.py`). Same day: tension springs that hold each
+    wheel's two steering gears together were installed, and all six servos were held at
+    1500 µs for the owner's alignment check.
 
 -   **FR-600-005 (rotation mode).** Added 2026-10-07 — built before it was required. A turn
     on the spot steers the four corner wheels onto the circle round the rover's centre

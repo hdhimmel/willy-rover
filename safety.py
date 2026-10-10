@@ -48,8 +48,14 @@ def approve_steer(deg,*,wheels_moving,tilt_deg=0.0,bat_tier='normal',motion_enab
     return ApprovedMotion('steer',d,None)
 
 class SafetyController:
-    def __init__(self,drive_base):
+    def __init__(self,drive_base,steering=None):
         self._drive=drive_base
+        # 2026-10-10 (owner): "Willie needs to straighten his wheels before moving". Steering
+        # servos are released 2 s after their last command, and a released wheel can be knocked
+        # off line; skid-steer then drives off on it. A drive that starts FROM REST with the
+        # wheels not known-straight first centres all six, holds the drive stopped for
+        # STEER_SETTLE_S, then goes. Never interrupts a rover already moving.
+        self._steering=steering; self._settle_until=None; self._pending=None
         # front_cm starts at 0.0 -- blocked -- so forward motion is refused until a real
         # sonar reading has actually arrived. It used to start at 999.0, which granted
         # clear path before a single frame had been read. S-9.
@@ -75,6 +81,11 @@ class SafetyController:
         if isinstance(result,Rejected):
             log.warning(f'motion rejected: action={action} reason={result.reason}')
             self._drive.stop(); self._deadline=None; self._active_action=None
+            self._settle_until=None; self._pending=None
+            return result
+        if result.action=='stop':
+            self._settle_until=None; self._pending=None
+        elif self._settling(result):
             return result
         {'forward':self._drive.forward,'reverse':self._drive.reverse,
          'turn_left':self._drive.turn_left,'turn_right':self._drive.turn_right,
@@ -84,6 +95,21 @@ class SafetyController:
         else:
             self._deadline=None; self._active_action=None
         return result
+
+    def _settling(self,result):
+        """True while an approved drive is held back for the wheels to straighten."""
+        now=time.time()
+        if self._settle_until is None:
+            from_rest=(self._deadline is None and not any(getattr(self._drive,'commanded',{}).values()))
+            st=self._steering
+            if not from_rest or st is None or getattr(st,'straight',True): return False
+            st.center_all(); self._settle_until=now+config.STEER_SETTLE_S
+            log.info(f'Straightening wheels before {result.action}')
+        if now<self._settle_until:
+            self._pending=result; self._drive.stop(); self._deadline=None; self._active_action=None
+            return True
+        self._settle_until=None; self._pending=None
+        return False
 
     # Convenience wrappers mirroring DriveBase's old API shape, so FSM call sites read the same
     # as before (self.motors.forward(...) -> self.safety.forward(...)).
@@ -103,6 +129,7 @@ class SafetyController:
         1 mph, and with a sonar refreshing only every ~90 ms he rolled ~10 cm past the point an
         obstacle was first seen. Clears any timed move -- this is the tick thread's own call."""
         self._drive.brake(); self._deadline=None; self._active_action=None
+        self._settle_until=None; self._pending=None
 
     def brake_now(self,reason):
         """Immediate hard brake from ANY thread, for a caller about to block every thread for
@@ -126,7 +153,7 @@ class SafetyController:
             log.warning(f'rotation rejected: {result.reason}')
             self._drive.stop(); self._deadline=None; self._active_action=None
             return result
-        self._deadline=None; self._active_action=None
+        self._deadline=None; self._active_action=None; self._settle_until=None; self._pending=None
         self._drive.set_wheels(targets)
         return result
 
@@ -146,6 +173,8 @@ class SafetyController:
         aborts are already handled by brain.py's top-level Directive checks calling
         emergency_stop() before this runs, which also clears _deadline — nothing to duplicate here).
         Returns True while a timed move is still running, False once finished/absent."""
+        if self._pending is not None and self._settle_until is not None and time.time()>=self._settle_until:
+            p=self._pending; self.request(p.action,p.speed,p.duration)   # re-approved, then started
         if self._deadline is None: return False
         if self._active_action=='forward' and self._ctx['front_cm']<config.DIST_STOP:
             log_event(log,'OBSTACLE_STOP',severity='warning',subsystem='safety',
@@ -190,3 +219,4 @@ class SafetyController:
         if now-self._last_estop_log_t>config.ESTOP_LOG_INTERVAL_S:
             log.warning(f'emergency stop: {reason}'); self._last_estop_log_t=now
         self._drive.brake(); self._deadline=None; self._active_action=None
+        self._settle_until=None; self._pending=None   # a held-back start must not fire after a stop

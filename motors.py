@@ -231,6 +231,7 @@ class Steering:
         self._pca=hw_sim.SimServoBank() if config.SIMULATE_HARDWARE else PCA9685(_i2c,address=config.STEER_PCA_ADDR)
         self._pca.frequency=config.SERVO_PWM_FREQ
         self._asleep=False; self._idle_since=time.monotonic(); self._running=True
+        self._centred=False   # see `straight`
         self._thread=threading.Thread(target=self._idle_loop,daemon=True); self._thread.start()
     # Idle release, added 2026-09-30. Centred steering servos hold their angle by being fed
     # pulses forever; stopping the pulses releases them. Safe here in a way it is not on the
@@ -244,7 +245,7 @@ class Steering:
     def _sleep(self):
         try: self._pca.mode1_reg=self._pca.mode1_reg|0x10      # MODE1 bit4 SLEEP
         except Exception: pass
-        self._asleep=True
+        self._asleep=True; self._centred=False   # released: a knock can move the wheel now
     def _wake(self):
         if not self._asleep: return
         try:
@@ -263,6 +264,7 @@ class Steering:
     # FR-600-003 (travel limits): clamped to half_span_us below before any pulse is sent.
     def set_angle(self,corner,degrees):
         # degrees relative to center, clamped to the conservative servo range's half-span
+        self._centred=False
         half_span_us=(config.SERVO_MAX_US-config.SERVO_MIN_US)/2
         us=self.center_us(corner)+(degrees/90.0)*half_span_us
         self._set_pulse(self._CORNERS[corner],us)
@@ -273,9 +275,16 @@ class Steering:
     def set_pulse(self,corner,us):
         """Raw pulse for one corner, clamped to SERVO_MIN_US..SERVO_MAX_US. Calibration only."""
         us=max(config.SERVO_MIN_US,min(config.SERVO_MAX_US,us))
+        self._centred=False
         self._set_pulse(self._CORNERS[corner],us); return us
     def center_all(self):
         for corner,ch in self._CORNERS.items(): self._set_pulse(ch,self.center_us(corner))
+        self._centred=True
+    @property
+    def straight(self):
+        """All six were last commanded to centre AND are still being driven. A released servo is
+        not trusted to be straight: the linkage can be knocked while it is unpowered."""
+        return self._centred and not self._asleep
     # Park brake -- owner's idea, 2026-09-30. Skid-steer never uses the corner servos, so
     # they are free for this: toe opposite corners against each other and the chassis cannot
     # roll in a straight line without the tyres scrubbing sideways. Then RELEASE them, and the

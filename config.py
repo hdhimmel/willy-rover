@@ -151,6 +151,7 @@ MOTOR_COAST_AFTER_S=2.0
 #   is longer than steering's for that reason, and the first test should be done with the
 #   arm LOW and nothing underneath it. Set ARM_RELEASE_WHEN_IDLE=False to disable.
 STEER_RELEASE_AFTER_S=2.0
+STEER_SETTLE_S=0.3   # 2026-10-10 (owner): straighten before moving -- centre, wait this long, then drive
 ARM_RELEASE_AFTER_S=10.0
 ARM_RELEASE_WHEN_IDLE=True
 SPEED_RAMP_PER_S=2.0  # FR-400-003: max throttle change per second (slew rate), full range in 0.5s
