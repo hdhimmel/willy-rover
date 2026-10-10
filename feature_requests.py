@@ -118,8 +118,11 @@ class FeatureRequests:
             except Exception: log.warning('Feature-request check failed',exc_info=True)
             if self._stop.wait(config.FEATURE_REQUEST_CHECK_S): return
 
-    def tick(self):
-        """One observe/compose/propose pass. Returns what happened, for tests and logs."""
+    def tick(self,owner_asked=False):
+        """One observe/compose/propose pass. Returns what happened, for tests and logs.
+        owner_asked (2026-10-10, "check your logs" -> "yes, ask for a fix"): the owner asked for
+        this one, so the one-a-day limit does not apply. One pending request at a time and the
+        30-day no-repeat rule still do -- they protect the inbox, not the schedule."""
         with self._lock:
             now=self._now()
             self._retry_push()
@@ -129,7 +132,8 @@ class FeatureRequests:
                 log.info(f'Feature request "{pend["title"]}" expired unapproved -- discarded')
                 self._save(config.FEATURE_REQUEST_PENDING_PATH,None)
             hist=self._load(config.FEATURE_REQUEST_HISTORY_PATH,{'sent':[],'keys':{}})
-            if sum(1 for t in hist['sent'] if now-t<86400)>=config.FEATURE_REQUEST_MAX_PER_DAY:
+            if (not owner_asked
+                    and sum(1 for t in hist['sent'] if now-t<86400)>=config.FEATURE_REQUEST_MAX_PER_DAY):
                 return 'rate_limited'
             ev=collect_evidence(_read_log_lines(os.path.join(self._root,config.WILLY_LOG_ROOT))
                                 if not os.path.isabs(config.WILLY_LOG_ROOT)

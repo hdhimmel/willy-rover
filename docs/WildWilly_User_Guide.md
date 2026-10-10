@@ -74,6 +74,10 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
   turning, on his way somewhere, waiting, or stopped and why. Works even while he's moving.
 - **"What do you see?"** / **"What are you looking at?"** — up to three things he recognises.
 - **"What time is it?"** / **"What's the date?"**
+- **"Check your logs"** / **"Any errors today?"** — he sums up the last 24 hours of his log in one
+  sentence (the top three problems, and how many other kinds). If there were problems he asks
+  **"Do you want me to ask for a fix?"** and listens for your answer; **yes** emails you a fix
+  request with an approval code (the usual feature-request process).
 - **"Run diagnostics"** / **"Self test"**
 
 **Driving him yourself:**

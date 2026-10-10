@@ -1346,7 +1346,11 @@ ENABLE_AUTONOMOUS_ROAM=True
 # charged-to-95%-at-the-dock with no ask, unattended.
 ROAM_PERMISSION_REQUIRED=True
 ROAM_ASK_TIMEOUT_S=30.0
-VOICE_ASK_LISTEN_S=8.0      # after a spoken question: beep, then listen this long for the answer, no wake word     # how long the spoken/on-screen ask stays open before it lapses
+VOICE_ASK_LISTEN_S=8.0
+LOGCHECK_HOURS=24           # "check your logs": the window he summarises
+LOGCHECK_TOP=3              # problems named out loud, then "and N other kinds"
+LOGCHECK_FILES=2
+FIX_ASK_TIMEOUT_S=20.0      # how long "do you want me to ask for a fix?" waits for an answer            # newest rotated files read (2 MB each), enough for a day      # after a spoken question: beep, then listen this long for the answer, no wake word     # how long the spoken/on-screen ask stays open before it lapses
 # A declined ask and an unanswered one land in the same place: this cooldown, then he asks again.
 # Refusal is deliberately not permanent -- "no" usually means "not now", and nobody answering
 # usually means nobody heard. 10 minutes is long enough not to nag.

@@ -68,7 +68,7 @@ _NON_SPOKEN_SOURCES=frozenset({'remote','email'})
 # What an email may queue: everything a spoken command could, through the same gating.
 _EMAIL_QUEUEABLE=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve','map',
     'stop_map','status','battery','arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','follow','diagnostics',
-    'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs','shutdown','demo_replay','roam'})
+    'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs','shutdown','demo_replay','roam','check_logs'})
 
 # Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
 # that state, before either drain pass, so Willie heard every command and answered none -- with
@@ -391,6 +391,7 @@ class RoverBrain:
         self._stuck_history=[]; self._last_stuck_prompt=''  # §14: caller-owned conversation history
         self._pose_log_t=0.0
         self._shutdown_pending=False; self._shutdown_deadline=0.0  # FR-900-005 voice-commanded shutdown confirm
+        self._fix_ask_pending=False; self._fix_ask_deadline=0.0    # "check your logs" -> "ask for a fix?"
         # Roam permission (owner decision 2026-09-09). ENABLE_AUTONOMOUS_ROAM means "allowed to
         # ask"; this grant is what actually opens the gate, and it starts false at EVERY boot --
         # unattended roaming is never the state Willie powers up in. See _roam_allowed().
@@ -952,6 +953,8 @@ class RoverBrain:
             # left as they are: a voice stop must never clear a latched fault.
             if self._state in _MOTION_STATES: self._go('IDLE')
             log.info('Voice-triggered immediate stop')
+        if getattr(self,'_fix_ask_pending',False) and time.time()>self._fix_ask_deadline:
+            self._fix_ask_pending=False; log.info('Fix-request offer lapsed unanswered.')
         if self._shutdown_pending and time.time()>self._shutdown_deadline:
             self._shutdown_pending=False
             log.info('Voice shutdown confirmation timed out — cancelled.')
@@ -1272,6 +1275,19 @@ class RoverBrain:
         self.voice.pending_commands.put({'source':'email','intent':name,'args':intent.get('args',{}),
                                          'text':text,'ts':time.time(),'on_reply':reply})
 
+    def _request_fix_now(self):
+        """Off the tick thread: compose (cloud model) + email take seconds. Speaks the outcome."""
+        try: r=self.feature_requests.tick(owner_asked=True)
+        except Exception:
+            log.warning('Owner-asked feature request failed',exc_info=True); r='error'
+        msg={'proposed':"Done. Check your email for the fix request and its approval code.",
+             'pending':"There's already a fix request waiting for your approval in your email.",
+             'no_evidence':"None of those happen often enough, or recently enough, to ask for a fix yet.",
+             'deferred':"I can't write it right now. I need the internet and my email.",
+             'error':"Something went wrong writing the fix request."}.get(r,f"Fix request: {r}.")
+        log.info(f'Owner-asked feature request: {r}')
+        if self.voice.available: self.voice.speak(msg)
+
     def _ask(self,question):
         """A question that wants a spoken answer: beep and listen without the wake word after it
         (voice.ask). A remote caller gets the question text as its reply, as _say does."""
@@ -1299,7 +1315,7 @@ class RoverBrain:
         with q.mutex:
             if not q.queue: return
             head=q.queue[0]; intent=head.get('intent')
-        if (self._shutdown_pending or self._roam_ask_pending) and head.get('source') not in _NON_SPOKEN_SOURCES:
+        if (self._shutdown_pending or self._roam_ask_pending or getattr(self,'_fix_ask_pending',False)) and head.get('source') not in _NON_SPOKEN_SOURCES:
             self._drain_voice_commands(); return
         if not intent or intent in _SELFTEST_FAULT_INTENTS:
             self._drain_voice_commands(); return
@@ -1324,7 +1340,7 @@ class RoverBrain:
             with q.mutex:
                 if not q.queue: return
                 head=q.queue[0]
-            if (self._shutdown_pending or self._roam_ask_pending) and head.get('source') not in _NON_SPOKEN_SOURCES: return
+            if (self._shutdown_pending or self._roam_ask_pending or getattr(self,'_fix_ask_pending',False)) and head.get('source') not in _NON_SPOKEN_SOURCES: return
             if head.get('intent') not in _SPEECH_ONLY_INTENTS: return
         try:
             cmd=self.voice.pending_commands.get_nowait()
@@ -1340,6 +1356,17 @@ class RoverBrain:
         # arriving mid-ask is a command in its own right: found live 2026-10-01, when an HA
         # "status" landed while Willie was asking to explore and was taken as a "no".
         answers_ask=cmd.get('source') not in _NON_SPOKEN_SOURCES
+        if getattr(self,'_fix_ask_pending',False) and answers_ask:
+            # 2026-10-10 (owner): after "check your logs" reports problems, he offers to ask for a
+            # fix; yes runs the FR-2200 feature-request process now (draft + approval email).
+            self._fix_ask_pending=False
+            words=re.findall(r"[a-z']+",cmd.get('text','').lower())
+            if cmd.get('intent')=='confirm_receipt' or any(w in words for w in ('yes','yeah','yep','sure','okay','ok','please')):
+                self._say("Okay, I'll write it up and email you.")
+                threading.Thread(target=self._request_fix_now,daemon=True,name='fix-request').start()
+            else:
+                self._say('Okay.')
+            return
         if self._shutdown_pending and answers_ask:
             # First queued command after a 'shutdown' intent is treated as the yes/no answer to
             # that confirmation, not dispatched normally below -- see the 'shutdown' branch and
@@ -1570,6 +1597,17 @@ class RoverBrain:
             self._say('Running diagnostics now, one moment.')
             ok,reason=self._self_test()
             self._say('Everything checks out.' if ok else f'Diagnostics found a problem: {reason}')
+        elif cmd.get('intent')=='check_logs':
+            # 2026-10-10 (owner): "check your logs". Reads ~4 MB of log on this thread (well under
+            # a second) -- accepted for the same reason as diagnostics: it only runs from IDLE.
+            import logcheck
+            text,found=logcheck.check()
+            if found and getattr(self,'feature_requests',None) is not None and config.ENABLE_FEATURE_REQUESTS:
+                self._say(text)
+                self._ask('Do you want me to ask for a fix?')
+                self._fix_ask_pending=True; self._fix_ask_deadline=time.time()+config.FIX_ASK_TIMEOUT_S
+            else:
+                self._say(text)
         elif cmd.get('intent')=='where_are_you':
             pose=self.world_model.get_robot_pose()
             room=self.world_model.get_room(pose.x,pose.y)

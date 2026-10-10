@@ -107,7 +107,7 @@ class PiperEngine:
 
 
 # Intents whose answer comes from brain.py reading sensors/state -- never from the model's text.
-_SENSOR_ANSWERED=frozenset({'status','battery','where_are_you','what_do_you_see','what_doing','diagnostics'})
+_SENSOR_ANSWERED=frozenset({'status','battery','where_are_you','what_do_you_see','what_doing','diagnostics','check_logs'})
 _NEUTRAL_ACKS=frozenset({'','Checking.','Looking.'})
 
 def speech_envelope(wav_path,step_s):
@@ -201,7 +201,7 @@ _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
 # deterministic "the local model did not understand" signal.
 _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve',
     'confirm_receipt','map','stop_map','shutdown','status','battery','arm_stow','arm_home','wave',
-    'come_here','come_to_me','rotate','steer','roam','follow','diagnostics','where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
+    'come_here','come_to_me','rotate','steer','roam','follow','diagnostics','check_logs','where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
     'privacy_on','privacy_off','demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
@@ -319,6 +319,10 @@ _FAST_PATH_PATTERNS=[
     (_fp(r'(?:start|begin) (?:mapping|the map)|map this room|start mapping this room'),
      'map','Starting the map.'),
     (_fp(r'(?:stop|end|finish) (?:mapping|the map)'),'stop_map','Stopping the map.'),
+    # 2026-10-10 (owner): a spoken summary of his own log.
+    (_fp(r'(?:check|scan|read|look at) (?:your |the )?logs?(?: for (?:errors|problems))?|'
+         r'any (?:errors|problems)(?: today| lately)?|what (?:errors|problems) (?:have you had|did you have)(?: today)?'),
+     'check_logs',''),
     (_fp(r'run (?:a )?diagnostics?|(?:run )?(?:a )?self test|diagnostics|check yourself'),
      'diagnostics',''),
 ]
@@ -1019,7 +1023,7 @@ class VoicePipeline:
         # consumer" rule as every motion intent.
         motion_intents={'forward','reverse','turn_left','turn_right','go_to','retrieve',
                          'confirm_receipt','map','stop_map','shutdown','status','battery',
-                         'arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','roam','follow','diagnostics',
+                         'arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','roam','follow','diagnostics','check_logs',
                          'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs',
                          'demo_start','demo_stop','demo_replay','enrol','forget_everyone'}
         if name in motion_intents:
