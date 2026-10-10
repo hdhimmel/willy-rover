@@ -312,6 +312,28 @@ class CloudAIProvider(AIProvider):
         if not text: raise RuntimeError(f"no text in response (stop_reason={body.get('stop_reason')})")
         return text[0].strip()
 
+    def chat(self,question):
+        """A short SPOKEN answer to a general question, fast (2026-10-10): CLAUDE_CHAT_MODEL, no
+        thinking, CLAUDE_CHAT_MAX_TOKENS. Falls back to the normal Sonnet path on any failure.
+        Returns an AIResult whose payload is the reply text."""
+        if not self.available: return self._call(question)
+        log_event(log,'AI_REQUEST',severity='info',subsystem='ai_provider',provider='cloud_chat')
+        payload={'model':config.CLAUDE_CHAT_MODEL,'max_tokens':config.CLAUDE_CHAT_MAX_TOKENS,
+                 'system':config.CLAUDE_CHAT_SYSTEM,'messages':[{'role':'user','content':question}]}
+        req=urllib.request.Request(_ANTHROPIC_URL,data=json.dumps(payload).encode(),
+            headers={'x-api-key':self._key,'anthropic-version':'2023-06-01','content-type':'application/json'},
+            method='POST')
+        try:
+            with urllib.request.urlopen(req,timeout=config.CLAUDE_CHAT_TIMEOUT_S) as r:
+                body=json.loads(r.read())
+            text=[b.get('text','') for b in body.get('content',[]) if b.get('type')=='text']
+            if not text or not text[0].strip(): raise RuntimeError(f"no text (stop_reason={body.get('stop_reason')})")
+            log_event(log,'AI_RESULT',severity='info',subsystem='ai_provider',provider='cloud_chat')
+            return AIResult(True,1.0,None,True,text[0].strip())
+        except Exception as e:
+            log.info(f'Fast chat failed ({type(e).__name__}: {e}); using the normal cloud path')
+            return self._call(question)
+
     def _call(self,prompt,system=None,schema=None,history=None):
         if not self.available:
             log_event(log,'AI_UNAVAILABLE',severity='info',subsystem='ai_provider',provider='cloud')

@@ -3541,6 +3541,14 @@ same deliberate, visible kind of exception as FR-2100-005, not a reading of
 FR-1800-002's "diagnostic logging" clause. See FR-2000-004 for the email side.
 
 ✅ **Built 2026-10-02 (`15bfc77`), not yet run on the rover:**
+**Faster answers to general questions (owner 2026-10-10).** Live, "why is the grass green?" took
+11-15 s: speech-to-text 5-6 s, the on-board model 5.3 s (then rejected), the cloud ~4 s. Now a plain
+question with no command words (`voice.general_question`) skips the on-board model and goes to
+`CloudAIProvider.chat()`: `CLAUDE_CHAT_MODEL` (Haiku 4.5), no extended thinking, 200 tokens, "one
+or two short spoken sentences", 6 s timeout, falling back to the normal Sonnet path. Commands are
+unchanged. Built, not yet timed on the rover. Speech-to-text has also slowed (5-6 s vs 2-4 s
+before) and needs a CPU-load check with Willie running.
+
 **FR-1800-003, wording (owner 2026-10-10):** instead of "One moment, checking with a cloud
 service for this one" he says one of `CLOUD_THINKING_PHRASES` ("Give me a minute to think about
 that.", "Hmm, that's a tough question.", "Checking my memories."). The indication that data is

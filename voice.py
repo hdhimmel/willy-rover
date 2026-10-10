@@ -107,6 +107,19 @@ class PiperEngine:
 
 
 # Intents whose answer comes from brain.py reading sensors/state -- never from the model's text.
+# 2026-10-10: a plain general question with no command in it skips the on-board model (which
+# only maps COMMANDS, and spent 5.3 s on "why is the grass green?" before being rejected) and
+# goes straight to the fast cloud chat.
+_GENERAL_QUESTION=re.compile(r"^(?:why|how (?:does|do|did|is|are|many|much|far|long|big)|what(?:'s| is| are| was| were| does| do)|"
+                             r"who|when (?:is|was|did|does)|tell me (?:about|a joke)|explain|can you tell me)\b",re.I)
+_COMMAND_WORDS=re.compile(r"\b(?:you|your|yourself|willie|go|drive|move|turn|come|fetch|bring|get|stop|back|forward|"
+                          r"reverse|map|steer|explore|roam|room|kitchen|battery|see|looking|doing|arm|wave|follow|"
+                          r"shut|privacy|light|lights|log|logs)\b",re.I)
+
+def general_question(text):
+    t=re.sub(r'^(?:(?:hey|ok|okay)[\s,]+)?willie[\s,]+','',text.strip(),flags=re.I)
+    return bool(_GENERAL_QUESTION.match(t)) and not _COMMAND_WORDS.search(t)
+
 _SENSOR_ANSWERED=frozenset({'status','battery','where_are_you','what_do_you_see','what_doing','diagnostics','check_logs'})
 # 2026-10-10, live: "Why is the grass green?" went to the Hailo model, which said where_are_you
 # (0.8, three times), and Willie answered "I'm not sure which room I'm in". A sensor-answered
@@ -809,6 +822,15 @@ class VoicePipeline:
             log.info(f'Fast-path matched: "{text}" -> {fast["intent"]}')
             self._act_on_intent(fast,text); return
 
+        if general_question(text) and self.cloud_ai and self.cloud_ai.available:
+            t_intent=time.time(); self._utterance_timing=(t_wake,t_stt,t_intent)
+            log.info(f'General question, straight to cloud chat: "{text}"')
+            import privacy as _p; _p.note_cloud_send(self.display,self,'your question')
+            chat=getattr(self.cloud_ai,'chat',None)
+            result=chat(text) if chat else self.cloud_ai.ask_sync(text)
+            if result.parse_success:
+                self.speak(result.payload,tone=getattr(self,'_reply_tone',config.VOICE_TONE_DEFAULT)); return
+            self.speak("I couldn't look that up right now."); return
         intent,confidence=self._interpret_local(text)
         t_intent=time.time()
         # Voice latency handoff 2026-08-15 Step 0: timing captured through here regardless of

@@ -836,6 +836,13 @@ NAV_TURN_STEP_S=0.2            # duration of each incremental heading-correction
 
 CLAUDE_MODEL='claude-sonnet-5-5'   # owner decision 2026-10-02: Claude (not Gemini) is the cloud provider
 CLAUDE_MAX_TOKENS=2000; CLAUDE_ESCALATE_AFTER=5   # headroom for adaptive thinking (Sonnet 5.5 cannot disable it)
+# 2026-10-10 (owner: "the internet retrieval needs to be faster"): spoken answers to general
+# questions use a FAST model, no extended thinking, short replies. Sonnet stays for decisions.
+CLAUDE_CHAT_MODEL='claude-haiku-4-5-20251001'
+CLAUDE_CHAT_MAX_TOKENS=200
+CLAUDE_CHAT_TIMEOUT_S=6
+CLAUDE_CHAT_SYSTEM=("You are Willie, a friendly home robot, answering out loud. Reply in one or two short "
+                    "spoken sentences, plain words, no lists, no markdown.")
 CLAUDE_EFFORT='low'   # short structured answers; low effort keeps thinking and latency small
 AI_NEARBY_RADIUS_M=3.0  # §14: how far counts as "nearby" when ai_provider.py's build_world_state()
                         # filters world_model.py objects/obstacles into the AI's world-state payload
