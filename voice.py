@@ -108,6 +108,19 @@ class PiperEngine:
 
 # Intents whose answer comes from brain.py reading sensors/state -- never from the model's text.
 _SENSOR_ANSWERED=frozenset({'status','battery','where_are_you','what_do_you_see','what_doing','diagnostics','check_logs'})
+# 2026-10-10, live: "Why is the grass green?" went to the Hailo model, which said where_are_you
+# (0.8, three times), and Willie answered "I'm not sure which room I'm in". A sensor-answered
+# intent from the MODEL must be backed by a word that belongs to it; otherwise it is not
+# understood and falls through to the cloud model. The fast path is not affected.
+_SENSOR_INTENT_WORDS={
+    'where_are_you':('where','room','location','lost'),
+    'battery':('battery','charge','charged','power','juice','volt','percent'),
+    'what_do_you_see':('see','look','looking','camera','front of you','watching'),
+    'what_doing':('doing','up to','going on','busy'),
+    'status':('status','how are you','okay','ok','report','state','alright'),
+    'diagnostics':('diagnos','self test','test yourself','check yourself'),
+    'check_logs':('log','error','problem'),
+}
 _NEUTRAL_ACKS=frozenset({'','Checking.','Looking.'})
 
 def speech_envelope(wav_path,step_s):
@@ -996,6 +1009,11 @@ class VoicePipeline:
         if name not in _ACTIONABLE_INTENTS:
             log.info(f'Local interpretation named an unknown intent {name!r} -- treating as not understood')
             return result.payload,0.0
+        words=_SENSOR_INTENT_WORDS.get(name)
+        if words and not any(w in text.lower() for w in words):
+            log.info(f'Local model said {name!r} for "{text}" with none of its words -- not understood')
+            return result.payload,0.0
+        log.info(f'Local model intent: {name!r} ({result.intent_confidence})')
         return result.payload,result.intent_confidence
 
     def _act_on_intent(self,intent,original_text):
