@@ -57,10 +57,11 @@ def test_rear_sides_use_willies_left():
     s.profile=FloorProfile([None]*64)
     assert s.side_obstacles_cm()==(20.0,None)
 
-def test_rear_cm_reports_drop_as_stop_and_never_raises():
+def test_rear_cm_reports_drop_as_stop_and_never_raises(monkeypatch):
     pytest.importorskip('fcntl',reason='sensors.py needs fcntl: Linux only (CI, the rover)')
     import sensors
     a=object.__new__(sensors.SonarArray)
+    monkeypatch.setattr(config,'TOF_DROP_CONFIRM_S',0.0)
     a.tof_rear=types.SimpleNamespace(drop_detected=lambda: True,nearest_obstacle_cm=lambda: 80.0)
     assert a.rear_cm()==0.0
     a.tof_rear=types.SimpleNamespace(drop_detected=lambda: False,nearest_obstacle_cm=lambda: 80.0)
@@ -92,3 +93,15 @@ def test_no_drop_verdict_in_the_first_seconds_after_start(monkeypatch):
     assert not s.drop_detected()                          # inside the grace: ignored
     s._healthy_since-=3.1
     assert s.drop_detected()                              # after it: a real drop
+
+def test_a_one_frame_drop_flicker_is_ignored(monkeypatch):
+    pytest.importorskip('fcntl',reason='sensors.py needs fcntl: Linux only (CI, the rover)')
+    import sensors
+    t=[100.0]; monkeypatch.setattr(sensors.time,'monotonic',lambda: t[0])
+    a=object.__new__(sensors.SonarArray)
+    drop=[True]
+    a.tof_rear=types.SimpleNamespace(drop_detected=lambda: drop[0],nearest_obstacle_cm=lambda: None)
+    assert a.rear_cm() is None                 # first sighting: not yet believed
+    drop[0]=False; t[0]+=0.15; assert a.rear_cm() is None
+    drop[0]=True; t[0]+=0.15; assert a.rear_cm() is None   # flicker restarted the clock
+    t[0]+=config.TOF_DROP_CONFIRM_S+0.01; assert a.rear_cm()==0.0   # sustained: stop

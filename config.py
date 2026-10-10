@@ -269,7 +269,8 @@ TOF_REAR_DROP_ROWS=(0,1)         # drop detection only where floor returns are s
 TOF_REAR_LEFT_COLUMNS=(0,1,2,3)     # WILLIE's left, not the sensor's
 TOF_REAR_FLOOR_PROFILE_PATH='tof_rear_floor_profile.json'
 TOF_PROFILE_SAMPLES=10
-TOF_STARTUP_IGNORE_DROP_S=3.0   # no DROP verdicts for this long after a ToF starts giving frames      # frames averaged when capturing; one frame carries per-zone noise
+TOF_STARTUP_IGNORE_DROP_S=3.0
+TOF_DROP_CONFIRM_S=0.3          # rear: a drop must persist this long (2+ frames) before it stops reversing   # no DROP verdicts for this long after a ToF starts giving frames      # frames averaged when capturing; one frame carries per-zone noise
                             # straight into the baseline everything else is measured against
 
 # I2C bus 1 clock. THE KERNEL IS AUTHORITATIVE, NOT THIS CONSTANT -- the bus speed is set by

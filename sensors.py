@@ -210,12 +210,23 @@ class SonarArray:
         tof = self.tof_rear
         if tof is None: return None
         try:
+            now = time.monotonic()
             if tof.drop_detected():
-                if not getattr(self, '_rear_drop', False):
-                    self._rear_drop = True; log.warning('Rear ToF: DROP BEHIND -- reversing stopped')
-                return 0.0
-            if getattr(self, '_rear_drop', False):
-                self._rear_drop = False; log.info('Rear ToF: floor behind again')
+                # Believed only once it has lasted TOF_DROP_CONFIRM_S (2+ frames): on 2026-10-10
+                # the service saw ~1 Hz flickers, mostly while someone moved behind him, that 80
+                # frames read standalone never showed. A real edge does not go away.
+                since = getattr(self, '_rear_drop_since', None)
+                if since is None: since = self._rear_drop_since = now
+                if now - since >= config.TOF_DROP_CONFIRM_S:
+                    if not getattr(self, '_rear_drop', False):
+                        self._rear_drop = True
+                        z = ', '.join(f'r{i//8}c{i%8}={v}' for i, v in getattr(tof, 'last_drop_zones', [])[:6])
+                        log.warning(f'Rear ToF: DROP BEHIND -- reversing stopped ({z})')
+                    return 0.0
+            else:
+                self._rear_drop_since = None
+                if getattr(self, '_rear_drop', False):
+                    self._rear_drop = False; log.info('Rear ToF: floor behind again')
             return tof.nearest_obstacle_cm()
         except Exception:
             log.warning('Rear ToF read raised; reversing without it', exc_info=True)

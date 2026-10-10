@@ -213,8 +213,10 @@ class ToFSensor:
         if time.monotonic()-getattr(self,'_healthy_since',0.0)<config.TOF_STARTUP_IGNORE_DROP_S:
             return False
         rows=self.drop_rows; cols=config.TOF_ZONE_COLUMNS
-        return any(self.profile.classify(i,v)==DROP for i,v in enumerate(frame)
-                   if rows is None or i//cols in rows)
+        zones=[(i,v) for i,v in enumerate(frame)
+               if (rows is None or i//cols in rows) and self.profile.classify(i,v)==DROP]
+        self.last_drop_zones=zones           # for the log line that reports a drop
+        return bool(zones)
 
     def capture_profile(self,samples=None,floor_rows=None):
         """Average several frames of clear floor into a new profile. Does NOT save -- the caller
