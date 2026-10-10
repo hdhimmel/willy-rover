@@ -263,7 +263,8 @@ REAR_CAM_DETECT_S=0.3          # rear detection rate while reversing (~3 Hz; the
 REAR_CAM_NEAR_FRAC=0.6         # person box this tall (fraction of frame) = close behind -> stop reverse
 REAR_CAM_STOP_CLASSES=('person','dog','cat')
 TOF_REAR_PORT='/dev/ttyAMA0'
-TOF_REAR_FLOOR_ROWS=(0,1)
+TOF_REAR_FLOOR_ROWS=(0,1,2)   # 2026-10-10: row 2 meets floor at 43-46 cm, only 3-6 cm past
+                              # TOF_NOFLOOR_OBSTACLE_MM -- a little pitch would read as an obstacle
 TOF_REAR_LEFT_COLUMNS=(0,1,2,3)     # WILLIE's left, not the sensor's
 TOF_REAR_FLOOR_PROFILE_PATH='tof_rear_floor_profile.json'
 TOF_PROFILE_SAMPLES=10      # frames averaged when capturing; one frame carries per-zone noise

@@ -673,7 +673,7 @@ additive. The sonar itself is behind a UART; for Pico B, stale means stop (S-9).
 ### 6.5a Rear coverage (2026-10-10)
 
 **Rear ToF:** a second `ToFSensor` on `TOF_REAR_PORT` (`/dev/ttyAMA0`) with its own geometry
-(`floor_rows=(0,1)`, `left_columns=(0..3)`: mounted upside down) and its own floor profile
+(`floor_rows=(0,1,2)`, `left_columns=(0..3)`: mounted upside down; row 2 added because it meets the floor at ~45 cm, just past the 40 cm upper-row cut-off) and its own floor profile
 (`tof_rear_floor_profile.json`). `SonarArray.rear_cm()` returns its nearest obstacle in cm, 0
 on a drop, None when unknown. It is deliberately NOT a key in `distances()`, whose three keys
 are sonar directions the world model plots. `approve_motion(rear_cm=...)` refuses `reverse`

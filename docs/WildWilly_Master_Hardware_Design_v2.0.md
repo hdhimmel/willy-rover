@@ -1065,8 +1065,10 @@ room (`TOF_FLOOR_ROWS=(6,7)`, the only rows the floor profile keeps). Profile sa
 `config.txt.bak-2026-10-10`); no serial console on these pins (`console=tty1`). Faces
 **backward**, mounted **upside down** relative to #1: a hand over the top half of its view showed
 in rows 5–7, and the floor is rows 0–1; a hand on Willie's left showed in columns 0–3 (owner
-confirmed). Handled in software (`TOF_REAR_FLOOR_ROWS` (0,1), `TOF_REAR_LEFT_COLUMNS` (0–3)),
-no remount. Floor profile not yet captured (`scripts/calibrate_tof_floor.py --rear`).
+confirmed). Handled in software (`TOF_REAR_FLOOR_ROWS` (0,1,2): row 2 meets floor at 43–46 cm, too close to the 40 cm
+upper-row cut-off, so it is judged against the profile too; `TOF_REAR_LEFT_COLUMNS` (0–3)),
+no remount. Floor profile captured 2026-10-10 (`scripts/calibrate_tof_floor.py --rear`): floor
+25 cm row 0, 33 cm row 1, ~45 cm row 2; clear floor reads clear.
 **Power:** both ToFs move to the 3.3 V DROK through a perfboard header bus: on the Pi's pin-1
 3V3 together they knocked I²C over (2026-10-09). Wiring as built:
 
