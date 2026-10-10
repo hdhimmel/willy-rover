@@ -246,6 +246,7 @@ class RearCamera:
         self._open_cap=open_cap or self._default_open
         self._cap=None; self._last_use=0.0; self._clock=clock; self._labels=None; self._failed_at=None
         import threading; self._lock=threading.RLock()   # rotation (tick) and the reverse watcher share it
+        self._opening=False
     @staticmethod
     def _default_open():
         import cv2
@@ -260,21 +261,35 @@ class RearCamera:
             self.close(); return None
         now=self._clock(); self._last_use=now
         if self._cap is None:
+            # NEVER open on the caller's thread: VideoCapture() takes ~0.9 s, and on 2026-10-10 the
+            # tick waited that long on this lock while he reversed (TICK_OVERRUN 897 ms). Open in
+            # the background; callers get None until it is ready.
             if self._failed_at is not None and now-self._failed_at<config.REAR_CAM_RETRY_S: return None
-            try: self._cap=self._open_cap()
-            except Exception: self._cap=None
-            if self._cap is None:
-                if self._failed_at is None: log.warning(f'Rear camera would not open ({config.CAMERA_DEVICE})')
-                self._failed_at=now; return None
-            self._failed_at=None; log.info('Rear camera open')
+            if not self._opening:
+                self._opening=True
+                import threading; threading.Thread(target=self._open_async,daemon=True,name='rearcam-open').start()
+            return None
         try:
             ok,f=self._cap.read()
             return f if ok else None
         except Exception:
             log.warning('Rear camera read failed',exc_info=True); self.close(); return None
-    def close_if_idle(self):
+    def _open_async(self):
+        try: cap=self._open_cap()
+        except Exception: cap=None
         with self._lock:
-            if self._cap is not None and self._clock()-self._last_use>config.REAR_CAM_IDLE_CLOSE_S: self.close()
+            self._opening=False
+            if cap is None:
+                if self._failed_at is None: log.warning(f'Rear camera would not open ({config.CAMERA_DEVICE})')
+                self._failed_at=self._clock(); return
+            self._cap=cap; self._failed_at=None; self._last_use=self._clock()
+        log.info('Rear camera open')
+    def close_if_idle(self):
+        # Called from the TICK: never wait for the lock. If someone holds it, try next tick.
+        if not self._lock.acquire(blocking=False): return
+        try:
+            if self._cap is not None and self._clock()-self._last_use>config.REAR_CAM_IDLE_CLOSE_S: self._close()
+        finally: self._lock.release()
     def close(self):
         with self._lock: self._close()
     def _close(self):

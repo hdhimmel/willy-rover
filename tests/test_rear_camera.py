@@ -20,16 +20,24 @@ def _cam(monkeypatch,frame='F',clock=None):
     t=clock or [0.0]
     return vision.RearCamera(open_cap=open_cap,clock=lambda: t[0]),caps,t
 
+def _ready(cam):
+    import time
+    for _ in range(200):
+        if cam._cap is not None or cam._failed_at is not None: return
+        time.sleep(0.005)
+
 def test_opens_on_demand_and_closes_when_idle(monkeypatch):
     cam,caps,t=_cam(monkeypatch)
     assert caps==[]                               # nothing opened until asked
+    assert cam.grab() is None                     # opening happens in the background
+    _ready(cam)
     assert cam.grab()=='F' and len(caps)==1
     t[0]+=config.REAR_CAM_IDLE_CLOSE_S+1; cam.close_if_idle()
     assert caps[0].released
 
 def test_privacy_closes_and_returns_nothing(monkeypatch):
     import privacy
-    cam,caps,t=_cam(monkeypatch); cam.grab()
+    cam,caps,t=_cam(monkeypatch); cam.grab(); _ready(cam)
     monkeypatch.setattr(privacy,'camera_enabled',lambda: False)
     assert cam.grab() is None and caps[0].released
 
@@ -38,8 +46,9 @@ def test_a_failed_open_is_not_retried_every_tick(monkeypatch):
     monkeypatch.setattr(config,'SIMULATE_HARDWARE',False)
     n=[]; t=[0.0]
     cam=vision.RearCamera(open_cap=lambda: n.append(1),clock=lambda: t[0])
-    assert cam.grab() is None and cam.grab() is None and len(n)==1
-    t[0]+=config.REAR_CAM_RETRY_S+1; cam.grab(); assert len(n)==2
+    assert cam.grab() is None; _ready(cam)
+    assert cam.grab() is None and len(n)==1
+    t[0]+=config.REAR_CAM_RETRY_S+1; cam.grab(); _ready(cam); assert len(n)==2
 
 def test_close_person_behind_is_tall_in_frame():
     from vision import rear_person_close
@@ -66,3 +75,13 @@ def test_brain_camera_only_adds_a_stop_while_reversing(monkeypatch):
     assert b._rear_cm()==120.0 and not b._rear_watch       # not reversing: camera not consulted
     b.safety.last_action='reverse'; b._rear_block_t=time.monotonic()-10
     assert b._rear_cm()==120.0                             # stale camera verdict is ignored
+
+def test_a_slow_open_never_blocks_the_caller(monkeypatch):
+    import vision,time,threading
+    monkeypatch.setattr(config,'SIMULATE_HARDWARE',False)
+    gate=threading.Event()
+    def slow_open(): gate.wait(2); return _Cap('F')
+    cam=vision.RearCamera(open_cap=slow_open)
+    t0=time.monotonic(); assert cam.grab() is None; cam.close_if_idle()
+    assert time.monotonic()-t0<0.1                # the 2026-10-10 tick waited 0.9 s here
+    gate.set(); _ready(cam); assert cam.grab()=='F'

@@ -197,6 +197,9 @@ class SafetyController:
                       status='mid_flight_abort',rear_cm=f'{rear:.0f}')
             self.obstacle_stop(); return False
         if time.time()>=self._deadline:
+            # Logged so a stop can be told apart from an obstacle abort (2026-10-10: a reverse
+            # toward the couch ended with neither in the log, and the reason could not be shown).
+            log.info(f'Timed {self._active_action} finished')
             self._drive.stop(); self._deadline=None; self._active_action=None; return False
         return True
 
