@@ -2394,7 +2394,9 @@ class RoverBrain:
         # FR-1600-004: the 'warn' tier keeps driving, so it is a prefix, not a face state.
         if getattr(self,'_bat_tier','normal')=='warn':
             st=f'🔋BATTERY LOW {self.adc.battery_volts:.1f}V — {st}'
-        self.display.update_state(state=fs,status=st,distances=d,tilt=tilt,speed=spd,
+        try: rear=self.sonars.rear_cm()        # B on the status line (owner 2026-10-10)
+        except Exception: rear=None
+        self.display.update_state(state=fs,status=st,distances=dict(d,rear=rear),tilt=tilt,speed=spd,
                                    awaiting_reset=awaiting_reset,offer_override=offer_override)
 
     def _roam_allowed(self):

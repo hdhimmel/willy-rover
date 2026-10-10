@@ -13,11 +13,13 @@ C_GREEN=(0,210,90);C_RED=(220,50,50);C_AMBER=(255,165,0)
 # FR-1600: states a personality overlay (bashful/silly) is allowed to visually decorate. Any
 # state NOT in this set (fault/lowbatt/warn/stuck) is mandatory and always wins — FR-1600-008.
 _PERSONALITY_SAFE_STATES={'idle','roam','slow','listening','processing','think','speak'}
-W,H=1280,720; FACE_CX=640; FACE_CY=360
+# 2026-10-10 (owner): the face fits ABOVE the status bar (STATUS_Y). It was centred on the full
+# 720 px, so the bar covered its bottom 80 px. Same sizes, moved up 60 px; the oval now 10..590.
+W,H=1280,720; FACE_CX=640; FACE_CY=300
 _NET_POLL_S=5.0      # how often the background thread refreshes the on-face network indicator
 _STOP_ARM_S=4.0      # how long the stop button stays armed/CONFIRM after the first tap
-EYE_L=415;EYE_R=865;EYE_CY=340;EYE_RX=175;EYE_RY=130;IRIS_R=86;PUPIL_R=38
-MOUTH_CX=640;MOUTH_CY=535;MOUTH_W=475;MOUTH_H=110
+EYE_L=415;EYE_R=865;EYE_CY=280;EYE_RX=175;EYE_RY=130;IRIS_R=86;PUPIL_R=38
+MOUTH_CX=640;MOUTH_CY=475;MOUTH_W=475;MOUTH_H=110
 STATUS_Y=600
 
 # FR-1600-001/002 (distinct visual states for idle/listening/processing/speaking):
@@ -386,7 +388,7 @@ class WillyFace:
         ic={'idle':C_IDLE,'roam':C_ROAM,'slow':C_STOP,'stop':C_WARN,'warn':C_RED,'stuck':C_RED,
             'fault':C_RED,'lowbatt':C_AMBER,'listening':C_IDLE,'processing':C_IDLE,'think':C_IDLE,
             'speak':C_ROAM,'bashful':C_AMBER,'silly':C_GREEN}.get(vis,C_IDLE)
-        pygame.draw.ellipse(s,C_FACE,pygame.Rect(FACE_CX-550,FACE_CY-320,1100,640))
+        pygame.draw.ellipse(s,C_FACE,pygame.Rect(FACE_CX-550,FACE_CY-290,1100,580))
         self._blink_next-=1.0/config.DISPLAY_FPS
         if self._blink_next<=0: self._blink_t=0.12; self._blink_next=3.0+math.sin(t*0.7)*1.5
         bf=0.0
@@ -444,8 +446,11 @@ class WillyFace:
             s.blit(surf,(x,y)); x+=surf.get_width()+14
         seg(f' {state.upper()} ',C_BG,bc)
         seg('WILLY',C_ACCENT)
-        for lbl,key in [('F','front'),('L','left'),('R','right')]:
-            d=dists.get(key,999); col=C_RED if d<config.DIST_STOP else C_AMBER if d<config.DIST_SLOW else C_GREEN
+        for lbl,key in [('F','front'),('L','left'),('R','right'),('B','rear')]:
+            d=dists.get(key,999 if key!='rear' else None)
+            if d is None:      # B (back, 2026-10-10): no rear sonar or ToF reading
+                seg(f'{lbl} --',C_DIM); continue
+            col=C_RED if d<config.DIST_STOP else C_AMBER if d<config.DIST_SLOW else C_GREEN
             seg(f'{lbl}{d:3.0f}cm',col)
         tc=C_RED if tilt>config.IMU_TILT_LIMIT else C_AMBER if tilt>config.IMU_TILT_WARN else C_DIM
         seg(f'TILT{tilt:5.1f}',tc)
