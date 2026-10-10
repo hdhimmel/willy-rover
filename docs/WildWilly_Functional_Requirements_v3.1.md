@@ -343,8 +343,16 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   Tailscale Funnel; the Google
                                                   account link is not made.
 
-  FR-1400 Cloud AI        PARTIAL --- server      Fallback is Claude (claude-
-                          process built, not run  sonnet-5-5), owner 2026-10-02.
+  FR-1400 Cloud AI        FR-1400-006 LIVE-       Fallback is Claude (claude-
+                          VERIFIED 2026-10-10     sonnet-5-5), owner 2026-10-02.
+                                                  Hailo server live 10-10: a 6.0
+                                                  s on-board model call with
+                                                  zero tick overruns, no brake,
+                                                  no sensor faults; "what do you
+                                                  see" answered through it
+                                                  (owner confirmed); low-
+                                                  confidence answer fell back to
+                                                  cloud as designed.
                                                   FR-1400-006: streaming cut the
                                                   freeze 7.7 s -> 2.2 s (10-08);
                                                   multi-process sharing ruled
@@ -3033,6 +3041,12 @@ stays primary (Hailo qwen2 1.5B, faster-whisper, Piper).
     voice's intent models share it). **To verify on the rover:** service restart → log
     `EVENT=HAILO_SERVER status=up yolo=True llm=True`; a model-path voice command while a
     20 ms heartbeat runs shows no gap; detection still works ("what do you see").
+    ✅ **Live-verified 2026-10-10.** Server up with yolo+llm on every start since 10-09. "Why is
+    the sky blue?" went to the on-board model through the server, 6.0 s, with **zero
+    TICK_OVERRUNs, no BRAKE_NOW and no sensor faults** in that window (in-process it froze
+    everything ~2.2 s and every sensor faulted). Its 0.3 confidence fell back to the cloud
+    model, as designed. "What do you see?" was answered through the server's detection
+    (owner confirmed). Not yet run: a server crash to exercise the vision-only fallback.
 
 # FR-1500 Voice Interaction
 
