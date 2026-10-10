@@ -89,11 +89,15 @@ class ToFSensor:
     """Frames in, meaning out. `source` is any callable returning a list of `TOF_ZONES`
     millimetre readings (None for no target); read_frame() below is the real one."""
 
-    def __init__(self,source=None,profile_path=None,floor_rows='config',left_columns='config'):
+    def __init__(self,source=None,profile_path=None,floor_rows='config',left_columns='config',drop_rows=None):
         # Geometry is per sensor (2026-10-10): the rear unit is mounted upside down, so its floor
         # is rows 0-1, not the front's 6-7. 'config' = the front sensor's config values, read at
         # call time so tests that patch config keep working.
         self._floor_rows=floor_rows; self._left_columns=left_columns
+        # Rows allowed to report a DROP. None = every profiled zone (the front, unchanged). The rear
+        # floor profile includes row 2, which meets the floor at a grazing ~45 cm and drops returns
+        # now and then -- 4 false "drop behind" in 9 s on clear floor, 2026-10-10.
+        self.drop_rows=drop_rows
         self.source=source
         self._available=False
         self._last_error=None
@@ -203,7 +207,9 @@ class ToFSensor:
         if self.profile is None: return False
         frame=self._frame()
         if frame is None: return False
-        return any(self.profile.classify(i,v)==DROP for i,v in enumerate(frame))
+        rows=self.drop_rows; cols=config.TOF_ZONE_COLUMNS
+        return any(self.profile.classify(i,v)==DROP for i,v in enumerate(frame)
+                   if rows is None or i//cols in rows)
 
     def capture_profile(self,samples=None,floor_rows=None):
         """Average several frames of clear floor into a new profile. Does NOT save -- the caller

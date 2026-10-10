@@ -240,7 +240,8 @@ class RoverBrain:
                 self.sonars.tof_rear=ToFSensor(
                     source=BackgroundFrames(SerialFrameSource(config.TOF_REAR_PORT)),
                     profile_path=os.path.join(config.WILLY_MEMORY_ROOT,config.TOF_REAR_FLOOR_PROFILE_PATH),
-                    floor_rows=config.TOF_REAR_FLOOR_ROWS,left_columns=config.TOF_REAR_LEFT_COLUMNS)
+                    floor_rows=config.TOF_REAR_FLOOR_ROWS,left_columns=config.TOF_REAR_LEFT_COLUMNS,
+                    drop_rows=config.TOF_REAR_DROP_ROWS)
                 if self.sonars.tof_rear.profile is None:
                     log.warning('Rear ToF fitted but no floor profile -- it reports nothing until '
                                 'scripts/calibrate_tof_floor.py --rear is run on clear floor')

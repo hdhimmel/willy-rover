@@ -64,3 +64,15 @@ def test_rear_cm_reports_drop_as_stop_and_never_raises():
     assert a.rear_cm() is None
     a.tof_rear=None
     assert a.rear_cm() is None
+
+def test_rear_drop_ignores_the_grazing_row():
+    from tof import ToFSensor,FloorProfile
+    zones=[None]*64
+    for i in range(24): zones[i]=300.0          # rows 0-2 profiled as floor
+    frame=list(zones); frame[2*8+3]=None        # row 2 zone loses its return (grazing angle)
+    s=ToFSensor(source=lambda: frame,profile_path='/nonexistent',floor_rows=(0,1,2),
+                left_columns=(0,1,2,3),drop_rows=(0,1))
+    s.profile=FloorProfile(zones)
+    assert not s.drop_detected()
+    frame[0*8+3]=None                           # a near floor row loses it: that is a real drop
+    assert s.drop_detected()
