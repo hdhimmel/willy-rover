@@ -105,3 +105,35 @@ def test_a_one_frame_drop_flicker_is_ignored(monkeypatch):
     drop[0]=False; t[0]+=0.15; assert a.rear_cm() is None
     drop[0]=True; t[0]+=0.15; assert a.rear_cm() is None   # flicker restarted the clock
     t[0]+=config.TOF_DROP_CONFIRM_S+0.01; assert a.rear_cm()==0.0   # sustained: stop
+
+def _array_with_frame(frame):
+    import sensors
+    a=object.__new__(sensors.SonarArray)
+    a._link=types.SimpleNamespace(fresh=lambda kind,age: frame)
+    a.tof_rear=None
+    return a
+
+def test_rear_sonar_is_read_from_the_b02_frame(monkeypatch):
+    pytest.importorskip('fcntl',reason='sensors.py needs fcntl: Linux only (CI, the rover)')
+    monkeypatch.setattr(config,'SIMULATE_HARDWARE',False)
+    old=['S','1','2','600','0','-1','30','575','30','0']                 # b-0.1: no rear
+    assert _array_with_frame(old).rear_sonar_cm() is None
+    new=old+['250','30']
+    assert _array_with_frame(new).rear_sonar_cm()==25.0
+    assert _array_with_frame(old+['-1','30']).rear_sonar_cm()==config.SONAR_MAX_CM   # no echo = clear
+    assert _array_with_frame(old+['250','5000']).rear_sonar_cm() is None             # stale channel
+
+def test_rear_cm_takes_the_nearer_of_sonar_and_tof(monkeypatch):
+    pytest.importorskip('fcntl',reason='sensors.py needs fcntl: Linux only (CI, the rover)')
+    monkeypatch.setattr(config,'SIMULATE_HARDWARE',False)
+    a=_array_with_frame(['S','1','2','600','0','-1','30','575','30','0','150','30'])
+    a.tof_rear=types.SimpleNamespace(drop_detected=lambda: False,nearest_obstacle_cm=lambda: None)
+    assert a.rear_cm()==15.0                 # the couch: ToF sees nothing, sonar sees 15 cm
+    a.tof_rear=types.SimpleNamespace(drop_detected=lambda: False,nearest_obstacle_cm=lambda: 9.0)
+    assert a.rear_cm()==9.0
+
+def test_failed_channels_names_a_dead_rear_sonar(monkeypatch):
+    pytest.importorskip('fcntl',reason='sensors.py needs fcntl: Linux only (CI, the rover)')
+    monkeypatch.setattr(config,'SIMULATE_HARDWARE',False)
+    a=_array_with_frame(['S','1','2','600','0','-1','30','575','30','8','-1','30'])
+    assert 'rear' in a.failed_channels

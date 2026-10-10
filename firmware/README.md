@@ -43,7 +43,7 @@ impossible. Verified on **both** boards 2026-09-29; it had never been run before
 | File | Board | Link | Job |
 |---|---|---|---|
 | `pico_a.py` | **A** | `uart4-pi5`, Pi GP12/GP13 | six wheel encoders, R5 rail sense |
-| `pico_b.py` | **B** | `uart2-pi5`, Pi GP4/GP5 | three HC-SR04, BNO085 reset |
+| `pico_b.py` | **B** | `uart2-pi5`, Pi GP4/GP5 | four HC-SR04 (rear on GP6/GP7 since **b-0.2**, 2026-10-10), BNO085 reset. `$S` b-0.2 = b-0.1 fields 0-9 unchanged, then `rear_mm,rear_age_ms`; flag bit 3 = rear ECHO stuck |
 
 Both use **UART0 on their own GP12/GP13** at **115200** and the **onboard status
 LED** (`Pin("LED")` on the CYW43439). **GP14 is free.**
@@ -65,6 +65,34 @@ mpremote connect COM4 run firmware/pico_a.py      # try it, Ctrl-C to stop
 mpremote connect COM4 fs cp firmware/pico_a.py :main.py   # make it permanent
 mpremote connect COM4 fs rm :pico_a.py                    # leave only ONE file
 ```
+
+### Updates over the UART (since 2026-10-10: Pico A a-0.4, Pico B b-0.2)
+
+**One USB install per board, then every later update goes over the Pi's UART.** The board
+runs `launcher.py` as `main.py`, which runs the firmware from `app.py`; `uartupd.py` receives
+updates. USB layout (replace COMx; `python -m mpremote` on the PC, or `mpremote` from the Pi
+with the board's USB in a Pi port):
+
+```
+mpremote connect COMx fs cp firmware/launcher.py :main.py
+mpremote connect COMx fs cp firmware/uartupd.py  :uartupd.py
+mpremote connect COMx fs cp firmware/pico_b.py   :app.py      # pico_a.py on board A
+mpremote connect COMx fs ls                                   # main.py, uartupd.py, app.py only
+mpremote connect COMx reset
+```
+
+Then, on Willie, with the service stopped:
+
+```
+venv/bin/python3 scripts/pico_update.py b      # or a
+```
+
+Chunks are acknowledged and the whole file is checked (size + adler32) before anything on the
+board changes. COMMIT swaps `app.py` (old one kept as `app_prev.py`), marks it on **trial** and
+resets; the tool waits for the board's `I` frame, checks the version matches the file's
+`VERSION`, and sends CONFIRM. A new firmware that crashes, will not import, or hangs (watchdog)
+on two trial boots is replaced by `app_prev.py` automatically. `launcher.py` and `uartupd.py`
+are deliberately USB-only: they are what makes a bad UART update recoverable.
 
 To recover a board that boots straight into a loop: hold **BOOTSEL** while
 plugging in USB and re-flash MicroPython, or `mpremote ... fs rm :main.py` if you

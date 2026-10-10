@@ -37,7 +37,7 @@ import time
 import machine
 from machine import Pin, UART, time_pulse_us
 
-VERSION = "b-0.1"
+VERSION = "b-0.2"   # 2026-10-10: fourth sonar (REAR, GP6/GP7) + firmware update over the UART (uartupd.py)
 BOARD = "B"
 
 # --- wiring, section 4.7 -----------------------------------------------------
@@ -48,6 +48,7 @@ SONARS = (
     ("front", 0, 1, "P1-1", "P1-4"),
     ("left",  2, 3, "P1-5", "P1-8"),
     ("right", 4, 5, "P1-9", "P1-12"),
+    ("rear",  6, 7, "GP6",  "GP7"),    # 2026-10-10: ECHO through its own 1k/2k divider
 )
 
 UART_ID = 0
@@ -75,7 +76,7 @@ US_TO_MM = 0.1715     # 343 m/s, there and back
 
 RST_ASSERT_MS = 10
 
-F_STUCK = {"front": 0x01, "left": 0x02, "right": 0x04}
+F_STUCK = {"front": 0x01, "left": 0x02, "right": 0x04, "rear": 0x08}
 F_RESET_DONE = 0x40   # an IMU reset has been performed since boot
 
 
@@ -189,7 +190,12 @@ def main():
     led = Status(LED_PIN)
     uart = UART(UART_ID, baudrate=BAUD,
                 tx=Pin(UART_TX), rx=Pin(UART_RX),
-                timeout=0, timeout_char=0)
+                timeout=0, timeout_char=0, rxbuf=1024)   # update lines are ~280 chars
+    try:
+        from uartupd import Receiver
+        upd = Receiver(lambda body: send(uart, body))
+    except ImportError:
+        upd = None        # installed without uartupd.py: USB updates only, as before
     sonars = [Sonar(n, t, e) for (n, t, e, _a, _b) in SONARS]
     by_name = {s.name: s for s in sonars}
     imu = ImuReset(RST_PIN)
@@ -215,6 +221,9 @@ def main():
             rx += chunk
             while b"\n" in rx:
                 line, rx = rx.split(b"\n", 1)
+                # Update lines are case-sensitive hex: handled BEFORE the upper() below.
+                if upd is not None and upd.handle(line.strip()):
+                    continue
                 cmd = line.strip().upper()
                 if cmd == b"PING":
                     send(uart, "P,{}".format(seq))
@@ -228,7 +237,7 @@ def main():
                     send(uart, "R,ok,{}".format(imu.count))
                 elif cmd:
                     send(uart, "X,unknown")
-            if len(rx) > 128:
+            if len(rx) > 600:      # must fit an update line (was 128)
                 rx = b""
 
         # --- one sensor per slot, round robin -------------------------------
@@ -248,13 +257,17 @@ def main():
             f = by_name["front"]
             l = by_name["left"]
             r = by_name["right"]
+            b = by_name["rear"]
             seq = (seq + 1) & 0xFFFF
-            send(uart, "S,{},{},{},{},{},{},{},{},{}".format(
+            # REAR goes AFTER the flags (b-0.2): fields 0-9 keep their places, so a Pi still
+            # running the three-sonar parser reads this frame unchanged.
+            send(uart, "S,{},{},{},{},{},{},{},{},{},{},{}".format(
                 seq, now,
                 f.mm, f.age_ms(now),
                 l.mm, l.age_ms(now),
                 r.mm, r.age_ms(now),
-                flags))
+                flags,
+                b.mm, b.age_ms(now)))
 
         # --- heartbeat ------------------------------------------------------
         led.beat(now)

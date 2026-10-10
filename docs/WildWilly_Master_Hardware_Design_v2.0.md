@@ -614,6 +614,8 @@ Pin numbers are Pico 2 W physical; the Pi column is Pi physical.
 | GP3 | 5 | ECHO-L in | P1-8 |
 | GP4 | 6 | TRIG-R out | P1-9 → P1-10 → RIGHT sonar TRIG |
 | GP5 | 7 | ECHO-R in | P1-12 |
+| GP6 | 9 | TRIG-REAR out | REAR sonar TRIG (2026-10-10, firmware b-0.2) |
+| GP7 | 10 | ECHO-REAR in | through its own 1 k / 2 k divider (5 V → 3.33 V) |
 | GP12 | 16 | UART0 TX | Pi GP5 RXD2, phys 29 |
 | GP13 | 17 | UART0 RX | Pi GP4 TXD2, phys 7 |
 | GP14 | 19 | — | free |
@@ -622,7 +624,7 @@ Pin numbers are Pico 2 W physical; the Pi column is Pi physical.
 | VBUS | 40 | — | leave unconnected |
 | GND | 38 | — | Pi GND, phys 6 or 9 |
 
-Pico B pings one sensor per 30 ms slot, round robin (~11 Hz per sensor), echo timeout
+Pico B pings one sensor per 30 ms slot, round robin (~11 Hz per sensor with three; **~8 Hz with the rear sonar, b-0.2**), echo timeout
 25 ms.
 
 #### Pi-side nets
@@ -633,7 +635,8 @@ Pico B pings one sensor per 30 ms slot, round robin (~11 Hz per sensor), echo ti
 | 29 | GP5 RXD2 | ← Pico B TX |
 | 32 | GP12 TXD4 | → Pico A RX |
 | 33 | GP13 RXD4 | ← Pico A TX |
-| 8, 37, 40 | GP14 (UART0 TXD), GP26, GP21 | unused |
+| 8, 10 | GP14 TXD0, GP15 RXD0 | FRONT SEN0628 ToF (`uart0-pi5`, since the 2026-10-10 harness swap) |
+| 37, 40 | GP26, GP21 | unused |
 | Service port (3-pin JST-SH) | debug UART | reserved for the console |
 
 #### 4.7.1 Verified on the rover

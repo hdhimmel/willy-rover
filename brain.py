@@ -2120,7 +2120,7 @@ class RoverBrain:
         try: now_failed=dict(self.sonars.failed_channels)
         except Exception: return
         now=time.time(); deb=config.SONAR_FAULT_DEBOUNCE_S
-        for name in ('front','left','right'):
+        for name in ('front','left','right','rear'):   # rear: Pico B b-0.2, 2026-10-10
             bad=name in now_failed
             since=self._sonar_edge.get(name)
             confirmed=name in self._sonar_failed

@@ -143,6 +143,14 @@ class SonarArray:
                 out[name] = 'unreadable field'; continue
             if age_ms > config.SONAR_STALE_S * 1000:
                 out[name] = f'not updated for {age_ms} ms'
+        if len(f) > 11:   # b-0.2 rear sonar, fields 10/11, stuck flag bit 3
+            if fl & 0x08:
+                out['rear'] = 'ECHO stuck high (sensor likely destroyed)'
+            else:
+                try:
+                    if int(f[11]) > config.SONAR_STALE_S * 1000: out['rear'] = f'not updated for {f[11]} ms'
+                except ValueError:
+                    out['rear'] = 'unreadable field'
         return out
 
     @property
@@ -207,11 +215,34 @@ class SonarArray:
                             exc_info=True)
         return {'front': front, 'left': d['left'], 'right': d['right']}
 
+    def rear_sonar_cm(self):
+        """The REAR sonar (Pico B b-0.2, fields 10/11 of $S), cm. SONAR_MAX_CM = no echo (clear);
+        None = no rear sonar in the frame (older firmware) or a stale channel -- unknown, so
+        reversing falls back to the rear ToF alone. Kept out of distances(): those three keys are
+        sonar DIRECTIONS the world model plots and avoidance compares."""
+        if config.SIMULATE_HARDWARE: return None
+        f = self._link.fresh('S', config.SONAR_STALE_S)
+        try:
+            mm = int(f[10]); age_ms = int(f[11])
+        except (TypeError, IndexError, ValueError):
+            return None
+        if mm < 0: return config.SONAR_MAX_CM
+        if age_ms > config.SONAR_STALE_S * 1000: return None
+        return mm / 10.0
+
     def rear_cm(self):
-        """Nearest obstacle BEHIND, in cm, from the rear ToF; a drop behind reads 0.0 (stop).
-        None = nothing known: no rear sensor, uncalibrated, or no fresh frame. Reversing then
-        behaves as it always has (there is no rear sonar); it never blocks motion by itself.
+        """Nearest obstacle BEHIND, in cm: the rear sonar and the rear ToF, nearer wins; a drop
+        behind reads 0.0 (stop). None = nothing known from either. Reversing then behaves as it
+        always has; it never blocks motion by itself.
         Never raises: this runs on the tick."""
+        # 2026-10-10: the rear SONAR joins in -- it sees the dark fabric couch the ToF cannot.
+        # Nearest wins; either alone still counts.
+        son = self.rear_sonar_cm()
+        tof_cm = self._rear_tof_cm()
+        vals = [v for v in (son, tof_cm) if v is not None]
+        return min(vals) if vals else None
+
+    def _rear_tof_cm(self):
         tof = self.tof_rear
         if tof is None: return None
         try:

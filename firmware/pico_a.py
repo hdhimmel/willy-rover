@@ -51,7 +51,7 @@ import time
 import machine
 from machine import Pin, ADC, UART
 
-VERSION = "a-0.3"
+VERSION = "a-0.4"   # 2026-10-10: firmware update over the UART (uartupd.py)
 BOARD = "A"
 
 # --- wiring, section 4.7 -----------------------------------------------------
@@ -288,7 +288,12 @@ def main():
     led = Status(LED_PIN)
     uart = UART(UART_ID, baudrate=BAUD,
                 tx=Pin(UART_TX), rx=Pin(UART_RX),
-                timeout=0, timeout_char=0)
+                timeout=0, timeout_char=0, rxbuf=1024)   # update lines are ~280 chars
+    try:
+        from uartupd import Receiver
+        upd = Receiver(lambda body: send(uart, body))
+    except ImportError:
+        upd = None        # installed without uartupd.py: USB updates only, as before
     adc = ADC(Pin(R5_SENSE))
     enc = Encoders()
     uid = "".join("{:02x}".format(b) for b in machine.unique_id())
@@ -314,6 +319,9 @@ def main():
             rx += chunk
             while b"\n" in rx:
                 line, rx = rx.split(b"\n", 1)
+                # Update lines are case-sensitive hex: handled BEFORE the upper() below.
+                if upd is not None and upd.handle(line.strip()):
+                    continue
                 cmd = line.strip().upper()
                 if cmd == b"PING":
                     send(uart, "P,{}".format(seq))
@@ -324,7 +332,7 @@ def main():
                     send(uart, "Z,ok")
                 elif cmd:
                     send(uart, "X,unknown")
-            if len(rx) > 128:
+            if len(rx) > 600:      # must fit an update line (was 128)
                 rx = b""          # a partial line this long is noise, not a command
 
         enc.poll_phase_b()
