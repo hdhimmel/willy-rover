@@ -652,7 +652,7 @@ class RoverBrain:
                 return (f'tilt {self.imu.tilt:.1f}deg held, no fresh IMU report',
                         f'quaternion or acceleration changing within {config.IMU_STALE_S}s')
             if name=='encoders':
-                return ('no fresh $E frame from Pico A',f'$E frames within {config.ENCODER_STALE_S}s')
+                return (self._encoder_fault_value(),f'$E frames within {config.ENCODER_STALE_S}s')
             if name=='sonars':
                 return ('no fresh $S frame from Pico B',f'$S frames within {config.SONAR_STALE_S}s')
             if name=='current':
@@ -662,6 +662,29 @@ class RoverBrain:
         except Exception:
             pass
         return ('unhealthy','is_healthy True')
+
+    def _encoder_fault_value(self):
+        """What an ENCODERS_FAULT saw, with the power state that usually explains it (feature
+        request 2938, approved 2026-10-10 narrowed). 23 of these 10-07..09 all landed at service
+        start with the base off: Pico A runs on R5 from the base, so "no frames" was no power, not
+        a link fault -- and the log line could not say which. Now it says: the age of the last
+        frame, the last R5 Pico A reported (it rides in the frame, so it can only be the last one),
+        and the +12V bus, with a cause when the bus explains it."""
+        parts=['no fresh $E frame from Pico A']
+        try:
+            f,age=self.encoders._link.latest('E')
+            parts.append('never received' if f is None else f'last {age:.1f}s ago')
+            if f is not None and len(f)>9: parts.append(f'last R5 {f[9]}mV')
+        except Exception: pass
+        try:
+            bus=_bus_volts(self.current)
+            parts.append(f'12V bus {bus:.1f}V')
+            if bus<config.MOTOR_RAIL_MIN_V:
+                parts.append('cause: base power off (Pico A and the encoders run on R5 from the base)')
+            else:
+                parts.append('bus live: Pico A, its power (R5) or the link')
+        except Exception: pass
+        return ', '.join(parts)
 
     def _stair_planning_front(self,d):
         """FR-1200-005, in the DELIBERATIVE layer (SWD §6.6): (front_cm for ROAM/SLOW/AVOID's

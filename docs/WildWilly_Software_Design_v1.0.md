@@ -501,8 +501,8 @@ once, announces, and enters `LOW_BATTERY`. Two guards:
   behaviour, and it can only prevent a halt. Until the divider is fixed, a dead-bus low
   battery is therefore not caught by software.
 
-Battery ladder: `BAT_WARN_V` 11.4, `BAT_RTH_V` 10.8, `BAT_SAFE_V` 10.5, `BAT_SHUTDOWN_V`
-10.2. `BAT_FULL_V` 11.58 is a display-only 100% anchor for `battery_pct`; every safety
+Battery ladder: `BAT_WARN_V` 11.1 (was 11.4, about half charge; owner 2026-10-10), `BAT_RTH_V` 10.8,
+`BAT_SAFE_V` 10.5, `BAT_SHUTDOWN_V` 10.2. `BAT_FULL_V` 12.6 (was 11.58, an under-load divider figure) is a display-only 100% anchor for `battery_pct`; every safety
 decision compares raw volts. `tests/test_battery_halt.py`.
 
 ---

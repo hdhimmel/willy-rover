@@ -309,7 +309,7 @@ The signal conditioning board (§4) and the Pico carriers (§4.8) carry no capac
 
 Charge to 12.6 V (4.20 V/cell) on the iMAX B6 (6 A max). **Set the charger's capacity
 cut-off above the 15000 mAh pack capacity**, or a charge ends early at storage level
-(~11.4 V, which is also `BAT_WARN_V`). Storage charge 11.4 V (3.8 V/cell). Packs must be
+(~11.4 V). `BAT_WARN_V` is 11.1 V since 2026-10-10 (3.7 V/cell). Storage charge 11.4 V (3.8 V/cell). Packs must be
 within 0.05 V per cell of each other before paralleling — main Y first, balance Y a minute
 later.
 
@@ -391,7 +391,7 @@ the ADS1115 (§6.6).
 | Sonar ECHO (Pico B, divided) | FRONT GP1, LEFT GP3, RIGHT GP5 |
 | ECHO divider ratio | 2/3 — the sonar's 5 V arrives at Pico B as 3.33 V |
 | Battery sense | ADS1115 A0, address 0x48 |
-| Battery divider ratio | nominal 0.242; calibrated `BATTERY_DIVIDER_SCALE` = 0.2432 (§6.2) |
+| Battery divider ratio | NEW board 2026-10-10: 10k/3.3k, nominal 0.248; calibrated `BATTERY_DIVIDER_SCALE` = 0.2452 (§6.2) |
 | P1-15/16, R10 | Unused since the FSR402 was removed 2026-10-04 |
 
 Sonar bearings (`config.SONAR_BEARING_DEG`): front 0°, left −90°, right +90°. There is no
@@ -983,7 +983,15 @@ these sensors — check pin seating and polarity before energising any sonar (§
 (≈3.2 kΩ) from midpoint to GND, on the signal board (§4.3). Midpoint → ADS1115 A0. Nominal
 ratio 0.242.
 
-**`BATTERY_DIVIDER_SCALE` = 0.2432**, from A0 = 2.7653 V (raw ~22120, 40 samples) against
+**2026-10-10: NEW divider board, 10 kΩ over 3.3 kΩ (nominal 0.248).** Built by the owner
+after the old board's lower 10 k (of the 4.7k‖10k pair) opened a second time and put 4.08 V
+on A0 (2026-10-09; the ADS1115 survived). Checked live: A0 2.988–2.998 V, 6.7 mV spread,
+ratio 0.247. **`BATTERY_DIVIDER_SCALE` = 0.2452**, from A0 2.9983 V against 12.23 V metered
+at the pack. One point; the second is open. Full pack 12.6 V gives 3.13 V on A0, under the
+chip's 3.3 V supply. Currently *temporarily* connected; record its final mounting and pins
+here when fitted. A 1 kΩ series resistor into A0 was suggested as protection.
+
+*Superseded:* **`BATTERY_DIVIDER_SCALE` = 0.2432**, from A0 = 2.7653 V (raw ~22120, 40 samples) against
 the pack metered at 11.37 V at the divider input — within 0.4% of nominal. One point; the
 second (near 12.6 V full, or 10.5 V) is open (§14 item 12). At PGA ±4.096 V the ADC
 represents up to 16.8 V, so a full or on-charger pack does not clip.
@@ -992,8 +1000,8 @@ Calibrate rather than trusting the nominal: resistor tolerance alone shifts it ~
 is ~600 mV at the pack — more than the gap between adjacent battery tiers.
 
 **Cross-check and authority (corrected 2026-10-07).** INA260 0x45 on the +12 V bus reads pack
-voltage less a small fuse-and-switch drop (`BUS_TO_PACK_DROP_V` 0.08 V; 0.16 V measured
-2026-10-07 against a metered 12.1 V). **While the bus is live it is the battery reading**; the
+voltage less a small fuse-and-switch drop (`BUS_TO_PACK_DROP_V` **0.16 V** since 2026-10-10: measured 0.157 V,
+12.23 V metered vs 12.073 V bus, and 0.16 V on 10-07; motors idle, so larger under drive). **While the bus is live it is the battery reading**; the
 divider is the fallback for a dead bus. Software compares the two (`⚠BATTERY SENSE SUSPECT`);
 with the bus dead, a halt on the divider is blocked while that flag stands (Software Design
 §4.2).
@@ -1527,7 +1535,7 @@ Standing rules.
 | Motor mapping and direction | PASS | M-1 per port; mirrored sides via `MOTOR_SIGN` |
 | BNO085 | PASS | Fusion output read; RST recovery proven; INT not used |
 | SEN0628 | PASS (link) | Frames on `/dev/ttyAMA3`; floor profile not captured |
-| Battery divider | PASS, one point | 0.2432; second point open |
+| Battery divider | PASS, one point (new board 2026-10-10) | 0.2452; second point open |
 | Arm channel map | PASS | Every channel identified on hardware; formal limits undefined |
 | Steering servo sweep | Not tested | — |
 | Gripper position feedback (A2) | Not tested | — |
@@ -1942,7 +1950,8 @@ harness if wanted.
 | Midpoint | P1-14 → ADS1115 A0 |
 | Low | P1-17 |
 
-Meter P1-14 ↔ P1-17 as 3.2 k, not 4.7 k or 10 k (§4.5). Calibrated scale 0.2432 (§6.2).
+Meter P1-14 ↔ P1-17 as 3.2 k, not 4.7 k or 10 k (§4.5). *Superseded 2026-10-10 by the new
+10k/3.3k divider board (§6.2): meter its low leg as 3.3 k. Scale 0.2452.*
 
 ### 16.14 Gripper position feedback
 

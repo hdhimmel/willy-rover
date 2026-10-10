@@ -687,7 +687,7 @@ ARM_KNOCK_STANDOFF_CM=(15,35)   # sonar front distance a knock may start from; n
 # Previous values: 0.2481 (MCP3008-era), 0.2865 (2026-08-02), 0.2386 (2026-08-16),
 # 0.3237 (2026-09-17, old bus node board). If this ever disagrees with a meter again, check the physical
 # divider connection before recalibrating.
-BATTERY_DIVIDER_SCALE=0.2432
+BATTERY_DIVIDER_SCALE=0.2452   # 2026-10-10: NEW divider board 10k/3.3k; A0 2.9983V vs metered pack 12.23V (one point; second point when the pack is ~11V)
 
 # Battery threshold ladder (§13.2) — one-way toward safer states until voltage recovers above
 # the next threshold up + hysteresis. Supersedes the old flat BAT_LOW/BAT_CRITICAL pair.
@@ -699,7 +699,8 @@ BATTERY_DIVIDER_SCALE=0.2432
 # in brain.py compares raw measured voltage against BAT_WARN/RTH/SAFE/SHUTDOWN_V directly, never
 # battery_pct. Don't treat voltage-under-load as equivalent to open-circuit/rested voltage if
 # these thresholds are ever recalibrated from a bench (unloaded) reading.
-BAT_FULL_V=11.58      # display-only 100% anchor for battery_pct (post-fuse voltage)
+BAT_FULL_V=12.6       # display-only 100% anchor for battery_pct. 2026-10-10: was 11.58, an under-load
+                      # divider figure; battery_volts is now bus+drop ~= the pack, so 3S full = 12.6V
 # PLAUSIBILITY FLOOR. Below this, the reading is not a flat pack -- it is a broken sensor, and
 # sensors.py refuses it instead of letting it drive the shutdown ladder.
 #
@@ -714,7 +715,7 @@ BAT_FULL_V=11.58      # display-only 100% anchor for battery_pct (post-fuse volt
 # BELOW BAT_SHUTDOWN_V on purpose -- a genuinely flat pack must still shut the rover down, so
 # raising this above the shutdown threshold would disable the protection the ladder exists for.
 BAT_IMPLAUSIBLE_V=5.0
-BAT_WARN_V=11.4       # -> warn
+BAT_WARN_V=11.1       # -> warn. 2026-10-10 (owner): was 11.4 = ~3.8V/cell, about HALF charge; 11.1 = 3.7V/cell, ~30%
 BAT_RTH_V=10.8        # -> graceful halt while ENABLE_DOCKING=False; return-to-home / DOCK otherwise
 BAT_SAFE_V=10.5        # -> SAFE_MODE (motion stop, arm holds)
 BAT_SHUTDOWN_V=10.2   # -> controlled shutdown; also the 0% anchor for battery_pct
@@ -861,7 +862,8 @@ SELFTEST_OVERRIDE_AFTER=3
 # measured 11.3-11.4V) but above the ~0V a genuine cut produces.
 MOTOR_RAIL_MIN_V=6.0
 INA_FRESH_S=1.0   # an INA260 rail older than this is NOT a reading (sensors.fresh_volts); 10 Hz reader
-BUS_TO_PACK_DROP_V=0.08   # F1 + SW-MAIN + Q1 between the pack and the 0x45 bus monitor (11.98 vs 11.90)
+BUS_TO_PACK_DROP_V=0.16   # F1 + SW-MAIN + Q1 between the pack and the 0x45 bus monitor. Measured 0.157V
+                          # 2026-10-10 (12.23 metered vs 12.073 bus) and 0.16V 10-07, motors idle; was 0.08
 MOTOR_RAIL_GRACE_S=1.0            # sustained below threshold before it's reported, not a blip
 ENABLE_STUCK_ALERT_EMAIL=True
 STUCK_ALERT_COOLDOWN_S=600.0      # min seconds between stuck alerts (10 min)

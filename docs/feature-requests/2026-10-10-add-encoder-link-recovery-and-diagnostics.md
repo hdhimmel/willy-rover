@@ -21,3 +21,12 @@ Please consider adding a watchdog that detects a stalled Pico A link and automat
 - `EVENT=ENCODERS_FAULT subsystem=encoders status=fault value=no fresh $E frame from Pico A expected=$E frames within 0.2s`
 
 *Machine-proposed by Willie from his own logs and approved by the owner by email. Approval is not a specification: anything non-trivial goes through design before implementation.*
+
+## Scope as built (2026-10-10)
+
+Narrowed by the owner on approval. The log showed all 23 faults at service start with the base
+off: Pico A runs on R5 from the base, so there were no frames because there was no power. A link
+watchdog would not have helped, so none was built. Instead, every `ENCODERS_FAULT` now carries the
+age of the last `$E` frame, the last R5 millivolts Pico A reported, and the +12 V bus voltage,
+and it names "base power off" as the cause when the bus is down (`brain._encoder_fault_value()`,
+`tests/test_encoder_fault_context.py`).

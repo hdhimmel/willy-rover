@@ -105,11 +105,19 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   k resoldered: midpoint 2.89 V
                                                   at P1-14. New ADS1115 fitted
                                                   2026-10-08 (0x48, self-test
-                                                  passes); A0 against the
-                                                  midpoint under 12 V not yet
-                                                  checked. BATTERY_DIVIDER_SCALE
-                                                  0.2432 is the old one-point
-                                                  trim: redo, both points. Low-
+                                                  passes). 2026-10-09 the 10 k
+                                                  opened AGAIN (A0 4.08 V);
+                                                  owner built a NEW divider
+                                                  board, 10k over 3.3k (temp-
+                                                  orarily connected): A0 2.998
+                                                  V steady, ratio 0.247.
+                                                  BATTERY_DIVIDER_SCALE 0.2452
+                                                  (one point, 12.23 V metered,
+                                                  2026-10-10); second point
+                                                  open. BUS_TO_PACK_DROP_V
+                                                  0.16 (measured 0.157). Warn
+                                                  11.1 V, full anchor 12.6 V
+                                                  (owner 2026-10-10). Low-
                                                   battery halt fired live
                                                   2026-10-02 at ~10 V (tier not
                                                   recorded). Overcurrent:
@@ -1482,6 +1490,10 @@ conditions:
     11.37V metered — **one point**; the 0.05V-across-range criterion above needs the
     second point (near 12.6V or 10.5V), still open. See §V's FR-200 row and Master
     Hardware Design §6.2.
+    **2026-10-10: superseded by the new divider board** (10 kΩ over 3.3 kΩ, built after the
+    old lower 10 k opened a second time and put 4.08 V on A0). `BATTERY_DIVIDER_SCALE` =
+    **0.2452**, from A0 2.9983 V against 12.23 V metered at the pack. One point; the second
+    is still open.
 
 -   **FR-200-001, pre-power safety condition.** A0 must be metered before the
     ADS1115 is first energised and must sit in the 2.76--3.06V window. A
