@@ -69,3 +69,12 @@ def test_steering_straight_tracks_centre_and_release():
     s.center_all(); assert s.straight
     s.set_pulse('lf',1600); assert not s.straight
     s.center_all(); s._sleep(); assert not s.straight
+
+def test_a_held_back_timed_move_counts_as_active(monkeypatch):
+    # Voice "back up" -> MANUAL watches timed_move_active; False during the settle sent it to IDLE,
+    # whose stop() cancelled the move before it began.
+    clock=[100.0]; sc,d,st=_sc(False,monkeypatch,clock)
+    sc.reverse_for(1.5,0.4)
+    assert sc.timed_move_active and ('reverse',0.4) not in d.calls
+    clock[0]+=config.STEER_SETTLE_S+0.01
+    assert sc.tick() and ('reverse',0.4) in d.calls

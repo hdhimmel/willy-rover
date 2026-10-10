@@ -172,7 +172,11 @@ class SafetyController:
         return r
 
     @property
-    def timed_move_active(self): return self._deadline is not None
+    def timed_move_active(self):
+        # A timed move held back while the wheels straighten counts as active: MANUAL and the
+        # other timed-move states would otherwise see "finished", go to IDLE, and IDLE's stop()
+        # would cancel the move before it ever started (found 2026-10-10 before the first test).
+        return self._deadline is not None or (self._pending is not None and self._pending.duration is not None)
 
     def tick(self):
         """Call once per brain tick regardless of FSM state. Enforces the deadline on an in-flight
