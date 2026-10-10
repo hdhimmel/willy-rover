@@ -120,6 +120,11 @@ def general_question(text):
     t=re.sub(r'^(?:(?:hey|ok|okay)[\s,]+)?willie[\s,]+','',text.strip(),flags=re.I)
     return bool(_GENERAL_QUESTION.match(t)) and not _COMMAND_WORDS.search(t)
 
+def _whole_word(w,text):
+    """w as a whole word in text; a stem ending in "diagnos" may run on (diagnostics)."""
+    tail=r"\w*" if w=="diagnos" else r"\b"
+    return re.search(r"\b"+re.escape(w)+tail,text) is not None
+
 _SENSOR_ANSWERED=frozenset({'status','battery','where_are_you','what_do_you_see','what_doing','diagnostics','check_logs'})
 # 2026-10-10, live: "Why is the grass green?" went to the Hailo model, which said where_are_you
 # (0.8, three times), and Willie answered "I'm not sure which room I'm in". A sensor-answered
@@ -1032,7 +1037,10 @@ class VoicePipeline:
             log.info(f'Local interpretation named an unknown intent {name!r} -- treating as not understood')
             return result.payload,0.0
         words=_SENSOR_INTENT_WORDS.get(name)
-        if words and not any(w in text.lower() for w in words):
+        # Whole words, not substrings (outside review 2026-10-10): "ok" must not match "look",
+        # "see" not "seed", "state" not "statement". A trailing \w* keeps "diagnos" -> diagnostics.
+        low=text.lower()
+        if words and not any(_whole_word(w,low) for w in words):
             log.info(f'Local model said {name!r} for "{text}" with none of its words -- not understood')
             return result.payload,0.0
         log.info(f'Local model intent: {name!r} ({result.intent_confidence})')

@@ -25,3 +25,12 @@ def test_unbacked_sensor_intent_is_not_understood(text,intent):
 def test_backed_sensor_intent_passes(text,intent):
     payload,conf=_v(intent)._interpret_local(text)
     assert conf==0.8
+
+
+@pytest.mark.parametrize('text,intent',[('Look at the seeds','status'),          # 'ok' inside 'look'
+                                        ('Read me a statement','status'),        # 'state' inside 'statement'
+                                        ('Somewhere over the rainbow','where_are_you'),
+                                        ('What does seed mean','what_do_you_see')])
+def test_substrings_inside_other_words_do_not_count(text,intent):
+    payload,conf=_v(intent)._interpret_local(text)
+    assert conf==0.0
