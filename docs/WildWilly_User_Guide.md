@@ -32,9 +32,17 @@ When he's been idle a while and wants to explore, he asks:
 
 and a green **LET ME ROAM** button appears on his screen.
 
-**To say yes:** say *"yes"* (or "sure", "okay", "go ahead"), **or** tap the button.
+After asking, he **beeps and listens for your answer** — no need to say "Hey Willie" first.
+
+**To say yes:** say *"yes"* (or "sure", "okay", "go ahead", "go explore"), **or** tap the button.
 
 **To say no:** say *"no"*, or ignore him. He stays put and asks again in about ten minutes.
+
+**You don't have to wait for him to ask.** Say **"Hey Willie, go explore"** (or "explore",
+"roam", "go wander", "start exploring") and he sets off straight away — that counts as your yes.
+
+The same beep-and-listen happens for any question he asks, for example "Are you sure you want
+me to shut down?".
 
 **Yes lasts until he's restarted.** To take it back, say **"stop"** — that halts him *and*
 revokes permission. He always starts up without permission, so a reboot never leaves him roaming.

@@ -45,7 +45,7 @@ def fb(tapped=False,shutdown_pending=False,state="IDLE"):
     )
     ns.said=said; ns.offers=offers; ns.calls=calls
     for m in ("_roam_allowed","_begin_roam_ask","_end_roam_ask","_service_roam_ask",
-              "_revoke_roam_permission","_drain_voice_commands","_say"):
+              "_revoke_roam_permission","_drain_voice_commands","_say","_ask"):
         setattr(ns,m,types.MethodType(getattr(RoverBrain,m),ns))
     return ns
 
@@ -144,6 +144,22 @@ f=fb(); f._roam_allowed()
 f._revoke_roam_permission()
 assert f._roam_ask_pending is False
 assert f.offers[-1] is False
+
+# 2026-10-10: a PROMPTED answer arrives as plain text with punctuation ("Yes."), and "go explore"
+# said in answer to the ask is itself a yes.
+f=fb(); f._roam_allowed()
+f.voice.pending_commands.put({"source":"voice","intent":None,"text":"Yes.","ts":time.time()})
+f._drain_voice_commands()
+assert f._roam_permission is True, "a prompted 'Yes.' must grant"
+f=fb(); f._roam_allowed()
+q(f,"roam","go explore"); f._drain_voice_commands()
+assert f._roam_permission is True, "'go explore' in answer to the ask must grant"
+
+# 2026-10-10: the ask uses voice.ask() (beep + listen, no wake word) when the pipeline has it.
+asked=[]
+f=fb(); f.voice.ask=lambda t,**k: asked.append(t)
+f._roam_allowed()
+assert asked and "explore" in asked[0].lower() and f.said==[], (asked,f.said)
 
 print("ROAM_PERMISSION_OK")
 '''

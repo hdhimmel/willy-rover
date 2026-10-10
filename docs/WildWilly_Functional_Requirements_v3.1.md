@@ -1951,8 +1951,18 @@ live-verified — see `motors.py::Steering`'s own comment.
     given to rotation mode as designed, and while reversing a background watcher runs Hailo
     detection on it about 3 times a second; a person or pet whose box fills 60% of the frame
     height pulls `rear_cm` to 0. The camera can only add a stop. ✅ Built 2026-10-10, not yet
-    run on the rover (`tests/test_rear_tof.py`, `tests/test_rear_camera.py`). Still to do: rear
-    floor profile capture, then a live reverse toward a box and toward a person.
+    run on the rover (`tests/test_rear_tof.py`, `tests/test_rear_camera.py`).
+    **Live 2026-10-10, partly verified — and a real gap found.** Rear floor profile captured
+    (rows 0-2; drop detection rows 0-1, 3 s start-up grace, 0.3 s confirmation, after false
+    drops). A 2-inch box behind was NOT seen (it reads as floor that close). **A dark fabric
+    couch was NOT seen either:** reversing toward it he stopped 6 cm short only because the
+    1.5 s back-up ran out ("Timed reverse finished"); the fabric returns almost nothing to the
+    ToF, which "no return" does not treat as an obstacle. The rear camera was tested as an
+    object check at 6, 20 and 40 cm from the couch: no detections at any distance (it does
+    detect a person in an open room). **Open: a rear HC-SR04 on Pico B** — needs a change to
+    the divider board (owner, waiting); rear bump switches as last resort. Until then the rear
+    ToF covers solid, reflective things (furniture edges, walls, legs), not dark fabric or low
+    objects close behind.
 
 -   **Straighten before moving (owner requirement 2026-10-10).** "Willie needs to
     straighten his wheels before moving." The steering servos are released 2 s after their
@@ -2454,6 +2464,16 @@ separately under FR-1200.
     protection limit, not a contact detector*). Keep the knock bounded and timed. If
     contact sensing is ever wanted, this monitor is a starting point that now exists --- it is
     not, by itself, sufficient.
+
+-   **Roam by voice, and questions that listen (owner requirement 2026-10-10).** (1) "go
+    explore" / "explore" / "roam" / "go wander" / "start exploring" grants the session's roam
+    permission by voice — no screen tap — and from IDLE sets him off at once (`roam` intent; it
+    still needs a passing self-test, and "stop" still revokes). (2) A question he asks
+    (`voice.ask`: the roam ask, the shutdown confirmation) is followed by the wake chirp and one
+    listen with NO wake word (`VOICE_ASK_LISTEN_S` 8 s); the answer is queued as a spoken command,
+    so the existing yes/no handling takes it. Yes-matching now ignores punctuation ("Yes.").
+    ✅ Built 2026-10-10, not yet run on the rover (`tests/test_roam_by_voice.py`,
+    `tests/test_brain_roam_permission.py`).
 
 -   **FR-1000-005 (permission to roam).** Owner decision 2026-09-09. The two
     triggers that start motion nobody asked for --- the `IDLE_TIMEOUT` wander

@@ -1,4 +1,4 @@
-import json,math,time,socket,os,subprocess,threading,logging,config,logsetup,storage,privacy,thermal
+import json,math,re,time,socket,os,subprocess,threading,logging,config,logsetup,storage,privacy,thermal
 from logsetup import log_event
 if not config.SIMULATE_HARDWARE: import board,busio
 from motors import DriveBase,Steering
@@ -68,7 +68,7 @@ _NON_SPOKEN_SOURCES=frozenset({'remote','email'})
 # What an email may queue: everything a spoken command could, through the same gating.
 _EMAIL_QUEUEABLE=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve','map',
     'stop_map','status','battery','arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','follow','diagnostics',
-    'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs','shutdown','demo_replay'})
+    'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs','shutdown','demo_replay','roam'})
 
 # Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
 # that state, before either drain pass, so Willie heard every command and answered none -- with
@@ -1272,6 +1272,14 @@ class RoverBrain:
         self.voice.pending_commands.put({'source':'email','intent':name,'args':intent.get('args',{}),
                                          'text':text,'ts':time.time(),'on_reply':reply})
 
+    def _ask(self,question):
+        """A question that wants a spoken answer: beep and listen without the wake word after it
+        (voice.ask). A remote caller gets the question text as its reply, as _say does."""
+        cb=getattr(self,'_reply_to',None)
+        if cb is not None or not getattr(self.voice,'available',False) or not hasattr(self.voice,'ask'):
+            self._say(question); return
+        self.voice.ask(question)
+
     def _say(self,text):
         # Every answer from the two drain passes goes through here. Speaks it, and hands it to
         # a remote caller (remote_cmd.py) when the command being answered came from one, so
@@ -1350,8 +1358,9 @@ class RoverBrain:
             # a yes counts as a no -- and a no costs only a cooldown, so reading an ambiguous reply
             # as refusal is the cheap direction to be wrong in.
             text=cmd.get('text','').lower()
-            if (cmd.get('intent')=='confirm_receipt'
-                    or any(w in text.split() for w in ('yes','yeah','yep','sure','okay','ok'))
+            words=re.findall(r"[a-z']+",text)   # "Yes." from a prompted answer keeps its full stop
+            if (cmd.get('intent') in ('confirm_receipt','roam')
+                    or any(w in words for w in ('yes','yeah','yep','sure','okay','ok'))
                     or 'go ahead' in text):
                 self._end_roam_ask(True)
             else:
@@ -1500,6 +1509,19 @@ class RoverBrain:
             ok,msg=self.start_rotation(deg)
             if not ok: self._say(f"I can't turn: {msg}")
             log.info(f'Voice-triggered rotation {deg:+.0f} deg ({msg})')
+        elif cmd.get('intent')=='roam':
+            # 2026-10-10 (owner): roam by voice without the screen. Saying it grants the session
+            # permission (same grant as the button) and, from IDLE, sets off now.
+            if not self._motion_enabled:
+                self._say(f"I can't explore yet. My self-test is failing: {self._init_fail_reason}.")
+            else:
+                if self._roam_ask_pending: self._roam_ask_pending=False; self.display.offer_roam(False)
+                self._roam_permission=True
+                log.info('Roam permission granted by voice command.')
+                if self._state=='IDLE':
+                    self._idle_t=0.0; self._say('Off I go.'); self._go('ROAM')
+                else:
+                    self._say("Okay, I'll explore when I'm done with this.")
         elif cmd.get('intent')=='steer':
             # FR-600-004. Applied in this same tick (one control cycle), parked only, clamped.
             r=self.safety.approve_steer(cmd.get('args',{}).get('degrees',0))
@@ -1579,7 +1601,7 @@ class RoverBrain:
                     reply=f"I can see {said}{', and more' if len(names)>3 else ''}."
             self._say(reply)
         elif cmd.get('intent')=='shutdown':
-            self._say('Are you sure you want me to shut down? Say confirm to proceed.')
+            self._ask('Are you sure you want me to shut down? Say confirm to proceed.')
             self._shutdown_pending=True; self._shutdown_deadline=time.time()+15.0
         elif cmd.get('intent'):
             log.info(f'Voice intent "{cmd["intent"]}" received but not wired to an executor.')
@@ -2361,7 +2383,7 @@ class RoverBrain:
         self._roam_ask_deadline=time.time()+config.ROAM_ASK_TIMEOUT_S
         self.display.offer_roam(True)
         log.info('Asking permission to roam.')
-        if self.voice.available: self.voice.speak("I would like to go explore. Is that okay?")
+        if self.voice.available: self._ask("I would like to go explore. Is that okay?")
 
     def _end_roam_ask(self,granted):
         # The single exit from an open ask -- granted or not, tapped or spoken or lapsed. Keeping

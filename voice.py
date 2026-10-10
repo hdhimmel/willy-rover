@@ -201,7 +201,7 @@ _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
 # deterministic "the local model did not understand" signal.
 _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve',
     'confirm_receipt','map','stop_map','shutdown','status','battery','arm_stow','arm_home','wave',
-    'come_here','come_to_me','rotate','steer','follow','diagnostics','where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
+    'come_here','come_to_me','rotate','steer','roam','follow','diagnostics','where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
     'privacy_on','privacy_off','demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
@@ -290,6 +290,9 @@ _FAST_PATH_PATTERNS=[
     (_fp(r'reset|clear (the )?fault|fault clear|all clear'),'reset','Reset. Motion re-enabled.'),
     (_fp(r'(?:go |move |drive )?forward'),'forward','Going forward.'),
     (_fp(r'(?:go |move |drive )?(?:reverse|backward|back up)'),'reverse','Backing up.'),
+    # 2026-10-10 (owner): roam by voice, no screen tap. Saying it IS the permission.
+    (_fp(r'(?:you can |go ahead and )?(?:go )?(?:explore|roam|wander)(?: around)?|go (?:for a )?(?:wander|walk|explore)|'
+         r'start (?:exploring|roaming)'),'roam',''),
     (_fp(r'turn left'),'turn_left','Turning left.'),
     (_fp(r'turn right'),'turn_right','Turning right.'),
     (_fp(r'shut down|power off|go to sleep|power yourself (?:off|down)|shut yourself (?:off|down)|'
@@ -813,6 +816,17 @@ class VoicePipeline:
         p=getattr(self,'_person',None)
         return p[0] if p and time.time()-p[1]<config.FACE_SPEAKER_WINDOW_S else None
 
+    def ask(self,question,timeout_s=None):
+        """Speak a question, then -- with no wake word -- beep and listen for the answer once
+        (2026-10-10, owner: "when he asks a question automatically beep and turn on the mic").
+        The answer is queued like any spoken command, so the brain's existing yes/no handling
+        (roam permission, shutdown confirmation) receives it unchanged. No answer = nothing
+        queued; the ask then lapses on its own timeout as before."""
+        self.speak(question)
+        def queue_answer(text):
+            if text: self.pending_commands.put({'intent':None,'text':text,'source':'voice','ts':time.time()})
+        self.prompt_listen(queue_answer,timeout_s if timeout_s is not None else config.VOICE_ASK_LISTEN_S)
+
     def prompt_listen(self,on_text,timeout_s):
         """FR-2100-003: listen once WITHOUT the wake word, after the question being spoken has
         finished, and call on_text(transcript or None). A narrow entry point -- the wake gate
@@ -1005,7 +1019,7 @@ class VoicePipeline:
         # consumer" rule as every motion intent.
         motion_intents={'forward','reverse','turn_left','turn_right','go_to','retrieve',
                          'confirm_receipt','map','stop_map','shutdown','status','battery',
-                         'arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','follow','diagnostics',
+                         'arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','roam','follow','diagnostics',
                          'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs',
                          'demo_start','demo_stop','demo_replay','enrol','forget_everyone'}
         if name in motion_intents:
