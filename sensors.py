@@ -180,7 +180,12 @@ class SonarArray:
         d = self._read_all()
         front = d['front']
         tof = self.tof
-        if tof is not None and getattr(tof, 'available', False):
+        # NOT gated on tof.available (fixed 2026-10-10). available only turns True inside a read,
+        # and this was the read that never happened: gated on it, the front ToF stayed "unavailable"
+        # for good and never fed the forward stop -- unless an avoidance turn happened to read it
+        # first. nearest_obstacle_cm()/drop_detected() already return None/False on a failed or
+        # stale read, so calling them unconditionally still falls back to sonar alone.
+        if tof is not None:
             try:
                 near = tof.nearest_obstacle_cm()
                 if near is not None and near < front:

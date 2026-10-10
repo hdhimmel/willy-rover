@@ -89,7 +89,8 @@ class ToFSensor:
     """Frames in, meaning out. `source` is any callable returning a list of `TOF_ZONES`
     millimetre readings (None for no target); read_frame() below is the real one."""
 
-    def __init__(self,source=None,profile_path=None,floor_rows='config',left_columns='config',drop_rows=None):
+    def __init__(self,source=None,profile_path=None,floor_rows='config',left_columns='config',drop_rows=None,name='front'):
+        self.name=name   # in every log line: one unnamed "frames healthy" hid a dead front ToF for days
         # Geometry is per sensor (2026-10-10): the rear unit is mounted upside down, so its floor
         # is rows 0-1, not the front's 6-7. 'config' = the front sensor's config values, read at
         # call time so tests that patch config keep working.
@@ -136,7 +137,7 @@ class ToFSensor:
             self._available=False
             return None
         if not self._available:
-            log.info('ToF frames healthy')
+            log.info(f'{self.name.capitalize()} ToF frames healthy')
             self._healthy_since=time.monotonic()
         self._available=True; self._last_error=None
         return frame

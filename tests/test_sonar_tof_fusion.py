@@ -114,3 +114,17 @@ def test_the_tof_never_affects_the_side_distances(array):
     d = array.distances
     assert d['left'] == pytest.approx(100.0)
     assert d['right'] == pytest.approx(100.0)
+
+
+def test_a_tof_not_yet_marked_available_is_still_read(array):
+    """2026-10-10: distances() used to skip the ToF until tof.available was True -- and only a read
+    sets it, so nothing ever read the front ToF and it never fed the forward stop. A real ToFSensor
+    starts unavailable; its first frame must still pull 'front' down."""
+    from tof import ToFSensor, FloorProfile
+    frame = [None] * 64; frame[3 * 8 + 4] = 150          # upper row, 15 cm: an obstacle
+    s = ToFSensor(source=lambda: frame, profile_path='/nonexistent', floor_rows=(6, 7))
+    s.profile = FloorProfile([None] * 64)
+    assert s.available is False
+    _set_front(array, 100.0)
+    array.tof = s
+    assert array.distances['front'] == pytest.approx(15.0)

@@ -1942,6 +1942,15 @@ live-verified — see `motors.py::Steering`'s own comment.
     not on 0x40's path (no current seen while a servo swung), and the `steering_5v`
     overcurrent trip was dropped (owner, 2026-10-08). Peak current is still unmeasured.
 
+-   **Front ToF never fed the forward stop (bug found 2026-10-10).** `SonarArray.distances()`
+    consulted the ToF only when `tof.available` was already True, and only a read sets it, so the
+    forward check never read it; it took part only after an avoidance turn happened to read it.
+    The FR-1000-002 "stop is sonar + ToF" claim was therefore not true in normal driving. Fixed:
+    the ToF is read every tick and still degrades to sonar on a failed read
+    (`tests/test_sonar_tof_fusion.py`). Log lines now name the sensor ("Front/Rear ToF frames
+    healthy"). Same day: the front ToF had been silent since 10-07 (wiring); both answer now, with
+    the harnesses swapped at the header and the ports swapped in config to match.
+
 -   **Rear coverage (2026-10-10).** Willie had no rear sensing at all: no rear sonar, and the
     rear camera was used only by a bench script. Now: (1) the **rear ToF** (second SEN0628,
     UART0, mounted upside down and handled in software) feeds `rear_cm` to the safety gate, and
