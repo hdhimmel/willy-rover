@@ -277,10 +277,31 @@ class IMU:
             # construction it does its I2C soft reset as before. The hardware line is for
             # recovery (_poll_once), proven on the rover 2026-10-01 once the Pi -> Pico B
             # wire was resoldered.
-            self._bno=self._make_bno()
+            self._bno=self._first_bno()
         self._pitch=0.0; self._roll=0.0; self._yaw=0.0
         self._lock=threading.Lock(); self._last_ok=0.0
         self._running=False; self._thread=None
+    def _first_bno(self):
+        """Driver at start-up, or None -- NEVER an exception (2026-10-10). A wedged BNO085 used
+        to raise out of here ('Was not able to enable feature'), past _init_device, and kill the
+        service; systemd restarted it every 10 s into the same wedge (2026-10-09, twice: once after
+        an I2C scan, once with Pico B -- which drives RST -- unpowered). Now: one try, then the
+        hardware RST and a second try; failing that, start WITHOUT the driver. _poll_once's
+        recovery (RST + rebuild, rate-limited) keeps trying, and until it succeeds the self-test
+        reports "IMU not reporting", so motion stays off -- a fault, not a crash loop."""
+        try: return self._make_bno()
+        except Exception as e: log.warning(f'BNO085 start failed ({e}); trying a hardware RST')
+        acked=False
+        if self._reset is not None:
+            try: acked=bool(self._reset())
+            except Exception: log.warning('BNO085 RST via Pico B raised', exc_info=True)
+        time.sleep(self._settle_s)
+        try:
+            b=self._make_bno(); log.info(f'BNO085 started after {"RST" if acked else "retry"}'); return b
+        except Exception as e:
+            log.error(f'BNO085 did not start ({e}; RST {"acknowledged" if acked else "not acknowledged"}). '
+                      'Running without it; recovery keeps trying.')
+            return None
     def _make_bno(self):
         b=BNO08X_I2C(self._i2c,reset=None,address=config.IMU_ADDR)
         b.enable_feature(BNO_REPORT_ROTATION_VECTOR)
@@ -321,6 +342,7 @@ class IMU:
         if config.SIMULATE_HARDWARE:
             with self._lock: self._pitch=0.0; self._roll=0.0; self._yaw=0.0  # simulated level chassis
             self._last_ok=time.perf_counter(); return
+        if self._bno is None: raise RuntimeError('BNO085 not started')   # -> _poll_once recovery
         q=self._bno.quaternion; now=time.monotonic()
         try: sig=(q,self._bno.acceleration)   # raw accel noise moves even when he is still
         except Exception: sig=(q,None)

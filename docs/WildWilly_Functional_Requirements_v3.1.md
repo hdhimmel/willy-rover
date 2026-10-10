@@ -1376,6 +1376,15 @@ signal conditioning board (Master Hardware Design §4.5). Pass conditions:
     appears OFF (12V bus X V)"** ahead of the individual items. Motion stays inhibited
     either way.
 
+-   **FR-100-003, a wedged IMU at start-up (2026-10-10).** On 10-09 the service crash-looped
+    twice: the BNO085 raised at construction ("Was not able to enable feature"), past
+    `_init_device`, and systemd restarted it every 10 s into the same wedge (once after an I²C
+    scan probed 0x4A, once with Pico B, which drives the IMU's RST, unpowered). Now
+    `IMU._first_bno()` tries, pulses the hardware RST, tries again, and failing that **starts
+    without the driver**: the poll loop's existing recovery (RST + rebuild, rate-limited) keeps
+    trying, and the self-test reports "IMU not reporting" with motion off until it succeeds.
+    ✅ Built 2026-10-10 (`tests/test_imu_start.py`); not yet seen on the rover.
+
 -   **FR-100-003 (startup self-test).** ⚠ **Corrected 2026-10-02: no BNO085 INT
     check exists or is required.** The driver polls over I²C and no code reads INT
     (it is wired to Pi GP15, header pin 10, unused — Master Hardware Design §6.3). Not
