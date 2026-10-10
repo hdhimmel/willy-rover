@@ -43,3 +43,15 @@ def test_privacy_on_is_answered_even_while_moving_and_by_email():
     import brain
     assert 'privacy_on' in brain._SPEECH_ONLY_INTENTS
     assert {'privacy_on','privacy_off'} <= brain._EMAIL_QUEUEABLE
+
+
+def test_cloud_send_says_a_thinking_phrase_and_still_shows_the_notice():
+    # 2026-10-10 (owner): no "checking with a cloud service" out loud; the display keeps the
+    # FR-1800-003 notice.
+    import privacy
+    said=[]; shown=[]
+    voice=types.SimpleNamespace(speak=lambda t,**k: said.append(t))
+    display=types.SimpleNamespace(update_state=lambda **k: shown.append(k.get('status','')))
+    privacy.note_cloud_send(display,voice,'your question')
+    assert said and said[0] in config.CLOUD_THINKING_PHRASES and 'cloud' not in said[0].lower()
+    assert shown and 'cloud AI' in shown[0]

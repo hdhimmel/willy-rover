@@ -3541,6 +3541,11 @@ same deliberate, visible kind of exception as FR-2100-005, not a reading of
 FR-1800-002's "diagnostic logging" clause. See FR-2000-004 for the email side.
 
 ✅ **Built 2026-10-02 (`15bfc77`), not yet run on the rover:**
+**FR-1800-003, wording (owner 2026-10-10):** instead of "One moment, checking with a cloud
+service for this one" he says one of `CLOUD_THINKING_PHRASES` ("Give me a minute to think about
+that.", "Hmm, that's a tough question.", "Checking my memories."). The indication that data is
+leaving the rover is the display line "Sending … to cloud AI", shown on every cloud send; the
+requirement allows voice or display.
 **FR-1800-003** — the STUCK escalation to the cloud model now calls
 `privacy.note_cloud_send()` (spoken/displayed notice) before sending sonar, pose and
 history off-device; previously only the voice path did. **FR-1800-004 / FR-1900-010**

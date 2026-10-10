@@ -37,7 +37,11 @@ def note_cloud_send(display,voice,what):
         try: display.update_state(state='think',status=msg)
         except Exception: pass
     if voice is not None:
-        try: voice.speak('One moment, checking with a cloud service for this one.',tone='neutral')
+        # 2026-10-10 (owner): a thinking phrase instead of "checking with a cloud service". The
+        # FR-1800-003 indication is the DISPLAY line above ("Sending ... to cloud AI"); the
+        # requirement allows voice OR display.
+        import random
+        try: voice.speak(random.choice(config.CLOUD_THINKING_PHRASES),tone='neutral')
         except Exception: pass
 
 def purge_expired(dir_path,max_age_days=None,pattern='*'):

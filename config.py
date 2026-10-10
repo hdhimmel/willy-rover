@@ -1350,7 +1350,11 @@ VOICE_ASK_LISTEN_S=8.0
 LOGCHECK_HOURS=24           # "check your logs": the window he summarises
 LOGCHECK_TOP=3              # problems named out loud, then "and N other kinds"
 LOGCHECK_FILES=2
-FIX_ASK_TIMEOUT_S=20.0      # how long "do you want me to ask for a fix?" waits for an answer            # newest rotated files read (2 MB each), enough for a day      # after a spoken question: beep, then listen this long for the answer, no wake word     # how long the spoken/on-screen ask stays open before it lapses
+FIX_ASK_TIMEOUT_S=20.0
+# Said while a question goes to the cloud model (owner 2026-10-10); the screen still shows
+# "Sending ... to cloud AI", which is what meets FR-1800-003.
+CLOUD_THINKING_PHRASES=("Give me a minute to think about that.","Hmm, that's a tough question.",
+                        "Checking my memories.")      # how long "do you want me to ask for a fix?" waits for an answer            # newest rotated files read (2 MB each), enough for a day      # after a spoken question: beep, then listen this long for the answer, no wake word     # how long the spoken/on-screen ask stays open before it lapses
 # A declined ask and an unanswered one land in the same place: this cooldown, then he asks again.
 # Refusal is deliberately not permanent -- "no" usually means "not now", and nobody answering
 # usually means nobody heard. 10 minutes is long enough not to nag.
