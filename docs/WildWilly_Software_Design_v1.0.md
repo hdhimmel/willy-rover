@@ -431,7 +431,7 @@ means starting on the RTC's time, logged; it never stops the service starting.
    to re-check. **`config.SIMULATE_HARDWARE` is frozen at first import** — setting the env
    var later in the same process does not reach modules that already imported `config`.
 1. `RoverBrain.__init__` constructs every subsystem. If `ENABLE_TOF`, it builds
-   `ToFSensor(BackgroundFrames(SerialFrameSource()))` on `/dev/ttyAMA3` and attaches it to
+   `ToFSensor(BackgroundFrames(SerialFrameSource()))` on `TOF_PORT` (`/dev/ttyAMA0` since 2026-10-10) and attaches it to
    `SonarArray` (warning if no floor profile). The IMU gets Pico B's reset callback.
    `motors.py`/`arm.py` construction calls `PCA9685.reset()`, which clears ALLCALL — so
    0x70 does not answer and is not expected.
@@ -672,7 +672,7 @@ additive. The sonar itself is behind a UART; for Pico B, stale means stop (S-9).
 
 ### 6.5a Rear coverage (2026-10-10)
 
-**Rear ToF:** a second `ToFSensor` on `TOF_REAR_PORT` (`/dev/ttyAMA0`) with its own geometry
+**Rear ToF:** a second `ToFSensor` on `TOF_REAR_PORT` (`/dev/ttyAMA3` since the 2026-10-10 harness swap) with its own geometry
 (`floor_rows=(0,1,2)`, `left_columns=(0..3)`: mounted upside down; row 2 added because it meets the floor at ~45 cm, just past the 40 cm upper-row cut-off) and its own floor profile
 (`tof_rear_floor_profile.json`). `SonarArray.rear_cm()` returns its nearest obstacle in cm, 0
 on a drop, None when unknown. It is deliberately NOT a key in `distances()`, whose three keys

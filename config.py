@@ -220,7 +220,10 @@ ENABLE_TOF=True             # fitted and answering (5/5 clean frames 2026-10-02)
                             # until scripts/calibrate_tof_floor.py has captured a floor profile.
 TOF_POLL_S=0.05             # background reader cadence; a frame itself takes ~0.13 s
 TOF_FRAME_MAX_AGE_S=0.5     # an older frame is no frame -> sonar alone
-TOF_PORT='/dev/ttyAMA3'     # UART, not I2C -- keeps it off a bus that took the whole rover down
+# 2026-10-10: the two ToF harnesses ended up swapped at the Pi header while the front sensor was
+# being fixed. Proven with a palm over the FRONT sensor: it showed on ttyAMA0. Owner chose to follow
+# in software rather than re-plug: FRONT = UART0 (pins 8 TXD0 / 10 RXD0), REAR = UART3 (24 / 21).
+TOF_PORT='/dev/ttyAMA0'     # FRONT. UART, not I2C -- keeps it off a bus that took the whole rover down
                             # twice on 2026-09-07/08. CONFIRM the Pi 5 overlay->pin mapping first
                             # (§6.5): the Pi 4 mapping does not carry over to the RP1.
 TOF_BAUD=115200             # fixed in the sensor's firmware, not configurable
@@ -262,7 +265,7 @@ REAR_CAM_RETRY_S=30.0          # after a failed open, do not retry every tick
 REAR_CAM_DETECT_S=0.3          # rear detection rate while reversing (~3 Hz; the chip is shared)
 REAR_CAM_NEAR_FRAC=0.6         # person box this tall (fraction of frame) = close behind -> stop reverse
 REAR_CAM_STOP_CLASSES=('person','dog','cat')
-TOF_REAR_PORT='/dev/ttyAMA0'
+TOF_REAR_PORT='/dev/ttyAMA3'   # REAR (swapped 2026-10-10, see TOF_PORT)
 TOF_REAR_FLOOR_ROWS=(0,1,2)   # 2026-10-10: row 2 meets floor at 43-46 cm, only 3-6 cm past
                               # TOF_NOFLOOR_OBSTACLE_MM -- a little pitch would read as an obstacle
 TOF_REAR_DROP_ROWS=(0,1)         # drop detection only where floor returns are solid (row 2 grazes)

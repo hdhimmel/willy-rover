@@ -45,7 +45,8 @@ Pi 5 40-pin header
   │          ├─ FeatherWing #2927  0x60 0x61
   │          └─ LTC4311 accelerator             (no address, transparent)
   ├─ uart2-pi5  GP4 TXD2 (phys 7) / GP5 RXD2 (phys 29)   → Pico B  (/dev/ttyAMA2)
-  ├─ uart3-pi5  GP8 TXD3 (phys 24) / GP9 RXD3 (phys 21)  → SEN0628 ToF (/dev/ttyAMA3)
+  ├─ uart3-pi5  GP8 TXD3 (phys 24) / GP9 RXD3 (phys 21)  → REAR SEN0628 ToF (/dev/ttyAMA3) — swapped 2026-10-10
+  ├─ uart0-pi5  GP14 TXD0 (phys 8) / GP15 RXD0 (phys 10) → FRONT SEN0628 ToF (/dev/ttyAMA0) — swapped 2026-10-10
   └─ uart4-pi5  GP12 TXD4 (phys 32) / GP13 RXD4 (phys 33) → Pico A  (/dev/ttyAMA4)
 ```
 
@@ -1093,7 +1094,7 @@ no remount. Floor profile captured 2026-10-10 (`scripts/calibrate_tof_floor.py -
 | Zones | 64 (8×8). 60° H × 60° V (90° is the diagonal) — ~7.5°/zone, ~13 cm at 1 m |
 | Range | 20–3500 mm |
 | Rate | ~0.13 s per polled frame |
-| Interface | UART, DIP switch set to UART, 115200 fixed, `uart3-pi5` → `/dev/ttyAMA3` |
+| Interface | UART, DIP switch set to UART, 115200 fixed. **Since 2026-10-10 the FRONT unit is on `uart0-pi5` → `/dev/ttyAMA0` (pins 8/10) and the REAR on `uart3-pi5` → `/dev/ttyAMA3` (pins 24/21)**: the harnesses were swapped at the header while the front was being fixed (proven with a palm test) and the owner chose to follow in software (`TOF_PORT` / `TOF_REAR_PORT`). The pin tables above describe the original plan. |
 | Supply | 3.3 V from Pi pin 1 (R4), <80 mA |
 
 **Wiring:**
@@ -1543,7 +1544,7 @@ Standing rules.
 | Pico A link and encoders | PASS | `$E` 50 Hz; six wheels count A and B, direction per wheel; 763 counts/rev from one wheel |
 | Motor mapping and direction | PASS | M-1 per port; mirrored sides via `MOTOR_SIGN` |
 | BNO085 | PASS | Fusion output read; RST recovery proven; INT not used |
-| SEN0628 | PASS (link) | Frames on `/dev/ttyAMA3`; floor profile not captured |
+| SEN0628 | PASS (link), both | Front on `/dev/ttyAMA0`, rear on `/dev/ttyAMA3` (swapped 2026-10-10); front silent 10-07 to 10-10 (wiring), both answering since 10-10 |
 | Battery divider | PASS, one point (new board 2026-10-10) | 0.2452; second point open |
 | Arm channel map | PASS | Every channel identified on hardware; formal limits undefined |
 | Steering servo sweep | Not tested | — |
