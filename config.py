@@ -251,6 +251,21 @@ TOF_NOFLOOR_OBSTACLE_MM=400.0
 # every surface change reads as an obstacle and he never moves.
 TOF_FLOOR_MARGIN_MM=120.0
 TOF_FLOOR_PROFILE_PATH='tof_floor_profile.json'
+# REAR ToF (second SEN0628, 2026-10-10). Faces backward on the Pi 5 UART0 (dtoverlay=uart0-pi5,
+# pins 8 TXD0 / 10 RXD0), 3.3 V from the DROK bus. Mounted UPSIDE DOWN relative to the front one,
+# measured 2026-10-10: a hand over the top half showed in rows 5-7 and the floor is rows 0-1; a
+# hand on Willie's LEFT showed in columns 0-3 (owner confirmed). Both handled in software.
+ENABLE_TOF_REAR=True
+# REAR CAMERA (vision.RearCamera, 2026-10-10). Opened on demand for rotation and reversing.
+REAR_CAM_IDLE_CLOSE_S=5.0
+REAR_CAM_RETRY_S=30.0          # after a failed open, do not retry every tick
+REAR_CAM_DETECT_S=0.3          # rear detection rate while reversing (~3 Hz; the chip is shared)
+REAR_CAM_NEAR_FRAC=0.6         # person box this tall (fraction of frame) = close behind -> stop reverse
+REAR_CAM_STOP_CLASSES=('person','dog','cat')
+TOF_REAR_PORT='/dev/ttyAMA0'
+TOF_REAR_FLOOR_ROWS=(0,1)
+TOF_REAR_LEFT_COLUMNS=(0,1,2,3)     # WILLIE's left, not the sensor's
+TOF_REAR_FLOOR_PROFILE_PATH='tof_rear_floor_profile.json'
 TOF_PROFILE_SAMPLES=10      # frames averaged when capturing; one frame carries per-zone noise
                             # straight into the baseline everything else is measured against
 

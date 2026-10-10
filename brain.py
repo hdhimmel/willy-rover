@@ -233,6 +233,19 @@ class RoverBrain:
                                 'scripts/calibrate_tof_floor.py is run on clear floor')
             except Exception:
                 log.warning('ToF could not start; sonar alone',exc_info=True)
+        # REAR ToF (2026-10-10): second SEN0628 facing backward, mounted upside down (config).
+        if config.ENABLE_TOF_REAR and not config.SIMULATE_HARDWARE:
+            try:
+                from tof import ToFSensor,SerialFrameSource,BackgroundFrames
+                self.sonars.tof_rear=ToFSensor(
+                    source=BackgroundFrames(SerialFrameSource(config.TOF_REAR_PORT)),
+                    profile_path=os.path.join(config.WILLY_MEMORY_ROOT,config.TOF_REAR_FLOOR_PROFILE_PATH),
+                    floor_rows=config.TOF_REAR_FLOOR_ROWS,left_columns=config.TOF_REAR_LEFT_COLUMNS)
+                if self.sonars.tof_rear.profile is None:
+                    log.warning('Rear ToF fitted but no floor profile -- it reports nothing until '
+                                'scripts/calibrate_tof_floor.py --rear is run on clear floor')
+            except Exception:
+                log.warning('Rear ToF could not start; reversing without it',exc_info=True)
         # The BNO085's RST is on Pico B, whose link SonarArray owns (§4.7 consequence 1).
         self.imu=_init_device(lambda:IMU(reset=self.sonars.reset_imu),'imu')
         self.adc=_init_device(ADC,'adc')
@@ -271,8 +284,14 @@ class RoverBrain:
         # Rotation mode (rotate.py, live-verified 2026-10-07). Drives THROUGH SafetyController
         # (set_wheels is approved like a turn). Front camera only here: the rear camera is not
         # opened by the service, and opening a USB camera on the tick thread would stall it.
+        # Rear camera (2026-10-10): rotation was built to use it and was never given it.
+        from vision import RearCamera
+        self.rear_cam=RearCamera()
+        self._rear_watch=False; self._rear_block=False; self._rear_block_t=0.0; self._rear_thread_on=True
+        threading.Thread(target=self._rear_watch_loop,daemon=True).start()
         self.rotation=Rotation(self.steering,self.safety,self.imu,lambda: self.sonars.distances,
                                camera_grab=self.detector.capture_frame,encoders=self.encoders,
+                               rear_grab=self.rear_cam.grab,
                                say=self._say)
         self.steer_override=SteerOverride(self.steering)   # FR-600-004
         self._after_rotate='IDLE'
@@ -515,6 +534,9 @@ class RoverBrain:
         if self.pursuit.active: self.pursuit.abort('shutdown')
         if self.rotation.active: self.rotation.abort('shutdown')
         self.faces.stop(); self.feature_requests.stop(); self.remote.stop(); self.voice.stop(); self.email.stop(); self.detector.close()
+        self._rear_thread_on=False
+        try: self.rear_cam.close()
+        except Exception: pass
         try:
             import hailo_server; hailo_server.close_client()   # FR-1400-006: release the chip
         except Exception: log.warning('Hailo server close failed',exc_info=True)
@@ -994,7 +1016,8 @@ class RoverBrain:
             self._drain_voice_in_selftest_fault()
             return
         d=self.sonars.distances; tilt=self.imu.tilt; bat_v=self.adc.battery_volts; bat=self.adc.battery_pct
-        self.safety.update_context(front_cm=d['front'],tilt_deg=tilt,motion_enabled=self._motion_enabled)
+        self.safety.update_context(front_cm=d['front'],tilt_deg=tilt,motion_enabled=self._motion_enabled,
+                                   rear_cm=self._rear_cm())
         # §9: passive Layer-1 obstacle feed, same "no motor consequence, just keeps an estimate
         # current" spirit as the odometry pose logging above -- every real (non-timeout) sonar hit
         # this tick becomes a world_model Obstacle point at the robot's current pose+bearing.
@@ -2118,6 +2141,33 @@ class RoverBrain:
             self._say("My cooling fan has stopped.")
         elif not self.thermal.fan_stopped:
             self._fan_warned=False
+
+    def _rear_cm(self):
+        """Rear clearance for the safety gate: the rear ToF, pulled to 0 when the rear camera sees
+        a person or pet close behind while reversing. The camera can only ever ADD a stop."""
+        rear=self.sonars.rear_cm()
+        self._rear_watch=(getattr(self.safety,'last_action','stop')=='reverse')
+        try: self.rear_cam.close_if_idle()
+        except Exception: pass
+        if (self._rear_watch and self._rear_block
+                and time.monotonic()-self._rear_block_t<config.REAR_CAM_DETECT_S*4):
+            return 0.0
+        return rear
+
+    def _rear_watch_loop(self):
+        """Rear detection OFF the tick thread: a detection goes through the Hailo server and can
+        wait behind a 2.2 s prompt read, which the tick must never do. Runs only while reversing."""
+        from vision import rear_person_close
+        while self._rear_thread_on:     # not _running: that is False until run() starts
+            if not self._rear_watch:
+                self._rear_block=False; time.sleep(0.1); continue
+            try: near=rear_person_close(self.rear_cam.detect())
+            except Exception: near=False
+            if near!=self._rear_block:
+                (log.warning if near else log.info)(
+                    'Rear camera: someone close behind -- reversing stopped' if near else 'Rear camera: clear behind')
+            self._rear_block=near; self._rear_block_t=time.monotonic()
+            time.sleep(config.REAR_CAM_DETECT_S)
 
     def _retention_sweep(self):
         """FR-1800-004 / FR-1900-010: enforce DATA_RETENTION_DAYS. Both purge functions existed

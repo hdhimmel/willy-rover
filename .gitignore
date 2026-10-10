@@ -58,3 +58,4 @@ docs/drawings/__pycache__/
 # Per-rover ToF floor calibration (scripts/calibrate_tof_floor.py) -- never committed; the
 # hourly auto-backup on the rover would otherwise sweep it into a local commit.
 tof_floor_profile.json
+tof_rear_floor_profile.json

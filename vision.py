@@ -232,3 +232,91 @@ class ObjectDetector:
         try:
             if self._hailo is not None: self._hailo.close()
         except Exception as e: log.warning(f'Hailo close failed during close(): {e}')
+
+
+class RearCamera:
+    """The REAR camera, Arducam OV9281 (config.CAMERA_DEVICE, by-id), 2026-10-10 (owner: "remember
+    to use the rear camera"). Until now only scripts/rotate_test.py ever opened it: rotation mode
+    was built to take a rear grab and brain.py never passed one.
+
+    Opened ON DEMAND (rotation, reversing) and released after REAR_CAM_IDLE_CLOSE_S unused, so it
+    costs nothing while he drives forward or sits. Honours privacy.camera_enabled() on every grab.
+    Frames are used and dropped, never stored (owner rule: no camera data unless needed)."""
+    def __init__(self,open_cap=None,clock=time.monotonic):
+        self._open_cap=open_cap or self._default_open
+        self._cap=None; self._last_use=0.0; self._clock=clock; self._labels=None; self._failed_at=None
+        import threading; self._lock=threading.RLock()   # rotation (tick) and the reverse watcher share it
+    @staticmethod
+    def _default_open():
+        import cv2
+        cap=cv2.VideoCapture(config.CAMERA_DEVICE,cv2.CAP_V4L2)
+        if not cap.isOpened(): cap.release(); return None
+        return cap
+    def grab(self):
+        """One frame (BGR or grey ndarray), or None: privacy, no camera, or a failed read."""
+        with self._lock: return self._grab()
+    def _grab(self):
+        if config.SIMULATE_HARDWARE or not privacy.camera_enabled():
+            self.close(); return None
+        now=self._clock(); self._last_use=now
+        if self._cap is None:
+            if self._failed_at is not None and now-self._failed_at<config.REAR_CAM_RETRY_S: return None
+            try: self._cap=self._open_cap()
+            except Exception: self._cap=None
+            if self._cap is None:
+                if self._failed_at is None: log.warning(f'Rear camera would not open ({config.CAMERA_DEVICE})')
+                self._failed_at=now; return None
+            self._failed_at=None; log.info('Rear camera open')
+        try:
+            ok,f=self._cap.read()
+            return f if ok else None
+        except Exception:
+            log.warning('Rear camera read failed',exc_info=True); self.close(); return None
+    def close_if_idle(self):
+        with self._lock:
+            if self._cap is not None and self._clock()-self._last_use>config.REAR_CAM_IDLE_CLOSE_S: self.close()
+    def close(self):
+        with self._lock: self._close()
+    def _close(self):
+        if self._cap is not None:
+            try: self._cap.release()
+            except Exception: pass
+            self._cap=None; log.info('Rear camera released')
+    def detect(self,client=None):
+        """Detections behind him, through the Hailo server (no in-process fallback: the rear camera
+        is an extra, and the chip lives in the server). [] when anything is unavailable."""
+        if client is None:
+            try:
+                import hailo_server; client=hailo_server.get_client()
+            except Exception: client=None
+        if client is None or not client.info.get('yolo'): return []
+        f=self.grab()
+        if f is None: return []
+        try:
+            import cv2,numpy as np,os
+            h,w=f.shape[:2]; mh,mw=client.info['input_shape'][:2]
+            img=cv2.resize(f,(mw,mh),interpolation=cv2.INTER_AREA)
+            img=cv2.cvtColor(img,cv2.COLOR_GRAY2RGB) if img.ndim==2 else cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
+            if self._labels is None:
+                p=os.path.join(os.path.dirname(os.path.abspath(__file__)),config.HAILO_COCO_LABELS_PATH)
+                with open(p,encoding='utf-8') as fh: self._labels=fh.read().splitlines()
+            out=[]
+            for cid,dets in enumerate(client.detect(np.ascontiguousarray(img,dtype=np.uint8))):
+                for det in dets:
+                    if det[4]<config.YOLO_CONF_THRESHOLD: continue
+                    y0,x0,y1,x1=det[:4]
+                    out.append({'class':self._labels[cid],'conf':float(det[4]),'bbox':(x0*w,y0*h,x1*w,y1*h),
+                                'frame_w':w,'frame_h':h,'timestamp':time.time(),'camera_id':'rear'})
+            return out
+        except Exception:
+            log.warning('Rear detection failed; nothing reported',exc_info=True); return []
+
+
+def rear_person_close(detections):
+    """A person (or pet) close behind: their box fills REAR_CAM_NEAR_FRAC of the frame height.
+    Height, not width -- a person side-on is narrow but still tall when near."""
+    for d in detections:
+        if d.get('class') not in config.REAR_CAM_STOP_CLASSES: continue
+        x0,y0,x1,y1=d['bbox']
+        if (y1-y0)>=config.REAR_CAM_NEAR_FRAC*d['frame_h']: return True
+    return False

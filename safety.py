@@ -24,7 +24,7 @@ class ApprovedMotion:
 # over a serial link where not-being-told is a normal failure mode. A caller that omits
 # front_cm is a caller with no obstacle information, and the answer to that is no.
 def approve_motion(action,speed=None,duration=None,*,front_cm=0.0,tilt_deg=0.0,
-                    bat_tier='normal',motion_enabled=True):
+                    bat_tier='normal',motion_enabled=True,rear_cm=None):
     """Pure decision logic, no hardware access — independently unit-testable (tests/test_safety.py).
     Returns ApprovedMotion (with speed/duration clamped to configured limits) or Rejected(reason)."""
     if not motion_enabled: return Rejected('motion disabled (self-test failed)')
@@ -32,6 +32,10 @@ def approve_motion(action,speed=None,duration=None,*,front_cm=0.0,tilt_deg=0.0,
     if tilt_deg>config.IMU_TILT_LIMIT: return Rejected(f'tilt {tilt_deg:.1f}deg exceeds limit')
     if bat_tier in('shutdown','safe'): return Rejected(f'battery tier {bat_tier!r} forbids motion')
     if action=='forward' and front_cm<config.DIST_STOP: return Rejected(f'obstacle at {front_cm:.0f}cm blocks forward')
+    # Rear ToF (2026-10-10). None = no rear reading: reversing stays as it always was (no rear
+    # sonar exists); a real reading inside DIST_STOP blocks it, exactly as the front does.
+    if action=='reverse' and rear_cm is not None and rear_cm<config.DIST_STOP:
+        return Rejected(f'obstacle at {rear_cm:.0f}cm behind blocks reverse')
     spd=None if speed is None else max(0.0,min(config.SPEED_MAX,float(speed)))
     dur=None if duration is None else max(0.0,min(config.MAX_COMMAND_DURATION_S,float(duration)))
     return ApprovedMotion(action,spd,dur)
@@ -56,14 +60,15 @@ class SafetyController:
         # wheels not known-straight first centres all six, holds the drive stopped for
         # STEER_SETTLE_S, then goes. Never interrupts a rover already moving.
         self._steering=steering; self._settle_until=None; self._pending=None
+        self.last_action='stop'
         # front_cm starts at 0.0 -- blocked -- so forward motion is refused until a real
         # sonar reading has actually arrived. It used to start at 999.0, which granted
         # clear path before a single frame had been read. S-9.
-        self._ctx={'front_cm':0.0,'tilt_deg':0.0,'bat_tier':'normal','motion_enabled':False}
+        self._ctx={'front_cm':0.0,'tilt_deg':0.0,'bat_tier':'normal','motion_enabled':False,'rear_cm':None}
         self._deadline=None; self._active_action=None
         self._last_estop_log_t=0.0
 
-    def update_context(self,front_cm=None,tilt_deg=None,bat_tier=None,motion_enabled=None):
+    def update_context(self,front_cm=None,tilt_deg=None,bat_tier=None,motion_enabled=None,rear_cm='keep'):
         # Called once near the top of brain.py's _tick() so per-call sites (forward()/stop()/etc.)
         # don't each have to thread sensor readings through — approve_motion() itself stays a pure
         # function of explicit args for testing; this is just where production wiring caches them.
@@ -71,6 +76,7 @@ class SafetyController:
         if tilt_deg is not None: self._ctx['tilt_deg']=tilt_deg
         if bat_tier is not None: self._ctx['bat_tier']=bat_tier
         if motion_enabled is not None: self._ctx['motion_enabled']=motion_enabled
+        if rear_cm!='keep': self._ctx['rear_cm']=rear_cm   # None is a real value here: "unknown"
 
     def request(self,action,speed=None,duration=None):
         """Approve against the current cached context, then execute if approved.
@@ -90,6 +96,7 @@ class SafetyController:
         {'forward':self._drive.forward,'reverse':self._drive.reverse,
          'turn_left':self._drive.turn_left,'turn_right':self._drive.turn_right,
          'stop':lambda s=None:self._drive.stop()}[result.action](result.speed)
+        self.last_action=result.action   # read by brain's rear-camera watcher (reversing or not)
         if result.duration is not None:
             self._deadline=time.time()+result.duration; self._active_action=result.action
         else:
@@ -179,6 +186,11 @@ class SafetyController:
         if self._active_action=='forward' and self._ctx['front_cm']<config.DIST_STOP:
             log_event(log,'OBSTACLE_STOP',severity='warning',subsystem='safety',
                       status='mid_flight_abort',front_cm=f'{self._ctx["front_cm"]:.0f}')
+            self.obstacle_stop(); return False
+        rear=self._ctx.get('rear_cm')
+        if self._active_action=='reverse' and rear is not None and rear<config.DIST_STOP:
+            log_event(log,'OBSTACLE_STOP',severity='warning',subsystem='safety',
+                      status='mid_flight_abort',rear_cm=f'{rear:.0f}')
             self.obstacle_stop(); return False
         if time.time()>=self._deadline:
             self._drive.stop(); self._deadline=None; self._active_action=None; return False

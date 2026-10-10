@@ -89,13 +89,25 @@ class ToFSensor:
     """Frames in, meaning out. `source` is any callable returning a list of `TOF_ZONES`
     millimetre readings (None for no target); read_frame() below is the real one."""
 
-    def __init__(self,source=None,profile_path=None):
+    def __init__(self,source=None,profile_path=None,floor_rows='config',left_columns='config'):
+        # Geometry is per sensor (2026-10-10): the rear unit is mounted upside down, so its floor
+        # is rows 0-1, not the front's 6-7. 'config' = the front sensor's config values, read at
+        # call time so tests that patch config keep working.
+        self._floor_rows=floor_rows; self._left_columns=left_columns
         self.source=source
         self._available=False
         self._last_error=None
         self.profile_path=profile_path or os.path.join(
             config.WILLY_MEMORY_ROOT,config.TOF_FLOOR_PROFILE_PATH)
         self.profile=FloorProfile.load(self.profile_path)
+
+    @property
+    def floor_rows(self):
+        return config.TOF_FLOOR_ROWS if self._floor_rows=='config' else self._floor_rows
+
+    @property
+    def left_columns(self):
+        return config.TOF_LEFT_COLUMNS if self._left_columns=='config' else self._left_columns
 
     @property
     def available(self):
@@ -158,7 +170,7 @@ class ToFSensor:
         first meets floor at ~86 cm), so a near return there is something in the way, with no
         baseline needed."""
         if self.profile.classify(i,v)==OBSTACLE: return True
-        rows=config.TOF_FLOOR_ROWS
+        rows=self.floor_rows
         if rows is None or v is None: return False
         return (i//config.TOF_ZONE_COLUMNS) not in rows and v<config.TOF_NOFLOOR_OBSTACLE_MM
 
@@ -171,10 +183,10 @@ class ToFSensor:
         field of view) and has not been checked on the rover. Guessing would make a turn steer
         INTO what the ToF sees, so an unknown orientation reports nothing. Check: hand on one
         side, scripts/tof_probe.py, see which columns drop."""
-        if self.profile is None or config.TOF_LEFT_COLUMNS is None: return None,None
+        if self.profile is None or self.left_columns is None: return None,None
         frame=self._frame()
         if frame is None: return None,None
-        left=right=None; cols=config.TOF_ZONE_COLUMNS; left_cols=set(config.TOF_LEFT_COLUMNS)
+        left=right=None; cols=config.TOF_ZONE_COLUMNS; left_cols=set(self.left_columns)
         for i,v in enumerate(frame):
             if not self._is_obstacle(i,v): continue
             cm=v/10.0
@@ -204,7 +216,7 @@ class ToFSensor:
         nothing. This is not the bottom-row mask the header warns against: it keeps exactly the
         rows that see floor and drops the ones that never do."""
         samples=samples or config.TOF_PROFILE_SAMPLES
-        if floor_rows is None: floor_rows=config.TOF_FLOOR_ROWS
+        if floor_rows is None: floor_rows=self.floor_rows
         sums=[0.0]*config.TOF_ZONES; counts=[0]*config.TOF_ZONES
         for _ in range(samples):
             frame=self._frame()

@@ -32,6 +32,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--show', action='store_true', help='print the stored profile and exit')
+    ap.add_argument('--rear', action='store_true',
+                    help='the REAR sensor (TOF_REAR_PORT, rows TOF_REAR_FLOOR_ROWS, its own profile file)')
     ap.add_argument('--samples', type=int, default=config.TOF_PROFILE_SAMPLES)
     ap.add_argument('--yes', action='store_true', help='save without asking')
     ap.add_argument('--floor-rows', default=None,
@@ -39,7 +41,9 @@ def main():
                          '"all" keeps every row')
     args = ap.parse_args()
 
-    path = os.path.join(config.WILLY_MEMORY_ROOT, config.TOF_FLOOR_PROFILE_PATH)
+    path = os.path.join(config.WILLY_MEMORY_ROOT,
+                        config.TOF_REAR_FLOOR_PROFILE_PATH if args.rear else config.TOF_FLOOR_PROFILE_PATH)
+    port = config.TOF_REAR_PORT if args.rear else config.TOF_PORT
 
     if args.show:
         p = FloorProfile.load(path)
@@ -49,11 +53,11 @@ def main():
         print(f'Stored profile ({len(p)} zones), mm:\n{_grid(p.zones)}')
         return 0
 
-    print(f'Capturing {args.samples} frames from {config.TOF_PORT} at {config.TOF_BAUD}.')
+    print(f'Capturing {args.samples} frames from {port} at {config.TOF_BAUD}.')
     print('The rover must be on CLEAR, LEVEL floor — the surface it actually roams.\n')
 
-    sensor = ToFSensor(source=SerialFrameSource(), profile_path=path)
-    rows = config.TOF_FLOOR_ROWS
+    sensor = ToFSensor(source=SerialFrameSource(port), profile_path=path)
+    rows = config.TOF_REAR_FLOOR_ROWS if args.rear else config.TOF_FLOOR_ROWS
     if args.floor_rows == 'all': rows = None
     elif args.floor_rows: rows = tuple(int(r) for r in args.floor_rows.split(','))
     print(f'Keeping floor rows: {"all" if rows is None else rows}; every other zone is NO_DATA.')

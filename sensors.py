@@ -60,6 +60,10 @@ class SonarArray:
         # which is also what an unavailable sensor degrades to. ALONGSIDE the sonar, never
         # replacing it -- the two are blind to different things, and ToF looks through glass.
         self.tof = None
+        # REAR ToF (2026-10-10), set by brain.py when ENABLE_TOF_REAR. Read through rear_cm()
+        # only -- NOT folded into distances(), whose three keys are sonar directions that the
+        # world model plots and the avoidance code compares.
+        self.tof_rear = None
 
     def start(self):
         if self._owns_link:
@@ -197,6 +201,25 @@ class SonarArray:
                 log.warning('ToF read raised inside distances(); using sonar alone',
                             exc_info=True)
         return {'front': front, 'left': d['left'], 'right': d['right']}
+
+    def rear_cm(self):
+        """Nearest obstacle BEHIND, in cm, from the rear ToF; a drop behind reads 0.0 (stop).
+        None = nothing known: no rear sensor, uncalibrated, or no fresh frame. Reversing then
+        behaves as it always has (there is no rear sonar); it never blocks motion by itself.
+        Never raises: this runs on the tick."""
+        tof = self.tof_rear
+        if tof is None: return None
+        try:
+            if tof.drop_detected():
+                if not getattr(self, '_rear_drop', False):
+                    self._rear_drop = True; log.warning('Rear ToF: DROP BEHIND -- reversing stopped')
+                return 0.0
+            if getattr(self, '_rear_drop', False):
+                self._rear_drop = False; log.info('Rear ToF: floor behind again')
+            return tof.nearest_obstacle_cm()
+        except Exception:
+            log.warning('Rear ToF read raised; reversing without it', exc_info=True)
+            return None
 
     def obstacle_ahead(self):
         return self.distances['front'] < config.DIST_STOP

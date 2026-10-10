@@ -1060,7 +1060,15 @@ one corner) is gone with the new housing. Rows 6–7 see floor at 37–60 cm; ro
 room (`TOF_FLOOR_ROWS=(6,7)`, the only rows the floor profile keeps). Profile saved
 2026-10-07 (rows 6–7 only).
 
-**Second SEN0628 — on order (2026-10-07), same model. Harness wired in place 2026-10-08 (owner); sensor plugs in on arrival:**
+**Second SEN0628 — the REAR ToF. Fitted and answering 2026-10-10** (full 8×8 frames every
+0.14 s after a ~9 s first-frame start-up). `dtoverlay=uart0-pi5` added to `config.txt` (backup
+`config.txt.bak-2026-10-10`); no serial console on these pins (`console=tty1`). Faces
+**backward**, mounted **upside down** relative to #1: a hand over the top half of its view showed
+in rows 5–7, and the floor is rows 0–1; a hand on Willie's left showed in columns 0–3 (owner
+confirmed). Handled in software (`TOF_REAR_FLOOR_ROWS` (0,1), `TOF_REAR_LEFT_COLUMNS` (0–3)),
+no remount. Floor profile not yet captured (`scripts/calibrate_tof_floor.py --rear`).
+**Power:** both ToFs move to the 3.3 V DROK through a perfboard header bus: on the Pi's pin-1
+3V3 together they knocked I²C over (2026-10-09). Wiring as built:
 
 | Pi pin | GPIO | UART0 | To |
 |---|---|---|---|
@@ -1075,8 +1083,7 @@ room (`TOF_FLOOR_ROWS=(6,7)`, the only rows the floor profile keeps). Profile sa
 - **Power from the 3.3 V rail** (owner), not the Pi's pin 1 3V3 that feeds #1 and the I²C
   logic. Ground: all grounds on Willie meet at a common star point (owner, 2026-10-07), so the
   UART shares the Pi's reference.
-- Mount position not decided (rear, or angled to a front corner); it decides how software uses
-  it. Each sensor needs its own orientation test and floor capture.
+- Mounted at the rear (decided 2026-10-07, fitted 2026-10-10).
 
 | | |
 |---|---|

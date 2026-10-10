@@ -244,8 +244,16 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   built, not yet run. Tilt
                                                   threshold against the real
                                                   tipping angle (arm out): not
-                                                  checked. Second ToF (rear,
-                                                  UART0) on order. 7 IMU_FAULTs
+                                                  checked. REAR ToF fitted and
+                                                  answering on UART0 2026-10-10
+                                                  (upside down: floor rows 0-1,
+                                                  left cols 0-3, in software);
+                                                  reversing stops on it; floor
+                                                  profile not captured yet. Rear
+                                                  camera now used: rotation and
+                                                  a person-close-behind stop
+                                                  while reversing (built, not
+                                                  run). 7 IMU_FAULTs
                                                   were the Hailo freeze, not the
                                                   IMU (FR-1400-006).
 
@@ -1933,6 +1941,18 @@ live-verified — see `motors.py::Steering`'s own comment.
     the 5V INA260 during the first such test. ⚠ **2026-10-07/08: it cannot.** Servo V+ is
     not on 0x40's path (no current seen while a servo swung), and the `steering_5v`
     overcurrent trip was dropped (owner, 2026-10-08). Peak current is still unmeasured.
+
+-   **Rear coverage (2026-10-10).** Willie had no rear sensing at all: no rear sonar, and the
+    rear camera was used only by a bench script. Now: (1) the **rear ToF** (second SEN0628,
+    UART0, mounted upside down and handled in software) feeds `rear_cm` to the safety gate, and
+    `approve_motion` refuses `reverse` with an obstacle inside `DIST_STOP` behind; a timed
+    reverse aborts mid-flight; a drop behind reads 0 (stop); no reading leaves reversing as
+    before. (2) The **rear camera** (`vision.RearCamera`, opened on demand, privacy-gated) is
+    given to rotation mode as designed, and while reversing a background watcher runs Hailo
+    detection on it about 3 times a second; a person or pet whose box fills 60% of the frame
+    height pulls `rear_cm` to 0. The camera can only add a stop. ✅ Built 2026-10-10, not yet
+    run on the rover (`tests/test_rear_tof.py`, `tests/test_rear_camera.py`). Still to do: rear
+    floor profile capture, then a live reverse toward a box and toward a person.
 
 -   **Straighten before moving (owner requirement 2026-10-10).** "Willie needs to
     straighten his wheels before moving." The steering servos are released 2 s after their

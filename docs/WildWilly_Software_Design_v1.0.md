@@ -670,6 +670,23 @@ through `SENSOR_FAULT`. An exception inside the fusion is caught and logged.
 **This rule does not extend to Pico B.** It holds only because the ToF is purely
 additive. The sonar itself is behind a UART; for Pico B, stale means stop (S-9).
 
+### 6.5a Rear coverage (2026-10-10)
+
+**Rear ToF:** a second `ToFSensor` on `TOF_REAR_PORT` (`/dev/ttyAMA0`) with its own geometry
+(`floor_rows=(0,1)`, `left_columns=(0..3)`: mounted upside down) and its own floor profile
+(`tof_rear_floor_profile.json`). `SonarArray.rear_cm()` returns its nearest obstacle in cm, 0
+on a drop, None when unknown. It is deliberately NOT a key in `distances()`, whose three keys
+are sonar directions the world model plots. `approve_motion(rear_cm=...)` refuses `reverse`
+inside `DIST_STOP`; `SafetyController.tick()` aborts a timed reverse. None = unknown = reversing
+as before (there is no rear sonar).
+
+**Rear camera:** `vision.RearCamera` (OV9281, `CAMERA_DEVICE`) opens on demand, closes after
+`REAR_CAM_IDLE_CLOSE_S`, and is privacy-gated. It is given to `Rotation` as `rear_grab`. A brain
+thread (`_rear_watch_loop`) runs `detect()` through the Hailo server only while
+`safety.last_action=='reverse'`; `_rear_cm()` pulls the ToF value to 0 while it sees a person
+or pet close behind (`rear_person_close`). That runs off the tick thread because a detection
+can wait behind a 2.2 s prompt read. The camera only ever adds a stop.
+
 ### 6.6 Stair standoff (FR-1200-005)
 
 Hold `STAIR_STANDOFF_M` = 0.15 m from a mapped stair edge while in `floor` mode.
