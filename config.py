@@ -323,8 +323,9 @@ STEER_PCA_ADDR=0x42
 # Channels as re-plugged by the owner 2026-10-05, each one MEASURED 2026-10-06: one channel swung
 # 1000<->2000us at a time with the owner naming the wheel. Not a pattern -- the fronts and rears
 # have right on the lower channel, the middles have left. Do not "tidy" it.
-# INA260 0x40 showed NO current change while a steering servo swung (0.51-0.54A flat), so the
-# servo V+ is not on that monitor's path: current cannot confirm steering motion, only eyes can.
+# 2026-10-06: INA260 0x40 showed NO current change while a steering servo swung -- the steering
+# board's V+ was on the 6 V ARM rail. Moved to the 5 V bus after 0x40 on 2026-10-11; 0x40 now
+# follows steering motion (0.08 -> 0.49 A on one servo's swing).
 STEER_LF=3; STEER_RF=2; STEER_LM=0; STEER_RM=1; STEER_LR=9; STEER_RR=8
 SERVO_CENTER_US=1500; SERVO_MIN_US=1000; SERVO_MAX_US=2000
 # Per-corner straight-ahead pulse. All six were mechanically re-horned straight at 1500us on
@@ -424,10 +425,11 @@ ARM_CURRENT_LIMIT_S=0.4
 # (MHD §2.1: F2 10A motors, F4 10A DROK-5V), so software stops the load before the fuse goes.
 # Held for OVERCURRENT_S, so a motor start or a steering slew does not trip it. The arm rail
 # has its own, tighter limit above (servo protection, releases the arm).
-# steering_5v trip DROPPED 2026-10-08 (owner): INA260 0x40 does not see steering servo current
-# (flat while a servo visibly swung, 2026-10-06), so a 9 A trip on it could never fire -- it only
-# looked like protection. The rail is still read and reported; the F4 10 A fuse remains the limit.
-OVERCURRENT_LIMIT_A={'bus_12v':9.0}
+# steering_5v trip RESTORED 2026-10-11. It was dropped 10-08 because 0x40 never saw steering
+# current -- the cause, found by the owner: BOTH PCA9685 boards took V+ from the 6 V arm rail.
+# The steering board (0x42) now feeds from the 5 V bus after 0x40; a front-left swing read
+# 0.08 -> 0.49 A on 0x40 with 0x44 flat at 0.03 A (2026-10-11, wheel seen to turn).
+OVERCURRENT_LIMIT_A={'bus_12v':9.0,'steering_5v':9.0}
 OVERCURRENT_S=1.0
 
 # Wheel encoders — Pico A over uart4-pi5 (§4.7). SIGNED x2 quadrature since firmware a-0.3

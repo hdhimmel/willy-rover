@@ -180,8 +180,8 @@ Order within `_tick()`:
    - `_check_battery_crosscheck()` — ADC vs INA260 0x45 (§4.2).
 9. **Battery tier** (§4.2), then the **stall check** (`STALL_FAULT`) and the
    **overcurrent check** (`_check_overcurrent()`: a rail in `OVERCURRENT_LIMIT_A` —
-   `bus_12v` 9.0 A only — the `steering_5v` trip was dropped 2026-10-08 because 0x40 does not see
-   steering current — held `OVERCURRENT_S` 1.0 s → stop, latched
+   `bus_12v` and `steering_5v`, 9.0 A each — the steering trip, dropped 10-08, was restored
+   2026-10-11 when the steering V+ moved off the 6 V arm rail — held `OVERCURRENT_S` 1.0 s → stop, latched
    `OVERCURRENT_FAULT` until operator reset).
 10. **State dispatch** — the Directive 6 layer.
 

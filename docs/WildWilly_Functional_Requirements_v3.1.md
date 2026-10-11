@@ -121,9 +121,10 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                                                   battery halt fired live
                                                   2026-10-02 at ~10 V (tier not
                                                   recorded). Overcurrent:
-                                                  bus_12v 9 A only (steering_5v
-                                                  trip dropped 2026-10-08,
-                                                  owner), built, not yet run. Pi
+                                                  bus_12v and steering_5v 9 A
+                                                  (steering trip restored 10-11:
+                                                  steering V+ had been on the 6
+                                                  V arm rail), not yet run. Pi
                                                   rail 5.144 V, throttled 0x0.
                                                   See Master Hardware Design
                                                   §6.2.
@@ -1548,8 +1549,9 @@ conditions:
 
     ✅ **Built 2026-10-02, not yet run on the rover:**
     - **FR-200-002, overcurrent** (`15bfc77`). A rail above `OVERCURRENT_LIMIT_A`
-      (`bus_12v` 9.0 A; the `steering_5v` trip was **dropped 2026-10-08** — 0x40 cannot see
-      steering current, so it could never fire) for `OVERCURRENT_S` (1.0 s) stops the
+      (`bus_12v` and `steering_5v`, 9.0 A each; the steering trip was dropped 2026-10-08 and
+      **restored 2026-10-11** once the steering board's V+ was moved off the 6 V arm rail onto
+      the 5 V bus after 0x40) for `OVERCURRENT_S` (1.0 s) stops the
       rover and latches **`OVERCURRENT_FAULT`** until an operator reset, like a stall.
       The arm rail has its own limit (FR-700-001).
     - **FR-200-003, warn** (`a8077b9`). The warn tier (`BAT_WARN_V`) logs and announces
@@ -1912,8 +1914,10 @@ measured 2026-10-06 by swinging it 1000↔2000 µs alone while the owner named t
 six sit straight at 1500 µs. **FR-600-001's "moves the expected wheel" is met for all six.**
 ⚠ **The steering servo supply is not on INA260 0x40's path:** six full swings of a servo
 that visibly moved left the 0x40 reading flat at 0.51–0.54 A. Current cannot confirm
-steering motion. **The servo V+ power path itself was confirmed by the owner 2026-10-07**;
-what stays open is measuring its peak current, which 0x40 cannot do.
+steering motion. ⚠ **Corrected 2026-10-11:** the 10-07 "power path confirmed" was wrong — both
+PCA9685 boards took V+ from the 6 V arm rail. The steering board now feeds from the 5 V bus after
+0x40, which follows steering current (0.08 → 0.49 A on one servo's swing); peak current with all
+six moving is still to be measured.
 
 -   **FR-600-001 (servo control).** Each corner responds on its own channel
     and moves the expected wheel. Verified one channel at a time.

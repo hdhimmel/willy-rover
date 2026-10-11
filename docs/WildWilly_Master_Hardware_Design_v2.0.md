@@ -874,8 +874,8 @@ Edit the repo file and republish to the same URL — printed copies carry the li
 
 Powered through the header 5 V pins from Witty Pi 5, not USB-C. The GPIO path bypasses
 the Pi's onboard input protection. There is no brownout protection for the Pi in software
-or hardware; a rail overcurrent trip exists for `bus_12v` only (`steering_5v` dropped
-2026-10-08: 0x40 cannot see servo current), and the arm
+or hardware; rail overcurrent trips exist for `bus_12v` and `steering_5v` (the latter restored
+2026-10-11 after the steering V+ moved from the 6 V arm rail to the 5 V bus after 0x40), and the arm
 rail has its own current guard (Software Design §2.3).
 
 **Boot and storage** (configured on willie itself, not in the repository):
@@ -1045,8 +1045,10 @@ lowering it) after a full roll-call check.
 
 3 × INA260, each inline in its rail (the rail passes through VIN+/VIN−). Integrated 2 mΩ
 shunt, factory calibrated. 0x40 = R2 5 V (`steering_5v`), 0x44 = R3 6 V arm (`arm_6v`),
-0x45 = +12 V bus (`bus_12v`). ⚠ 0x40 did **not** move while a steering servo visibly swung
-(2026-10-06, §7.3) — whatever it monitors, the steering servo supply is not on it. An inline INA260 can drop off the bus while its rail works
+0x45 = +12 V bus (`bus_12v`). **Fixed 2026-10-11:** on 10-06 0x40 did not move while a steering
+servo swung, because **both PCA9685 boards took V+ from the 6 V arm rail**. The steering board
+(0x42) now feeds from the 5 V bus after 0x40: one servo's swing reads 0.08 → 0.49 A on 0x40 with
+0x44 flat, and the `steering_5v` overcurrent trip (9 A) is back. An inline INA260 can drop off the bus while its rail works
 perfectly — its absence blinds monitoring without causing a power fault.
 
 ---
@@ -1275,8 +1277,8 @@ over I²C — no direction GPIOs, no STBY pin. M4 on each board is spare.
 
 6 × GDW DS041MG on PCA9685 0x42: **LF CH3, RF CH2, LM CH0, RM CH1, LR CH9, RR CH8** — re-plugged 2026-10-05, each channel
 measured one at a time 2026-10-06 (CH0's connector replaced that day). Fronts and rears have
-right on the lower channel; the middles have left. ⚠ INA260 0x40 does **not** see this
-supply: a swinging steering servo left its reading flat. Each plugs
+right on the lower channel; the middles have left. Their V+ is the 5 V bus after INA260
+0x40 (moved off the 6 V arm rail 2026-10-11), so 0x40 sees steering current. Each plugs
 into a 3-pin channel header; the board takes V+ from R2. All six were re-horned straight at
 1500 µs on 2026-10-05; the earlier per-corner trims are void.
 
