@@ -32,7 +32,10 @@ if SIMULATE_HARDWARE:
             globals()[_name]=os.path.join(_SIM_ROOT,'logs' if _name=='WILLY_LOG_ROOT' else '')
     os.makedirs(os.path.join(_SIM_ROOT,'logs'),exist_ok=True)
 
-DISPLAY_W=800; DISPLAY_H=480; DISPLAY_FPS=30; DISPLAY_ROTATE=0
+# DISPLAY_FPS 30 -> 15 (2026-10-11): py-spy on the idle service showed drawing the face at 30 fps
+# was the largest CPU user (~38% of busy samples, above wake-word listening at ~29%). 15 fps is
+# plenty for blinking and the talking mouth, and frees CPU for speech-to-text.
+DISPLAY_W=800; DISPLAY_H=480; DISPLAY_FPS=15; DISPLAY_ROTATE=0
 DISPLAY_FPS_QUIET=5   # while voice transcribes (display.set_quiet): frees CPU for speech-to-text
 
 # Drive — 2x Adafruit FeatherWing #2927 MotorKit boards over I2C (§9, §1.3 master doc).
