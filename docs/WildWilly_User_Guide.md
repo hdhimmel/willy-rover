@@ -52,15 +52,18 @@ revokes permission. He always starts up without permission, so a reboot never le
 Say **"Hey Willie"**, then your request. Wait for him to answer before the next one.
 
 Common commands (the ones listed in **bold** below) are recognised instantly. Anything else he
-has to think about, which takes several seconds — and **if he is driving when he starts thinking,
-he stops first** and carries on afterwards. That pause is deliberate: while he thinks, nothing
-else in him runs, so he brakes rather than drive blind.
+has to think about, which takes a few seconds. Thinking no longer stops him: his on-board model
+runs separately from his driving and sensors (since 2026-10-10), so he keeps watching where
+he's going while he thinks.
 
 ## What you can ask him
 
-**Anything, really.** Questions and conversation that aren't one of the commands below are
-answered by his on-board model, or — with internet — a cloud model. He can't *do* anything
-through conversation that the commands below don't allow; talking is just talking.
+**Anything, really.** A plain question — *"Why is the grass green?"*, *"Who wrote Hamlet?"*,
+*"Tell me a joke"* — goes straight to a fast cloud model (with internet) and he answers in a
+sentence or two. While it's being looked up he says something like *"Hmm, that's a tough
+question"* or *"Give me a minute to think about that"*, and the screen shows "Sending … to cloud
+AI". He can't *do* anything through conversation that the commands below don't allow; talking
+is just talking.
 
 **His personality:** in casual conversation he sometimes answers playfully, and he goes a bit
 shy if you compliment him or ask him personal questions. Anything about safety or faults is
@@ -176,6 +179,14 @@ as speaking to him. (Google Home needs linking to Home Assistant first.)
 **He may email Howard asking for a feature**, usually when something has failed several times.
 Howard approves by replying with the subject line **"Willie: approve <code>"** from the email;
 a plain reply doesn't count. Approval files the request — nothing changes until someone builds it.
+
+## His screen
+
+His face fills the top of the screen. The line underneath shows his state (IDLE, ROAM, …) and
+what each sensor sees: **F** front, **L** left, **R** right, **B** behind — green is clear,
+amber is close, red is too close (under 20 cm). **B --** means nothing is reading behind him.
+Below that is what he's doing or saying. Top right: the red **STOP SVC** button (two taps)
+and his network.
 
 ## What doesn't work yet
 
