@@ -120,6 +120,19 @@ def general_question(text):
     t=re.sub(r'^(?:(?:hey|ok|okay)[\s,]+)?willie[\s,]+','',text.strip(),flags=re.I)
     return bool(_GENERAL_QUESTION.match(t)) and not _COMMAND_WORDS.search(t)
 
+def speakable(text):
+    """Text as it should be SAID (2026-10-10, owner: he was reading out "asterisk"). Cloud
+    replies arrive with markdown -- *emphasis*, **bold**, # headings, - bullets, `code`,
+    [links](url) -- and Piper speaks every symbol. Keep the words, drop the markup."""
+    if not text: return text
+    t=re.sub(r'\[([^\]]+)\]\([^)]*\)',r'\1',text)            # [label](url) -> label
+    t=re.sub(r'https?://\S+','',t)                            # bare URLs: nothing useful to say
+    t=re.sub(r'(?m)^\s*(?:[-*+•]|\d+[.)])\s+','',t)           # list bullets / numbering
+    t=re.sub(r'(?m)^\s*#{1,6}\s*','',t)                       # headings
+    t=re.sub(r'[*_`~#|>]+','',t)                              # emphasis, code, tables, quotes
+    t=re.sub(r'\s*\n\s*',' ',t)                               # line breaks -> spaces
+    return re.sub(r'\s{2,}',' ',t).strip()
+
 def _whole_word(w,text):
     """w as a whole word in text; a stem ending in "diagnos" may run on (diagnostics)."""
     tail=r"\w*" if w=="diagnos" else r"\b"
@@ -1090,6 +1103,7 @@ class VoicePipeline:
         # FR-1500-004 + FR-1500-010: force neutral tone for anything safety-shaped, regardless
         # of what the caller asked for. Non-blocking — safe to call from brain.py's tick thread
         # (see module docstring); actual synthesis happens on _speaker_loop's own thread.
+        text=speakable(text)
         if _SAFETY_PATTERN.search(text): tone='neutral'
         if self.display: self.display.update_state(state='speak',status=text)
         if not self._enabled:
