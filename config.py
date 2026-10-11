@@ -686,7 +686,11 @@ ADS_ADDR=0x48; ADS_CH_BATTERY=0  # AIN0 = battery divider. A1 spare (FSR402 remo
 ADS_CH_GRIP_FB=2
 GRIP_FB_DIVIDER_SCALE=0.5  # 47k/(47k+47k); ADS1115 input impedance pulls the reading ~0.4% low
 # Gripper end points with the longer fingers, measured 2026-10-05 (see the CH5 note above).
-GRIP_OPEN_US=1150; GRIP_CLOSED_US=2205
+# Measured 2026-10-11 (owner watching, arm held clear of the body): fully open 1150 us (feedback
+# ratio 0.189), fully closed 2150 us (ratio 0.451; the owner's hand-closed reading was 0.446).
+# Free travel between them draws no extra current; pressing past 2150 starts to. Feedback is
+# linear, ~0.00026 ratio per us. 2205 was a squeeze past closed.
+GRIP_OPEN_US=1150; GRIP_CLOSED_US=2150
 GRIP_OPEN_WIDTH_MM=73   # jaw gap at GRIP_OPEN_US, owner-measured; 0 at GRIP_CLOSED_US
 # Grasp with feedback (grip.py, 2026-10-08). Feedback = A2 wiper / arm rail volts (ratio), so the
 # 10-05 run-to-run shift with the rail drops out. Starting values -- to be checked against the A2
@@ -1119,7 +1123,21 @@ AUDIO_INPUT_DEVICE='USB PnP Sound Device'
 # 16000 -- validate() enforces it. A future 16kHz-native mic sets this to 16000 and the conversion
 # becomes a passthrough.
 AUDIO_INPUT_RATE=48000
-AUDIO_QUEUE_BLOCKS=50   # ~4 s of 80 ms blocks between the capture callback and the wake loop
+AUDIO_QUEUE_BLOCKS=50
+# 2026-10-11 CPU (audio_gate.py). The wake-word model runs only while there is sound: louder than
+# WAKE_GATE_MARGIN x the tracked noise floor (and at least WAKE_GATE_MIN_RMS), or the ReSpeaker's
+# hardware VAD. PREROLL ~1 s is replayed at onset so "Hey Willie" is not clipped; HANG keeps
+# scoring after the sound stops. If a soft-spoken wake word starts being missed, lower MARGIN or
+# set WAKE_GATE_ENABLED=False -- the heartbeat line logs 'skipped (quiet)' to tune by.
+WAKE_GATE_ENABLED=True
+WAKE_GATE_MARGIN=2.0
+WAKE_GATE_MIN_RMS=0.002
+WAKE_GATE_PREROLL_BLOCKS=12
+WAKE_GATE_HANG_S=2.0
+# A capture device whose name contains one of these is a mic ARRAY: captured at 16 kHz, channel 0
+# (its processed output). RESPEAKER_VAD reads the v2.0's hardware voice flag over USB (pyusb).
+AUDIO_ARRAY_NAMES=('ReSpeaker',)
+RESPEAKER_VAD=True   # ~4 s of 80 ms blocks between the capture callback and the wake loop
 # NOT USED. Kept only to document that it is inert: all three playback sites in voice.py call
 # `pw-play`, which routes to PipeWire's default sink, and nothing anywhere reads this value.
 # Setting it does nothing. To change the output device, change PipeWire's default sink.

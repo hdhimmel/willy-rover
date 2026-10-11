@@ -581,8 +581,14 @@ class VoicePipeline:
         frame_len=_WAKE_FRAME  # what the REST of the pipeline sees: openwakeword's 80ms @16kHz
         # The mic may not support 16kHz (2026-09-09: the current one supports only 48000/44100),
         # so capture natively and convert in _read_frame(). Validated in config.validate().
-        self._rate_factor=int(config.AUDIO_INPUT_RATE)//16000
+        # 2026-10-11: a ReSpeaker array, if plugged in, is used at 16 kHz (no decimation).
+        import audio_gate
+        in_dev,in_rate,in_kind=audio_gate.pick_input()
+        self._rate_factor=in_rate//16000
         self._blocksize=frame_len*self._rate_factor
+        self._gate=audio_gate.WakeGate()
+        self._vad=(audio_gate.ReSpeakerVAD() if in_kind=='array' and config.RESPEAKER_VAD else None)
+        if self._vad is not None and not self._vad.present: self._vad=None
         try:
             self._audio_q=queue.Queue(maxsize=config.AUDIO_QUEUE_BLOCKS)
             # blocksize=0: let PortAudio deliver the driver's natural period and re-cut it into
@@ -598,16 +604,17 @@ class VoicePipeline:
                     except queue.Full: self._hb['overflows']+=1   # consumer 4 s behind: drop
                     buf=buf[n:]
                 pend[0]=buf
-            with sd.InputStream(samplerate=int(config.AUDIO_INPUT_RATE),channels=1,dtype='int16',
-                                 device=config.AUDIO_INPUT_DEVICE,blocksize=0,
+            with sd.InputStream(samplerate=in_rate,channels=1,dtype='int16',
+                                 device=in_dev,blocksize=0,
                                  latency='high',callback=_cb) as stream:
                 # Logged once, by resolved name: picking the wrong mic is otherwise invisible and
                 # presents as "the wake word just doesn't work" -- see the 2026-08-21 hunt.
                 try:
                     import sounddevice as _sd
-                    log.info('Voice capture on %r @ %dHz (decimating %dx to 16k)',
-                             _sd.query_devices(config.AUDIO_INPUT_DEVICE,'input')['name'],
-                             int(config.AUDIO_INPUT_RATE),self._rate_factor)
+                    log.info('Voice capture on %r @ %dHz (decimating %dx to 16k)%s%s',
+                             _sd.query_devices(in_dev,'input')['name'],in_rate,self._rate_factor,
+                             ' -- mic ARRAY' if in_kind=='array' else '',
+                             ', hardware VAD' if self._vad else '')
                 except Exception: pass
                 while self._running:
                     if not privacy.mic_enabled():
@@ -629,14 +636,28 @@ class VoicePipeline:
                             self._prompt=None
                             self._handle_wake(stream,frame_len,time.time(),on_text=p['cb'])
                             continue
+                    rms=float(np.sqrt(np.mean((flat.astype(np.float32)/32768.0)**2)))
                     self._update_noise(flat)
-                    scores=self._wakeword.predict(flat)
-                    hb=self._hb; hb['scored']+=1
-                    hb['best']=max(hb['best'],max(scores.values(),default=0.0))
-                    hb['peak']=max(hb['peak'],float(np.sqrt(np.mean((flat.astype(np.float32)/32768.0)**2))))
-                    if max(scores.values(),default=0.0)>=config.WAKEWORD_THRESHOLD:
-                        self._handle_wake(stream,frame_len,time.time())
-                        self._drop_backlog()
+                    hb=self._hb; hb['peak']=max(hb['peak'],rms)
+                    # 2026-10-11: score only while there is sound (audio_gate.WakeGate). Quiet
+                    # blocks wait in a pre-roll; on onset the model is reset and the pre-roll is
+                    # scored first, so the start of the wake word is not lost.
+                    if config.WAKE_GATE_ENABLED:
+                        vad=self._vad.read() if self._vad is not None else None
+                        blocks,reset=self._gate.feed(flat,rms,self._noise_rms,vad)
+                        if reset:
+                            try: self._wakeword.reset()
+                            except Exception: pass
+                    else:
+                        blocks=[flat]
+                    for b in blocks:
+                        scores=self._wakeword.predict(b)
+                        hb['scored']+=1
+                        hb['best']=max(hb['best'],max(scores.values(),default=0.0))
+                        if max(scores.values(),default=0.0)>=config.WAKEWORD_THRESHOLD:
+                            self._handle_wake(stream,frame_len,time.time())
+                            self._drop_backlog()
+                            break
         except Exception as e:
             log.error(f'Voice input stream failed, pipeline stopping: {e}')
             self._running=False
@@ -657,9 +678,11 @@ class VoicePipeline:
     def _heartbeat(self):
         hb=self._hb; now=time.time()
         if now-hb['t']<60.0: return
-        log.info('wake loop: %d scored, %d muted, best score %.3f (threshold %.2f), peak rms %.4f, '
-                 'noise %.4f, %d overflows',hb['scored'],hb['muted'],hb['best'],
-                 config.WAKEWORD_THRESHOLD,hb['peak'],self._noise_rms or 0.0,hb['overflows'])
+        g=getattr(self,'_gate',None)
+        log.info('wake loop: %d scored, %d skipped (quiet), %d muted, best score %.3f (threshold %.2f), '
+                 'peak rms %.4f, noise %.4f, %d overflows',hb['scored'],g.skipped if g else 0,hb['muted'],
+                 hb['best'],config.WAKEWORD_THRESHOLD,hb['peak'],self._noise_rms or 0.0,hb['overflows'])
+        if g: g.skipped=0
         self._hb=dict(t=now,scored=0,muted=0,best=0.0,peak=0.0,overflows=0)
 
     def _update_noise(self,samples):

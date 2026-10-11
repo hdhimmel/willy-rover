@@ -28,10 +28,10 @@ import config
 from wheel_current_test import _read_amps
 
 _RAIL=config.INA260_ARM_6V_ADDR
-_OPEN_US=1500        # well open: 0.075A, nowhere near contact
-_START_US=1500
-_STOP_US=1780        # config.py measured 1.049A here -- the hard ceiling
-_STEP_US=5
+_OPEN_US=config.GRIP_OPEN_US   # fully open (measured 2026-10-11)
+_START_US=config.GRIP_OPEN_US     # 2026-10-11: the full travel. 1500..1780 only ever saw the middle
+_STOP_US=config.GRIP_CLOSED_US+50 # a little past closed, so the on-object run shows the squeeze
+_STEP_US=10
 _DWELL_S=0.6         # let the servo arrive before reading (the 100 nF settles in ~10 ms)
 _STOP_A=0.50         # rail current at which to stop closing
 

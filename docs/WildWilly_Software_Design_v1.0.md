@@ -627,6 +627,15 @@ Playback shells out to `pw-play` (PipeWire default sink, the puck).
 `config.AUDIO_OUTPUT_DEVICE` is inert. STT is faster-whisper `base.en` on 3 CPU threads;
 TTS is Piper `en_US-amy-medium`.
 
+**Listening CPU (2026-10-11, `audio_gate.py`).** py-spy on the idle service put the wake-word
+model at ~29% of busy samples, scoring every 80 ms block of a silent room. `WakeGate` scores only
+while there is sound — RMS over `WAKE_GATE_MARGIN` × the tracked noise floor, or a ReSpeaker
+array's hardware VAD — keeping the last ~1 s (`WAKE_GATE_PREROLL_BLOCKS`) in a pre-roll that is
+scored first, after a model reset, at onset, and scoring on for `WAKE_GATE_HANG_S` after the
+sound stops. `pick_input()` captures a ReSpeaker array (name match) at 16 kHz on channel 0, its
+processed output, so the 48 → 16 kHz decimation disappears. The heartbeat logs
+`skipped (quiet)`. The array parts are built without the hardware and are unverified.
+
 ### 6.5 Front obstacle fusion (DFRobot SEN0628)
 
 **As built:** `tof.py` reads the sensor, `sensors.py::SonarArray.distances` fuses it,
