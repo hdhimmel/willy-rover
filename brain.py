@@ -68,7 +68,7 @@ _NON_SPOKEN_SOURCES=frozenset({'remote','email'})
 # What an email may queue: everything a spoken command could, through the same gating.
 _EMAIL_QUEUEABLE=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve','map',
     'stop_map','status','battery','arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','follow','diagnostics',
-    'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs','shutdown','demo_replay','roam','check_logs'})
+    'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs','shutdown','demo_replay','roam','check_logs','learn_home','home_address'})
 
 # Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
 # that state, before either drain pass, so Willie heard every command and answered none -- with
@@ -295,6 +295,16 @@ class RoverBrain:
                                rear_grab=self.rear_cam.grab,
                                say=self._say)
         self.steer_override=SteerOverride(self.steering)   # FR-600-004
+        # FR-2300 GPS (2026-10-11). Optional: absent or fixless never blocks anything (FR-2300-005).
+        self.gps=None
+        if config.ENABLE_GPS and not config.SIMULATE_HARDWARE:
+            try:
+                import gps as _gps; self.gps=_gps.GPS()
+            except Exception: log.warning('GPS reader could not start (optional)',exc_info=True)
+        self._gps_t=0.0; self._gps_reported=False; self._gps_started=time.time()
+        try:
+            import gps as _gps; self._wander=_gps.WanderWatch()
+        except Exception: self._wander=None
         self._after_rotate='IDLE'
         self.come_to_me=ComeToMeTask(self.navigator,self.pursuit,self.world_model,self.detector,
                                      say=self._say)  # FR-1000-006
@@ -931,6 +941,7 @@ class RoverBrain:
             self._running=False
             return
         self._thermal_tick()
+        self._gps_tick()
         self.steer_override.tick(self._state)   # FR-600-004: held in IDLE, ended on leaving it
         if self.voice.stop_requested.is_set():
             # Checked before any Directive gating below — see voice.py's stop_requested docstring.
@@ -1611,7 +1622,27 @@ class RoverBrain:
         elif cmd.get('intent')=='where_are_you':
             pose=self.world_model.get_robot_pose()
             room=self.world_model.get_room(pose.x,pose.y)
-            self._say(f"I'm in the {room.name}." if room else "I'm not sure which room I'm in.")
+            email=cmd.get('source')=='email'
+            self._say((f"I'm in the {room.name}." if room else "I'm not sure which room I'm in.")
+                      +self._where_gps(email=email))
+        elif cmd.get('intent')=='learn_home':
+            # FR-2300-002: average about a minute of fixes. Refused plainly without a fix.
+            g=getattr(self,'gps',None)
+            if g is None: self._say("I don't have a GPS.")
+            elif g.fix() is None: self._say("I can't learn home without a GPS fix. I need to see the sky.")
+            else:
+                self._say("Hold still. I'm learning where home is; this takes about a minute.")
+                g.learn_home(lambda ok,msg: self.voice.speak(msg) if self.voice.available else log.info(msg))
+        elif cmd.get('intent')=='home_address':
+            # 2026-10-11 (owner). Kept in gps_home.json on the rover only (gitignored), set with
+            # scripts/set_gps_home.py --address; never in the repository.
+            g=getattr(self,'gps',None); home=(g.home if g else None) or {}
+            addr=home.get('address')
+            self._say(f"I live at {addr}." if addr else "I don't know my home address yet.")
+        elif cmd.get('intent')=='go_home':
+            # FR-2300-006 is a stretch goal with open prerequisites: refuse and say why.
+            self._say("I can't drive home by GPS yet. Outdoor driving and an outdoor compass aren't "
+                      "ready, so I won't try.")
         elif cmd.get('intent')=='privacy_on':
             # FR-1800-005. Said BEFORE the flag goes down: speaking uses the speaker, not the mic.
             self._say("Privacy on. My microphone and camera are off. Tap the button on my screen "
@@ -2229,6 +2260,39 @@ class RoverBrain:
                     'Rear camera: someone close behind -- reversing stopped' if near else 'Rear camera: clear behind')
             self._rear_block=near; self._rear_block_t=time.monotonic()
             time.sleep(config.REAR_CAM_DETECT_S)
+
+    def _gps_tick(self):
+        """FR-2300, once a second, never more than a few dict reads: report presence once, and run
+        the wander alert (FR-2300-003). Emails go out on the email thread (send_alert)."""
+        g=getattr(self,'gps',None)
+        if g is None: return
+        now=time.time()
+        if now-self._gps_t<1.0: return
+        self._gps_t=now
+        if not self._gps_reported and now-self._gps_started>15:
+            self._gps_reported=True
+            log.info('GPS (0x10) present' if g.present else 'GPS (0x10) not answering -- optional, carrying on')
+        if self._wander is None: return
+        import gps as _gps
+        fix=g.fix(); ev=self._wander.tick(fix,g.home,now)
+        if ev and getattr(self,'email',None) is not None and self.email.available:
+            subj={'left':'Willie has left the home area','update':'Willie is still away from home',
+                  'back':'Willie is back home'}[ev]
+            log_event(log,'GPS_WANDER',subsystem='gps',status=ev)
+            body=_gps.email_position(fix,g.home)
+            threading.Thread(target=lambda: self.email.send_alert(subj,body),daemon=True).start()
+
+    def _where_gps(self,email=False):
+        """The GPS part of "where are you" (FR-2300-001), or '' when there is nothing to add."""
+        g=getattr(self,'gps',None)
+        if g is None: return ''
+        import gps as _gps
+        fix=g.fix()
+        if fix is None:
+            return ("\nGPS: no fix (no sky view)." if email else " I can't see the sky for GPS.")
+        if email: return '\n'+_gps.email_position(fix,g.home)
+        if g.home: return f" By GPS I'm {_gps.relative_phrase(fix,g.home)}."
+        return " I have a GPS fix, but no home set yet."
 
     def _retention_sweep(self):
         """FR-1800-004 / FR-1900-010: enforce DATA_RETENTION_DAYS. Both purge functions existed

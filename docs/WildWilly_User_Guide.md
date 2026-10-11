@@ -77,6 +77,14 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
   turning, on his way somewhere, waiting, or stopped and why. Works even while he's moving.
 - **"What do you see?"** / **"What are you looking at?"** — up to three things he recognises.
 - **"What time is it?"** / **"What's the date?"**
+- **"Where are you?"** — the room he's in, and with GPS (outdoors only — it needs sky) how far
+  and which way from home. By email he replies with a map link.
+- **"This is home"** (outdoors, with GPS) — he learns where home is over about a minute.
+- **"What's your address?"** / **"Where do you live?"** — his home address.
+- **"Who are your owners?"** / **"Who are your parents?"** — Carolyn and Howard Himmel.
+- **"Go home"** — not yet: he says why.
+- If he wanders more than 50 m from home outdoors, he emails his position every few minutes,
+  and once more when he's back.
 - **"Check your logs"** / **"Any errors today?"** — he sums up the last 24 hours of his log in one
   sentence (the top three problems, and how many other kinds). If there were problems he asks
   **"Do you want me to ask for a fix?"** and listens for your answer; **yes** emails you a fix

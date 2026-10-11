@@ -272,6 +272,21 @@ TOF_REAR_DROP_ROWS=(0,1)         # drop detection only where floor returns are s
 TOF_REAR_LEFT_COLUMNS=(0,1,2,3)     # WILLIE's left, not the sensor's
 TOF_REAR_FLOOR_PROFILE_PATH='tof_rear_floor_profile.json'
 TOF_PROFILE_SAMPLES=10
+
+# FR-2300 GPS (gps.py, 2026-10-11): Adafruit Mini GPS PA1010D, I2C 0x10 via STEMMA QT, on the DROK
+# 3.3 V bus. OPTIONAL: never in the self-test's required set, never feeds the stop (FR-2300-005).
+ENABLE_GPS=True
+GPS_ADDR=0x10
+GPS_POLL_S=0.1              # 32-byte reads; the chip streams ~1 kB of NMEA a second
+GPS_STALE_S=5.0             # a fix older than this is no fix
+GPS_HOME_PATH='gps_home.json'
+GPS_AT_HOME_M=15.0          # closer than this: "at home" (GPS is ~3-5 m at best)
+GPS_HOME_RADIUS_M=50.0      # FR-2300-003 wander alert radius
+GPS_WANDER_CONFIRM=5        # consecutive fresh fixes beyond (or back inside) the radius
+GPS_ALERT_REPEAT_S=300.0    # while out of the home area, a position email every 5 min
+GPS_LEARN_S=60.0            # "this is home": average this long
+GPS_LEARN_MIN_FIXES=20
+GPS_LEARN_MAX_SPREAD_M=15.0
 TOF_STARTUP_IGNORE_DROP_S=3.0
 TOF_DROP_CONFIRM_S=0.3          # rear: a drop must persist this long (2+ frames) before it stops reversing   # no DROP verdicts for this long after a ToF starts giving frames      # frames averaged when capturing; one frame carries per-zone noise
                             # straight into the baseline everything else is measured against
@@ -955,6 +970,7 @@ GMAIL_IMAP_HOST='imap.gmail.com'; GMAIL_SMTP_HOST='smtp.gmail.com'; GMAIL_SMTP_P
 GMAIL_APP_PASSWORD_ENV='WILLIE_GMAIL_APP_PASSWORD'
 GMAIL_POLL_INTERVAL_S=120  # FR-2000-002
 OWNER_EMAIL='h.d.himmel@gmail.com'
+OWNER_FAMILY_SPOKEN='Carolyn and Howard Himmel'   # "who is your owner / who are your parents" (owner 2026-10-11)
 OWNER_NAME='Howard'   # how Willie names the owner aloud ("Howard emailed: ...")
 # FR-2000-012/013 email commands (owner decision 2026-09-11, built 2026-10-02). Only the owner,
 # only with Gmail's own Authentication-Results showing DKIM pass ALIGNED with the From domain,

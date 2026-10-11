@@ -4186,8 +4186,22 @@ IMU reports; battery reading reliability), the owner approved each with a DKIM-v
 
 Added 2026-10-08 (owner). Part on order: **Adafruit Mini GPS PA1010D (#4415)**, on I²C at
 **0x10** through its STEMMA QT socket (all Pi UARTs are used once ToF #2 is on UART0); about 3 m
-accuracy, 1 Hz. **Nothing below is built.** GPS needs open sky: indoors, no fix is the normal
-state, and the room map (FR-1000) remains the indoor answer to "where".
+accuracy, 1 Hz. GPS needs open sky: indoors, no fix is the normal state, and the room map
+(FR-1000) remains the indoor answer to "where".
+
+**Fitted and built 2026-10-11 (`gps.py`, `tests/test_gps.py`).** The chip answers at 0x10 and
+streams NMEA (66 sentences in 3 s); in the basement it has no fix, as expected. Built:
+-001 "where are you" adds the GPS part (relative to home by voice; lat/lon, fix age, satellites,
+HDOP and a map link by email; "I can't see the sky" without a fix; a fix older than
+`GPS_STALE_S` is never used); -002 "this is home" averages `GPS_LEARN_S` of fixes and refuses
+without a fix or with too much spread, and `scripts/set_gps_home.py LAT LON --address "..."`
+sets home from coordinates with no fix (the basement case); -003 the wander alert emails on
+leaving `GPS_HOME_RADIUS_M`, every 5 min while out, and once on return, debounced over
+`GPS_WANDER_CONFIRM` fixes; -005 optional: logged present/absent once, never in the required
+self-test set, never feeds the stop; -006 "go home" refuses and says why. **Not built:** -004 GPS
+time as a clock backup. Also (owner 2026-10-11): "what's your address?" says the home address
+stored on the rover only (gitignored `gps_home.json`); "who are your owners/parents?" →
+"Carolyn and Howard Himmel". **Not yet run with a fix** (needs sky).
 
   -----------------------------------------------------------------------
   Requirement ID    Requirement                  Priority     Verification

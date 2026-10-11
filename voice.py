@@ -245,7 +245,7 @@ _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
 # deterministic "the local model did not understand" signal.
 _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve',
     'confirm_receipt','map','stop_map','shutdown','status','battery','arm_stow','arm_home','wave',
-    'come_here','come_to_me','rotate','steer','roam','follow','diagnostics','check_logs','where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
+    'come_here','come_to_me','rotate','steer','roam','follow','diagnostics','check_logs','learn_home','go_home','home_address','where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
     'privacy_on','privacy_off','demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
@@ -335,6 +335,17 @@ _FAST_PATH_PATTERNS=[
     (_fp(r'(?:go |move |drive )?forward'),'forward','Going forward.'),
     (_fp(r'(?:go |move |drive )?(?:reverse|backward|back up)'),'reverse','Backing up.'),
     # 2026-10-10 (owner): roam by voice, no screen tap. Saying it IS the permission.
+    # FR-2300 (2026-10-11): learn GPS home outdoors; "go home" refuses (stretch goal).
+    (_fp(r'this is (?:your )?home|(?:learn|remember|set) (?:your |this as )?home(?: here)?'),'learn_home',''),
+    (_fp(r'go home|drive home|head home|come home'),'go_home',''),
+    # 2026-10-11 (owner): who he belongs to. A fixed reply, answered on the spot ('chat': spoken,
+    # nothing queued, no model).
+    (_fp(r"who(?:'s| is| are) your (?:owner|owners|parents|mom and dad|family)|who owns you|"
+         r"who do you belong to|who (?:are|is) your (?:mother|father|mom|dad)"),
+     'chat',f"My owners are {config.OWNER_FAMILY_SPOKEN}."),
+    # 2026-10-11 (owner): he can say his home address when asked.
+    (_fp(r"what(?:'s| is) (?:your|the) (?:home )?address|where do you live|where(?:'s| is) (?:your )?home|"
+         r"what(?:'s| is) your home address"),'home_address',''),
     (_fp(r'(?:you can |go ahead and )?(?:go )?(?:explore|roam|wander)(?: around)?|go (?:for a )?(?:wander|walk|explore)|'
          r'start (?:exploring|roaming)'),'roam',''),
     (_fp(r'turn left'),'turn_left','Turning left.'),
@@ -982,7 +993,7 @@ class VoicePipeline:
         if m: return {'intent':'name_room','args':{'room':m.group(1).strip().lower()},'reply':''}
         if _MARK_STAIRS.fullmatch(norm): return {'intent':'mark_stairs','args':{},'reply':''}
         m=_ENROL.fullmatch(norm)
-        if m and m.group(1).lower() not in ('the','a','an','it','me','my','that','him','her'):
+        if m and m.group(1).lower() not in ('the','a','an','it','me','my','that','him','her','home','your'):
             return {'intent':'enrol','args':{'name':m.group(1).capitalize()},'reply':''}
         if _FORGET_EVERYONE.fullmatch(norm): return {'intent':'forget_everyone','args':{},'reply':''}
         m=_DEMO_START.fullmatch(norm)
@@ -1084,7 +1095,7 @@ class VoicePipeline:
         # consumer" rule as every motion intent.
         motion_intents={'forward','reverse','turn_left','turn_right','go_to','retrieve',
                          'confirm_receipt','map','stop_map','shutdown','status','battery',
-                         'arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','roam','follow','diagnostics','check_logs',
+                         'arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','roam','follow','diagnostics','check_logs','learn_home','go_home','home_address',
                          'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs',
                          'demo_start','demo_stop','demo_replay','enrol','forget_everyone'}
         if name in motion_intents:
