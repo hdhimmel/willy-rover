@@ -566,15 +566,16 @@ SW-A, added to the distribution tree (Master Hardware Design rev 2.2 Section
 2.1/2.3) -- SW-M in P3 on the motor supply; SW-A in P6, on the arm servo supply (6V DROK input — was the DZS, replaced 2026-08-28),
 **which IS monitored: INA260 0x44 sits on R3, the 6V arm rail. SW-A cuts the 6V DROK's input, so
 throwing it collapses R3 and 0x44 would read the drop — making the arm side of G-1
-observable in software for the first time. Not yet implemented; see Master Hardware
+observable in software for the first time; see Master Hardware
 Design §2.3.** SW-M's placement was intended to close the motor side of
 this gap by reading the current monitor then downstream of it (0x44). **That
 route closed on 2026-08-28** when 0x44 moved upstream to the +12V main input,
 reopening the motor side of G-1. ✅ **CLOSED — hardware
 2026-09-08/14, software 2026-09-15.** 0x45 now sits on the +12V bus (measured 11.174V against
 an owner-metered pack of 11.36V) and `brain.py::_check_motor_rail()` reads it via the
-`'bus_12v'` key, pinned by `tests/test_motor_rail_identity.py`. The arm side (SW-A)
-still needs either a new INA260 or a direct switch-state sense.
+`'bus_12v'` key, pinned by `tests/test_motor_rail_identity.py`. The arm side (SW-A) is
+likewise closed: `brain.py::_check_arm_rail()` reads INA260 0x44 via the `'arm_6v'` key
+(`config.ARM_RAIL_MIN_V`/`ARM_RAIL_GRACE_S`).
 SW-M and SW-A are branch switches, not the E-stop. **There is no mushroom switch:
 the E-stop is the main power switch** (owner, 2026-10-02), which takes everything
 down, the Pi included.

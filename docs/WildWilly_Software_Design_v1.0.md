@@ -833,11 +833,12 @@ Numbered S-1 to S-10 so other documents can cite them.
 
 **S-1 — Emergency stop.** The main power switch. It cuts all power including the Pi; there is no separate E-stop and no sense input. FR-300-001 is satisfied by design.
 `_check_motor_rail()` watches the +12V bus monitor (INA260 0x45) for the collapse a SW-M
-cut produces, logs it and shows it on the face; detection only. Rail identities: **0x40 =
+cut produces, logs it and shows it on the face; detection only. `_check_arm_rail()` does the
+same for the arm-rail collapse a SW-A cut produces, on the 6V arm rail monitor (INA260 0x44,
+`ARM_RAIL_MIN_V`/`ARM_RAIL_GRACE_S`). Rail identities: **0x40 =
 R2 5V, 0x44 = R3 6V arm, 0x45 = +12V bus** (`INA260_5V_ADDR`, `INA260_ARM_6V_ADDR`,
 `INA260_BUS_12V_ADDR`, rail keys `steering_5v`, `arm_6v`, `bus_12v`);
-`tests/test_motor_rail_identity.py` pins them. The arm-rail collapse a SW-A cut produces is
-readable on 0x44 but not monitored.
+`tests/test_motor_rail_identity.py` pins them.
 
 **S-2 — Encoder sampling. Closed by Pico A.** Decode is in PIO on Pico A, signed ×2 (both
 edges of Phase A, Phase B sampled at each), 763 counts per wheel revolution; the Pi reads

@@ -284,7 +284,7 @@ the sonar ECHO divider outputs (§16.12).
 - **Emergency stop:** the main power switch. It cuts all power including the Pi; there is no separate E-stop and no sense input.
 - **SW-M** in P3 (between F2 and both FeatherWings) and **SW-A** in P6 (between F5 and the
   DROK-6V input). A SW-M cut is observable on INA260 0x45 (`_check_motor_rail()`); a SW-A
-  cut collapses R3 and is readable on 0x44 but not monitored.
+  cut collapses R3 and is observable on INA260 0x44 (`_check_arm_rail()`).
 - **Switch 2** in the Pi buck input line — de-powers the Pi and the 3V3 bus after a
   software shutdown.
 - **Pico carriers:** each feed passes a 0.5 A PTC (F1) and a series 1N5819 (D1); no
