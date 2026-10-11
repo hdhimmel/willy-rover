@@ -895,6 +895,15 @@ INA_FRESH_S=1.0   # an INA260 rail older than this is NOT a reading (sensors.fre
 BUS_TO_PACK_DROP_V=0.16   # F1 + SW-MAIN + Q1 between the pack and the 0x45 bus monitor. Measured 0.157V
                           # 2026-10-10 (12.23 metered vs 12.073 bus) and 0.16V 10-07, motors idle; was 0.08
 MOTOR_RAIL_GRACE_S=1.0            # sustained below threshold before it's reported, not a blip
+# Arm-rail (SW-A) power-loss detection, same shape as MOTOR_RAIL_MIN_V/_GRACE_S above --
+# closes Software Design S-1's gap that a SW-A cut was readable on 0x44 (INA260_ARM_6V_ADDR)
+# but not monitored. The arm rail idles at 6.043V (config's INA260 identity note) with ordinary
+# arm-servo droop of tens of mV, so 3.0V clears any real droop by a wide margin while staying
+# well above the ~0V a genuine cut produces -- the same proportion of nominal as MOTOR_RAIL_MIN_V
+# (6.0V) is to the 12V bus. Detection-only, exactly like the motor rail: it logs and shows on the
+# face, it never stops, faults, or touches the tier.
+ARM_RAIL_MIN_V=3.0
+ARM_RAIL_GRACE_S=1.0              # sustained below threshold before it's reported, not a blip
 ENABLE_STUCK_ALERT_EMAIL=True
 STUCK_ALERT_COOLDOWN_S=600.0      # min seconds between stuck alerts (10 min)
 STUCK_ALERT_MAX_PER_SESSION=5     # hard cap per service run, regardless of cooldown

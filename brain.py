@@ -326,6 +326,9 @@ class RoverBrain:
         self._stuck_alert_t=0.0; self._stuck_alert_count=0
         # Motor-power-loss detection (2026-08-24) -- see _check_motor_rail().
         self._motor_rail_low_since=None; self._motor_rail_lost=False
+        # Arm-rail (SW-A) power-loss detection -- see _check_arm_rail(). Closes the S-1 gap:
+        # the arm-rail collapse was readable on 0x44 but not monitored.
+        self._arm_rail_low_since=None; self._arm_rail_lost=False
         # Encoder-rail (R5) warning, 2026-10-01 -- see _check_r5(). Warn only, never a stop.
         self._r5_low_since=None; self._r5_low=False
         self._bat_halt_since=None   # battery-tier halt confirmation clock, see _battery_halt()
@@ -1068,6 +1071,8 @@ class RoverBrain:
         # Runs every tick regardless of FSM state so a cut is noticed while parked, not just
         # while driving.
         motor_rail_msg=self._check_motor_rail()
+        # Arm rail (detection only, same shape as motor_rail_msg -- see _check_arm_rail).
+        arm_rail_msg=self._check_arm_rail()
         # Encoder rail (detection only -- see _check_r5); feeds _upd's prefix and _stall_reason.
         self._check_r5()
         self._check_arm_current()
@@ -2087,6 +2092,39 @@ class RoverBrain:
                       f'Motion commands will have no effect until power returns.')
         return f'MOTOR POWER LOST ({v:.2f}V)'
 
+    def _check_arm_rail(self):
+        """Partial software observability for an arm-power cut (SW-A). Returns a short status
+        string when power looks lost, else ''. Same shape as _check_motor_rail(): detection
+        only, never a stop, fault, or state change.
+
+        Software Design S-1 notes the arm-rail collapse a SW-A cut produces is readable on 0x44
+        but was not monitored -- G-1 only ever wired up the +12V motor bus (0x45). The arm rail
+        (R3, 6V, INA260_ARM_6V_ADDR) is wired inline the same way, so a cut collapses the voltage
+        it reads just like the motor bus does.
+
+        ARM_RAIL_MIN_V is well below the idling 6.043V (ordinary arm-servo droop is tens of mV --
+        see config.py's INA260 identity note and test_motor_rail_identity.py for why that margin
+        matters) and well above the ~0V a genuine cut produces."""
+        try:
+            v=self.current.rail('arm_6v')['voltage_v']
+        except Exception:
+            return ''  # monitor itself unreadable -- _check_health() owns that, not this
+        now=time.time()
+        if v>=config.ARM_RAIL_MIN_V:
+            if self._arm_rail_lost:
+                log.warning(f'Arm rail power RESTORED ({v:.2f}V)')
+            self._arm_rail_low_since=None; self._arm_rail_lost=False
+            return ''
+        if self._arm_rail_low_since is None:
+            self._arm_rail_low_since=now; return ''
+        if now-self._arm_rail_low_since<config.ARM_RAIL_GRACE_S:
+            return ''
+        if not self._arm_rail_lost:
+            self._arm_rail_lost=True
+            log.error(f'ARM POWER LOST — 6V arm servo rail reads {v:.2f}V (SW-A cut?). '
+                      f'Arm commands will have no effect until power returns.')
+        return f'ARM POWER LOST ({v:.2f}V)'
+
     def _check_arm_current(self):
         """FR-700-001: release the arm when the 6V arm rail stays above ARM_CURRENT_LIMIT_A for
         ARM_CURRENT_LIMIT_S. config.py has asked for this since 2026-09-17 -- a servo stalled
@@ -2384,6 +2422,8 @@ class RoverBrain:
         # its own state: it is information, not a state change (see _check_motor_rail). Doing it
         # here means every call site surfaces it without each one having to remember to.
         if self._motor_rail_lost: st=f'⚡MOTOR POWER LOST — {st}'
+        # Same treatment for an arm-rail (SW-A) cut -- information, not a state change.
+        if self._arm_rail_lost: st=f'⚡ARM POWER LOST — {st}'
         # Same treatment for a battery-sense disagreement: information, not a state change.
         # It rides in front because a pack reading you cannot trust colours everything else
         # on the face -- the percentage, the tier, the range estimate.
