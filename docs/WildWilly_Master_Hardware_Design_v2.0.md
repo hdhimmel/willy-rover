@@ -1275,7 +1275,7 @@ over I²C — no direction GPIOs, no STBY pin. M4 on each board is spare.
 
 ### 7.3 Steering
 
-6 × GDW DS041MG on PCA9685 0x42: **LF CH3, RF CH2, LM CH0, RM CH1, LR CH9, RR CH8** — re-plugged 2026-10-05, each channel
+6 × GDW DS041MG on PCA9685 0x42: **LF CH3, RF CH2, LM CH0, RM CH1, LR CH5, RR CH4** — re-plugged 2026-10-05, each channel
 measured one at a time 2026-10-06 (CH0's connector replaced that day). Fronts and rears have
 right on the lower channel; the middles have left. Their V+ is the 5 V bus after INA260
 0x40 (moved off the 6 V arm rail 2026-10-11), so 0x40 sees steering current. Each plugs
@@ -1896,7 +1896,7 @@ One 6-pin JST-PH per motor. Meter each crimp before trusting the colour.
 
 ### 16.10 Steering servos × 6
 
-On PCA9685 0x42 (measured 2026-10-06): LF CH3, RF CH2, LM CH0, RM CH1, LR CH9, RR CH8.
+On PCA9685 0x42 (measured 2026-10-06): LF CH3, RF CH2, LM CH0, RM CH1, LR CH5, RR CH4. (rear pair moved to CH5/CH4 2026-10-12; straight values measured that day with a jig: lf 1440, rf 1440, lm 1460, rm 1320, lr 1560, rr 1630)
 
 ### 16.11 Arm servos × 7
 

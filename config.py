@@ -344,12 +344,17 @@ STEER_PCA_ADDR=0x42
 # 2026-10-06: INA260 0x40 showed NO current change while a steering servo swung -- the steering
 # board's V+ was on the 6 V ARM rail. Moved to the 5 V bus after 0x40 on 2026-10-11; 0x40 now
 # follows steering motion (0.08 -> 0.49 A on one servo's swing).
-STEER_LF=3; STEER_RF=2; STEER_LM=0; STEER_RM=1; STEER_LR=9; STEER_RR=8
+# 2026-10-12: the rear pair moved to CH4/CH5 (rear right showed no servo on CH8; found by a channel
+# walk and the jig sweep). Fronts and middles unchanged.
+STEER_LF=3; STEER_RF=2; STEER_LM=0; STEER_RM=1; STEER_LR=5; STEER_RR=4
 SERVO_CENTER_US=1500; SERVO_MIN_US=1000; SERVO_MAX_US=2000
 # Per-corner straight-ahead pulse. All six were mechanically re-horned straight at 1500us on
 # 2026-10-05, so 1500 is measured, not nominal; the earlier trims (1800/1350/1270) are void.
 # Fine-tune with scripts/steer_jog.py if a wheel is visibly off.
-STEER_CENTER_US={'lf':1500,'rf':1500,'lm':1500,'rm':1500,'lr':1500,'rr':1500}
+# MEASURED 2026-10-12 with the owner's alignment jig holding each side's wheels straight: each
+# servo was swept 10 us at a time and the pulse where it stops pushing against the jig (the
+# minimum of the 5 V current on INA260 0x40) is straight. Clean valleys on all six.
+STEER_CENTER_US={'lf':1440,'rf':1440,'lm':1460,'rm':1320,'lr':1560,'rr':1630}
 # Steering direction and scale, owner-measured 2026-10-07 by eye, each corner ALONE to 1700 us:
 # all four corners point RIGHT for +us, ~15 deg per 200 us. The rear servos are mounted reversed
 # from the fronts, but the wheel still went right -- measure, don't infer from the mounting.

@@ -44,8 +44,9 @@ def test_corner_angle_is_the_turning_circle_tangent():
 def test_corners_point_along_the_circle_and_middles_stay_straight():
     p=rotation_pulses()
     # measured: +us = right on all four corners. FL and RR right, FR and RL left.
-    assert p['lf']>1500 and p['rr']>1500 and p['rf']<1500 and p['lr']<1500
-    assert p['lm']==1500 and p['rm']==1500
+    c=config.STEER_CENTER_US     # each wheel's own measured straight pulse (2026-10-12)
+    assert p['lf']>c['lf'] and p['rr']>c['rr'] and p['rf']<c['rf'] and p['lr']<c['lr']
+    assert p['lm']==c['lm'] and p['rm']==c['rm']
 
 def test_corner_pulses_never_leave_the_allowed_servo_range():
     p=rotation_pulses()

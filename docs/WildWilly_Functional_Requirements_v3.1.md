@@ -185,7 +185,7 @@ Requirements are implemented and unit-tested off-hardware unless noted.
 
   FR-600 Steering         PARTIAL --- map,        Channel map MEASURED
                           direction and           2026-10-06: LF3 RF2 LM0 RM1
-                          rotation live-          LR9 RR8, all six straight at
+                          rotation live-          LR5 RR4, all six straight at
                           verified                1500. +us turns all four
                                                   corners RIGHT, ~15 deg/200 us
                                                   by eye (2026-10-07). Rotation
@@ -1909,7 +1909,7 @@ Pico A a-0.3 reports signed counts.
 
 # Acceptance Criteria
 
-Six steering servos on PCA9685 0x42: **LF CH3, RF CH2, LM CH0, RM CH1, LR CH9, RR CH8** (re-plugged 2026-10-05, each channel
+Six steering servos on PCA9685 0x42: **LF CH3, RF CH2, LM CH0, RM CH1, LR CH5, RR CH4**** (rear pair moved to CH5/CH4 2026-10-12; straight values measured that day with a jig: lf 1440, rf 1440, lm 1460, rm 1320, lr 1560, rr 1630)** (re-plugged 2026-10-05, each channel
 measured 2026-10-06 by swinging it 1000↔2000 µs alone while the owner named the wheel). All
 six sit straight at 1500 µs. **FR-600-001's "moves the expected wheel" is met for all six.**
 ⚠ **The steering servo supply is not on INA260 0x40's path:** six full swings of a servo
