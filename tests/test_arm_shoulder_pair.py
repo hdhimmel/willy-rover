@@ -1,0 +1,22 @@
+import os,sys
+sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.environ.setdefault('WILLY_SIMULATE','1')
+import config
+
+# 2026-10-12: the shoulder is two servos (CH2 + CH3) on one joint, driven with the SAME pulse.
+
+def _arm(monkeypatch):
+    monkeypatch.setattr(config,'ARM_RELEASE_WHEN_IDLE',False)
+    import arm; return arm.Arm()
+
+def test_shoulder_drives_both_channels_with_the_same_pulse(monkeypatch):
+    a=_arm(monkeypatch)
+    a.set_pulse('shoulder',1700)
+    d=[a._pca.channels[c].duty_cycle for c in (config.ARM_SHOULDER,config.ARM_SHOULDER_B)]
+    assert d[0]==d[1]>0
+    assert 'shoulder_b' not in a.joints            # no way to drive one servo of the pair alone
+
+def test_release_zeroes_both_shoulder_channels(monkeypatch):
+    a=_arm(monkeypatch)
+    a.set_pulse('shoulder',1700); a.release()
+    assert a._pca.channels[config.ARM_SHOULDER].duty_cycle==0==a._pca.channels[config.ARM_SHOULDER_B].duty_cycle

@@ -2068,12 +2068,16 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     the measured one.
 
     ⚠ **Do NOT command the shoulder as a mirrored pair** (`J1b = 2 × 1500µs − J1a`).
-    Hardware does not support it: driving CH2/CH3 mirrored versus identically drew
-    statistically the same settled current (0.197A vs 0.176A, two amplitudes), where
-    a genuine shared axis driven the wrong way would fight hard. The derivation is
-    not in `arm.py`, and reinstating it would command CH3 to 2250µs with the shoulder
-    at its verified 750µs waving position. **What CH3 does on its own is not yet
-    established.**
+
+    ⛔ **Updated 2026-10-12: CH2 and CH3 ARE the shoulder's two servos, driven with the
+    SAME pulse.** The 09-17 current comparison was made while one of them was dead (it
+    drew no current on 10-12 until replaced). With new servos fitted, each alone raises
+    the shoulder as the pulse goes up, and both at one pulse hold at ~0.1 A and move
+    smoothly; `arm.py` drives both from every shoulder command. Mirroring them would make
+    them fight, so the warning above still stands. The new servos turn the opposite way to
+    the old one, so the hand-verified shoulder values below (wave 750 µs, rest 2010 µs) are
+    invalid until re-measured; `ARM_SHOULDER_POSES_VERIFIED=False` blocks wave, stow, home,
+    reach and knock meanwhile.
 
     **The "confirm a servo is seated on CH0" caution was correct and is what
     surfaced all of this** --- it is retained in spirit as the rule below.

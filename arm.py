@@ -44,11 +44,16 @@ class Arm:
     # enforced every tick by brain._check_arm_current() (2026-10-02), which releases the arm. This is a driver + primitive
     # set_pulse interface only, clamped to manufacturer defaults; arm_jog.py is the tool for
     # producing real calibration numbers. No autonomous motion is wired to this class anywhere.
-    # Channel numbers corrected against hardware 2026-09-17 -- see the map in config.py. The old
-    # names shoulder_a/shoulder_b implied a mirrored pair; CH2 and CH3 are not one.
-    _JOINTS={'base':config.ARM_BASE,'shoulder':config.ARM_SHOULDER,'shoulder_b':config.ARM_SHOULDER_B,
+    # Channel numbers re-verified against hardware 2026-10-12 -- see the map in config.py.
+    # The shoulder is TWO servos (CH2 + CH3) on one joint: 'shoulder' drives both with the SAME
+    # pulse (_PAIRED). There is deliberately no way to drive one of them alone -- two servos on one
+    # axis at different pulses fight each other.
+    _JOINTS={'base':config.ARM_BASE,'shoulder':config.ARM_SHOULDER,
              'elbow':config.ARM_ELBOW,'wrist_rot':config.ARM_WRIST_ROT,'wrist_pitch':config.ARM_WRIST_PITCH,
              'gripper':config.ARM_GRIPPER}
+    _PAIRED={'shoulder':(config.ARM_SHOULDER,config.ARM_SHOULDER_B)}
+    @classmethod
+    def _channels(cls,joint): return cls._PAIRED.get(joint,(cls._JOINTS[joint],))
     _PERIOD_US=1_000_000/config.SERVO_PWM_FREQ
     def __init__(self):
         # NO JUMP AT STARTUP (2026-10-02, seen on the rover). Releasing only SLEEPs the PCA9685,
@@ -81,7 +86,7 @@ class Arm:
         """Stop driving every joint. The arm goes limp and will move under gravity.
         Outputs are zeroed before the chip sleeps, so nothing that later wakes it -- a restart,
         a single-joint move -- can replay an old pulse on the other joints."""
-        for ch in self._JOINTS.values():
+        for ch in sorted({c for j in self._JOINTS for c in self._channels(j)}):
             try: self._pca.channels[ch].duty_cycle=0
             except Exception: pass
         try: self._pca.mode1_reg=self._pca.mode1_reg|0x10      # MODE1 bit4 SLEEP
@@ -100,18 +105,17 @@ class Arm:
     def _drive(self,joint,us):
         self._wake(); self._idle_since=time.monotonic()
         us=max(config.ARM_SERVO_MIN_US,min(config.ARM_SERVO_MAX_US,us))
-        self._pca.channels[self._JOINTS[joint]].duty_cycle=int(us/self._PERIOD_US*65535)
+        duty=int(us/self._PERIOD_US*65535)
+        for ch in self._channels(joint): self._pca.channels[ch].duty_cycle=duty
         self._pulse[joint]=us; self._driven.add(joint)
         return us
-    # FR-700-001 (control all arm joints): each joint on its own channel.
+    # FR-700-001 (control all arm joints): each joint on its own channel, except the shoulder.
     #
-    # THE MIRRORED-PAIR DERIVATION WAS REMOVED 2026-09-17. This used to drive
-    # shoulder_b = 2*center - shoulder_a, per the FRD's J1a/J1b spec. Hardware says CH2 and CH3
-    # are not a mirrored pair: commanding them mirrored and commanding them the same drew
-    # statistically identical current (0.197A vs 0.176A avg), where a genuine shared axis driven
-    # the wrong way would fight hard. Keeping the derivation was actively harmful -- with the
-    # shoulder at its verified 750us waving position it would have driven CH3 to 2250us.
-    # CH3's actual function is still unidentified; it is addressable but nothing here uses it.
+    # SHOULDER PAIR, 2026-10-12. CH2 and CH3 are the two shoulder servos. Measured with new servos
+    # fitted (horns set at 1500us): each ALONE raises the shoulder as the pulse goes UP, and both
+    # together at the SAME pulse held at ~0.1A (no fighting) and moved the arm smoothly. So they
+    # get identical pulses -- NOT mirrored (2*center - x), which would make them fight. The
+    # 09-17 "not a pair" finding was made while one of the two servos was dead.
     def set_pulse(self,joint,us):
         return self._drive(joint,us)
     def pulse(self,joint): return self._pulse[joint]

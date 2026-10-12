@@ -1038,8 +1038,9 @@ Bench procedures with blank result fields are in `docs/WildWilly_Bench_Test_Proc
    BNO085 report rate is ~5 Hz, cause unknown.
 5. **Stair standoff drift** — measure dead-reckoning drift on the floor before relying on
    the 15 cm margin.
-6. **Arm per-joint limits** — run `arm_jog.py` and record real limits (S-4); identify what
-   CH3 does alone.
+6. **Arm per-joint limits** — run `arm_jog.py` and record real limits (S-4). Re-measure the
+   wave and rest shoulder values on the new servo pair (2026-10-12), then set
+   `ARM_SHOULDER_POSES_VERIFIED=True`.
 7. **Gripper feedback curve** — run `scripts/grip_feedback_curve.py` empty and loaded, store the
    curve, consult it in `RetrievalTask._await_confirm()` (S-5).
 8. **Steering** — steering servos are centred and held; kinematics (crab, point-turn,
@@ -1072,14 +1073,21 @@ Bench procedures with blank result fields are in `docs/WildWilly_Bench_Test_Proc
 
 `arm.py` rests on three facts measured on the hardware.
 
-**1. The channel map.** Wrist pitch CH0, elbow CH1, shoulder CH2, second shoulder axis
-CH3, wrist rotate CH4, gripper CH5, base yaw CH6, CH7 unused. `_JOINTS` uses
-`ARM_SHOULDER` (CH2) as `'shoulder'`.
+**1. The channel map** (re-verified 2026-10-12). Wrist pitch CH0, elbow CH1, shoulder
+CH2 + CH3, wrist rotate CH4, gripper CH5, base yaw CH6, CH7 unused.
 
-**2. No mirrored-pair derivation.** `set_pulse()` is a plain clamped write
-(`ARM_SERVO_MIN_US` 500 – `ARM_SERVO_MAX_US` 2500); every joint is independent. **Do not
-reinstate `shoulder_b = 2*ARM_SERVO_CENTER_US - shoulder_a`.** CH2/CH3 are not one axis,
-and at the 750 µs wave position the derivation would command CH3 to 2250 µs.
+**2. The shoulder is a pair driven with the same pulse.** `set_pulse('shoulder', us)` writes
+the same pulse to CH2 and CH3 (`Arm._PAIRED`); `release()` zeroes both. There is no
+`shoulder_b` joint, so nothing can drive one servo of the pair alone. **Do not mirror them**
+(`2*ARM_SERVO_CENTER_US - x`): measured 2026-10-12 with new servos, each alone raises the
+shoulder as the pulse goes up, so mirrored pulses would make them fight. Other joints are a
+plain clamped write (`ARM_SERVO_MIN_US` 500 – `ARM_SERVO_MAX_US` 2500).
+
+**Pose gate (2026-10-12).** The new pair turns the opposite way to the old servo, so every
+shoulder value measured before that day is wrong — the wave's 750 µs would drive the arm down
+into the body. `config.ARM_SHOULDER_POSES_VERIFIED=False` makes `brain._arm_poses_ok()`
+refuse wave, stow and home with a spoken reason, and makes `grip.reach_plan()` and
+`knock.knock_plan()` return None (no reach, no knock). Set it True only after re-measuring.
 
 **3. Never centre the elbow (CH1).** `ARM_SERVO_CENTER_US` (1500 µs) drives it into the
 top of the chassis. `center_all()` skips it.
@@ -1087,7 +1095,7 @@ top of the chassis. `center_all()` skips it.
 **Rules.**
 - **Open the elbow before moving the shoulder**, or the arm strikes the top of Willy.
 - Step the shoulder in `ARM_WAVE_APPROACH_STEP_US` (50 µs) steps; a single jump slams it.
-- Shoulder: decreasing µs raises. Gripper: increasing µs closes (contact from ~1700 µs).
+- Shoulder: increasing µs raises (new servo pair, 2026-10-12). Gripper: increasing µs closes (contact from ~1700 µs).
   Grip force is set by current, not position: stop feeding past ~0.4–0.5 A.
 - Holding a pose is nearly free (~0.33 A for the wave pose); moving costs amps.
 - **A released arm falls.** `release()` (PCA9685 SLEEP) makes every arm channel limp.

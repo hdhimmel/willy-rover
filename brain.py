@@ -1590,6 +1590,8 @@ class RoverBrain:
             bat_v=self.adc.battery_volts; bat_pct=self.adc.battery_pct
             self._say("I can't read my battery right now." if bat_v<=0 else
                                  f"Battery is at {bat_v:.1f} volts, about {bat_pct} percent.")
+        elif cmd.get('intent') in('arm_stow','arm_home') and not self._arm_poses_ok():
+            pass
         elif cmd.get('intent') in('arm_stow','arm_home'):
             # Stow/home = the REST pose, reached in steps (shoulder first, 50 us at a time, then
             # elbow, then wrist) through the same tick-serviced sequence as the wave. Used to be
@@ -1831,7 +1833,17 @@ class RoverBrain:
     def _start_arm_sequence(self,plan):
         self._wave_seq=plan; self._wave_step=0; self._wave_deadline=None; self._go('WAVE')
 
+    def _arm_poses_ok(self):
+        # 2026-10-12: new shoulder servos turn the opposite way to the old one, so every stored
+        # shoulder value (wave, rest) is wrong until re-measured -- the wave's would drive the
+        # arm down into the body. Refuse and say so (config.ARM_SHOULDER_POSES_VERIFIED).
+        if config.ARM_SHOULDER_POSES_VERIFIED: return True
+        log.warning('Arm pose refused: shoulder poses not re-measured since the 2026-10-12 servo change')
+        self._say("I can't move my arm yet. My shoulder was just rebuilt and I need to relearn my arm positions.")
+        return False
+
     def _start_wave(self):
+        if not self._arm_poses_ok(): return
         if self.voice.available: self.voice.speak('Hello!')
         self._start_arm_sequence(self._wave_plan(self._shoulder_now()))
 

@@ -85,7 +85,7 @@ def reach_plan(base_us,shoulder_from,elbow_from):
     owner's rule: OPEN THE ELBOW before the shoulder moves, shoulder in ARM_WAVE_APPROACH_STEP_US
     steps. Returns None when ARM_POSE_REACH has not been measured -- no guessed pose, ever."""
     reach=config.ARM_POSE_REACH
-    if not reach: return None
+    if not reach or not config.ARM_SHOULDER_POSES_VERIFIED: return None   # rest/lift shoulder values too (10-12)
     step=config.ARM_WAVE_APPROACH_STEP_US
     open_us=config.ARM_POSE_WAVE_HELLO['elbow']
     plan=[('gripper',config.GRIP_OPEN_US,0.3),('base',base_us,0.4)]

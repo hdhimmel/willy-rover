@@ -1343,14 +1343,14 @@ graph TD
     PCA_ARM -->|PWM| ARM_SERVO
 ```
 
-**Channel map, measured on hardware** (each channel driven alone, watching the joint):
+**Channel map, measured on hardware** (each channel driven alone, watching the joint; re-verified 2026-10-12):
 
 | Joint | Servo | Channel | `config.py` name |
 |-------|-------|---------|------------------|
 | J4 wrist pitch | MG90S | CH0 | `ARM_WRIST_PITCH` |
 | J2 elbow | MG996R | CH1 | `ARM_ELBOW` |
-| J1 shoulder (lift axis) | MG996R | CH2 | `ARM_SHOULDER` |
-| J1b second shoulder axis | MG996R | CH3 | `ARM_SHOULDER_B` — moves the shoulder; function not identified |
+| J1 shoulder, servo 1 | MG996R | CH2 | `ARM_SHOULDER` |
+| J1 shoulder, servo 2 | MG996R | CH3 | `ARM_SHOULDER_B` — driven with the same pulse as CH2 |
 | J3 wrist rotate | MG90S | CH4 | `ARM_WRIST_ROT` |
 | J5 gripper | MG90S | CH5 | `ARM_GRIPPER` |
 | J0 base yaw | MG996R | CH6 | `ARM_BASE` |
@@ -1359,12 +1359,16 @@ graph TD
 0x43 CH7 is electrically empty; on 0x42 only CH0–3 and CH8–9 are used since 2026-10-05. **A paper remap is not a rewiring** —
 drive one channel at a time and watch the joint before trusting any arm mapping.
 
-**CH2 and CH3 are not a mirrored pair.** Mirrored and same-direction commands draw the same
-current; do not derive one from the other.
+**CH2 and CH3 are the two servos of the shoulder, driven with the SAME pulse (2026-10-12).**
+They face each other on the joint; with new servos fitted (horns set at 1500 µs), each alone
+raises the shoulder as the pulse goes up, and both together at one pulse hold at ~0.1 A and move
+smoothly. `arm.py` writes every shoulder command to both; nothing drives one alone. Never mirror
+them (2 × 1500 − x): they would fight. The 09-17 "not a mirrored pair" finding was made while one
+of the two servos was dead — on 10-12 it drew no current until replaced.
 
 | Joint | Direction | Notes |
 |-------|-----------|-------|
-| Shoulder CH2 | decreasing µs raises | peaks 2.1–2.6 A raising, holds 0.17–0.35 A; 750–2010 µs traversed |
+| Shoulder CH2+CH3 | **increasing µs raises** (new servos 2026-10-12; the old servo was the opposite) | pair holds ~0.1 A at 1500–1700 µs; every shoulder value measured before 10-12 (wave 750, rest 2010) is invalid — `ARM_SHOULDER_POSES_VERIFIED=False` blocks wave, stow, home, reach and knock until re-measured |
 | Elbow CH1 | — | 1400→2500 µs with no binding (~200°), settles under 0.43 A; stops responding past ~2530 µs |
 | Gripper CH5 | increasing µs closes | jaw contact from ~1700 µs; grip by current, stop past ~0.4–0.5 A |
 | Wrist pitch CH0 | increasing lowers | free below ~2300 µs; 2400 µs+ holds a sustained 0.9 A |
@@ -1598,8 +1602,9 @@ Item numbers are stable; closed items are removed, not renumbered.
 19. **Steering uncalibrated** — per-unit servo range and centre; kinematics deferred.
 20. **ToF floor profile not captured** — `scripts/calibrate_tof_floor.py` on clear floor.
 21. *(closed 2026-10-02 — all three sonars working, owner-confirmed.)*
-22. **Arm per-joint limits** — record with `arm_jog.py`; identify CH3's function; define a
-    stow pose and a safe elbow centre.
+22. **Arm per-joint limits** — record with `arm_jog.py`; define a stow pose and a safe elbow
+    centre. **Re-measure the wave and rest shoulder values on the new servo pair (2026-10-12)**,
+    then set `ARM_SHOULDER_POSES_VERIFIED=True`.
 23. **Odometry and IMU** — drive a measured straight line (rolling diameter, other five
     wheels' scale); check the IMU yaw sign; BNO085 report rate ~5 Hz, cause unknown.
 24. **Unconfirmed as-built details** — which header pins the display's 5 V tap uses and what
@@ -1906,8 +1911,8 @@ On PCA9685 0x43, through the arm bulkhead connector:
 |---|---|---|---|
 | J4 wrist pitch | MG90S | CH0 | `ARM_WRIST_PITCH` |
 | J2 elbow | MG996R | CH1 | `ARM_ELBOW` |
-| J1 shoulder (lift axis) | MG996R | CH2 | `ARM_SHOULDER` |
-| J1b second shoulder axis | MG996R | CH3 | `ARM_SHOULDER_B` |
+| J1 shoulder, servo 1 | MG996R | CH2 | `ARM_SHOULDER` |
+| J1 shoulder, servo 2 (same pulse) | MG996R | CH3 | `ARM_SHOULDER_B` |
 | J3 wrist rotate | MG90S | CH4 | `ARM_WRIST_ROT` |
 | J5 gripper | MG90S | CH5 | `ARM_GRIPPER` |
 | J0 base yaw | MG996R | CH6 | `ARM_BASE` |

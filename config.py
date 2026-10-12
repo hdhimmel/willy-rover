@@ -378,13 +378,16 @@ ARM_PCA_ADDR=0x43
 # REVERSED in it -- it read shoulderA/shoulderB/elbow/wristPitch where the hardware is
 # wristPitch/elbow/shoulder/shoulder. 4, 5 and 6 were already right.
 #
-#   CH0 wrist pitch   CH1 elbow   CH2 shoulder   CH3 shoulder(second axis, function unidentified)
+#   CH0 wrist pitch   CH1 elbow   CH2 shoulder   CH3 shoulder (second servo of the pair)
 #   CH4 wrist rotate  CH5 gripper CH6 base       CH7 unused, nothing connected
+# RE-VERIFIED 2026-10-12, each channel driven alone with the owner watching.
 #
-# CH2 and CH3 are NOT a mirrored pair. The old "J1b = 2x1500 - J1a" relation is wrong: driving
-# them mirrored vs. same-direction gave statistically identical current (0.197A vs 0.176A), and
-# a shared axis driven the wrong way would fight hard. CH2 is the shoulder lift axis; what CH3
-# does alone has not been established.
+# THE SHOULDER IS A PAIR, DRIVEN WITH THE SAME PULSE (2026-10-12). CH2 and CH3 are two servos on
+# one joint, mounted facing each other. New servos fitted 10-12 (horns set at 1500us): each alone
+# raises the shoulder as the pulse goes UP, and both at the same pulse held at ~0.1A and moved
+# smoothly. arm.py writes every 'shoulder' command to both channels. Never drive them apart, and
+# never mirror them (2x1500 - x): they would fight. The 09-17 note that they were "not a pair"
+# was measured while one servo was dead (it drew no current at all on 10-12 until replaced).
 ARM_BASE=6; ARM_WRIST_PITCH=0; ARM_ELBOW=1; ARM_SHOULDER=2; ARM_SHOULDER_B=3
 ARM_WRIST_ROT=4; ARM_GRIPPER=5
 ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
@@ -393,8 +396,10 @@ ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
 # the servo fitted before 2026-09-17 held ~8A there indefinitely and was destroyed by it. Any
 # homing or park routine that centres every joint will stall the elbow on each startup.
 #
-# DIRECTIONS, owner-confirmed on hardware 2026-09-17:
-#   shoulder CH2 : DECREASING us raises, increasing lowers
+# DIRECTIONS, owner-confirmed on hardware 2026-09-17 (shoulder re-measured 2026-10-12):
+#   shoulder CH2+CH3 : INCREASING us RAISES (new servos 10-12 -- the OPPOSITE of the old servo,
+#                  which raised with decreasing us; every shoulder value measured before 10-12
+#                  is therefore wrong, see ARM_SHOULDER_POSES_VERIFIED)
 #   gripper  CH5 : INCREASING us closes, decreasing opens. LONGER FINGERS fitted by 2026-10-05:
 #                  jaws now shut at ~2205us (0.39A); 2210us drew 0.49A = stalling. Widest open
 #                  without load is 1150us (0.07A); the open stop is ~1100 and 1050us stalls at 0.8A. The ~1700us
@@ -415,6 +420,12 @@ ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
 # on a 6.04V rail with every channel energised. Reach it in the order given, 50us steps on the
 # shoulder -- not as a single jump, which would slam the joint.
 ARM_POSE_WAVE_HELLO={'elbow':1000,'shoulder':750,'wrist_pitch':1500}
+#
+# ⚠ SHOULDER VALUES ABOVE AND IN ARM_POSE_REST ARE FROM THE OLD SERVO (2026-10-12). The new pair
+# turns the other way, so the wave's 750us now drives the shoulder fully DOWN into the body, and
+# rest's 2010us is high. Until both poses are re-measured on the new servos, brain.py refuses
+# wave, stow and home and says so instead of moving. Set True only after re-measuring.
+ARM_SHOULDER_POSES_VERIFIED=False
 #
 # REST pose, owner-designated 2026-09-17. TWO CAVEATS, both measured, neither yet resolved:
 #

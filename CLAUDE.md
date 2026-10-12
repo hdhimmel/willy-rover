@@ -227,15 +227,18 @@ Other header pins:
 - Measure counts per rev under power, never by hand-turning — the hub slips on the shaft.
 - Steering: 6 × DS041MG on 0x42 — LF CH3, RF CH2, LM CH0, RM CH1, LR CH5, RR CH4 (measured 2026-10-06), 1000–2000 µs, centred
   and held. Skid steer is the only turning mechanism.
-- **Arm map (0x43, measured):** CH0 wrist pitch, CH1 elbow, CH2 shoulder (lift; decreasing
-  µs raises), CH3 second shoulder axis, CH4 wrist rotate, CH5 gripper (increasing µs
+- **Arm map (0x43, re-measured 2026-10-12):** CH0 wrist pitch, CH1 elbow, CH2 + CH3 shoulder
+  pair (same pulse; increasing µs raises), CH4 wrist rotate, CH5 gripper (increasing µs
   closes), CH6 base yaw, CH7 empty. A paper remap is not a rewiring — drive one channel at
   a time and watch the joint.
 - **Never centre the elbow (CH1)** — `ARM_SERVO_CENTER_US` drives it into the chassis.
   `center_all()` skips it.
 - **Open the elbow before moving the shoulder**, or the arm strikes the top of Willy.
   Step the shoulder in 50 µs steps.
-- **CH2 and CH3 are not a mirrored pair.** Never derive one from the other.
+- **CH2 and CH3 are the shoulder's two servos, always driven with the SAME pulse** (`arm.py`
+  does both). Never mirror them and never drive one alone — they fight. Shoulder values from
+  before the 2026-10-12 servo change are invalid; `ARM_SHOULDER_POSES_VERIFIED=False` blocks
+  wave/stow/home/reach/knock until they are re-measured.
 - **A released arm falls.** Holding a pose is nearly free; moving costs amps.
 - The arm current guard (`_check_arm_current()`, 0x44, `ARM_CURRENT_LIMIT_A` 2.5 A for
   `ARM_CURRENT_LIMIT_S` 0.4 s → release) runs every tick *during* motion. A limit checked

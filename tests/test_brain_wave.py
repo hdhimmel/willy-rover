@@ -30,8 +30,14 @@ def fb():
     ns._go=lambda s: setattr(ns,"_state",s)
     for m in ("_wave","_start_wave","_shoulder_now","_start_arm_sequence"): setattr(ns,m,types.MethodType(getattr(RoverBrain,m),ns))
     ns._wave_plan=RoverBrain._wave_plan; ns._rest_plan=RoverBrain._rest_plan
+    ns._said=[]; ns._say=ns._said.append
+    ns._arm_poses_ok=types.MethodType(RoverBrain._arm_poses_ok,ns)
     return ns
 
+# 2026-10-12: shoulder poses not re-measured since the servo change -> refuse, say why, no motion
+config.ARM_SHOULDER_POSES_VERIFIED=False
+f=fb(); f._start_wave(); assert f._state=="IDLE" and f.arm.pulses==[] and "relearn" in f._said[0]
+config.ARM_SHOULDER_POSES_VERIFIED=True
 f=fb(); f._start_wave(); assert f._state=="WAVE"
 # 1. one tick returns at once and drives one joint
 t0=time.perf_counter(); f._wave({},0.0)

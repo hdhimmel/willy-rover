@@ -158,6 +158,9 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
 - **"Wave hello"** / **"Say hi"** — raises the arm and waves.
 - **"Stow your arm"** / **"Put your arm away"** — moves it to the rest position, opening the
   elbow first so it doesn't hit him. If the arm strains, he lets it go limp and says so.
+- **Not yet (since 2026-10-12):** his shoulder servos were replaced and his arm positions have to
+  be measured again. Until then, wave and stow get *"I can't move my arm yet. My shoulder was just
+  rebuilt and I need to relearn my arm positions."* and the arm stays still.
 
 **Saying stop:**
 - **"Stop"** / **"Halt"** / **"Freeze"** / **"Whoa"** — recognised instantly and handled before
