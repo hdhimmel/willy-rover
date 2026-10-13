@@ -51,3 +51,20 @@ def test_pair_engages_for_a_move_then_drops(monkeypatch):
     assert d[0]==d[1]>0
     a.set_pulse('shoulder_pair',0)
     assert a._pca.channels[config.ARM_SHOULDER_B].duty_cycle==0
+
+
+def test_drop_pair_zeroes_ch3_without_waking(monkeypatch):
+    monkeypatch.setattr(config,'ARM_SHOULDER_PAIR',False)
+    a=_arm(monkeypatch); a.set_pulse('shoulder',1500); a.set_pulse('shoulder_pair',1)
+    assert a._pca.channels[config.ARM_SHOULDER_B].duty_cycle>0
+    assert a.drop_pair() is True and a._pca.channels[config.ARM_SHOULDER_B].duty_cycle==0
+    a.release(); assert a.drop_pair() is False and a.released      # asleep: stays asleep
+
+def test_leaving_an_arm_sequence_drops_the_pair(monkeypatch):
+    import types
+    monkeypatch.setattr(config,'SIMULATE_HARDWARE',True)
+    from brain import RoverBrain
+    dropped=[]
+    b=types.SimpleNamespace(_state='WAVE',arm=types.SimpleNamespace(drop_pair=lambda: dropped.append(1)),faces=None)
+    RoverBrain._go(b,'IDLE')
+    assert dropped==[1] and b._state=='IDLE'

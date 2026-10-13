@@ -972,6 +972,10 @@ class RoverBrain:
             if self.rotation.active: self.rotation.abort('voice stop')
             self.steer_override.end('release','voice stop')
             self.routine.abandon('voice stop')   # stop means the rest of the routine too
+            if self.teacher.active: self.teacher.end()
+            self._release_after_seq=False
+            try: self.arm.drop_pair()              # outside review 2026-10-13
+            except Exception: pass
             self._abandon_stuck_if_active()
             self.safety.emergency_stop('voice stop')
             self._revoke_roam_permission()  # stop means stop, not "pause for 30 seconds"
@@ -2026,7 +2030,7 @@ class RoverBrain:
             else: self.arm.release()
         if self.teacher.active:
             if self.teacher.timed_out():
-                self.teacher.end(); self._say("I've stopped teaching my arm.")
+                self.teacher.end(); self.arm.drop_pair(); self._say("I've stopped teaching my arm.")
             else:
                 self.arm.keep_alive()   # no idle release while being taught: a released arm falls
         if self.routine.active:
@@ -2274,6 +2278,10 @@ class RoverBrain:
 
     def _go(self,state):
         if state!=self._state:
+            if self._state=='WAVE':
+                # an arm sequence ending -- finished or interrupted -- never leaves the pair driven
+                try: self.arm.drop_pair()
+                except Exception: pass
             log.info(f'  {self._state}->{state}'); self._state=state
             if state=='AVOID': self._avoid_start=time.time(); self._avoid_phase=None
             if state=='IDLE': self._idle_t=0.0

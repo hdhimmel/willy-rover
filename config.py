@@ -1378,6 +1378,7 @@ REACH_TABLE_MAX_DIST=0.12             # further than this from every taught spot
 # when no class is named.
 REACH_TEACH_CLASSES=('cup','bottle','sports ball','remote','cell phone','mouse','book','scissors','teddy bear')
 RETRIEVAL_TARGET_TOL=(0.04,0.03)
+RETRIEVAL_CONFIRM_FRAMES=2      # consecutive in-position detections, rover stopped, before a reach
 RETRIEVAL_TURN_PULSE_S=0.12
 RETRIEVAL_CREEP_PULSE_S=(0.12,0.3)   # forward pulse when close / far from the target row
 RETRIEVAL_GRASP_RETRIES=2       # FR-1700-005

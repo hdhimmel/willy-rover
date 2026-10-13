@@ -56,6 +56,16 @@ class Arm:
         if joint in self._PAIRED and (config.ARM_SHOULDER_PAIR or getattr(self,'_pair',False)):
             return self._PAIRED[joint]
         return (self._JOINTS[joint],)
+    def drop_pair(self):
+        """Disengage CH3 from the shoulder WITHOUT waking the chip or touching the idle timer.
+        Every interrupted arm sequence ends here (outside review 2026-10-13: a stop, abort or
+        teach timeout used to leave both shoulder servos driven together -- the arrangement that
+        locked at 3-6 A that day)."""
+        was=getattr(self,'_pair',False); self._pair=False
+        if was and not config.ARM_SHOULDER_PAIR and not self._asleep:
+            try: self._pca.channels[config.ARM_SHOULDER_B].duty_cycle=0
+            except Exception: pass
+        return was
     def _set_pair(self,on):
         """Engage CH3 on the shoulder (at CH2's current pulse) for a heavy move, or drop it."""
         self._pair=bool(on)

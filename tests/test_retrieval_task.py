@@ -116,7 +116,7 @@ def test_abort_when_not_active_still_resets_grasp_state():
 
 # --- 2026-10-13: line-up by image position ---
 
-def _lineup(cx,cy,front=999):
+def _lineup(cx,cy,front=999,ticks=1):
     import types
     calls=[]
     s=types.SimpleNamespace(timed_move_active=False,
@@ -127,7 +127,7 @@ def _lineup(cx,cy,front=999):
     det={'class':'cup','conf':0.9,'bbox':(cx*W-20,cy*H-20,cx*W+20,cy*H+20),'frame_w':W,'frame_h':H}
     rt=RetrievalTask(s,None,types.SimpleNamespace(detect=lambda classes=None:[det]))
     rt.state='APPROACH'; rt._target_class='cup'
-    rt._approach({'front':front},0.0)
+    for _ in range(ticks): rt._approach({'front':front},0.0)
     return rt.state,calls
 
 def test_lineup_turns_creeps_backs_off_and_grasps_on_target():
@@ -135,6 +135,16 @@ def test_lineup_turns_creeps_backs_off_and_grasps_on_target():
     assert _lineup(tx+0.2,0.5)[1]==['right'] and _lineup(tx-0.2,0.5)[1]==['left']
     assert _lineup(tx,0.5)[1]==['fwd']
     assert _lineup(tx,min(1.0,ty+0.06))[1]==['back']
-    assert _lineup(tx,ty)==('GRASP',['stop'])
+    assert _lineup(tx,ty)==('APPROACH',['stop'])            # one frame on target is not enough
+    assert _lineup(tx,ty,ticks=2)==('GRASP',['stop','stop'])
     st,c=_lineup(tx,0.5,front=1)
     assert st=='FAILED' and 'fwd' not in c                 # never pushes through something closer
+
+
+def test_abort_drops_the_shoulder_pair():
+    import types
+    dropped=[]
+    arm=types.SimpleNamespace(drop_pair=lambda: dropped.append(1))
+    rt=RetrievalTask(types.SimpleNamespace(stop=lambda: None),arm,types.SimpleNamespace())
+    rt.state='GRASP'; rt.abort('voice stop')
+    assert dropped==[1] and rt.state=='ABORTED'

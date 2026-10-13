@@ -56,6 +56,8 @@ class RetrievalTask:
             log.warning(f'Retrieval task ABORTED: {reason}')
         self.state='ABORTED'; self._fail_reason=reason
         self._grasp_step=0; self._grasp_deadline=None; self._phase=None; self._plan=[]
+        try: self.arm.drop_pair()                # outside review 2026-10-13: never leave CH3 driven
+        except Exception: pass
 
     def reset(self): self.state='IDLE'
 
@@ -86,7 +88,7 @@ class RetrievalTask:
         if self.safety.timed_move_active: return
         det=self._best(self.detector.detect(classes=[self._target_class]))
         if det is None:
-            self._lost_count+=1
+            self._lost_count+=1; self._confirm_key=None
             if self._lost_count>20:
                 self.safety.stop(); self.state='FAILED'; self._fail_reason='lost sight of target while approaching'
             return
@@ -95,13 +97,16 @@ class RetrievalTask:
         # here with the blended pose, no further lining up.
         pose,_=reach_table.pose_for(reach_table.box_xy(det))
         if pose is not None:
-            self._reach_pose=pose; self.safety.stop(); self.state='GRASP'
-            log.info(f'In a taught reach zone: {reach_table.box_xy(det)} -> {pose}')
+            self.safety.stop()
+            if self._confirm(('zone',)):
+                self._reach_pose=pose; self.state='GRASP'
+                log.info(f'In a taught reach zone: {reach_table.box_xy(det)} -> {pose}')
             return
         self._reach_pose=None
         x1,y1,x2,y2=det['bbox']
         cx=(x1+x2)/2/det['frame_w']; cy=(y1+y2)/2/det['frame_h']
         tx,ty=config.RETRIEVAL_TARGET_XY; tolx,toly=config.RETRIEVAL_TARGET_TOL
+        if abs(cx-tx)>tolx or abs(cy-ty)>toly: self._confirm_key=None   # moving: start again
         if abs(cx-tx)>tolx:
             (self.safety.turn_right_for if cx>tx else self.safety.turn_left_for)(
                 config.RETRIEVAL_TURN_PULSE_S,config.SPEED_SLOW*0.5)
@@ -117,8 +122,19 @@ class RetrievalTask:
         if cy>ty+toly:
             self.safety.reverse_for(config.RETRIEVAL_CREEP_PULSE_S[0],config.SPEED_SLOW*0.6)
             return
-        self.safety.stop(); self.state='GRASP'
-        log.info(f'Lined up: object at ({cx:.3f},{cy:.3f}), target ({tx},{ty})')
+        self.safety.stop()
+        if self._confirm(('target',)):
+            self.state='GRASP'
+            log.info(f'Lined up: object at ({cx:.3f},{cy:.3f}), target ({tx},{ty})')
+
+    def _confirm(self,key):
+        """True once the same in-position verdict has held for RETRIEVAL_CONFIRM_FRAMES
+        consecutive fresh detections with the rover stopped. vision.detect() captures a new frame
+        on every call (no cache), but the first frame after a move can still show the scene from
+        during it; this also stops one false detection from starting a reach."""
+        n=self._confirm_n+1 if getattr(self,'_confirm_key',None)==key else 1
+        self._confirm_key=key; self._confirm_n=n
+        return n>=config.RETRIEVAL_CONFIRM_FRAMES
 
     def _approach_by_distance_unused(self,d,tilt):
         # FR-1700-003: respects the same obstacle thresholds as brain.py's ROAM/SLOW/AVOID —
