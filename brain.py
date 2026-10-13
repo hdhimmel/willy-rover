@@ -1916,7 +1916,7 @@ class RoverBrain:
         r=config.ARM_POSE_REST; up=config.ARM_STOW_UPRIGHT_US
         plan=[('wrist_pitch',config.ARM_REST_WRIST_US,0.3)]
         plan+=grip.fold_first(shoulder_from,elbow_from)      # hand high before anything turns (10-13)
-        plan+=[('base',config.ARM_SERVO_CENTER_US,0.6)]
+        plan+=grip.turn_base(config.ARM_SERVO_CENTER_US)
         plan+=grip.shoulder_ramp(up,r['shoulder'])
         return plan
 

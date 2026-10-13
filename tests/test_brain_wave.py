@@ -80,7 +80,7 @@ def hand_high_at_base(plan,sh,el,ok_elbows=None):
         j,u=step[0],step[1]
         if j=="shoulder": sh=u
         elif j=="elbow": el=u
-        elif j=="base": assert sh==UP and el in ok_elbows, (sh,el)
+        elif j=="base": assert sh>=UP and el in ok_elbows, (sh,el)
     return True
 for sh0,el0 in ((1000,1000),(1300,1300),(2000,1775),(2000,None)):
     plan=[p for p in RoverBrain._rest_plan(sh0,el0) if p[0]!="shoulder_pair"]

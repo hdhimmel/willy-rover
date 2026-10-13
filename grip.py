@@ -134,7 +134,7 @@ def reach_plan(base_us,shoulder_from,elbow_from,pose=None,object_cm=None):
     ramp=_ramp; up=config.ARM_STOW_UPRIGHT_US; fold=config.ARM_POSE_REST['elbow']
     plan=[('gripper',config.GRIP_OPEN_US,0.3),('wrist_pitch',config.ARM_REST_WRIST_US,0.3)]
     plan+=fold_first(shoulder_from,elbow_from)                      # hand up before anything turns
-    plan+=[('base',base_us,0.6)]
+    plan+=turn_base(base_us)
     plan+=shoulder_ramp(up,reach['shoulder'])                       # forward, still folded
     hover=reach['elbow']+(config.ARM_REACH_HOVER_ELBOW_US if object_cm is None else
           min(config.ARM_HOVER_MAX_US,int(config.ARM_ELBOW_US_PER_CM*(object_cm+config.ARM_HOVER_CLEARANCE_CM))))
@@ -153,8 +153,18 @@ def fold_first(shoulder_from,elbow_from):
     stand up first then fold (folding there drives the forearm into his body, measured 10-12)."""
     up=config.ARM_STOW_UPRIGHT_US; fold=config.ARM_POSE_REST['elbow']
     def el(): return [('elbow',fold,0.6)] if elbow_from is None else _ramp('elbow',elbow_from,fold,step=25,dt=0.12)
-    if shoulder_from<up: return el()+shoulder_ramp(shoulder_from,up)
+    if shoulder_from<up:
+        # forward: the shoulder holds the whole arm out level while the elbow folds -- CH2 alone
+        # tripped the 2.5 A guard doing this with the ball (3.35 A, 10-13), so BOTH servos hold it.
+        return [('shoulder_pair',1,0.2)]+el()+shoulder_ramp(shoulder_from,up)
     return shoulder_ramp(shoulder_from,up)+el()
+
+
+def turn_base(base_us):
+    """Turn the base with the arm UP and leaning back (owner 10-13: raise the shoulder higher
+    while moving left and right), then back to upright. Call only from upright, elbow folded."""
+    up=config.ARM_STOW_UPRIGHT_US; hi=config.ARM_BASE_TURN_SHOULDER_US
+    return shoulder_ramp(up,hi)+[('base',base_us,0.6)]+shoulder_ramp(hi,up)
 
 
 def lift_plan(shoulder_from,elbow_from=None):

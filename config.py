@@ -526,6 +526,7 @@ ARM_POSE_REST={'elbow':1775,'shoulder':2000,'wrist_pitch':1200}   # elbow 1825->
 # 0.60 A there, and folding UP to it (as stow does) 1875 held 1.53 A, 1900 2.29 A, 1850 0.31 A,
 # 1825 0.12 A -> 1825. Wrist 1275 added ~1 A folded, 1200 nothing.
 ARM_STOW_UPRIGHT_US=1500        # shoulder: arm standing up, where the elbow folds/opens safely
+ARM_BASE_TURN_SHOULDER_US=1650  # owner 10-13: shoulder raised/back while the base turns (hand high)
 # ⚠ 2026-10-13 REPLACES the two caveats above (old servos). Re-measured on the new hardware:
 # shoulder pair 1750 (10-12: the furthest back before the hand meets his front, held 0.05 A;
 # then a release lets the arm settle into the fold), elbow 2050 (DS3225, owner-set as rest),

@@ -66,7 +66,7 @@ def test_reach_turns_base_folded_then_lowers_by_opening_the_elbow(monkeypatch):
     assert joints[0]=='gripper' and plan[0][1]==config.GRIP_OPEN_US
     b=joints.index('base')
     sh=[u for j,u,_ in plan[:b] if j=='shoulder']; el=[u for j,u,_ in plan[:b] if j=='elbow']
-    assert sh[-1]==config.ARM_STOW_UPRIGHT_US and el[-1]==config.ARM_POSE_REST['elbow']   # folded, up
+    assert sh[-1]==config.ARM_BASE_TURN_SHOULDER_US and el[-1]==config.ARM_POSE_REST['elbow']   # folded, raised
     after=plan[b+1:]
     last_sh=max(i for i,(j,_,_) in enumerate(after) if j=='shoulder')
     assert all(j!='elbow' for j,_,_ in after[:last_sh])                 # forward while still folded
