@@ -1393,6 +1393,15 @@ REACH_TEACH_CLASSES=('cup','bottle','sports ball','remote','cell phone','mouse',
 RETRIEVAL_TARGET_TOL=(0.04,0.03)
 RETRIEVAL_CONFIRM_FRAMES=2
 RETRIEVAL_PICK_STOP_CM=8
+# Pick-up line-up (10-13 live): turn pulses at SPEED_SLOW*0.5 (17% duty) could not break the
+# wheels away on a spin -> real STALL_FAULT on lf/lr. Now: an x error bigger than
+# RETRIEVAL_ROTATE_X uses rotation mode (degrees = error x ROTATE_CAMERA_HFOV_DEG); smaller x
+# errors are taken up by the ARM BASE, mapped from where the hand lands at each base value
+# (measured with the front camera, arm at the floor): base -> image x of the jaws.
+# Creeping forward/back runs at RETRIEVAL_CREEP_SPEED (full slow speed, breaks away).
+RETRIEVAL_ROTATE_X=0.15
+RETRIEVAL_BASE_X_MAP=((2100,0.45),(2200,0.26),(2300,0.20))
+RETRIEVAL_CREEP_SPEED=SPEED_SLOW
 # Reach: hover this far (shoulder us) above the reach pose, then lower in small slow steps (owner 10-13).
 ARM_REACH_HOVER_US=80           # used when the object's height is unknown
 # Owner 10-13: hover from the object's HEIGHT, worked out from its size in the image at the

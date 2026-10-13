@@ -1748,6 +1748,15 @@ class RoverBrain:
 
     def _retrieve(self,d,tilt):
         self.retrieval.tick(d,tilt)
+        deg=getattr(self.retrieval,'turn_request',None)
+        if deg is not None:
+            # pick-up line-up: a real spin turn in rotation mode, then back to the task
+            self.retrieval.turn_request=None
+            if abs(deg)<config.ROTATE_MIN_DEG: deg=config.ROTATE_MIN_DEG*(1 if deg>0 else -1)
+            ok,msg=self.start_rotation(deg,then='RETRIEVE')
+            if not ok:
+                self.retrieval.abort(f"can't turn: {msg}")
+            return
         if self.retrieval.state=='HOLDING':
             self._holding=True; self._say(f"Got the {self.retrieval._target_class}.")
             self.retrieval.reset(); self._go('IDLE'); return
@@ -1824,6 +1833,9 @@ class RoverBrain:
                 # Blocked or refused mid-avoidance: back off and let AVOID try again.
                 self._avoid_phase=None
                 self.safety.request('reverse',None,config.BACK_UP_TIME)
+            if nxt=='RETRIEVE' and done!='DONE':
+                # a pick-up line-up turn that failed or was refused: end the task, never loop
+                self.retrieval.abort(f'line-up turn {done.lower()}')
             self._go(nxt)
 
     def _come_to_me_tick(self,d,tilt):

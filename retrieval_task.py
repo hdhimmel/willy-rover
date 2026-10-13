@@ -1,4 +1,13 @@
 import time,config,logsetup,grip,reach_table
+
+
+def base_for_x(x):
+    """Arm base pulse whose jaws land at image x (RETRIEVAL_BASE_X_MAP, linear, clamped)."""
+    pts=sorted(config.RETRIEVAL_BASE_X_MAP,key=lambda p:p[1])
+    if x<=pts[0][1]: return pts[0][0]
+    if x>=pts[-1][1]: return pts[-1][0]
+    for (b0,x0),(b1,x1) in zip(pts,pts[1:]):
+        if x0<=x<=x1: return int(round(b0+(b1-b0)*(x-x0)/(x1-x0)))
 log=logsetup.setup('retrieval')
 
 # FR-1700 Object Detection and Retrieval Task — the "core mission" per the FRD. This is a
@@ -44,6 +53,7 @@ class RetrievalTask:
         if self.active: return False,'retrieval task already in progress'
         self.pick_only=pick_only      # 2026-10-13 "pick up the X": no hand-off, end HOLDING
         self.state='LOCALIZE'; self._target_class=target_class; self._requester_hint=requester_hint
+        self.turn_request=None
         self._lost_count=0; self._retries=0; self._fail_reason=''
         self._phase=None; self._plan=[]; self._grip_result=None; self._fb_hold=None
         log.info(f'Retrieval task started: target={target_class}')
@@ -107,6 +117,8 @@ class RetrievalTask:
         x1,y1,x2,y2=det['bbox']
         cx=(x1+x2)/2/det['frame_w']; cy=(y1+y2)/2/det['frame_h']
         tx,ty=config.RETRIEVAL_TARGET_XY; tolx,toly=config.RETRIEVAL_TARGET_TOL
+        if getattr(self,'pick_only',False):
+            return self._approach_pick(d,det,cx,cy)
         if abs(cx-tx)>tolx or abs(cy-ty)>toly: self._confirm_key=None   # moving: start again
         if abs(cx-tx)>tolx:
             (self.safety.turn_right_for if cx>tx else self.safety.turn_left_for)(
@@ -129,6 +141,35 @@ class RetrievalTask:
             log.info(f'Object height estimate: {self._object_cm} cm')
             self.state='GRASP'
             log.info(f'Lined up: object at ({cx:.3f},{cy:.3f}), target ({tx},{ty})')
+
+    def _approach_pick(self,d,det,cx,cy):
+        """Pick-up line-up: rotate the body for a big x error, creep for y, then let the arm
+        base take up the rest of x (RETRIEVAL_BASE_X_MAP)."""
+        tx,ty=config.RETRIEVAL_TARGET_XY; _,toly=config.RETRIEVAL_TARGET_TOL
+        ex=cx-tx
+        if abs(ex)>config.RETRIEVAL_ROTATE_X:
+            self._confirm_key=None
+            # object right of the target (ex>0) -> turn right (negative degrees in rotate.py)
+            self.turn_request=-ex*config.ROTATE_CAMERA_HFOV_DEG
+            log.info(f'Line-up: object at x {cx:.2f}, rotating {self.turn_request:+.0f} deg')
+            return
+        if cy<ty-toly or cy>ty+toly:
+            self._confirm_key=None
+            if cy<ty-toly:
+                if d.get('front',999)<config.RETRIEVAL_PICK_STOP_CM:
+                    self.safety.stop(); self.state='FAILED'; self._fail_reason='something is in the way'
+                    return
+                near,far=config.RETRIEVAL_CREEP_PULSE_S
+                self.safety.forward_for(near if ty-cy<0.15 else far,config.RETRIEVAL_CREEP_SPEED)
+            else:
+                self.safety.reverse_for(config.RETRIEVAL_CREEP_PULSE_S[0],config.RETRIEVAL_CREEP_SPEED)
+            return
+        self.safety.stop()
+        if self._confirm(('pick',)):
+            self._object_cm=grip.object_height_cm(det)
+            self._reach_pose=dict(config.ARM_POSE_REACH,base=base_for_x(cx))
+            log.info(f'Lined up: object at ({cx:.3f},{cy:.3f}), height {self._object_cm} cm, base {self._reach_pose["base"]}')
+            self.state='GRASP'
 
     def _confirm(self,key):
         """True once the same in-position verdict has held for RETRIEVAL_CONFIRM_FRAMES

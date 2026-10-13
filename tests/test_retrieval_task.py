@@ -148,3 +148,24 @@ def test_abort_drops_the_shoulder_pair():
     rt=RetrievalTask(types.SimpleNamespace(stop=lambda: None),arm,types.SimpleNamespace())
     rt.state='GRASP'; rt.abort('voice stop')
     assert dropped==[1] and rt.state=='ABORTED'
+
+
+def test_pick_lineup_rotates_big_errors_and_aims_the_base_for_small_ones():
+    import types,retrieval_task
+    calls=[]
+    s=types.SimpleNamespace(timed_move_active=False,forward_for=lambda t,v: calls.append(('fwd',v)),
+        reverse_for=lambda t,v: calls.append('back'),stop=lambda: calls.append('stop'))
+    W,H=1280,720
+    def task(cx,cy):
+        det={'class':'sports ball','conf':0.9,'bbox':(cx*W-30,cy*H-30,cx*W+30,cy*H+30),'frame_w':W,'frame_h':H}
+        rt=RetrievalTask(s,None,types.SimpleNamespace(detect=lambda classes=None:[det]))
+        rt.start('sports ball',pick_only=True); rt.state='APPROACH'
+        return rt
+    tx,ty=config.RETRIEVAL_TARGET_XY
+    rt=task(tx+0.4,ty); rt._approach({'front':999},0)
+    assert rt.turn_request<0                                   # object right of target -> turn right
+    calls.clear(); rt=task(tx,0.5); rt._approach({'front':999},0)
+    assert calls==[('fwd',config.RETRIEVAL_CREEP_SPEED)]       # creep at a speed that breaks away
+    rt=task(tx+0.1,ty); rt._approach({'front':999},0); rt._approach({'front':999},0)
+    assert rt.state=='GRASP' and rt._reach_pose['base']==retrieval_task.base_for_x(tx+0.1)
+    assert retrieval_task.base_for_x(0.26)==2200 and 2100<retrieval_task.base_for_x(0.35)<2200
