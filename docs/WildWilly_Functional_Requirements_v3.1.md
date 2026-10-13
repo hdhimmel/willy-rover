@@ -2232,8 +2232,9 @@ and Master Hardware Design §8 / §16.11 carry the same table.
 
 -   **FR-800-001, heading.** ✅ **Built 2026-10-02 (`20fc3ab`), not yet run on the
     rover:** `sensors.IMU.heading` exposes yaw (−180..180°) from the fused quaternion.
-    With the ROTATION_VECTOR report it is magnetometer-referenced, so anything
-    magnetic on the chassis biases it. **Rotation mode (FR-600-005) steers by it, live
+    Since 2026-10-13 it uses the GAME_ROTATION_VECTOR report (no magnetometer): the
+    magnetometer-referenced vector jumped ~70° as the motors spun up and a line-up turn ran
+    away. **Rotation mode (FR-600-005) steers by it, live
     2026-10-07** (`IMU_YAW_SIGN` +1). *(2026-10-02: odometry
     can take its rotation from it — FR-1000-003 — but `ODOM_USE_IMU_HEADING=False` until
     the yaw sign is checked on the rover, so as configured it is still unused.)*
@@ -3826,6 +3827,13 @@ guaranteed-save requirement in particular had none anywhere in the document.
     (per-joint limits, the shoulder pair) under the every-tick arm current guard; the idle
     release is held off while teaching. `teach.py`; tests `tests/test_teach.py`. **Not yet
     run on the rover.**
+-   **FR-1700, pick-up by voice — first live success 2026-10-13.** "Hey Willie, pick up the red
+    ball" found the ball (by colour: YOLO had labelled the half-visible ball "mouse"), lined it up
+    with the arm base, hovered, lowered, gripped on feedback, lifted and said so; owner: "the ball
+    is now perfectly in his hand". A second run tripped the arm current guard on the lift fold
+    (both shoulder servos now hold during it). The full fetch (`ENABLE_RETRIEVAL_TASK`, driving
+    and hand-off) stays off; all arm plans are refused until the shoulder is rebuilt and re-mapped
+    (2026-10-15).
 -   **FR-1900-012 (added 2026-10-13, owner): multi-step routines.** FR-1900-007's
     *"when I say X, do Y"* accepts several steps: *"when I say goodnight, do stow your arm,
     then go home, then wave"*. Every step must be a command the fast path understands —

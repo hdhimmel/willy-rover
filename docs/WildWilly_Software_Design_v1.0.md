@@ -863,7 +863,8 @@ other five wheels' scale have not been checked by driving a measured distance (�
 `ENCODER_SIGN` (left +1, right −1) is applied in `odometry.py`; `Encoders.counts` stays
 raw (unwrapped across 32 bits, re-based on a Pico reboot). Rotation can come from the IMU
 yaw delta (`ODOM_USE_IMU_HEADING`, **False** until the yaw sign is checked; `IMU_YAW_SIGN`).
-`IMU.heading` uses the BNO085 ROTATION_VECTOR report, which is magnetometer-referenced.
+`IMU.heading` uses the BNO085 GAME_ROTATION_VECTOR report (gyro + accel, no magnetometer, since
+2026-10-13 — the magnetometer heading jumped ~70° when the motors spun up).
 Do not calibrate counts per revolution by hand-turning a wheel — the hub slips on the
 shaft when back-driven; `scripts/encoder_calibration.py` is invalid on this rover.
 
@@ -1041,9 +1042,10 @@ Bench procedures with blank result fields are in `docs/WildWilly_Bench_Test_Proc
    BNO085 report rate is ~5 Hz, cause unknown.
 5. **Stair standoff drift** — measure dead-reckoning drift on the floor before relying on
    the 15 cm margin.
-6. **Arm per-joint limits** — run `arm_jog.py` and record real limits (S-4). Re-measure the
-   wave and rest shoulder values on the new servo pair (2026-10-12), then set
-   `ARM_SHOULDER_POSES_VERIFIED=True`.
+6. **Arm shoulder rebuild (2026-10-15)** — CH2 decoupled on 10-13; both shoulder servos being
+   replaced with holding servos on metal horns. Re-map with the cameras, then set
+   `ARM_SHOULDER_POSES_VERIFIED=True` (all arm plans refused until then).
+6a. **Rotation overshoot** — 30° asked, ~76° turned (10-13). Slow small spins / faster IMU.
 7. **Gripper feedback curve** — run `scripts/grip_feedback_curve.py` empty and loaded, store the
    curve, consult it in `RetrievalTask._await_confirm()` (S-5).
 8. **Steering** — steering servos are centred and held; kinematics (crab, point-turn,
@@ -1073,6 +1075,29 @@ Bench procedures with blank result fields are in `docs/WildWilly_Bench_Test_Proc
 ---
 
 ## Arm control
+
+**Arm state at end of 2026-10-13 (read this before moving the arm).** The CH2 shoulder servo is
+**decoupled from the joint**: swept 700→1700 µs with CH3 off, the arm did not move (camera frames
+identical, 0.07–0.38 A) — most likely stripped when the arm was driven against his front. CH3
+alone does move the shoulder. The owner-set stow (arm folded along the top) was recorded as
+shoulder 500 / elbow 2050, but 500 was CH2's pulse while the arm was placed by hand, so it drives
+nothing. **On 2026-10-15 both shoulder servos (CH2, CH3) are being replaced with servos that hold
+position unpowered, on metal horns.** After that: map the shoulder from scratch with the front
+and laptop cameras (stow, upright, reach, base-turn height), add the shoulder to
+`ARM_HOLDS_UNPOWERED`, bump `ARM_POSE_EPOCH`, then set `ARM_SHOULDER_POSES_VERIFIED=True`. Until
+then every arm plan (wave, stow, reach, pick-up, knock) is refused.
+
+**Pick-up by voice (built and run live 2026-10-13).** "Pick up the red ball": the object is found
+by the detector, or — when the spoken name starts with a colour and YOLO misses it — by the
+largest blob of that colour (`ObjectDetector.detect_colour`). If it is not at a taught reach spot,
+`RetrievalTask` runs in `pick_only` mode: line up by image position (`RETRIEVAL_TARGET_XY`, his
+left, where the front camera can see the hand), body turns off (`RETRIEVAL_ROTATE_X=1.0`), the arm
+base aims (`RETRIEVAL_BASE_X_MAP`), creep at `SPEED_SLOW`, two confirming frames; then reach,
+grip on feedback, lift, end HOLDING until "let go". The reach turns the base only with the elbow
+folded and the shoulder raised (`grip.fold_first`, `grip.turn_base`) and lowers the jaws onto the
+object by opening the elbow, pausing at a hover height from the object's image size. First live
+run: the ball was "perfectly in his hand" (owner). "Do you see a red ball?" is answered from the
+camera (`see_object`). Every spoken answer is logged as `Say: ...` for remote testing.
 
 `arm.py` rests on three facts measured on the hardware.
 
@@ -1111,10 +1136,10 @@ arm moves: sampling after a move reads idle current, and a threshold checked aft
 protects nothing. Settled current is what matters — a joint at position relaxes to
 0.05–0.4 A; one that stays higher is still fighting.
 
-**Presets.** `ARM_POSE_WAVE_HELLO` = elbow 1000 (fully open on the DS3225), shoulder 750
-(old servo — not yet re-measured), wrist pitch 1500. `ARM_POSE_REST` (re-measured 2026-10-13
-on the new shoulder pair and DS3225 elbow) = elbow 2050, shoulder 1750, wrist pitch 2300.
-Elbow limits 1000–2050 (`ARM_JOINT_LIMITS_US`).
+**Presets.** All shoulder values are void until the 2026-10-15 shoulder rebuild is re-mapped
+(see the note at the top of this section). Elbow (DS3225): 2050 = folded along the top, 1000 =
+open; limits 800–2050 (`ARM_JOINT_LIMITS_US`), 1300–1850 while reaching down
+(`ARM_COUPLED_LIMITS_US`). Wrist pitch free 1075–1475.
 
 **Wave** (`brain.py::_wave_plan`): elbow to 1000, shoulder stepped to 750, wrist pitch
 oscillated between `ARM_WAVE_WRIST_US` (1380/1620) for `ARM_WAVE_CYCLES` (4) at

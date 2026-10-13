@@ -76,6 +76,8 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
 - **"What are you doing?"** / **"What are you up to?"** — one short sentence: exploring,
   turning, on his way somewhere, waiting, or stopped and why. Works even while he's moving.
 - **"What do you see?"** / **"What are you looking at?"** — up to three things he recognises.
+- **"Do you see a red ball?"** / **"Is there a cup in front of you?"** — he checks his camera and
+  says yes and where (left, right, in front), or no and what he does see.
 - **"What time is it?"** / **"What's the date?"**
 - **"Where are you?"** — the room he's in, and with GPS (outdoors only — it needs sky) how far
   and which way from home. By email he replies with a map link.
@@ -168,6 +170,10 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
   Later, **"pose knock"** (or *"show me pose knock"*) moves the arm back there. **"What poses do
   you know"** lists them; **"forget the pose knock"** deletes one. Moving his arm by hand teaches
   him nothing — he only knows where he moved it himself.
+- **Picking things up:** *"Pick up the red ball"* — he finds it (by colour if he can't name it),
+  lines it up on his left side, reaches down, grips and lifts it, and holds it until you say
+  **"let go"**. *(Off until 2026-10-15: the shoulder servos are being replaced; he says his arm
+  needs relearning.)*
 - **Teaching him to reach things:** put a cup, bottle or ball (he can't recognise a tape roll) on
   the floor in front of him with his arm put away and say **"learn this spot"**. He looks, reaches
   out, and starts arm teaching: move it with "shoulder down", "elbow up" and so on until the hand

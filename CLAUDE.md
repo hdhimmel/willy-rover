@@ -235,10 +235,12 @@ Other header pins:
   `center_all()` skips it.
 - **Open the elbow before moving the shoulder**, or the arm strikes the top of Willy.
   Step the shoulder in 50 µs steps.
-- **CH2 and CH3 are the shoulder's two servos, always driven with the SAME pulse** (`arm.py`
-  does both). Never mirror them and never drive one alone — they fight. Shoulder values from
-  before the 2026-10-12 servo change are invalid; `ARM_SHOULDER_POSES_VERIFIED=False` blocks
-  wave/stow/home/reach/knock until they are re-measured.
+- **Shoulder (CH2 + CH3): being rebuilt.** On 2026-10-13 CH2 was found decoupled from the joint
+  (no motion over 700–1700 µs); both servos are being replaced with holding servos on metal horns
+  (2026-10-15). `ARM_SHOULDER_POSES_VERIFIED=False` refuses every arm plan until the shoulder is
+  re-mapped with the cameras. When paired, CH2 and CH3 take the SAME pulse, never mirrored.
+- **Look before every arm move** (front camera + laptop webcam), and never turn the base with the
+  hand low: fold the elbow and raise the shoulder first (owner rule, 10-13).
 - **A released arm falls.** Holding a pose is nearly free; moving costs amps.
 - **Bump `ARM_POSE_EPOCH` after any arm servo or horn change** — voice-taught poses
   (`teach.py`) are pulse values for the hardware they were taught on.

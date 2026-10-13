@@ -1021,8 +1021,11 @@ midpoint (the first reading after the swap was 1.72 V, taken mid-install).A read
 
 ### 6.3 IMU
 
-BNO085 at 0x4A, on-chip SH-2 fusion. Software reads the ROTATION_VECTOR report (heading is
-magnetometer-referenced, so the motors can bias it) and the accelerometer.
+BNO085 at 0x4A, on-chip SH-2 fusion. Software reads the **GAME_ROTATION_VECTOR** report
+(gyro + accelerometer, no magnetometer; since 2026-10-13) and the accelerometer. The
+magnetometer-fused ROTATION_VECTOR jumped ~70° the instant the drive motors spun up (their
+current bends the field at the IMU), which made a rotation "finish" on its first tick. The game
+vector's heading is relative (it drifts slowly, does not jump) — what turning needs.
 
 | Pin | Connection |
 |-----|------------|
@@ -1302,6 +1305,17 @@ only turning mechanism.
 ---
 
 ## 8. Arm
+
+**Arm state at end of 2026-10-13 (read this before moving the arm).** The CH2 shoulder servo is
+**decoupled from the joint**: swept 700→1700 µs with CH3 off, the arm did not move (camera frames
+identical, 0.07–0.38 A) — most likely stripped when the arm was driven against his front. CH3
+alone does move the shoulder. The owner-set stow (arm folded along the top) was recorded as
+shoulder 500 / elbow 2050, but 500 was CH2's pulse while the arm was placed by hand, so it drives
+nothing. **On 2026-10-15 both shoulder servos (CH2, CH3) are being replaced with servos that hold
+position unpowered, on metal horns.** After that: map the shoulder from scratch with the front
+and laptop cameras (stow, upright, reach, base-turn height), add the shoulder to
+`ARM_HOLDS_UNPOWERED`, bump `ARM_POSE_EPOCH`, then set `ARM_SHOULDER_POSES_VERIFIED=True`. Until
+then every arm plan (wave, stow, reach, pick-up, knock) is refused.
 
 5-DOF plus gripper, 7 servos on PCA9685 0x43, V+ from R3 6 V. Servos plug into 3-pin
 channel headers through a bulkhead connector, so the arm detaches without desoldering.
@@ -1606,9 +1620,13 @@ Item numbers are stable; closed items are removed, not renumbered.
 19. **Steering uncalibrated** — per-unit servo range and centre; kinematics deferred.
 20. **ToF floor profile not captured** — `scripts/calibrate_tof_floor.py` on clear floor.
 21. *(closed 2026-10-02 — all three sonars working, owner-confirmed.)*
-22. **Arm per-joint limits** — record with `arm_jog.py`; define a stow pose and a safe elbow
-    centre. **Re-measure the wave and rest shoulder values on the new servo pair (2026-10-12)**,
-    then set `ARM_SHOULDER_POSES_VERIFIED=True`.
+22. **Arm shoulder rebuild (2026-10-15)** — CH2 shoulder servo decoupled on 10-13; both shoulder
+    servos to be replaced with holding servos on metal horns. Then re-map stow / upright / reach /
+    base-turn with the cameras and set `ARM_SHOULDER_POSES_VERIFIED=True` (see §8 note).
+22a. **Rotation overshoot** — "turn left 30°" turned ~76° on 10-13 (full-duty spin, BNO085 ~5 Hz):
+    slow the spin for small turns and/or raise the IMU report rate.
+22b. **rf encoder** reads ~0 while turning; left out of the stall check (`STALL_IGNORE_WHEELS`).
+22c. **Rear sonar** reported "not updated" for the whole 10-13 session (SONAR_FAULT, rear).
 23. **Odometry and IMU** — drive a measured straight line (rolling diameter, other five
     wheels' scale); check the IMU yaw sign; BNO085 report rate ~5 Hz, cause unknown.
 24. **Unconfirmed as-built details** — which header pins the display's 5 V tap uses and what
