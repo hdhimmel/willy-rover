@@ -31,7 +31,7 @@ import threading
 I=sensors.IMU.__new__(sensors.IMU); I._lock=threading.Lock(); I._last_q=None
 import time as _t; I._last_change=_t.monotonic()
 h=math.radians(90)/2
-I._bno=types.SimpleNamespace(quaternion=(0.0,0.0,math.sin(h),math.cos(h)))
+I._bno=types.SimpleNamespace(game_quaternion=(0.0,0.0,math.sin(h),math.cos(h)))   # game vector since 10-13
 I._update()
 assert abs(I.heading-90.0)<0.5, I.heading
 

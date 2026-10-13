@@ -975,7 +975,7 @@ class RoverBrain:
             self.steer_override.end('release','voice stop')
             self.routine.abandon('voice stop')   # stop means the rest of the routine too
             if self.teacher.active: self.teacher.end()
-            self._release_after_seq=False; self._pick=None
+            self._release_after_seq=False; self._pick=None; self._pick_after_stow=None
             try: self.arm.drop_pair()              # outside review 2026-10-13
             except Exception: pass
             self._abandon_stuck_if_active()
@@ -1953,7 +1953,11 @@ class RoverBrain:
                 self._pick_tick(); return
             if getattr(self,'_release_after_seq',False):
                 self._release_after_seq=False; self.arm.release()   # stowed: let it settle
-            self._go('IDLE'); return
+            self._go('IDLE')
+            nxt=getattr(self,'_pick_after_stow',None)
+            if nxt is not None:
+                self._pick_after_stow=None; self._start_pick_lineup(*nxt)
+            return
         joint,us,delay=self._wave_seq[self._wave_step]
         self.arm.set_pulse(joint,us)
         self._wave_step+=1
@@ -2022,11 +2026,13 @@ class RoverBrain:
                 # the camera can see it -- the retrieval task's line-up, then reach/grip/lift; no
                 # hand-off (pick_only). Motion goes through SafetyController as always.
                 w0=(self._spoken_object or '').split()
-                ok,msg=self.retrieval.start(det['class'],pick_only=True,
-                                            colour=w0[0] if w0 and w0[0] in getattr(self.detector,'_COLOURS',{}) else None)
-                if ok:
-                    self._say(f"Lining up on the {a.get('object')}."); self._go('RETRIEVE')
-                else: self._say("I'm busy with something else.")
+                colour=w0[0] if w0 and w0[0] in getattr(self.detector,'_COLOURS',{}) else None
+                if not self._at_rest():
+                    # owner 10-13: start from the stowed arm -- stow first, then line up
+                    self._pick_after_stow=(det['class'],colour,a.get('object'))
+                    self._say(f"Putting my arm away first, then I'll get the {a.get('object')}.")
+                    self._stow_and_release('before a pick-up'); return
+                self._start_pick_lineup(det['class'],colour,a.get('object'))
                 return
             log.info(f'Pick up {det["class"]} at {xy} -> {pose}')
             plan=grip.reach_plan(config.ARM_SERVO_CENTER_US,self._shoulder_now(),self._arm_now('elbow'),pose=pose)
@@ -2107,6 +2113,12 @@ class RoverBrain:
         log.info(f'Stowing the arm ({why})')
         self._release_after_seq=True
         self._start_arm_sequence(self._rest_plan(self._shoulder_now(),self._arm_now('elbow')))
+
+    def _start_pick_lineup(self,cls,colour,spoken):
+        ok,msg=self.retrieval.start(cls,pick_only=True,colour=colour)
+        if ok:
+            self._say(f"Lining up on the {spoken}."); self._go('RETRIEVE')
+        else: self._say("I'm busy with something else.")
 
     def _pick_tick(self):
         """After the reach plan of a pick-up: close with feedback, then lift. True while still busy

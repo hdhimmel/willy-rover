@@ -5,7 +5,7 @@ if not config.SIMULATE_HARDWARE:
     import board, busio
     import adafruit_bno08x
     from adafruit_bno08x.i2c import BNO08X_I2C
-    from adafruit_bno08x import BNO_REPORT_ROTATION_VECTOR,BNO_REPORT_ACCELEROMETER
+    from adafruit_bno08x import BNO_REPORT_GAME_ROTATION_VECTOR,BNO_REPORT_ACCELEROMETER
     # RPi.GPIO and the MCP23017 both left on 2026-09-30 (§4.7). Nothing in this module
     # drives a Pi GPIO any more: the sonars answer through Pico B and the encoders
     # through Pico A. GP4, GP5 and GP13 -- the pins Sonar used to time -- are TXD2,
@@ -335,7 +335,11 @@ class IMU:
             return None
     def _make_bno(self):
         b=BNO08X_I2C(self._i2c,reset=None,address=config.IMU_ADDR)
-        b.enable_feature(BNO_REPORT_ROTATION_VECTOR)
+        # GAME rotation vector (gyro+accel, NO magnetometer), 2026-10-13: the magnetometer-fused
+        # vector jumped -70 deg the instant the drive motors spun up for a rotation (their current
+        # bends the field at the IMU), so an 11 deg turn "finished" on the first tick and he spun
+        # on uncontrolled. Turning needs relative yaw, which the game vector gives without jumps.
+        b.enable_feature(BNO_REPORT_GAME_ROTATION_VECTOR)
         b.enable_feature(BNO_REPORT_ACCELEROMETER)   # freshness signal, see config.IMU_STALE_S
         return b
     def _poll_once(self):
@@ -374,7 +378,7 @@ class IMU:
             with self._lock: self._pitch=0.0; self._roll=0.0; self._yaw=0.0  # simulated level chassis
             self._last_ok=time.perf_counter(); return
         if self._bno is None: raise RuntimeError('BNO085 not started')   # -> _poll_once recovery
-        q=self._bno.quaternion; now=time.monotonic()
+        q=self._bno.game_quaternion; now=time.monotonic()
         try: sig=(q,self._bno.acceleration)   # raw accel noise moves even when he is still
         except Exception: sig=(q,None)
         if sig!=self._last_q:
