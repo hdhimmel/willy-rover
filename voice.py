@@ -249,7 +249,7 @@ _POSE_FORGET=re.compile(r"forget (?:the |your )?(?:pose|position) "+_NAME,re.I)
 _REACH_LEARN=re.compile(r"(?:learn|teach me|teach you) (?:this|that|a|the|a new|the new) (?:reach )?(?:spot|place|position)|learn (?:to reach|reaching)(?: this| that| it)?",re.I)
 _REACH_SAVE=re.compile(r"(?:remember|save) (?:this|that|the) reach|that'?s the reach|got it,? remember (?:this|that) reach",re.I)
 _REACH_FORGET=re.compile(r"forget (?:all )?(?:your |the )?reach(?:es| spots)?",re.I)
-_REACH_TOUCH=re.compile(r"(?:touch|reach for|reach) (?:the |that |this )?([a-z][a-z ]{1,20}?)",re.I)
+_REACH_TOUCH=re.compile(r"(?:(?:can|could|would) you |please )?(?:touch|reach for|reach) (?:the |that |this |a )?([a-z][a-z ]{1,20}?)",re.I)
 _POSE_LIST=re.compile(r"what (?:poses|positions) do you know|list (?:your )?(?:poses|positions)",re.I)
 _STEP_SIZE={'bigger':'big','larger':'big','smaller':'small','tiny':'small','small':'small','normal':'normal'}
 
@@ -1204,6 +1204,15 @@ class VoicePipeline:
         if words and not any(_whole_word(w,low) for w in words):
             log.info(f'Local model said {name!r} for "{text}" with none of its words -- not understood')
             return result.payload,0.0
+        # 2026-10-13 live: "Can you see a white ball of yarn?" came back as come_to_me {"room":"kitchen"}
+        # -- the model copied the prompt's example. A place/name argument that is not in what was
+        # said is invented, so the whole answer is "not understood". (Objects are left alone: the
+        # model may normalise "the newspaper" to "newspaper", which is still in the words.)
+        for k in ('room','name','target','object'):
+            v=((result.payload or {}).get('args') or {}).get(k)
+            if isinstance(v,str) and v.strip() and not all(_whole_word(w,low) for w in re.findall(r"[a-z]+",v.lower())):
+                log.info(f'Local model invented {k}={v!r} for "{text}" -- not understood')
+                return result.payload,0.0
         log.info(f'Local model intent: {name!r} ({result.intent_confidence})')
         return result.payload,result.intent_confidence
 

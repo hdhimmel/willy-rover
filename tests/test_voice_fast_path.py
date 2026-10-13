@@ -107,3 +107,20 @@ def test_arm_stow_phrasings_reach_the_arm_stow_intent(utterance):
 ])
 def test_negated_arm_commands_fall_through(utterance):
     assert _intent(utterance) not in ('arm_home','arm_stow')
+
+
+def test_local_model_invented_room_is_not_understood(monkeypatch):
+    # 2026-10-13 live: "Can you see a white ball of yarn?" -> come_to_me {"room":"kitchen"}
+    import types,voice
+    v=object.__new__(voice.VoicePipeline)
+    v.memory=None; v.current_person=lambda: None
+    res=types.SimpleNamespace(parse_success=True,intent_confidence=0.9,reason='',
+        payload={'intent':'come_to_me','args':{'room':'kitchen'},'reply':''})
+    v._local_ai=types.SimpleNamespace(ask_sync=lambda *a,**k: res)
+    assert v._interpret_local('Can you see a white ball of yarn?')[1]==0.0
+    assert v._interpret_local("I'm in the kitchen, come to me")[1]==0.9
+
+def test_can_you_touch_is_a_reach():
+    import voice
+    v=object.__new__(voice.VoicePipeline)
+    assert v._fast_path('can you touch the cup')['intent']=='reach_touch'
