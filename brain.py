@@ -1341,6 +1341,7 @@ class RoverBrain:
             self._reply_to=None
             try: cb(text)
             except Exception as e: log.warning(f'Remote reply callback failed: {e}')
+        log.info(f'Say: {text}')    # 2026-10-13: the answers are in the log, for remote testing
         if self.voice.available: self.voice.speak(text)
 
     def _drain_voice_in_selftest_fault(self):
