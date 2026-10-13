@@ -23,6 +23,7 @@ from steer_override import SteerOverride
 import avoidance
 import grip
 import teach
+import battery_log
 from email_client import EmailClient
 from remote_cmd import RemoteCommandServer
 from feature_requests import FeatureRequests
@@ -304,7 +305,11 @@ class RoverBrain:
                                say=self._say)
         self.steer_override=SteerOverride(self.steering)   # FR-600-004
         self.teacher=teach.ArmTeacher()      # arm poses taught by voice (2026-10-13)
+        self._stow_requested=False; self._release_after_seq=False
+        try: self.arm.on_idle=self._request_stow   # owner 2026-10-13: always back to stow
+        except Exception: pass
         self.routine=teach.RoutineRunner()   # "when I say X, do A, then B" (2026-10-13)
+        self.battery_log=battery_log.BatteryLogger(self._battery_reading) if config.ENABLE_BATTERY_LOG else None
         # FR-2300 GPS (2026-10-11). Optional: absent or fixless never blocks anything (FR-2300-005).
         self.gps=None
         if config.ENABLE_GPS and not config.SIMULATE_HARDWARE:
@@ -952,6 +957,7 @@ class RoverBrain:
             return
         self._thermal_tick()
         self._gps_tick()
+        if self.battery_log is not None: self.battery_log.tick()   # owner 2026-10-13: every 2 h
         self.steer_override.tick(self._state)   # FR-600-004: held in IDLE, ended on leaving it
         if self.voice.stop_requested.is_set():
             # Checked before any Directive gating below — see voice.py's stop_requested docstring.
@@ -1614,8 +1620,7 @@ class RoverBrain:
             # Stow/home = the REST pose, reached in steps (shoulder first, 50 us at a time, then
             # elbow, then wrist) through the same tick-serviced sequence as the wave. Used to be
             # center_all(), which jumped the shoulder to 1500 in one step.
-            self._start_arm_sequence(self._rest_plan(self._shoulder_now(),
-                                     int(self.arm.pulse('elbow')) if self.arm.was_driven('elbow') else None))
+            self._stow_and_release('asked')
             self._say('Putting my arm away.')
         elif cmd.get('intent')=='wave':
             self._start_wave()
@@ -1804,43 +1809,53 @@ class RoverBrain:
     # open the elbow BEFORE moving the shoulder (or the arm strikes the top of Willy), shoulder in
     # ARM_WAVE_APPROACH_STEP_US steps (a single jump slams the joint), wave the wrist PITCH, then
     # come back in reverse: shoulder down first, elbow last. FR-700-002.
+    # 2026-10-13, REWRITTEN for the rebuilt arm (shoulder pair, DS3225 elbow) after measuring on the
+    # rover with the owner. Stow is LYING BACK OVER THE TOP, and it can only be reached in one
+    # order: stand the arm up (shoulder ARM_STOW_UPRIGHT_US), fold the elbow there, then lay the
+    # shoulder back. Folding the elbow with the shoulder already back drove the forearm into his
+    # body (3.3 A); laying the shoulder back with the elbow open swings the hand into his front.
+    # The wave is the same path in reverse: stand up folded, open the elbow, wave, sway the base,
+    # then the stow path. Joints step ARM_WAVE_APPROACH_STEP_US at a time (a jump slams them).
     @staticmethod
-    def _wave_plan(shoulder_from):
-        p=config.ARM_POSE_WAVE_HELLO; r=config.ARM_POSE_REST; step=config.ARM_WAVE_APPROACH_STEP_US
-        def ramp(a,b):
-            d=step if b>a else -step
-            return [('shoulder',v,config.ARM_WAVE_STEP_S) for v in range(a+d,b,d)]+[('shoulder',b,0.3)]
-        plan=[('elbow',p['elbow'],0.6)]
-        plan+=ramp(shoulder_from,p['shoulder'])
+    def _ramp(joint,a,b,last_delay=0.3):
+        step=config.ARM_WAVE_APPROACH_STEP_US
+        if a==b: return [(joint,b,last_delay)]
+        d=step if b>a else -step
+        return [(joint,v,config.ARM_WAVE_STEP_S) for v in range(a+d,b,d)]+[(joint,b,last_delay)]
+
+    @staticmethod
+    def _wave_plan(shoulder_from,elbow_from=None):
+        p=config.ARM_POSE_WAVE_HELLO; up=config.ARM_STOW_UPRIGHT_US
+        ramp=RoverBrain._ramp
+        plan=[('wrist_pitch',config.ARM_REST_WRIST_US,0.3)]
+        plan+=ramp('shoulder',shoulder_from,up)                       # stand up, still folded
+        plan+=ramp('elbow',config.ARM_POSE_REST['elbow'] if elbow_from is None else elbow_from,p['elbow'])
+        plan+=ramp('shoulder',up,p['shoulder'])
         plan+=[('wrist_pitch',p['wrist_pitch'],0.3)]
         lo,hi=config.ARM_WAVE_WRIST_US
         for _ in range(config.ARM_WAVE_CYCLES):
             plan+=[('wrist_pitch',lo,config.ARM_WAVE_LEG_S),('wrist_pitch',hi,config.ARM_WAVE_LEG_S)]
         plan+=[('wrist_pitch',p['wrist_pitch'],0.3)]
-        plan+=ramp(p['shoulder'],r['shoulder'])
-        plan+=[('elbow',min(r['elbow'],config.ARM_SERVO_MAX_US),0.6),('wrist_pitch',config.ARM_REST_WRIST_US,0.0)]
+        # owner 2026-10-13: the base turns left and right a few times too (bench-tested 1300/1700).
+        c=config.ARM_SERVO_CENTER_US; lo,hi=config.ARM_WAVE_BASE_US
+        plan+=[('base',c,0.6)]
+        for _ in range(config.ARM_WAVE_BASE_CYCLES):
+            plan+=[('base',lo,config.ARM_WAVE_BASE_LEG_S),('base',hi,config.ARM_WAVE_BASE_LEG_S)]
+        plan+=[('base',c,0.6)]
+        plan+=RoverBrain._rest_plan(p['shoulder'],p['elbow'])
         return plan
 
     @staticmethod
     def _rest_plan(shoulder_from,elbow_from=None):
-        """Back to ARM_POSE_REST: shoulder in steps, then elbow, then the low-current wrist.
-
-        FR-700-002, stow from ANY starting configuration. Owner rule: the elbow must be open
-        before the shoulder moves, or the arm strikes the top of Willy. Coming back from the
-        wave it already is; from anywhere else (arm_jog, a half-finished sequence) it may not
-        be. So if the shoulder has to move and the elbow is not known to be at least as open as
-        the wave pose's, open it first -- the same first step the hardware-verified wave takes.
-        elbow_from=None means not driven this boot: position unknown, treated as closed."""
-        r=config.ARM_POSE_REST; step=config.ARM_WAVE_APPROACH_STEP_US
-        open_us=config.ARM_POSE_WAVE_HELLO['elbow']
-        plan=[]
-        if shoulder_from!=r['shoulder'] and (elbow_from is None or elbow_from>open_us):
-            plan.append(('elbow',open_us,0.6))
-        d=step if r['shoulder']>shoulder_from else -step
-        plan+=[('shoulder',v,config.ARM_WAVE_STEP_S) for v in range(shoulder_from+d,r['shoulder'],d)]
-        plan+=[('shoulder',r['shoulder'],0.3),
-               ('elbow',min(r['elbow'],config.ARM_SERVO_MAX_US),0.6),
-               ('wrist_pitch',config.ARM_REST_WRIST_US,0.0)]
+        """Back to ARM_POSE_REST (stow, lying back over the top) from anywhere: wrist to its rest
+        value, shoulder to upright, elbow folded there, then the shoulder laid back. FR-700-002.
+        elbow_from=None: the elbow's position is unknown (not driven this boot) -- it is sent
+        straight to its rest value while the arm is upright, the one place that move is safe."""
+        r=config.ARM_POSE_REST; up=config.ARM_STOW_UPRIGHT_US; ramp=RoverBrain._ramp
+        plan=[('wrist_pitch',config.ARM_REST_WRIST_US,0.3)]
+        plan+=ramp('shoulder',shoulder_from,up)
+        plan+=([('elbow',r['elbow'],0.6)] if elbow_from is None else ramp('elbow',elbow_from,r['elbow']))
+        plan+=ramp('shoulder',up,r['shoulder'])
         return plan
 
     def _shoulder_now(self):
@@ -1863,7 +1878,7 @@ class RoverBrain:
     def _start_wave(self):
         if not self._arm_poses_ok(): return
         if self.voice.available: self.voice.speak('Hello!')
-        self._start_arm_sequence(self._wave_plan(self._shoulder_now()))
+        self._start_arm_sequence(self._wave_plan(self._shoulder_now(),self._arm_now('elbow')))
 
     def _wave(self,d,tilt):
         now=time.time()
@@ -1873,7 +1888,10 @@ class RoverBrain:
         joint,us,delay=self._wave_seq[self._wave_step]
         self.arm.set_pulse(joint,us)
         self._wave_step+=1
-        if self._wave_step>=len(self._wave_seq): self._go('IDLE')
+        if self._wave_step>=len(self._wave_seq):
+            if getattr(self,'_release_after_seq',False):
+                self._release_after_seq=False; self.arm.release()   # stowed: let it settle
+            self._go('IDLE')
         else: self._wave_deadline=now+delay
 
     # ---- teaching (teach.py, 2026-10-13) ---------------------------------------------------
@@ -1925,7 +1943,34 @@ class RoverBrain:
             names=sorted(teach.load_poses())
             self._say(('I know '+', '.join(names)+'.') if names else "I haven't learned any arm poses yet.")
 
+    def _battery_reading(self):
+        r={'volts':float(self.adc.battery_volts),'percent':int(self.adc.battery_pct)}
+        try:
+            bus=self.current.rail('bus_12v'); r['bus_volts']=float(bus['voltage_v']); r['bus_amps']=float(bus['current_a'])
+        except Exception: pass
+        return r
+
+    def _request_stow(self):
+        """Arm idle timer (arm thread): only sets a flag; _teach_tick() acts on it."""
+        self._stow_requested=True
+
+    def _at_rest(self):
+        r=config.ARM_POSE_REST
+        return all(self._arm_now(j)==r[j] for j in ('shoulder','elbow'))
+
+    def _stow_and_release(self,why):
+        """Back to the stow pose in steps, then release. Never just releases where it is."""
+        if self._at_rest():
+            self.arm.release(); return
+        log.info(f'Stowing the arm ({why})')
+        self._release_after_seq=True
+        self._start_arm_sequence(self._rest_plan(self._shoulder_now(),self._arm_now('elbow')))
+
     def _teach_tick(self):
+        if getattr(self,'_stow_requested',False) and self._state=='IDLE' and not self.teacher.active:
+            self._stow_requested=False
+            if config.ARM_SHOULDER_POSES_VERIFIED: self._stow_and_release('idle')
+            else: self.arm.release()
         if self.teacher.active:
             if self.teacher.timed_out():
                 self.teacher.end(); self._say("I've stopped teaching my arm.")
@@ -2237,11 +2282,22 @@ class RoverBrain:
             self._arm_over_since=now; return
         if now-self._arm_over_since>=config.ARM_CURRENT_LIMIT_S:
             self._arm_over_since=None
-            self.arm.release()
-            log_event(log,'ARM_OVERCURRENT',severity='error',subsystem='arm',status='released',
+            # 2026-10-13 (owner): never drop the arm -- stow it. Only if it is still straining
+            # WHILE stowing (or the poses are not verified) is it released in place, to save the
+            # servo.
+            stowing=self._state=='WAVE' and getattr(self,'_release_after_seq',False)
+            if config.ARM_SHOULDER_POSES_VERIFIED and not stowing:
+                self._stow_and_release('over-current')
+                status='stowing'; said='My arm was straining, so I am putting it away.'
+            else:
+                self._release_after_seq=False
+                self.arm.release()
+                if self._state=='WAVE': self._go('IDLE')
+                status='released'; said='My arm was straining, so I let it go limp.'
+            log_event(log,'ARM_OVERCURRENT',severity='error',subsystem='arm',status=status,
                       amps=f'{amps:.2f}',limit_a=config.ARM_CURRENT_LIMIT_A,
                       limit_s=config.ARM_CURRENT_LIMIT_S)
-            if self.voice.available: self.voice.speak('My arm was straining, so I let it go limp.')
+            if self.voice.available: self.voice.speak(said)
 
     def _check_sonar_channels(self):
         """FR-800-004: report a dead sonar channel instead of letting it sit silently at 0.0.

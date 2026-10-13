@@ -72,6 +72,7 @@ stubbed, disabled, approximate or not yet run on the rover, it says so.
 | `privacy.py` | 59 | Mic/camera disable flag; cloud-send notes; file purge |
 | `steer_override.py` | 65 | FR-600-004: parked steering override, held in IDLE, ended on leaving it |
 | `knock.py` | 70 | FR-1000-006: fixed timed knock step list and player; off until `ARM_POSE_KNOCK` is measured |
+| `battery_log.py` | 139 | Battery log: every 2 h volts/%/hours-running-since-charge to a CSV, pushed to the `battery-log` branch, posted to HA if a token exists |
 | `teach.py` | 137 | FR-1900-011/012: arm poses taught by voice (jog, save, replay, epoch) and multi-step routines |
 | `hailo_server.py` | 255 | FR-1400-006: child process owning the Hailo chip (YOLO + LLM); client, restart, in-process fallback |
 | `thermal.py` | 70 | M-009: SoC temperature and fan tach, warm/hot levels, fan-stopped check |
@@ -1135,6 +1136,14 @@ sequence through `_start_arm_sequence` (elbow, shoulder, then the light joints).
 `routine`, which `_NON_SPOKEN_SOURCES` keeps from answering a pending ask); steps that only
 speak (time, date, chat) are said directly. `voice._routine_intent()` resolves the steps at
 trigger time; `_maybe_learn()` validates them when taught.
+
+**Stow and auto-stow (2026-10-13).** Stow lies the arm back over the top and is reached in one
+order only (`_rest_plan`): wrist to `ARM_REST_WRIST_US`, shoulder to `ARM_STOW_UPRIGHT_US`, elbow
+folded there, then the shoulder laid back; then the arm is released to settle. The idle timer no
+longer releases in place: `Arm.on_idle` asks the brain to stow first (owner: after any use, always
+back to stow). The over-current guard stows too, and only releases in place if it is still over
+the limit while stowing. The wave runs the stow path in reverse, waves the wrist, sways the base
+`ARM_WAVE_BASE_CYCLES` times, then stows.
 
 **Diagnosis.** A current trace describes the motor, never the arm. Before interpreting a
 trace, check whether the joint physically moved. `arm_jog.py` is the calibration tool

@@ -17,19 +17,27 @@ brain.time.time=lambda: clock[0]
 
 def fb(rails):
     released=[]
-    ns=types.SimpleNamespace(_arm_over_since=None,_oc_since={},
+    ns=types.SimpleNamespace(_arm_over_since=None,_oc_since={},_state="IDLE",_release_after_seq=False,
         current=types.SimpleNamespace(rail=lambda n:{"current_a":rails.get(n,0.0),"voltage_v":12.0}),
         arm=types.SimpleNamespace(released=False,release=lambda: released.append(1)),
         voice=types.SimpleNamespace(available=False))
     for m in ("_check_arm_current","_check_overcurrent"): setattr(ns,m,types.MethodType(getattr(RoverBrain,m),ns))
-    ns.released=released; return ns
+    ns.released=released; ns.stowed=[]
+    ns._stow_and_release=lambda why: ns.stowed.append(why)
+    ns._go=lambda s: setattr(ns,"_state",s)
+    return ns
 
 # arm: a short spike is tolerated, a sustained one releases
 f=fb({"arm_6v":config.ARM_CURRENT_LIMIT_A+1})
 f._check_arm_current(); clock[0]+=config.ARM_CURRENT_LIMIT_S/2; f._check_arm_current()
 assert f.released==[]
 clock[0]+=config.ARM_CURRENT_LIMIT_S; f._check_arm_current()
-assert f.released==[1], f.released
+# 2026-10-13 (owner): never drop the arm -- the first over-current STOWS it
+assert f.released==[] and f.stowed==["over-current"], (f.released,f.stowed)
+# still straining while stowing -> released in place, to save the servo
+f._state="WAVE"; f._release_after_seq=True
+f._check_arm_current(); clock[0]+=config.ARM_CURRENT_LIMIT_S; f._check_arm_current()
+assert f.released==[1] and f._state=="IDLE", f.released
 
 # overcurrent: per rail, held for OVERCURRENT_S
 f=fb({"bus_12v":config.OVERCURRENT_LIMIT_A["bus_12v"]+1})

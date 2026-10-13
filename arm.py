@@ -55,7 +55,7 @@ class Arm:
     @classmethod
     def _channels(cls,joint): return cls._PAIRED.get(joint,(cls._JOINTS[joint],))
     _PERIOD_US=1_000_000/config.SERVO_PWM_FREQ
-    def __init__(self):
+    def __init__(self,on_idle=None):
         # NO JUMP AT STARTUP (2026-10-02, seen on the rover). Releasing only SLEEPs the PCA9685,
         # and the chip keeps the last pulse widths; PCA9685()'s reset() writes MODE1=0, which
         # wakes it, so the shoulder jumped back to the previous run's pulse before any of our
@@ -67,6 +67,10 @@ class Arm:
         self._pulse=dict.fromkeys(self._JOINTS,config.ARM_SERVO_CENTER_US)
         self._asleep=False; self._idle_since=time.monotonic(); self._running=True
         self._driven=set()   # joints commanded since boot -- pulse() is only real for these
+        # 2026-10-13 (owner): after use the arm goes back to stow, never just released where it
+        # is. When set, the idle timer calls on_idle() (the brain stows, then releases) instead
+        # of releasing. Called from this thread: it must only set a flag.
+        self.on_idle=on_idle
         if config.ARM_RELEASE_WHEN_IDLE:
             self._thread=threading.Thread(target=self._idle_loop,daemon=True); self._thread.start()
     # Idle release, added 2026-09-30. THIS IS SERVO PROTECTION, not power saving. The servo
@@ -81,7 +85,12 @@ class Arm:
             time.sleep(0.5)
             if (not self._asleep and self._idle_since is not None
                     and time.monotonic()-self._idle_since>=config.ARM_RELEASE_AFTER_S):
-                self.release()
+                if self.on_idle is not None:
+                    self._idle_since=None          # once per idle spell; the next move re-arms it
+                    try: self.on_idle()
+                    except Exception: self.release()
+                else:
+                    self.release()
     def release(self):
         """Stop driving every joint. The arm goes limp and will move under gravity.
         Outputs are zeroed before the chip sleeps, so nothing that later wakes it -- a restart,

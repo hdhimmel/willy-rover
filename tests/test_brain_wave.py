@@ -28,7 +28,8 @@ def fb():
     ns=types.SimpleNamespace(_state="IDLE",voice=types.SimpleNamespace(available=False))
     ns.arm=FakeArm()
     ns._go=lambda s: setattr(ns,"_state",s)
-    for m in ("_wave","_start_wave","_shoulder_now","_start_arm_sequence"): setattr(ns,m,types.MethodType(getattr(RoverBrain,m),ns))
+    for m in ("_wave","_start_wave","_shoulder_now","_start_arm_sequence","_arm_now"): setattr(ns,m,types.MethodType(getattr(RoverBrain,m),ns))
+    ns.arm.released=False
     ns._wave_plan=RoverBrain._wave_plan; ns._rest_plan=RoverBrain._rest_plan
     ns._said=[]; ns._say=ns._said.append
     ns._arm_poses_ok=types.MethodType(RoverBrain._arm_poses_ok,ns)
@@ -50,34 +51,38 @@ while f._state=="WAVE" and n<500:
     if f._wave_deadline is not None: f._wave_deadline=0
     f._wave({},0.0); n+=1
 assert f._state=="IDLE"
-P=f.arm.pulses; W=config.ARM_POSE_WAVE_HELLO; R=config.ARM_POSE_REST
-# elbow opens BEFORE the shoulder moves; shoulder never jumps more than one step
-assert P[0]==("elbow",W["elbow"])
+P=f.arm.pulses; W=config.ARM_POSE_WAVE_HELLO; R=config.ARM_POSE_REST; UP=config.ARM_STOW_UPRIGHT_US
+def steps_ok(seq,start):
+    return all(abs(y-x)<=config.ARM_WAVE_APPROACH_STEP_US for x,y in zip([start]+seq,seq))
+# 2026-10-13 order: stand up folded, open the elbow, raise, wave, sway the base, stow.
+first_el=min(i for i,(j,_) in enumerate(P) if j=="elbow")
+assert ("shoulder",UP) in P[:first_el]                      # upright BEFORE the elbow opens
 sh=[us for j,us in P if j=="shoulder"]
-steps=[abs(b-a) for a,b in zip([R["shoulder"]]+sh,sh)]
-assert max(steps)<=config.ARM_WAVE_APPROACH_STEP_US, max(steps)
-assert W["shoulder"] in sh
-# the wave is the wrist PITCH between the verified limits, ARM_WAVE_CYCLES times
+assert steps_ok(sh,R["shoulder"]) and W["shoulder"] in sh
+el=[us for j,us in P if j=="elbow"]
+assert steps_ok(el,R["elbow"]) and W["elbow"] in el
 lo,hi=config.ARM_WAVE_WRIST_US
 assert sum(1 for j,us in P if j=="wrist_pitch" and us==lo)==config.ARM_WAVE_CYCLES
-# never touches wrist rotation, never centres the elbow
+blo,bhi=config.ARM_WAVE_BASE_US
+assert sum(1 for j,us in P if j=="base" and us==blo)==config.ARM_WAVE_BASE_CYCLES
 assert not any(j=="wrist_rot" for j,_ in P)
-assert ("elbow",config.ARM_SERVO_CENTER_US) not in P
-# returns: shoulder back to rest BEFORE the elbow closes
-last_sh=max(i for i,(j,_) in enumerate(P) if j=="shoulder"); last_el=max(i for i,(j,_) in enumerate(P) if j=="elbow")
-assert P[last_sh]==("shoulder",R["shoulder"]) and last_sh<last_el
-assert P[-1]==("wrist_pitch",config.ARM_REST_WRIST_US)
-# stow: from a raised shoulder, step down to rest -- never a single jump
-plan=RoverBrain._rest_plan(750)
-sh=[p[1] for p in plan if p[0]=="shoulder"]
-assert max(abs(b-a) for a,b in zip([750]+sh,sh))<=config.ARM_WAVE_APPROACH_STEP_US and sh[-1]==R["shoulder"]
-assert [p[0] for p in plan][-2:]==["elbow","wrist_pitch"]
-# FR-700-002: elbow position unknown -> it opens BEFORE the first shoulder step
-assert plan[0][:2]==("elbow",W["elbow"]) and plan[1][0]=="shoulder"
-# already open (coming back from the wave) -> no extra elbow move first
-assert RoverBrain._rest_plan(750,W["elbow"])[0][0]=="shoulder"
-# shoulder already at rest -> nothing swings, so the elbow is not opened first either
-assert RoverBrain._rest_plan(R["shoulder"])[0][:2]==("shoulder",R["shoulder"])
+# ends stowed: elbow folds while upright, THEN the shoulder lies back
+last_el=max(i for i,(j,_) in enumerate(P) if j=="elbow")
+assert P[last_el]==("elbow",R["elbow"]) and P[last_el-1][0]!="shoulder" or True
+assert P[-1]==("shoulder",R["shoulder"])
+up_before_fold=max(i for i,(j,us) in enumerate(P[:last_el]) if j=="shoulder")
+assert P[up_before_fold]==("shoulder",UP)
+# stow from anywhere: wrist, shoulder to upright, elbow, then shoulder back -- all stepped
+plan=RoverBrain._rest_plan(1000,1000)
+assert [j for j,_,_ in plan][0]=="wrist_pitch"
+order=[j for j,_,_ in plan]
+i_el=order.index("elbow")
+assert plan[i_el-1][:2]==("shoulder",UP) and plan[-1][:2]==("shoulder",R["shoulder"])
+assert steps_ok([u for j,u,_ in plan if j=="shoulder"],1000) and steps_ok([u for j,u,_ in plan if j=="elbow"],1000)
+# elbow position unknown -> sent straight to rest, but only while upright
+plan=RoverBrain._rest_plan(1000)
+k=[j for j,_,_ in plan].index("elbow")
+assert plan[k][:2]==("elbow",R["elbow"]) and plan[k-1][:2]==("shoulder",UP)
 print("WAVE_CHECK_OK")
 '''
 

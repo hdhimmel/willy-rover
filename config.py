@@ -395,7 +395,10 @@ ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
 # Empty since 2026-10-13: ELBOW is now a DS3225 (270-degree travel, ~0.135 deg/us vs ~0.09 for the
 # MG996R; owner: it holds its position unpowered), fitted 2026-10-13 and not yet mapped. Put each
 # joint's measured stops here.
-ARM_JOINT_LIMITS_US={'elbow':(1000,2050)}
+ARM_JOINT_LIMITS_US={'elbow':(800,2050),'wrist_pitch':(1075,1475)}
+# WRIST PITCH (horn refitted 2026-10-13): free 1050-1500 with the forearm level (0.14 A); 1000 and
+# 1550 jammed at ~3.1 A. Every wave jam that day was the wrist driven past 1500.
+# ELBOW 800: held the forearm out level without strain on 10-13 (owner's 1000 was not the end).
 # ELBOW (DS3225, 2026-10-13, owner-set on the rover): 2050 = folded at rest, 1000 = fully open.
 # Lower us opens it. Nothing outside that range is ever sent.
 # Joints that keep their position with the pulses off (owner, 2026-10-13: the DS3225 elbow). After
@@ -431,6 +434,18 @@ ARM_TEACH_START_US={'shoulder':1500,'elbow':1500,'wrist_pitch':1500,'wrist_rot':
 # has been free (IDLE, nothing queued, not speaking) for ROUTINE_STEP_GAP_S; a step that keeps it
 # busy longer than ROUTINE_STEP_TIMEOUT_S abandons the rest.
 ROUTINE_STEP_GAP_S=1.0
+#
+# Battery log (battery_log.py, owner 2026-10-13): every 2 h to a local CSV under WILLY_LOG_ROOT,
+# then pushed to the public repo's 'battery-log' branch (owner's choice) from a separate clone,
+# and posted to Home Assistant if the HA token file exists. Offline: the next cycle pushes it all.
+ENABLE_BATTERY_LOG=True
+BATTERY_LOG_INTERVAL_S=7200
+BATTERY_LOG_FIRST_S=120          # first reading two minutes after start
+BATTERY_LOG_CHARGE_JUMP_V=0.3     # a rise this big between readings = he was charged
+BATTERY_LOG_CSV='battery_log.csv'
+BATTERY_LOG_BRANCH='battery-log'
+BATTERY_LOG_REPO='https://github.com/hdhimmel/willy-rover.git'
+BATTERY_LOG_CLONE="~/battery-log"
 ROUTINE_STEP_TIMEOUT_S=300.0
 ROUTINE_MAX_STEPS=10
 #
@@ -461,13 +476,15 @@ ROUTINE_MAX_STEPS=10
 # Presets. WAVE_HELLO verified end to end on hardware 2026-09-17; the whole pose holds at ~0.33A
 # on a 6.04V rail with every channel energised. Reach it in the order given, 50us steps on the
 # shoulder -- not as a single jump, which would slam the joint.
-ARM_POSE_WAVE_HELLO={'elbow':1000,'shoulder':750,'wrist_pitch':1500}   # elbow 1000 = fully open on the DS3225 (10-13); shoulder 750 is OLD-servo, unverified
+ARM_POSE_WAVE_HELLO={'elbow':1000,'shoulder':1500,'wrist_pitch':1275}   # 10-13 new hardware: upright, held 0.18 A; wrist mid-range
 #
 # ⚠ SHOULDER VALUES ABOVE AND IN ARM_POSE_REST ARE FROM THE OLD SERVO (2026-10-12). The new pair
 # turns the other way, so the wave's 750us now drives the shoulder fully DOWN into the body, and
 # rest's 2010us is high. Until both poses are re-measured on the new servos, brain.py refuses
 # wave, stow and home and says so instead of moving. Set True only after re-measuring.
-ARM_SHOULDER_POSES_VERIFIED=False
+ARM_SHOULDER_POSES_VERIFIED=True
+# 2026-10-13: both re-measured on the new hardware (wave upright shoulder 1500 / elbow 1000 /
+# wrist 1275; stow shoulder 2000 / elbow 1950 / wrist 1275) -- wave and stow allowed again.
 #
 # REST pose, owner-designated 2026-09-17. TWO CAVEATS, both measured, neither yet resolved:
 #
@@ -480,19 +497,26 @@ ARM_SHOULDER_POSES_VERIFIED=False
 #  2. The elbow value is OUT OF SPEC (manufacturer range is 500-2500us). Past about 2530us the
 #     servo stopped responding -- peaks collapsed to ~0.1A -- so 2610 is very likely not a
 #     position it actually reaches. Treat ~2530us as the real limit until re-measured.
-ARM_POSE_REST={'elbow':2050,'shoulder':1750,'wrist_pitch':2300}
+ARM_POSE_REST={'elbow':1950,'shoulder':2000,'wrist_pitch':1275}
+# 2026-10-13 STOW = lying back over the top (owner). Measured: arm up at shoulder 1500, elbow
+# folded to 1950 (0.15 A; 2000 pressed at >2.5 A), then shoulder stepped back to 2000 (0.11 A,
+# lying on his top; 2100 pressed into him at 3.2 A). Reached only in that order (brain._rest_plan).
+ARM_STOW_UPRIGHT_US=1500        # shoulder: arm standing up, where the elbow folds/opens safely
 # ⚠ 2026-10-13 REPLACES the two caveats above (old servos). Re-measured on the new hardware:
 # shoulder pair 1750 (10-12: the furthest back before the hand meets his front, held 0.05 A;
 # then a release lets the arm settle into the fold), elbow 2050 (DS3225, owner-set as rest),
 # wrist pitch 2300. Wave shoulder still to re-measure, so ARM_SHOULDER_POSES_VERIFIED stays False.
-ARM_WAVE_WRIST_US=(1380,1620)   # oscillate the wrist between these, ~0.35s per leg, 4 cycles
+ARM_WAVE_WRIST_US=(1200,1350)  # inside the wrist's 1075-1475 (10-13); was 1380/1620   # oscillate the wrist between these, ~0.35s per leg, 4 cycles
 ARM_WAVE_APPROACH_STEP_US=50    # shoulder step size travelling to the pose
 ARM_WAVE_STEP_S=0.06            # time between shoulder steps (2026-10-02, brain._wave)
 ARM_WAVE_CYCLES=4
-ARM_WAVE_LEG_S=0.35
+ARM_WAVE_BASE_US=(1300,1700)    # owner 2026-10-13: base sways left/right after the wrist wave
+ARM_WAVE_BASE_CYCLES=3
+ARM_WAVE_BASE_LEG_S=0.6
+ARM_WAVE_LEG_S=0.6     # 10-13: slower legs, the quick reversals jolted the shoulder pair
 # Where the wave returns to: ARM_POSE_REST with the wrist at 2300us, the low-current variant noted
 # under ARM_POSE_REST (0.23A vs 0.87A at 2450). The elbow is clamped to ARM_SERVO_MAX_US by arm.py.
-ARM_REST_WRIST_US=2300
+ARM_REST_WRIST_US=1275   # 10-13: 2300 is outside the refitted wrist's range; mid-range until re-measured
 #
 # Any arm motion should watch INA260 ARM_6V current and release the arm when it stays above this
 # for this long. A threshold checked only AFTER a move completes is useless -- that is how the
