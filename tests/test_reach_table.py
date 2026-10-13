@@ -35,7 +35,7 @@ def test_reach_plan_uses_the_given_pose_and_its_base():
     import grip
     plan=[p for p in grip.reach_plan(1500,2000,1825,pose={'shoulder':1350,'elbow':1400,'base':1620})
           if p[0]!='shoulder_pair']
-    assert ('base',1620,0.4) in plan
+    assert ('base',1620,0.6) in plan
     assert [u for j,u,_ in plan if j=='shoulder'][-1]==1350
     assert [u for j,u,_ in plan if j=='elbow'][-1]==1400
 
@@ -77,7 +77,7 @@ def test_learn_then_save_then_touch():
     b.started.clear()
     b._teach_cmd({'intent':'reach_touch','args':{'object':'cup'}})
     plan=b.started[-1]
-    assert [u for j,u,_ in plan if j=='elbow'][-1]==1350 and ('base',1510,0.4) in plan
+    assert [u for j,u,_ in plan if j=='elbow'][-1]==1350 and ('base',1510,0.6) in plan
 
 def test_touch_with_nothing_learned_says_so():
     b=_brain([CUP])

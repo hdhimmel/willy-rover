@@ -59,17 +59,21 @@ def test_no_reach_plan_until_the_pose_is_measured(monkeypatch):
     monkeypatch.setattr(config,'ARM_POSE_REACH',None)
     assert grip.reach_plan(1500,2010,None) is None
 
-def test_reach_opens_the_elbow_first_and_steps_the_shoulder(monkeypatch):
+def test_reach_turns_base_folded_then_lowers_by_opening_the_elbow(monkeypatch):
     monkeypatch.setattr(config,'ARM_POSE_REACH',{'shoulder':1200,'elbow':1300,'wrist_pitch':1500})
     plan=[p for p in grip.reach_plan(1500,2010,None) if p[0]!='shoulder_pair']
     joints=[j for j,_,_ in plan]
     assert joints[0]=='gripper' and plan[0][1]==config.GRIP_OPEN_US
-    sh_i=[i for i,j in enumerate(joints) if j=='shoulder']; el_i=joints.index('elbow')
-    assert plan[el_i-1][:2]==('shoulder',config.ARM_STOW_UPRIGHT_US)  # elbow set while upright
-    assert max(i for i in sh_i if i<el_i)<el_i<min(i for i in sh_i if i>el_i)
-    sh=[u for j,u,_ in plan if j=='shoulder']
-    assert max(abs(b-a) for a,b in zip([2010]+sh,sh))<=config.ARM_WAVE_APPROACH_STEP_US and sh[-1]==1200
-    assert not any(j=='elbow' and u==config.ARM_SERVO_CENTER_US for j,u,_ in plan)
+    b=joints.index('base')
+    sh=[u for j,u,_ in plan[:b] if j=='shoulder']; el=[u for j,u,_ in plan[:b] if j=='elbow']
+    assert sh[-1]==config.ARM_STOW_UPRIGHT_US and el[-1]==config.ARM_POSE_REST['elbow']   # folded, up
+    after=plan[b+1:]
+    last_sh=max(i for i,(j,_,_) in enumerate(after) if j=='shoulder')
+    assert all(j!='elbow' for j,_,_ in after[:last_sh])                 # forward while still folded
+    el2=[u for j,u,_ in after if j=='elbow']
+    assert el2[-1]==1300 and el2==sorted(el2,reverse=True)               # then the hand comes DOWN
+    shs=[u for j,u,_ in plan if j=='shoulder']
+    assert max(abs(y-x) for x,y in zip([2010]+shs,shs))<=config.ARM_WAVE_APPROACH_STEP_US
 
 def test_fetch_refuses_aloud_without_a_reach_pose(monkeypatch):
     monkeypatch.setattr(config,'ARM_POSE_REACH',None)
@@ -99,5 +103,5 @@ def test_hover_height_follows_the_object():
     clipped={'bbox':(100,600,241,720),'frame_w':1280,'frame_h':720}  # cut by the bottom: use width
     assert abs(grip.object_height_cm(clipped)-141/config.RETRIEVAL_PX_PER_CM_AT_TARGET)<1e-9
     tall=grip.reach_plan(2200,2000,1775,object_cm=10); short=grip.reach_plan(2200,2000,1775,object_cm=2)
-    top=lambda p: [u for j,u,dl in p if j=='shoulder' and dl==0.8][0]     # the hover step
-    assert top(tall)>top(short)>config.ARM_POSE_REACH['shoulder']
+    top=lambda p: [u for j,u,dl in p if j=='elbow' and dl==0.8][0]        # the hover step
+    assert top(tall)>top(short)>config.ARM_POSE_REACH['elbow']

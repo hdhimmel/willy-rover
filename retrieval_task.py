@@ -271,7 +271,8 @@ class RetrievalTask:
             r=self._closer.step(); self._grasp_deadline=now+config.ARM_WAVE_STEP_S
             if r:
                 self._grip_result=r; self._fb_hold=self.feedback() if r=='gripped' else None
-                self._plan=grip.lift_plan(self._joint_now('shoulder',config.ARM_POSE_REST['shoulder']))
+                self._plan=grip.lift_plan(self._joint_now('shoulder',config.ARM_POSE_REST['shoulder']),
+                                          self._joint_now('elbow',None))
                 self._phase='lift'; self._grasp_deadline=None
             return
         if self._phase=='lift':

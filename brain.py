@@ -1759,7 +1759,8 @@ class RoverBrain:
                 self.retrieval.abort(f"can't turn: {msg}")
             return
         if self.retrieval.state=='HOLDING':
-            self._holding=True; self._say(f"Got the {self.retrieval._target_class}.")
+            self._holding=True
+            self._say(f"Got the {getattr(self,'_spoken_object',None) or self.retrieval._target_class}.")
             self.retrieval.reset(); self._go('IDLE'); return
         if self.retrieval.state in('DONE','FAILED','ABORTED'):
             if self.retrieval.state=='DONE' and self.voice.available: self.voice.speak('All done!')
@@ -1912,11 +1913,10 @@ class RoverBrain:
         value, shoulder to upright, elbow folded there, then the shoulder laid back. FR-700-002.
         elbow_from=None: the elbow's position is unknown (not driven this boot) -- it is sent
         straight to its rest value while the arm is upright, the one place that move is safe."""
-        r=config.ARM_POSE_REST; up=config.ARM_STOW_UPRIGHT_US; ramp=RoverBrain._ramp
+        r=config.ARM_POSE_REST; up=config.ARM_STOW_UPRIGHT_US
         plan=[('wrist_pitch',config.ARM_REST_WRIST_US,0.3)]
-        plan+=grip.shoulder_ramp(shoulder_from,up)
-        plan+=[('base',config.ARM_SERVO_CENTER_US,0.6)]      # base turns only with the arm up (10-13)
-        plan+=([('elbow',r['elbow'],0.6)] if elbow_from is None else ramp('elbow',elbow_from,r['elbow']))
+        plan+=grip.fold_first(shoulder_from,elbow_from)      # hand high before anything turns (10-13)
+        plan+=[('base',config.ARM_SERVO_CENTER_US,0.6)]
         plan+=grip.shoulder_ramp(up,r['shoulder'])
         return plan
 
@@ -2124,7 +2124,7 @@ class RoverBrain:
             p['result']=r; log.info(f'Pick up: grip result {r}')
             if r=='empty':
                 self.arm.set_pulse('gripper',config.GRIP_OPEN_US)
-            self._wave_seq=grip.lift_plan(self._shoulder_now()); self._wave_step=0; self._wave_deadline=None
+            self._wave_seq=grip.lift_plan(self._shoulder_now(),self._arm_now('elbow')); self._wave_step=0; self._wave_deadline=None
             p['phase']='lift'; return True
         # lift finished
         self._pick=None

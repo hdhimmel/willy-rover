@@ -72,17 +72,27 @@ assert P[last_el]==("elbow",R["elbow"]) and P[last_el-1][0]!="shoulder" or True
 assert P[-1]==("shoulder",R["shoulder"])
 up_before_fold=max(i for i,(j,us) in enumerate(P[:last_el]) if j=="shoulder")
 assert P[up_before_fold]==("shoulder",UP)
-# stow from anywhere: wrist, shoulder to upright, elbow, then shoulder back -- all stepped
-plan=[p for p in RoverBrain._rest_plan(1000,1000) if p[0]!="shoulder_pair"]
-assert [j for j,_,_ in plan][0]=="wrist_pitch"
-order=[j for j,_,_ in plan]
-i_el=order.index("elbow")
-assert plan[i_el-1][:2]==("base",config.ARM_SERVO_CENTER_US) and plan[i_el-2][:2]==("shoulder",UP) and plan[-1][:2]==("shoulder",R["shoulder"])   # base turns only when up
-assert steps_ok([u for j,u,_ in plan if j=="shoulder"],1000) and steps_ok([u for j,u,_ in plan if j=="elbow"],1000)
-# elbow position unknown -> sent straight to rest, but only while upright
-plan=[p for p in RoverBrain._rest_plan(1000) if p[0]!="shoulder_pair"]
-k=[j for j,_,_ in plan].index("elbow")
-assert plan[k][:2]==("elbow",R["elbow"]) and plan[k-2][:2]==("shoulder",UP)
+# 2026-10-13 (owner): never turn the base with the hand low -- every base step happens with the
+# shoulder upright AND the elbow folded; forward of upright the elbow folds first.
+def hand_high_at_base(plan,sh,el,ok_elbows=None):
+    ok_elbows=ok_elbows or (R["elbow"],)
+    for step in plan:
+        j,u=step[0],step[1]
+        if j=="shoulder": sh=u
+        elif j=="elbow": el=u
+        elif j=="base": assert sh==UP and el in ok_elbows, (sh,el)
+    return True
+for sh0,el0 in ((1000,1000),(1300,1300),(2000,1775),(2000,None)):
+    plan=[p for p in RoverBrain._rest_plan(sh0,el0) if p[0]!="shoulder_pair"]
+    assert hand_high_at_base(plan,sh0,el0) and plan[-1][:2]==("shoulder",R["shoulder"])
+    joints=[j for j,_,_ in plan]
+    if sh0<UP: assert joints.index("elbow")<joints.index("shoulder")      # fold first when forward
+    else: assert joints.index("shoulder")<joints.index("elbow")           # stand up first when back
+import grip
+rp=[p for p in grip.reach_plan(2200,2000,1775) if p[0]!="shoulder_pair"]
+assert hand_high_at_base(rp,2000,1775)
+# the wave's base sway is with the arm raised straight up (elbow at the wave value), hand high
+assert hand_high_at_base(P,R["shoulder"],R["elbow"],ok_elbows=(R["elbow"],W["elbow"]))
 print("WAVE_CHECK_OK")
 '''
 

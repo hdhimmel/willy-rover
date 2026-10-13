@@ -1406,7 +1406,9 @@ RETRIEVAL_ROTATE_X=1.0
 RETRIEVAL_BASE_X_MAP=((2000,0.55),(2100,0.45),(2200,0.26),(2300,0.20))
 RETRIEVAL_CREEP_SPEED=SPEED_SLOW
 # Reach: hover this far (shoulder us) above the reach pose, then lower in small slow steps (owner 10-13).
-ARM_REACH_HOVER_US=80           # used when the object's height is unknown
+ARM_REACH_HOVER_US=80           # (shoulder hover, no longer used: the elbow lowers the hand now)
+ARM_REACH_HOVER_ELBOW_US=150    # elbow hover above the reach when the object's height is unknown
+ARM_ELBOW_US_PER_CM=15.0        # ESTIMATE: elbow us per cm of hand height near the floor
 # Owner 10-13: hover from the object's HEIGHT, worked out from its size in the image at the
 # lined-up spot (known distance): height_cm = box height px / RETRIEVAL_PX_PER_CM_AT_TARGET;
 # hover = reach shoulder + ARM_SHOULDER_US_PER_CM * (height + ARM_HOVER_CLEARANCE_CM).

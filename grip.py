@@ -80,12 +80,12 @@ def released_by_person(fb_at_hold,fb_now):
     return abs(fb_now-fb_at_hold)>=config.GRIP_HANDOFF_DELTA
 
 
-def _ramp(joint,a,b,last_delay=0.3):
+def _ramp(joint,a,b,last_delay=0.3,step=None,dt=None):
     """Steps from a to b, ARM_WAVE_APPROACH_STEP_US apart (same as brain.RoverBrain._ramp)."""
-    step=config.ARM_WAVE_APPROACH_STEP_US
+    step=step or config.ARM_WAVE_APPROACH_STEP_US; dt=dt or config.ARM_WAVE_STEP_S
     if a==b: return [(joint,b,last_delay)]
     d=step if b>a else -step
-    return [(joint,v,config.ARM_WAVE_STEP_S) for v in range(a+d,b,d)]+[(joint,b,last_delay)]
+    return [(joint,v,dt) for v in range(a+d,b,d)]+[(joint,b,last_delay)]
 
 def shoulder_ramp(a,b,last_delay=0.3):
     """A shoulder move from a to b on BOTH servos (CH2+CH3), in ARM_PAIR_STEP_US steps every
@@ -126,27 +126,38 @@ def reach_plan(base_us,shoulder_from,elbow_from,pose=None,object_cm=None):
     # 2026-10-13 path, matching the measurement: stand the arm up (shoulder ARM_STOW_UPRIGHT_US),
     # set the elbow to the reach value THERE (1300 keeps the hand off the wheel), then step the
     # shoulder forward to the floor. Elbow and shoulder both stepped (a jump slams the joint).
-    ramp=_ramp; up=config.ARM_STOW_UPRIGHT_US
+    # Owner 2026-10-13: "lift his arm before shifting left and right -- you cannot smash it on
+    # the floor." With the elbow open the hand hangs near the floor even with the shoulder up, so
+    # every base turn now happens with the ELBOW FOLDED (hand high). Then the shoulder goes
+    # forward with the hand still folded up, and the elbow OPENS slowly to bring the open jaws
+    # DOWN onto the object from above -- pausing at a hover height set from the object's size.
+    ramp=_ramp; up=config.ARM_STOW_UPRIGHT_US; fold=config.ARM_POSE_REST['elbow']
     plan=[('gripper',config.GRIP_OPEN_US,0.3),('wrist_pitch',config.ARM_REST_WRIST_US,0.3)]
-    plan+=shoulder_ramp(shoulder_from,up)
-    plan+=([('elbow',reach['elbow'],0.6)] if elbow_from is None else ramp('elbow',elbow_from,reach['elbow']))
-    plan+=[('base',base_us,0.4)]
-    # Owner 2026-10-13: HOVER over the object, then lower onto it -- coming down in one sweep
-    # pushed balls away. Down to ARM_REACH_HOVER_US above the reach, pause, then the last stretch
-    # in small slow steps so the open jaws settle around it.
-    hover=reach['shoulder']+(config.ARM_REACH_HOVER_US if object_cm is None else
-          min(config.ARM_HOVER_MAX_US,int(config.ARM_SHOULDER_US_PER_CM*(object_cm+config.ARM_HOVER_CLEARANCE_CM))))
-    plan+=shoulder_ramp(up,hover,last_delay=0.8)
-    plan+=[('shoulder',v,config.ARM_REACH_LOWER_STEP_S)
-           for v in range(hover-config.ARM_REACH_LOWER_STEP_US,reach['shoulder'],-config.ARM_REACH_LOWER_STEP_US)]
-    plan+=[('shoulder',reach['shoulder'],0.5)]
+    plan+=fold_first(shoulder_from,elbow_from)                      # hand up before anything turns
+    plan+=[('base',base_us,0.6)]
+    plan+=shoulder_ramp(up,reach['shoulder'])                       # forward, still folded
+    hover=reach['elbow']+(config.ARM_REACH_HOVER_ELBOW_US if object_cm is None else
+          min(config.ARM_HOVER_MAX_US,int(config.ARM_ELBOW_US_PER_CM*(object_cm+config.ARM_HOVER_CLEARANCE_CM))))
+    hover=min(hover,fold)
+    plan+=ramp('elbow',fold,hover,step=25,dt=0.12,last_delay=0.8)    # down to hover
+    plan+=[('elbow',v,config.ARM_REACH_LOWER_STEP_S)
+           for v in range(hover-config.ARM_REACH_LOWER_STEP_US,reach['elbow'],-config.ARM_REACH_LOWER_STEP_US)]
+    plan+=[('elbow',reach['elbow'],0.5)]
     if 'wrist_pitch' in reach: plan.append(('wrist_pitch',reach['wrist_pitch'],0.3))
     return plan
 
 
-def lift_plan(shoulder_from):
-    """Back up to carry: shoulder in steps toward the rest shoulder; the elbow is not touched (it
-    is holding the object's height and the gripper is shut on it)."""
-    # 2026-10-13: up to UPRIGHT, not to rest -- lying back with the elbow open swings the hand
-    # into his front. Stowing (with the object released) is a separate, later step.
-    return shoulder_ramp(shoulder_from,config.ARM_STOW_UPRIGHT_US)
+def fold_first(shoulder_from,elbow_from):
+    """Get to upright with the elbow folded, never sweeping the hand low: if the arm is forward
+    of upright, fold the elbow FIRST (hand comes up) then stand up; if it is back (stow side),
+    stand up first then fold (folding there drives the forearm into his body, measured 10-12)."""
+    up=config.ARM_STOW_UPRIGHT_US; fold=config.ARM_POSE_REST['elbow']
+    def el(): return [('elbow',fold,0.6)] if elbow_from is None else _ramp('elbow',elbow_from,fold,step=25,dt=0.12)
+    if shoulder_from<up: return el()+shoulder_ramp(shoulder_from,up)
+    return shoulder_ramp(shoulder_from,up)+el()
+
+
+def lift_plan(shoulder_from,elbow_from=None):
+    """Lift the held object: fold the elbow (hand straight up off the floor), then stand the arm
+    up (2026-10-13: lifting the shoulder alone left the hand near the floor)."""
+    return fold_first(shoulder_from,elbow_from)
