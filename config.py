@@ -392,14 +392,15 @@ ARM_BASE=6; ARM_WRIST_PITCH=0; ARM_ELBOW=1; ARM_SHOULDER=2; ARM_SHOULDER_B=3
 ARM_WRIST_ROT=4; ARM_GRIPPER=5
 ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
 # Per-joint limits, clamped in arm.py on top of the servo range: {'joint':(min_us,max_us)}.
-# Empty since 2026-10-13: the elbow servo was replaced twice on 10-12, and the third one has not
-# been mapped (its 500-2500 sweep jammed nowhere). Put each joint's measured stops here.
+# Empty since 2026-10-13: ELBOW is now a DS3225 (270-degree travel, ~0.135 deg/us vs ~0.09 for the
+# MG996R; owner: it holds its position unpowered), fitted 2026-10-13 and not yet mapped. Put each
+# joint's measured stops here.
 ARM_JOINT_LIMITS_US={}
 #
 # Teaching arm poses by voice (teach.py, 2026-10-13). One jog = one step on one joint.
 # ARM_POSE_EPOCH is stamped on every saved pose: BUMP IT whenever a servo or horn changes, and
 # every pose taught before is refused instead of being replayed onto different hardware.
-ARM_POSE_EPOCH='2026-10-13'
+ARM_POSE_EPOCH='2026-10-13-ds3225'   # elbow -> DS3225 270-degree, 2026-10-13
 ARM_POSES_PATH='arm_poses.json'          # under WILLY_MEMORY_ROOT, on the rover only
 ARM_TEACH_STEP_US=50
 ARM_TEACH_STEP_SIZES_US={'small':20,'normal':50,'big':150}

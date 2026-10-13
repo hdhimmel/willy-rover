@@ -145,7 +145,8 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
 - **"Forget everyone"** — deletes every face he has learned.
 
 **Remembering things:**
-- *"Remember that [something]"* — stores a fact.
+- *"Remember that [something]"* — stores a fact "Remember, …", "remember …" and "I want you to remember …" work too.
+- *"My name is Howard"* (or *"call me Howard"*, *"remember, my name is Howard"*) — he remembers it; *"what's my name?"* answers from that, or from your face if he recognises you.
 - **"What do you remember?"** / **"What do you know about [something]?"**
 - **"Forget [something]"**
 - **"What do I usually ask?"** — the routines he has noticed.

@@ -261,6 +261,11 @@ _ENROL=re.compile(r"this is ([A-Z][a-z]+)",re.I)
 _FORGET_EVERYONE=re.compile(r"forget everyone|forget all (?:the )?faces",re.I)
 _NAME_REPLY=re.compile(r"(?:(?:hi|hello|hey)[\s,]+)?(?:i'?m|i am|it'?s|it is|my name is|this is)?\s*([A-Za-z]+)[.!]?",re.I)
 _FORGET=re.compile(r"(?:please )?forget (?:about |that )?(.+)",re.I)
+# 2026-10-13 (owner): "Remember, my name is Howard" fell through to the local model (5 s) and was
+# lost -- only "remember that ..." was stored. Wider, still anchored at the start of the utterance.
+_REMEMBER=re.compile(r"(?:(?:please|i want you to|i'd like you to|can you|could you)\s+)?remember(?:\s+that|\s*[,:])?\s+(.+)",re.I)
+_MY_NAME=re.compile(r"(?:my name is|my name's|call me)\s+([a-z][a-z'-]+)",re.I)
+_WHATS_MY_NAME=re.compile(r"what(?:'s| is) my name|do you (?:know|remember) my name|who am i",re.I)
 _ROUTINES=re.compile(r"what do i usually (?:ask|do|ask for)|what are my routines",re.I)
 _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
 # FR-1400-001 (2026-10-02): intents the rest of the system can act on. Escalation no longer
@@ -974,6 +979,13 @@ class VoicePipeline:
         intent,confidence=self._interpret_local(text)
         return intent if confidence>=config.LOCAL_LLM_CONFIDENCE_FLOOR else None
 
+    def _learn_name(self,name):
+        """'my name is Howard' -> stored as the fact 'my name' (no face needed). A recognised face
+        already has a name, so this is for whoever is talking when no face is in view."""
+        name=name.strip().capitalize()
+        self.memory.add_fact('my name',name)
+        self.speak(f"Nice to meet you, {name}. I'll remember that."); return True
+
     def _routine_intent(self,ins):
         """A stored instruction with several steps -> one 'routine' intent carrying each step as a
         fast-path intent (teach.py). None for a single-step instruction (substituted as before)."""
@@ -994,6 +1006,16 @@ class VoicePipeline:
         norm=text.strip().rstrip('.!? ')
         if _FORGET_EVERYONE.fullmatch(norm): return False   # FR-2100: brain's intent, not a fact
         if _POSE_FORGET.fullmatch(norm): return False       # teach.py: a saved arm pose, not a fact
+        if _POSE_SAVE.fullmatch(norm): return False         # "remember this as knock" is a pose
+        m=_MY_NAME.fullmatch(norm)
+        if m: return self._learn_name(m.group(1))
+        if _WHATS_MY_NAME.fullmatch(norm):
+            who=self.current_person()
+            if who: self.speak(f"You're {who}."); return True
+            name=self.memory.all_facts().get('my name')
+            self.speak(f"You told me your name is {name}." if name else
+                       "I don't know your name yet. Tell me: my name is, and your name.")
+            return True
         # FR-1900-008: correction and deletion by voice. Both delete paths existed; nothing
         # spoken reached them.
         m=_FORGET.fullmatch(norm)
@@ -1027,8 +1049,12 @@ class VoicePipeline:
             self.speak(('I remember: '+'; '.join(str(x) for x in items)+'.') if items
                        else "I don't have anything stored about that.")
             return True
-        m=re.match(r"remember that (.+)",text,re.I)
+        m=_REMEMBER.fullmatch(norm)
+        if m and m.group(1).strip().lower() in ('my name','me'):
+            self.speak("Sure. Tell me: my name is, and your name."); return True
         if m:
+            n=_MY_NAME.fullmatch(m.group(1).strip())
+            if n: return self._learn_name(n.group(1))
             # FR-2100-004: scoped to whoever he last recognised (within FACE_SPEAKER_WINDOW_S).
             who=self.current_person()
             key=(f'[{who}] ' if who else '')+m.group(1)[:60]

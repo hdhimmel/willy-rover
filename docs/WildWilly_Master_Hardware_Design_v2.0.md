@@ -1348,7 +1348,7 @@ graph TD
 | Joint | Servo | Channel | `config.py` name |
 |-------|-------|---------|------------------|
 | J4 wrist pitch | MG90S | CH0 | `ARM_WRIST_PITCH` |
-| J2 elbow | MG996R | CH1 | `ARM_ELBOW` |
+| J2 elbow | DS3225 270° (since 2026-10-13; unmapped) | CH1 | `ARM_ELBOW` |
 | J1 shoulder, servo 1 | MG996R | CH2 | `ARM_SHOULDER` |
 | J1 shoulder, servo 2 | MG996R | CH3 | `ARM_SHOULDER_B` — driven with the same pulse as CH2 |
 | J3 wrist rotate | MG90S | CH4 | `ARM_WRIST_ROT` |
@@ -1656,7 +1656,8 @@ Current components only.
 
 | Component | Role | Qty | Status |
 |-----------|------|-----|--------|
-| MG996R metal-gear servo | J0 base, J1/J1b shoulder, J2 elbow | 4 | Installed |
+| MG996R metal-gear servo | J0 base, J1/J1b shoulder | 3 | Installed |
+| DS3225 270° servo | J2 elbow (2026-10-13) | 1 | Installed |
 | MG90S micro servo | J3 wrist rotate, J4 wrist pitch, J5 gripper | 3 | Installed |
 | 608 bearing | Arm joint | 1 | Fitted |
 | 6203 bearing | Arm joint | 2 | Fitted |
@@ -1914,7 +1915,7 @@ On PCA9685 0x43, through the arm bulkhead connector:
 | Joint | Servo | Channel | `config.py` |
 |---|---|---|---|
 | J4 wrist pitch | MG90S | CH0 | `ARM_WRIST_PITCH` |
-| J2 elbow | MG996R | CH1 | `ARM_ELBOW` |
+| J2 elbow | DS3225 270° (since 2026-10-13; unmapped) | CH1 | `ARM_ELBOW` |
 | J1 shoulder, servo 1 | MG996R | CH2 | `ARM_SHOULDER` |
 | J1 shoulder, servo 2 (same pulse) | MG996R | CH3 | `ARM_SHOULDER_B` |
 | J3 wrist rotate | MG90S | CH4 | `ARM_WRIST_ROT` |
