@@ -2013,6 +2013,7 @@ class RoverBrain:
             self._stow_and_release('reach taught')
         elif i=='pick_up':
             # 2026-10-13: arm-only pick-up from a taught reach spot (reach_table), no driving.
+            self._spoken_object=a.get('object','')
             det=self._reach_object(a.get('object'))
             if det is None: self._say(f"I can't see a {a.get('object') or 'thing'} to pick up."); return
             xy=reach_table.box_xy(det); pose,dist=reach_table.pose_for(xy)
@@ -2020,7 +2021,9 @@ class RoverBrain:
                 # 2026-10-13 (owner): move so the object is on his left, where the hand lands and
                 # the camera can see it -- the retrieval task's line-up, then reach/grip/lift; no
                 # hand-off (pick_only). Motion goes through SafetyController as always.
-                ok,msg=self.retrieval.start(det['class'],pick_only=True)
+                w0=(self._spoken_object or '').split()
+                ok,msg=self.retrieval.start(det['class'],pick_only=True,
+                                            colour=w0[0] if w0 and w0[0] in getattr(self.detector,'_COLOURS',{}) else None)
                 if ok:
                     self._say(f"Lining up on the {a.get('object')}."); self._go('RETRIEVE')
                 else: self._say("I'm busy with something else.")
@@ -2141,7 +2144,15 @@ class RoverBrain:
             dets=self.detector.detect(classes=[name] if name else list(config.REACH_TEACH_CLASSES))
         except Exception:
             log.warning('Reach: detection failed',exc_info=True); return None
-        return max(dets,key=lambda x:x['conf']) if dets else None
+        if dets: return max(dets,key=lambda x:x['conf'])
+        # colour fallback (10-13): "red ball" -> the largest red blob
+        if name and getattr(self,'_spoken_object',None):
+            words=self._spoken_object.split()
+            if words and words[0] in getattr(self.detector,'_COLOURS',{}):
+                d=self.detector.detect_colour(words[0],label=name)
+                if d: log.info(f'{self._spoken_object!r} found by colour at {d["bbox"]}')
+                return d
+        return None
 
     def _teach_tick(self):
         if getattr(self,'_holding',False) and not self.arm.released:

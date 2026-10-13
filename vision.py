@@ -192,6 +192,36 @@ class ObjectDetector:
             log.error(f'Hailo detect failed, reporting no detections this frame: {e}')
             return []
 
+    # 2026-10-13: colour fallback. A red ball at the very bottom of the frame (only its top
+    # showing) was labelled 'mouse' 0.45 and missed; "the red ball" names a colour, and a strong
+    # colour against the floor is easy to find. HSV ranges, OpenCV hue 0-179.
+    _COLOURS={'red':[((0,120,70),(10,255,255)),((170,120,70),(179,255,255))],
+              'blue':[((100,120,60),(130,255,255))],'green':[((40,80,50),(85,255,255))],
+              'yellow':[((20,120,90),(35,255,255))],'orange':[((10,140,90),(20,255,255))]}
+    def detect_colour(self,colour,label=None,min_area_frac=0.0015):
+        """The largest blob of a named colour as a detection dict, or None (never raises)."""
+        if not self.available or colour not in self._COLOURS or not getattr(self,'_hailo_backend',False):
+            return None
+        try:
+            import cv2,numpy as np
+            f=self._picam2.capture_array('main')[:,:,:3]           # B,G,R
+            hsv=cv2.cvtColor(np.ascontiguousarray(f),cv2.COLOR_BGR2HSV)
+            mask=None
+            for lo,hi in self._COLOURS[colour]:
+                m=cv2.inRange(hsv,np.array(lo,np.uint8),np.array(hi,np.uint8))
+                mask=m if mask is None else (mask|m)
+            mask=cv2.morphologyEx(mask,cv2.MORPH_OPEN,np.ones((5,5),np.uint8))
+            n,_,stats,_=cv2.connectedComponentsWithStats(mask)
+            if n<2: return None
+            i=1+int(np.argmax(stats[1:,cv2.CC_STAT_AREA]))
+            x,y,w,h,area=stats[i]
+            H,W=f.shape[:2]
+            if area<min_area_frac*W*H: return None
+            return {'class':label or colour,'conf':0.6,'bbox':(float(x),float(y),float(x+w),float(y+h)),
+                    'frame_w':W,'frame_h':H,'timestamp':time.time(),'camera_id':_CAMERA_ID,'by':'colour'}
+        except Exception as e:
+            log.warning(f'colour detect failed: {e}'); return None
+
     def localize(self,detection):
         # FR-1700-002. See module docstring — heuristic, not calibrated.
         x1,y1,x2,y2=detection['bbox']; w=detection['frame_w']

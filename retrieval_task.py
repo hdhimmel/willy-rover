@@ -49,9 +49,10 @@ class RetrievalTask:
     @property
     def active(self): return self.state in _MOTION_STATES
 
-    def start(self,target_class,requester_hint=None,pick_only=False):
+    def start(self,target_class,requester_hint=None,pick_only=False,colour=None):
         if self.active: return False,'retrieval task already in progress'
         self.pick_only=pick_only      # 2026-10-13 "pick up the X": no hand-off, end HOLDING
+        self.colour=colour
         self.state='LOCALIZE'; self._target_class=target_class; self._requester_hint=requester_hint
         self.turn_request=None
         self._lost_count=0; self._retries=0; self._fail_reason=''
@@ -79,7 +80,12 @@ class RetrievalTask:
         }.get(self.state,lambda d,t:None)(d,tilt)
 
     def _best(self,dets):
-        return max(dets,key=lambda x:x['conf']) if dets else None
+        if dets: return max(dets,key=lambda x:x['conf'])
+        # colour fallback for a spoken colour ("red ball"), same as brain._reach_object (10-13)
+        col=getattr(self,'colour',None)
+        if col and hasattr(self.detector,'detect_colour'):
+            return self.detector.detect_colour(col,label=self._target_class)
+        return None
 
     def _localize(self,d,tilt):
         # FR-1700-001/002.
