@@ -53,6 +53,19 @@ _CAMERA_ID='front'             # §12: accurate for the Hailo/CSI backend (imx70
                                 # than a bare magic string so a second camera later is an obvious
                                 # addition here, not a silent inconsistency.
 
+def _letterbox_rgb(frame,model_hw):
+    """XRGB8888 frame (B,G,R,X bytes) -> (model-size RGB image, (scale_x, scale_y, pad_x, pad_y)).
+    Aspect kept, grey (114) bars like YOLO's own training letterbox."""
+    import numpy as np,cv2
+    mh,mw=model_hw
+    rgb=np.ascontiguousarray(frame[:,:,2::-1])
+    H,W=rgb.shape[:2]; k=min(mw/W,mh/H); nw,nh=int(round(W*k)),int(round(H*k))
+    px,py=(mw-nw)//2,(mh-nh)//2
+    out=np.full((mh,mw,3),114,np.uint8)
+    out[py:py+nh,px:px+nw]=cv2.resize(rgb,(nw,nh),interpolation=cv2.INTER_AREA)
+    return out,(nw/W,nh/H,px,py)
+
+
 class ObjectDetector:
     def __init__(self):
         self._hailo_backend=config.ENABLE_HAILO_VISION
@@ -153,8 +166,14 @@ class ObjectDetector:
         # path gets this for free: cap.read() returns False rather than raising. This one doesn't.
         try:
             w,h=1280,720  # matches _load_hailo()'s 'main' stream config
-            frame=self._picam2.capture_array('lores')
+            # 2026-10-13: the model was fed the 'lores' stream, which is (a) in B,G,R memory order
+            # ('RGB888' in picamera2 means BGR bytes -- a red ball arrived BLUE) and (b) the whole
+            # 16:9 view squeezed into a square. A red ball in plain view scored nothing; the same
+            # scene letterboxed in RGB scored 'sports ball' 0.81. So: 'main' (XRGB8888 = B,G,R,X
+            # bytes) -> RGB -> letterboxed to the model input, and boxes mapped back to the frame.
+            frame,(sx,sy,px,py)=_letterbox_rgb(self._picam2.capture_array('main'),self._hailo_input_hw)
             results=self._hailo.run(frame)  # postprocessed by the HEF itself -- no manual NMS/decode
+            mh,mw=self._hailo_input_hw
             out=[]
             for class_id,dets in enumerate(results):
                 cls_name=self._hailo_labels[class_id]
@@ -163,8 +182,10 @@ class ObjectDetector:
                     score=det[4]
                     if score<config.YOLO_CONF_THRESHOLD: continue
                     y0,x0,y1,x1=det[:4]
+                    bx=[float(min(max((x0*mw-px)/sx,0),w)),float(min(max((y0*mh-py)/sy,0),h)),
+                        float(min(max((x1*mw-px)/sx,0),w)),float(min(max((y1*mh-py)/sy,0),h))]
                     out.append({'class':cls_name,'conf':float(score),
-                                'bbox':(x0*w,y0*h,x1*w,y1*h),'frame_w':w,'frame_h':h,
+                                'bbox':tuple(bx),'frame_w':w,'frame_h':h,
                                 'timestamp':time.time(),'camera_id':_CAMERA_ID})  # §12
             return out
         except Exception as e:
