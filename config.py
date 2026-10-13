@@ -395,7 +395,13 @@ ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
 # Empty since 2026-10-13: ELBOW is now a DS3225 (270-degree travel, ~0.135 deg/us vs ~0.09 for the
 # MG996R; owner: it holds its position unpowered), fitted 2026-10-13 and not yet mapped. Put each
 # joint's measured stops here.
-ARM_JOINT_LIMITS_US={}
+ARM_JOINT_LIMITS_US={'elbow':(1000,2050)}
+# ELBOW (DS3225, 2026-10-13, owner-set on the rover): 2050 = folded at rest, 1000 = fully open.
+# Lower us opens it. Nothing outside that range is ever sent.
+# Joints that keep their position with the pulses off (owner, 2026-10-13: the DS3225 elbow). After
+# a release their last pulse still describes them, so teaching and pose moves step from it
+# instead of snapping. Every other joint falls when released.
+ARM_HOLDS_UNPOWERED=frozenset({'elbow'})
 #
 # Teaching arm poses by voice (teach.py, 2026-10-13). One jog = one step on one joint.
 # ARM_POSE_EPOCH is stamped on every saved pose: BUMP IT whenever a servo or horn changes, and
@@ -455,7 +461,7 @@ ROUTINE_MAX_STEPS=10
 # Presets. WAVE_HELLO verified end to end on hardware 2026-09-17; the whole pose holds at ~0.33A
 # on a 6.04V rail with every channel energised. Reach it in the order given, 50us steps on the
 # shoulder -- not as a single jump, which would slam the joint.
-ARM_POSE_WAVE_HELLO={'elbow':1000,'shoulder':750,'wrist_pitch':1500}
+ARM_POSE_WAVE_HELLO={'elbow':1000,'shoulder':750,'wrist_pitch':1500}   # elbow 1000 = fully open on the DS3225 (10-13); shoulder 750 is OLD-servo, unverified
 #
 # ⚠ SHOULDER VALUES ABOVE AND IN ARM_POSE_REST ARE FROM THE OLD SERVO (2026-10-12). The new pair
 # turns the other way, so the wave's 750us now drives the shoulder fully DOWN into the body, and
@@ -474,7 +480,11 @@ ARM_SHOULDER_POSES_VERIFIED=False
 #  2. The elbow value is OUT OF SPEC (manufacturer range is 500-2500us). Past about 2530us the
 #     servo stopped responding -- peaks collapsed to ~0.1A -- so 2610 is very likely not a
 #     position it actually reaches. Treat ~2530us as the real limit until re-measured.
-ARM_POSE_REST={'elbow':2610,'shoulder':2010,'wrist_pitch':2450}
+ARM_POSE_REST={'elbow':2050,'shoulder':1750,'wrist_pitch':2300}
+# ⚠ 2026-10-13 REPLACES the two caveats above (old servos). Re-measured on the new hardware:
+# shoulder pair 1750 (10-12: the furthest back before the hand meets his front, held 0.05 A;
+# then a release lets the arm settle into the fold), elbow 2050 (DS3225, owner-set as rest),
+# wrist pitch 2300. Wave shoulder still to re-measure, so ARM_SHOULDER_POSES_VERIFIED stays False.
 ARM_WAVE_WRIST_US=(1380,1620)   # oscillate the wrist between these, ~0.35s per leg, 4 cycles
 ARM_WAVE_APPROACH_STEP_US=50    # shoulder step size travelling to the pose
 ARM_WAVE_STEP_S=0.06            # time between shoulder steps (2026-10-02, brain._wave)

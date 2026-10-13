@@ -1880,7 +1880,8 @@ class RoverBrain:
     def _arm_now(self,joint):
         """The pulse a joint is really at, or None: not driven this boot, or the arm has been
         released since (it fell, so the last pulse no longer describes it)."""
-        if self.arm.released or not self.arm.was_driven(joint): return None
+        if not self.arm.was_driven(joint): return None
+        if self.arm.released and joint not in config.ARM_HOLDS_UNPOWERED: return None
         return int(self.arm.pulse(joint))
 
     def _teach_cmd(self,cmd):

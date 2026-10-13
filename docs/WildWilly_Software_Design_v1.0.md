@@ -1109,10 +1109,10 @@ arm moves: sampling after a move reads idle current, and a threshold checked aft
 protects nothing. Settled current is what matters — a joint at position relaxes to
 0.05–0.4 A; one that stays higher is still fighting.
 
-**Presets.** `ARM_POSE_WAVE_HELLO` = elbow 1000, shoulder 750, wrist pitch 1500.
-`ARM_POSE_REST` = elbow 2610 (clamped to 2500 by `arm.py`; ~2530 is the real limit),
-shoulder 2010, wrist pitch 2450 (draws a sustained 0.87 A; 2300 holds the same shape at
-0.23 A, `ARM_REST_WRIST_US`).
+**Presets.** `ARM_POSE_WAVE_HELLO` = elbow 1000 (fully open on the DS3225), shoulder 750
+(old servo — not yet re-measured), wrist pitch 1500. `ARM_POSE_REST` (re-measured 2026-10-13
+on the new shoulder pair and DS3225 elbow) = elbow 2050, shoulder 1750, wrist pitch 2300.
+Elbow limits 1000–2050 (`ARM_JOINT_LIMITS_US`).
 
 **Wave** (`brain.py::_wave_plan`): elbow to 1000, shoulder stepped to 750, wrist pitch
 oscillated between `ARM_WAVE_WRIST_US` (1380/1620) for `ARM_WAVE_CYCLES` (4) at

@@ -178,7 +178,7 @@ def test_brain_saves_only_known_joints_and_refuses_after_release():
     assert teach.get_pose('knock')[0]=={'shoulder':1600,'elbow':1800}
     b.arm.released=True                                       # it fell: pulses no longer true
     b._teach_cmd({'intent':'pose_save','args':{'name':'other'}})
-    assert teach.get_pose('other')[0] is None
+    assert teach.get_pose('other')[0]=={'elbow':1800}         # ...except the elbow, which holds unpowered
 
 def test_brain_goes_to_a_pose_with_a_stepped_sequence():
     b=_brain(); teach.save_pose('knock',{'shoulder':1600})

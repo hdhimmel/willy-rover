@@ -1369,7 +1369,7 @@ of the two servos was dead — on 10-12 it drew no current until replaced.
 | Joint | Direction | Notes |
 |-------|-----------|-------|
 | Shoulder CH2+CH3 | **increasing µs raises** (new servos 2026-10-12; the old servo was the opposite) | pair holds ~0.1 A at 1500–1700 µs; every shoulder value measured before 10-12 (wave 750, rest 2010) is invalid — `ARM_SHOULDER_POSES_VERIFIED=False` blocks wave, stow, home, reach and knock until re-measured |
-| Elbow CH1 | — | 1400→2500 µs with no binding (~200°), settles under 0.43 A; stops responding past ~2530 µs |
+| Elbow CH1 | **lower µs opens** (DS3225 270°, 2026-10-13) | 2050 = folded at rest, 1000 = fully open (owner-set); clamped to 1000–2050 by `ARM_JOINT_LIMITS_US`; holds ~0.04 A. (Old MG996R figures retired.) |
 | Gripper CH5 | increasing µs closes | jaw contact from ~1700 µs; grip by current, stop past ~0.4–0.5 A |
 | Wrist pitch CH0 | increasing lowers | free below ~2300 µs; 2400 µs+ holds a sustained 0.9 A |
 
