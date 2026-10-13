@@ -1399,8 +1399,11 @@ RETRIEVAL_PICK_STOP_CM=8
 # errors are taken up by the ARM BASE, mapped from where the hand lands at each base value
 # (measured with the front camera, arm at the floor): base -> image x of the jaws.
 # Creeping forward/back runs at RETRIEVAL_CREEP_SPEED (full slow speed, breaks away).
-RETRIEVAL_ROTATE_X=0.15
-RETRIEVAL_BASE_X_MAP=((2100,0.45),(2200,0.26),(2300,0.20))
+# 10-13 live: a -11 deg line-up turn spun the WRONG way and far too far (owner); the IMU heading
+# jumped 11 -> 179 deg. Small rotation-mode turns are not trustworthy yet, so body rotation is OFF
+# for the pick-up (1.0 = never) and the arm base covers the whole reachable x range instead.
+RETRIEVAL_ROTATE_X=1.0
+RETRIEVAL_BASE_X_MAP=((2000,0.55),(2100,0.45),(2200,0.26),(2300,0.20))
 RETRIEVAL_CREEP_SPEED=SPEED_SLOW
 # Reach: hover this far (shoulder us) above the reach pose, then lower in small slow steps (owner 10-13).
 ARM_REACH_HOVER_US=80           # used when the object's height is unknown

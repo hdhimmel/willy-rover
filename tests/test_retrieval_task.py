@@ -162,10 +162,10 @@ def test_pick_lineup_rotates_big_errors_and_aims_the_base_for_small_ones():
         rt.start('sports ball',pick_only=True); rt.state='APPROACH'
         return rt
     tx,ty=config.RETRIEVAL_TARGET_XY
-    rt=task(tx+0.4,ty); rt._approach({'front':999},0)
-    assert rt.turn_request<0                                   # object right of target -> turn right
+    rt=task(0.9,ty); rt._approach({'front':999},0)
+    assert rt.state=='FAILED' and 'too far right' in rt._fail_reason   # body turns off (10-13)
     calls.clear(); rt=task(tx,0.5); rt._approach({'front':999},0)
     assert calls==[('fwd',config.RETRIEVAL_CREEP_SPEED)]       # creep at a speed that breaks away
     rt=task(tx+0.1,ty); rt._approach({'front':999},0); rt._approach({'front':999},0)
     assert rt.state=='GRASP' and rt._reach_pose['base']==retrieval_task.base_for_x(tx+0.1)
-    assert retrieval_task.base_for_x(0.26)==2200 and 2100<retrieval_task.base_for_x(0.35)<2200
+    assert retrieval_task.base_for_x(0.26)==2200 and 2100<retrieval_task.base_for_x(0.35)<2200 and retrieval_task.base_for_x(0.5)==2050

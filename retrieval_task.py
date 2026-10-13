@@ -147,6 +147,12 @@ class RetrievalTask:
         base take up the rest of x (RETRIEVAL_BASE_X_MAP)."""
         tx,ty=config.RETRIEVAL_TARGET_XY; _,toly=config.RETRIEVAL_TARGET_TOL
         ex=cx-tx
+        lo=min(x for _,x in config.RETRIEVAL_BASE_X_MAP); hi=max(x for _,x in config.RETRIEVAL_BASE_X_MAP)
+        if config.RETRIEVAL_ROTATE_X>=1.0 and not lo-0.03<=cx<=hi+0.03:
+            # outside what the arm base can reach and body turns are off: say so, don't guess
+            self.safety.stop(); self.state='FAILED'
+            self._fail_reason=f"it's too far {'right' if cx>hi else 'left'} for my arm. Move it in front of my left side"
+            return
         if abs(ex)>config.RETRIEVAL_ROTATE_X:
             self._confirm_key=None
             # object right of the target (ex>0) -> turn right (negative degrees in rotate.py)
