@@ -816,10 +816,13 @@ GRIP_RAIL_MIN_V=5.0           # arm rail below this = no trustworthy ratio
 # Reach-down pose for the floor, MEASURED 2026-10-13 with the owner: upper arm flat forward over
 # the top, forearm straight down, hand at the floor just in front of the right-front wheel; held
 # 0.27 A. Elbow 1300 is the owner's limit that keeps the hand off the wheel.
-ARM_POSE_REACH={'shoulder':1300,'elbow':1300,'wrist_pitch':1275,'base':1950}
+ARM_POSE_REACH={'shoulder':1300,'elbow':1300,'wrist_pitch':1275,'base':2200}
 # base 1950 (2026-10-13, aimed with Willie's own front camera): at 1500 the hand lands beside the
 # right-front wheel, outside the camera's view; stepping the base up brought it in from the right
 # edge and at 1950 the open jaws were on the object at RETRIEVAL_TARGET_XY. 1400 pressed (4.4 A).
+# base 2200 (owner, same evening): reach on his LEFT, where the front camera can see the hand --
+# at 1950-2000 the forearm hid the hand and the ball. At 2200 the jaws land at image (0.26,0.93),
+# holding 0.05 A. The base only ever turns with the arm UP (turning at the floor swept balls away).
 # FR-1000-006 knock at a shut door (knock.py, 2026-10-08). Pose NOT MEASURED: jog it with
 # scripts/arm_jog.py, owner watching, arm pointing at a door from ARM_KNOCK_STANDOFF_CM, then set
 # e.g. {'shoulder':..,'elbow':..,'wrist_pitch':..}. Until then the navigator asks only. The tap
@@ -1372,7 +1375,7 @@ RETRIEVAL_APPROACH_STOP_CM=25   # distance from target to halt before attempting
 # Measured with the arm stowed and a tape roll under the reached hand: it sat at the bottom edge,
 # centre-right (the box is cut off by the frame edge, so y is the visible centre). Base yaw stays
 # centred: he turns his body to line the object up (owner: no extra camera, he turns to see it).
-RETRIEVAL_TARGET_XY=(0.586,0.93)
+RETRIEVAL_TARGET_XY=(0.26,0.93)     # where the jaws land at ARM_POSE_REACH (base 2200), 10-13
 # Reach by example (reach_table.py): taught (image x,y) -> arm pose pairs, blended for a new object.
 REACH_TABLE_PATH='reach_table.json'   # under WILLY_MEMORY_ROOT, on the rover only
 REACH_TABLE_K=3                       # nearest taught spots blended
@@ -1384,7 +1387,21 @@ OBJECT_CLASS_ALIASES={'ball':'sports ball','red ball':'sports ball','tennis ball
                       'mug':'cup','phone':'cell phone','remote control':'remote'}
 REACH_TEACH_CLASSES=('cup','bottle','sports ball','remote','cell phone','mouse','book','scissors','teddy bear')
 RETRIEVAL_TARGET_TOL=(0.04,0.03)
-RETRIEVAL_CONFIRM_FRAMES=2      # consecutive in-position detections, rover stopped, before a reach
+RETRIEVAL_CONFIRM_FRAMES=2
+RETRIEVAL_PICK_STOP_CM=8
+# Reach: hover this far (shoulder us) above the reach pose, then lower in small slow steps (owner 10-13).
+ARM_REACH_HOVER_US=80           # used when the object's height is unknown
+# Owner 10-13: hover from the object's HEIGHT, worked out from its size in the image at the
+# lined-up spot (known distance): height_cm = box height px / RETRIEVAL_PX_PER_CM_AT_TARGET;
+# hover = reach shoulder + ARM_SHOULDER_US_PER_CM * (height + ARM_HOVER_CLEARANCE_CM).
+# PX_PER_CM measured: the ~7 cm ball at the bottom of the frame was 141 px wide (1280 px frame).
+# US_PER_CM is an ESTIMATE until measured (raise the shoulder 100 us at the reach, measure the rise).
+RETRIEVAL_PX_PER_CM_AT_TARGET=20.0
+ARM_SHOULDER_US_PER_CM=10.0
+ARM_HOVER_CLEARANCE_CM=4.0
+ARM_HOVER_MAX_US=300
+ARM_REACH_LOWER_STEP_US=10
+ARM_REACH_LOWER_STEP_S=0.15        # pick-up line-up: creeping stops for anything nearer than this      # consecutive in-position detections, rover stopped, before a reach
 RETRIEVAL_TURN_PULSE_S=0.12
 RETRIEVAL_CREEP_PULSE_S=(0.12,0.3)   # forward pulse when close / far from the target row
 RETRIEVAL_GRASP_RETRIES=2       # FR-1700-005

@@ -40,8 +40,9 @@ class RetrievalTask:
     @property
     def active(self): return self.state in _MOTION_STATES
 
-    def start(self,target_class,requester_hint=None):
+    def start(self,target_class,requester_hint=None,pick_only=False):
         if self.active: return False,'retrieval task already in progress'
+        self.pick_only=pick_only      # 2026-10-13 "pick up the X": no hand-off, end HOLDING
         self.state='LOCALIZE'; self._target_class=target_class; self._requester_hint=requester_hint
         self._lost_count=0; self._retries=0; self._fail_reason=''
         self._phase=None; self._plan=[]; self._grip_result=None; self._fb_hold=None
@@ -112,7 +113,7 @@ class RetrievalTask:
                 config.RETRIEVAL_TURN_PULSE_S,config.SPEED_SLOW*0.5)
             return
         if cy<ty-toly:
-            if d.get('front',999)<config.DIST_STOP:
+            if d.get('front',999)<(config.RETRIEVAL_PICK_STOP_CM if getattr(self,'pick_only',False) else config.DIST_STOP):
                 # something closer than the object is in the way -- never push through it
                 self.safety.stop(); self.state='FAILED'; self._fail_reason='something is in the way'
                 return
@@ -124,6 +125,8 @@ class RetrievalTask:
             return
         self.safety.stop()
         if self._confirm(('target',)):
+            self._object_cm=grip.object_height_cm(det)
+            log.info(f'Object height estimate: {self._object_cm} cm')
             self.state='GRASP'
             log.info(f'Lined up: object at ({cx:.3f},{cy:.3f}), target ({tx},{ty})')
 
@@ -181,7 +184,8 @@ class RetrievalTask:
     def _start_grasp(self):
         base_us=config.ARM_SERVO_CENTER_US   # 2026-10-13: lined up by turning the body
         plan=grip.reach_plan(base_us,self._joint_now('shoulder',config.ARM_POSE_REST['shoulder']),
-                             self._joint_now('elbow',None),pose=getattr(self,'_reach_pose',None))
+                             self._joint_now('elbow',None),pose=getattr(self,'_reach_pose',None),
+                             object_cm=getattr(self,'_object_cm',None))
         if plan is None:
             self.state='FAILED'; self._fail_reason='reach pose not measured'
             log.warning('Grasp refused: ARM_POSE_REACH is not measured (scripts/arm_jog.py)')
@@ -225,7 +229,7 @@ class RetrievalTask:
         # FR-1700-005. The gripper's own feedback first: 'empty' means it closed on nothing;
         # 'gripped' means something stopped the jaw. Vision only decides when it was unsensed.
         if self._grip_result=='gripped':
-            self.state='DELIVER'; return
+            self.state='HOLDING' if getattr(self,'pick_only',False) else 'DELIVER'; return
         det=None if self._grip_result=='empty' else self._best(self.detector.detect(classes=[self._target_class]))
         if self._grip_result=='empty' or det is not None:
             self.arm.set_pulse('gripper',config.GRIP_OPEN_US)
@@ -236,7 +240,7 @@ class RetrievalTask:
             else:
                 self.state='APPROACH'
         else:
-            self.state='DELIVER'
+            self.state='HOLDING' if getattr(self,'pick_only',False) else 'DELIVER'
 
     def _deliver(self,d,tilt):
         # FR-1700-006/008: never release without a person detected within a safe, defined range.

@@ -1747,8 +1747,15 @@ class RoverBrain:
 
     def _retrieve(self,d,tilt):
         self.retrieval.tick(d,tilt)
+        if self.retrieval.state=='HOLDING':
+            self._holding=True; self._say(f"Got the {self.retrieval._target_class}.")
+            self.retrieval.reset(); self._go('IDLE'); return
         if self.retrieval.state in('DONE','FAILED','ABORTED'):
             if self.retrieval.state=='DONE' and self.voice.available: self.voice.speak('All done!')
+            if self.retrieval.state=='FAILED' and getattr(self.retrieval,'pick_only',False):
+                self._say(f"I couldn't pick it up: {self.retrieval._fail_reason}.")
+                try: self._stow_and_release('pick failed')
+                except Exception: pass
             self.retrieval.reset(); self._go('IDLE')
 
     def _brake_before_hailo(self):
@@ -1894,6 +1901,7 @@ class RoverBrain:
         r=config.ARM_POSE_REST; up=config.ARM_STOW_UPRIGHT_US; ramp=RoverBrain._ramp
         plan=[('wrist_pitch',config.ARM_REST_WRIST_US,0.3)]
         plan+=grip.shoulder_ramp(shoulder_from,up)
+        plan+=[('base',config.ARM_SERVO_CENTER_US,0.6)]      # base turns only with the arm up (10-13)
         plan+=([('elbow',r['elbow'],0.6)] if elbow_from is None else ramp('elbow',elbow_from,r['elbow']))
         plan+=grip.shoulder_ramp(up,r['shoulder'])
         return plan
@@ -1995,8 +2003,14 @@ class RoverBrain:
             if det is None: self._say(f"I can't see a {a.get('object') or 'thing'} to pick up."); return
             xy=reach_table.box_xy(det); pose,dist=reach_table.pose_for(xy)
             if pose is None:
-                self._say("I haven't learned to reach there yet. Say learn this spot." if dist is None else
-                          "That's too far from anywhere I've learned to reach. Move it closer to a spot I know."); return
+                # 2026-10-13 (owner): move so the object is on his left, where the hand lands and
+                # the camera can see it -- the retrieval task's line-up, then reach/grip/lift; no
+                # hand-off (pick_only). Motion goes through SafetyController as always.
+                ok,msg=self.retrieval.start(det['class'],pick_only=True)
+                if ok:
+                    self._say(f"Lining up on the {a.get('object')}."); self._go('RETRIEVE')
+                else: self._say("I'm busy with something else.")
+                return
             log.info(f'Pick up {det["class"]} at {xy} -> {pose}')
             plan=grip.reach_plan(config.ARM_SERVO_CENTER_US,self._shoulder_now(),self._arm_now('elbow'),pose=pose)
             if not plan: self._say("I can't reach right now."); return

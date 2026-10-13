@@ -91,3 +91,13 @@ def test_shoulder_ramp_engages_the_pair_and_steps_slowly():
     assert r[0][:2]==('shoulder_pair',1) and r[-1][:2]==('shoulder_pair',0)
     sh=[u for j,u,_ in r if j=='shoulder']
     assert sh[-1]==1500 and all(abs(b-a)<=config.ARM_PAIR_STEP_US for a,b in zip([1300]+sh,sh))
+
+
+def test_hover_height_follows_the_object():
+    det={'bbox':(100,400,240,560),'frame_w':1280,'frame_h':720}      # 160 px tall, not clipped
+    h=grip.object_height_cm(det); assert abs(h-160/config.RETRIEVAL_PX_PER_CM_AT_TARGET)<1e-9
+    clipped={'bbox':(100,600,241,720),'frame_w':1280,'frame_h':720}  # cut by the bottom: use width
+    assert abs(grip.object_height_cm(clipped)-141/config.RETRIEVAL_PX_PER_CM_AT_TARGET)<1e-9
+    tall=grip.reach_plan(2200,2000,1775,object_cm=10); short=grip.reach_plan(2200,2000,1775,object_cm=2)
+    top=lambda p: [u for j,u,dl in p if j=='shoulder' and dl==0.8][0]     # the hover step
+    assert top(tall)>top(short)>config.ARM_POSE_REACH['shoulder']

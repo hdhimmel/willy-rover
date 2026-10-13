@@ -106,7 +106,17 @@ def shoulder_ramp(a,b,last_delay=0.3):
     out.append(('shoulder',b,last_delay))
     return out+([('shoulder_pair',0,0.2)] if pair else [])
 
-def reach_plan(base_us,shoulder_from,elbow_from,pose=None):
+def object_height_cm(det):
+    """Height of a detected object lined up at the reach spot, from its box (cm), or None. A box
+    cut off by the bottom of the frame is measured by its width instead (round things)."""
+    try:
+        x1,y1,x2,y2=det['bbox']; fh=det['frame_h']
+        px=(x2-x1) if y2>=fh*0.98 else (y2-y1)
+        return px/config.RETRIEVAL_PX_PER_CM_AT_TARGET
+    except Exception:
+        return None
+
+def reach_plan(base_us,shoulder_from,elbow_from,pose=None,object_cm=None):
     """Arm steps (joint, us, delay_s) from wherever the arm is to the reach-down pose, honouring the
     owner's rule: OPEN THE ELBOW before the shoulder moves, shoulder in ARM_WAVE_APPROACH_STEP_US
     steps. Returns None when ARM_POSE_REACH has not been measured -- no guessed pose, ever."""
@@ -121,7 +131,15 @@ def reach_plan(base_us,shoulder_from,elbow_from,pose=None):
     plan+=shoulder_ramp(shoulder_from,up)
     plan+=([('elbow',reach['elbow'],0.6)] if elbow_from is None else ramp('elbow',elbow_from,reach['elbow']))
     plan+=[('base',base_us,0.4)]
-    plan+=shoulder_ramp(up,reach['shoulder'])
+    # Owner 2026-10-13: HOVER over the object, then lower onto it -- coming down in one sweep
+    # pushed balls away. Down to ARM_REACH_HOVER_US above the reach, pause, then the last stretch
+    # in small slow steps so the open jaws settle around it.
+    hover=reach['shoulder']+(config.ARM_REACH_HOVER_US if object_cm is None else
+          min(config.ARM_HOVER_MAX_US,int(config.ARM_SHOULDER_US_PER_CM*(object_cm+config.ARM_HOVER_CLEARANCE_CM))))
+    plan+=shoulder_ramp(up,hover,last_delay=0.8)
+    plan+=[('shoulder',v,config.ARM_REACH_LOWER_STEP_S)
+           for v in range(hover-config.ARM_REACH_LOWER_STEP_US,reach['shoulder'],-config.ARM_REACH_LOWER_STEP_US)]
+    plan+=[('shoulder',reach['shoulder'],0.5)]
     if 'wrist_pitch' in reach: plan.append(('wrist_pitch',reach['wrist_pitch'],0.3))
     return plan
 

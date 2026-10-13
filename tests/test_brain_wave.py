@@ -77,12 +77,12 @@ plan=[p for p in RoverBrain._rest_plan(1000,1000) if p[0]!="shoulder_pair"]
 assert [j for j,_,_ in plan][0]=="wrist_pitch"
 order=[j for j,_,_ in plan]
 i_el=order.index("elbow")
-assert plan[i_el-1][:2]==("shoulder",UP) and plan[-1][:2]==("shoulder",R["shoulder"])
+assert plan[i_el-1][:2]==("base",config.ARM_SERVO_CENTER_US) and plan[i_el-2][:2]==("shoulder",UP) and plan[-1][:2]==("shoulder",R["shoulder"])   # base turns only when up
 assert steps_ok([u for j,u,_ in plan if j=="shoulder"],1000) and steps_ok([u for j,u,_ in plan if j=="elbow"],1000)
 # elbow position unknown -> sent straight to rest, but only while upright
 plan=[p for p in RoverBrain._rest_plan(1000) if p[0]!="shoulder_pair"]
 k=[j for j,_,_ in plan].index("elbow")
-assert plan[k][:2]==("elbow",R["elbow"]) and plan[k-1][:2]==("shoulder",UP)
+assert plan[k][:2]==("elbow",R["elbow"]) and plan[k-2][:2]==("shoulder",UP)
 print("WAVE_CHECK_OK")
 '''
 
