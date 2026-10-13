@@ -1916,7 +1916,13 @@ class RoverBrain:
             # 3) the owner jogs it onto the object, 4) "remember this reach".
             det=self._reach_object()
             if det is None:
-                self._say("I can't see anything I know there. Try a cup, a bottle or a ball."); return
+                # 2026-10-13 live: a ball of yarn was not seen and he gave no clue why. Say what he
+                # DOES see, so the owner can pick an object the detector knows.
+                try: seen=sorted({d['class'] for d in self.detector.detect() if d['class']!='person'})
+                except Exception: seen=[]
+                log.info(f'Reach learn: no known object in view; detector sees {seen}')
+                self._say("I can't see anything I can pick up there"+(f". I can see: {', '.join(seen[:4])}." if seen else ", I don't see any objects.")
+                          +" Try a cup, a bottle or a ball."); return
             self._reach_pending=reach_table.box_xy(det)
             log.info(f'Reach learn: {det["class"]} at {self._reach_pending}')
             pose,_=reach_table.pose_for(self._reach_pending)
