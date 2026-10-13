@@ -24,6 +24,7 @@ import avoidance
 import grip
 import teach
 import battery_log
+import reach_table
 from email_client import EmailClient
 from remote_cmd import RemoteCommandServer
 from feature_requests import FeatureRequests
@@ -77,7 +78,7 @@ _ROUTINE_QUEUED=_EMAIL_QUEUEABLE|{'arm_teach','arm_teach_done','arm_jog','arm_mo
                                   'pose_forget','enrol','forget_everyone','demo_start','demo_stop'}
 # Teaching the arm and saved poses (teach.py, 2026-10-13), handled by RoverBrain._teach_cmd().
 _TEACH_INTENTS=frozenset({'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save',
-                          'pose_go','pose_forget','pose_list'})
+                          'pose_go','pose_forget','pose_list','reach_learn','reach_save','reach_forget','reach_touch'})
 
 # Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
 # that state, before either drain pass, so Willie heard every command and answered none -- with
@@ -1909,7 +1910,44 @@ class RoverBrain:
             self._say("Okay, teaching my arm. Tell me a joint and a direction, like shoulder up. "
                       "Say more to repeat it, and remember this as, and a name, to save it.")
         elif i=='arm_teach_done':
-            self.teacher.end(); self._say('Done teaching.')
+            self.teacher.end(); self.arm.set_pulse('shoulder_pair',0); self._say('Done teaching.')
+        elif i=='reach_learn':
+            # reach_table.py: 1) see the object with the arm stowed, 2) go to the reach pose,
+            # 3) the owner jogs it onto the object, 4) "remember this reach".
+            det=self._reach_object()
+            if det is None:
+                self._say("I can't see anything I know there. Try a cup, a bottle or a ball."); return
+            self._reach_pending=reach_table.box_xy(det)
+            log.info(f'Reach learn: {det["class"]} at {self._reach_pending}')
+            pose,_=reach_table.pose_for(self._reach_pending)
+            plan=grip.reach_plan(config.ARM_SERVO_CENTER_US,self._shoulder_now(),self._arm_now('elbow'),pose=pose)
+            if plan: self._start_arm_sequence(plan)
+            self.teacher.start()
+            self._say(f"I see the {det['class']}. Now move my arm until I'm touching it, then say remember this reach.")
+        elif i=='reach_save':
+            xy=getattr(self,'_reach_pending',None)
+            if xy is None: self._say('Say learn this spot first, with the arm put away.'); return
+            pose={j:self._arm_now(j) for j in reach_table.JOINTS}
+            pose={j:u for j,u in pose.items() if u is not None}
+            if 'shoulder' not in pose or 'elbow' not in pose:
+                self._say("I don't know where my arm is. Move it again, then say remember this reach."); return
+            n=reach_table.add(xy,pose); self._reach_pending=None
+            self.teacher.end(); self.arm.set_pulse('shoulder_pair',0)
+            log.info(f'Reach spot {n} saved: {xy} -> {pose}')
+            self._say(f"Got it. I know {n} reach spot{'s' if n!=1 else ''} now.")
+            self._stow_and_release('reach taught')
+        elif i=='reach_forget':
+            reach_table.clear(); self._say("Okay, I've forgotten all my reach spots.")
+        elif i=='reach_touch':
+            det=self._reach_object(a.get('object'))
+            if det is None: self._say(f"I can't see a {a.get('object') or 'thing'} to touch."); return
+            pose,dist=reach_table.pose_for(reach_table.box_xy(det))
+            if pose is None:
+                self._say("I haven't learned to reach there yet." if dist is not None else
+                          "I haven't learned any reach spots yet. Say learn this spot."); return
+            log.info(f'Reach touch: {det["class"]} at {reach_table.box_xy(det)} -> {pose} (nearest {dist:.3f})')
+            self._start_arm_sequence(grip.reach_plan(config.ARM_SERVO_CENTER_US,self._shoulder_now(),
+                                                     self._arm_now('elbow'),pose=pose))
         elif i in ('arm_jog','arm_more','arm_step'):
             if not self.teacher.active:
                 self._say('Say teach your arm first.'); return
@@ -1919,6 +1957,7 @@ class RoverBrain:
             if i=='arm_jog': joint,us=self.teacher.jog(a.get('joint'),a.get('dir'),self._arm_now(a.get('joint','')))
             else: joint,us=self.teacher.again(self._arm_now)
             if joint is None: self._say(us); return
+            if joint=='shoulder': self.arm.set_pulse('shoulder_pair',1)   # both servos while teaching
             self.arm.set_pulse(joint,us)
             log.info(f'Teach jog: {joint} -> {us} us')
         elif i=='pose_save':
@@ -1965,6 +2004,14 @@ class RoverBrain:
         log.info(f'Stowing the arm ({why})')
         self._release_after_seq=True
         self._start_arm_sequence(self._rest_plan(self._shoulder_now(),self._arm_now('elbow')))
+
+    def _reach_object(self,name=None):
+        """The most confident detection of `name`, or of the first REACH_TEACH_CLASSES seen."""
+        try:
+            dets=self.detector.detect(classes=[name] if name else list(config.REACH_TEACH_CLASSES))
+        except Exception:
+            log.warning('Reach: detection failed',exc_info=True); return None
+        return max(dets,key=lambda x:x['conf']) if dets else None
 
     def _teach_tick(self):
         if getattr(self,'_stow_requested',False) and self._state=='IDLE' and not self.teacher.active:

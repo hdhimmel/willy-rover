@@ -166,7 +166,8 @@ def test_brain_jog_needs_teach_mode_then_moves_one_joint():
     b._teach_cmd({'intent':'arm_teach','args':{}})
     b._teach_cmd({'intent':'arm_jog','args':{'joint':'shoulder','dir':'up'}})
     b._teach_cmd({'intent':'arm_more','args':{}})
-    assert b.arm.log==[('shoulder',1500),('shoulder',1500+config.ARM_TEACH_STEP_US)]
+    assert [x for x in b.arm.log if x[0]!='shoulder_pair']==[('shoulder',1500),('shoulder',1500+config.ARM_TEACH_STEP_US)]
+    assert ('shoulder_pair',1) in b.arm.log                    # both servos while teaching the shoulder
     b._teach_tick(); assert b.arm.alive==1                   # no idle release while teaching
 
 def test_brain_saves_only_known_joints_and_refuses_after_release():

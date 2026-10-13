@@ -1370,6 +1370,13 @@ RETRIEVAL_APPROACH_STOP_CM=25   # distance from target to halt before attempting
 # centre-right (the box is cut off by the frame edge, so y is the visible centre). Base yaw stays
 # centred: he turns his body to line the object up (owner: no extra camera, he turns to see it).
 RETRIEVAL_TARGET_XY=(0.586,0.93)
+# Reach by example (reach_table.py): taught (image x,y) -> arm pose pairs, blended for a new object.
+REACH_TABLE_PATH='reach_table.json'   # under WILLY_MEMORY_ROOT, on the rover only
+REACH_TABLE_K=3                       # nearest taught spots blended
+REACH_TABLE_MAX_DIST=0.12             # further than this from every taught spot = not learned there
+# YOLO (COCO) cannot see a tape roll: teach and fetch with something it knows. Tried in this order
+# when no class is named.
+REACH_TEACH_CLASSES=('cup','bottle','sports ball','remote','cell phone','mouse','book','scissors','teddy bear')
 RETRIEVAL_TARGET_TOL=(0.04,0.03)
 RETRIEVAL_TURN_PULSE_S=0.12
 RETRIEVAL_CREEP_PULSE_S=(0.12,0.3)   # forward pulse when close / far from the target row

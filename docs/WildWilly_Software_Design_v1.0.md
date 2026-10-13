@@ -73,6 +73,7 @@ stubbed, disabled, approximate or not yet run on the rover, it says so.
 | `steer_override.py` | 65 | FR-600-004: parked steering override, held in IDLE, ended on leaving it |
 | `knock.py` | 70 | FR-1000-006: fixed timed knock step list and player; off until `ARM_POSE_KNOCK` is measured |
 | `battery_log.py` | 139 | Battery log: every 2 h volts/%/hours-running-since-charge to a CSV, pushed to the `battery-log` branch, posted to HA if a token exists |
+| `reach_table.py` | 65 | Reach by example: taught (image x,y) → arm pose spots, blended by inverse distance for a new object |
 | `teach.py` | 137 | FR-1900-011/012: arm poses taught by voice (jog, save, replay, epoch) and multi-step routines |
 | `hailo_server.py` | 255 | FR-1400-006: child process owning the Hailo chip (YOLO + LLM); client, restart, in-process fallback |
 | `thermal.py` | 70 | M-009: SoC temperature and fan tach, warm/hot levels, fan-stopped check |
@@ -1147,6 +1148,16 @@ the limit while stowing. The wave runs the stow path in reverse, waves the wrist
 upright 1500, elbow 1825, shoulder 2000. The shoulder is driven by CH2 alone
 (`ARM_SHOULDER_PAIR=False`; `Arm._channels`): the two servos locked against each other after any
 jolt. The DS3225 elbow never goes limp, so its stow value is chosen to not press.
+
+**Reaching for what he sees (2026-10-13).** No camera geometry or arm kinematics are measured, so
+the reach is learned by example (`reach_table.py`): "learn this spot" notes a known object's box
+centre in the front image (arm stowed — the arm blocks the camera once down), runs the reach plan
+and starts teach mode; the owner jogs the arm onto the object and says "remember this reach".
+"Touch the cup" (and retrieval) blends the nearest `REACH_TABLE_K` taught poses by inverse image
+distance; further than `REACH_TABLE_MAX_DIST` from all of them he refuses rather than guess, and
+retrieval instead lines up on `RETRIEVAL_TARGET_XY` (turn for x, creep for y). YOLO cannot see a
+tape roll: teach with `REACH_TEACH_CLASSES` objects. Every shoulder ramp engages CH3 for the move
+(`grip.shoulder_ramp`, 25 µs / 0.3 s) and drops it after; holding is CH2 only.
 
 **Diagnosis.** A current trace describes the motor, never the arm. Before interpreting a
 trace, check whether the joint physically moved. `arm_jog.py` is the calibration tool

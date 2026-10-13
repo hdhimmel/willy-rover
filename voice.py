@@ -246,6 +246,10 @@ _ARM_STEP=re.compile(r"(bigger|larger|smaller|tiny|small|normal) steps?",re.I)
 _POSE_SAVE=re.compile(r"(?:remember|save|store|call) (?:this|it)(?: (?:pose|position))? as (?:the |a |an )?"+_NAME,re.I)
 _POSE_GO=re.compile(r"(?:(?:go to|move to|show me|do|strike|take) (?:the |your |a )?)?(?:pose|position) "+_NAME,re.I)
 _POSE_FORGET=re.compile(r"forget (?:the |your )?(?:pose|position) "+_NAME,re.I)
+_REACH_LEARN=re.compile(r"(?:learn|teach me|teach you) (?:this|a|the|a new) (?:reach )?spot|learn (?:to reach|reaching)(?: this| that| it)?",re.I)
+_REACH_SAVE=re.compile(r"(?:remember|save) (?:this|that|the) reach|that'?s the reach|got it,? remember (?:this|that) reach",re.I)
+_REACH_FORGET=re.compile(r"forget (?:all )?(?:your |the )?reach(?:es| spots)?",re.I)
+_REACH_TOUCH=re.compile(r"(?:touch|reach for|reach) (?:the |that |this )?([a-z][a-z ]{1,20}?)",re.I)
 _POSE_LIST=re.compile(r"what (?:poses|positions) do you know|list (?:your )?(?:poses|positions)",re.I)
 _STEP_SIZE={'bigger':'big','larger':'big','smaller':'small','tiny':'small','small':'small','normal':'normal'}
 
@@ -276,7 +280,8 @@ _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_
     'confirm_receipt','map','stop_map','shutdown','status','battery','arm_stow','arm_home','wave',
     'come_here','come_to_me','rotate','steer','roam','follow','diagnostics','check_logs','learn_home','go_home','home_address','where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
     'privacy_on','privacy_off','demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date',
-    'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save','pose_go','pose_forget','pose_list','routine'})
+    'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save','pose_go','pose_forget','pose_list','routine',
+    'reach_learn','reach_save','reach_forget','reach_touch'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
 def _fp(core):
@@ -1007,6 +1012,7 @@ class VoicePipeline:
         if _FORGET_EVERYONE.fullmatch(norm): return False   # FR-2100: brain's intent, not a fact
         if _POSE_FORGET.fullmatch(norm): return False       # teach.py: a saved arm pose, not a fact
         if _POSE_SAVE.fullmatch(norm): return False         # "remember this as knock" is a pose
+        if _REACH_SAVE.fullmatch(norm) or _REACH_FORGET.fullmatch(norm): return False   # reach table
         m=_MY_NAME.fullmatch(norm)
         if m: return self._learn_name(m.group(1))
         if _WHATS_MY_NAME.fullmatch(norm):
@@ -1099,6 +1105,11 @@ class VoicePipeline:
         m=_POSE_FORGET.fullmatch(norm)
         if m: return {'intent':'pose_forget','args':{'name':m.group(1).strip().lower()},'reply':''}
         if _POSE_LIST.fullmatch(norm): return {'intent':'pose_list','args':{},'reply':''}
+        if _REACH_LEARN.fullmatch(norm): return {'intent':'reach_learn','args':{},'reply':''}
+        if _REACH_SAVE.fullmatch(norm): return {'intent':'reach_save','args':{},'reply':''}
+        if _REACH_FORGET.fullmatch(norm): return {'intent':'reach_forget','args':{},'reply':''}
+        m=_REACH_TOUCH.fullmatch(norm)
+        if m: return {'intent':'reach_touch','args':{'object':m.group(1).strip().lower()},'reply':''}
         m=_POSE_GO.fullmatch(norm)
         if m: return {'intent':'pose_go','args':{'name':m.group(1).strip().lower()},'reply':''}
         if _PRIVACY_ON.fullmatch(norm): return {'intent':'privacy_on','args':{},'reply':''}
@@ -1225,7 +1236,7 @@ class VoicePipeline:
                          'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs',
                          'demo_start','demo_stop','demo_replay','enrol','forget_everyone',
                          'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save','pose_go',
-                         'pose_forget','pose_list','routine'}
+                         'pose_forget','pose_list','routine','reach_learn','reach_save','reach_forget','reach_touch'}
         if name in motion_intents:
             # FR-1500-007: queued only — brain.py applies full Directive 1-5 gating before this
             # is ever executed.

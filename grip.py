@@ -96,12 +96,13 @@ def shoulder_ramp(a,b,last_delay=0.3):
         out+=[('shoulder',v,config.ARM_PAIR_STEP_S) for v in range(a+d,b,d)]
     return out+[('shoulder',b,last_delay),('shoulder_pair',0,0.2)]
 
-def reach_plan(base_us,shoulder_from,elbow_from):
+def reach_plan(base_us,shoulder_from,elbow_from,pose=None):
     """Arm steps (joint, us, delay_s) from wherever the arm is to the reach-down pose, honouring the
     owner's rule: OPEN THE ELBOW before the shoulder moves, shoulder in ARM_WAVE_APPROACH_STEP_US
     steps. Returns None when ARM_POSE_REACH has not been measured -- no guessed pose, ever."""
-    reach=config.ARM_POSE_REACH
-    if not reach or not config.ARM_SHOULDER_POSES_VERIFIED: return None   # rest/lift shoulder values too (10-12)
+    reach=pose or config.ARM_POSE_REACH      # pose: from reach_table (taught spots), 2026-10-13
+    if not reach or not config.ARM_SHOULDER_POSES_VERIFIED: return None
+    if 'base' in reach: base_us=reach['base']   # rest/lift shoulder values too (10-12)
     # 2026-10-13 path, matching the measurement: stand the arm up (shoulder ARM_STOW_UPRIGHT_US),
     # set the elbow to the reach value THERE (1300 keeps the hand off the wheel), then step the
     # shoulder forward to the floor. Elbow and shoulder both stepped (a jump slams the joint).

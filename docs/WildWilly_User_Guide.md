@@ -168,6 +168,12 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
   Later, **"pose knock"** (or *"show me pose knock"*) moves the arm back there. **"What poses do
   you know"** lists them; **"forget the pose knock"** deletes one. Moving his arm by hand teaches
   him nothing — he only knows where he moved it himself.
+- **Teaching him to reach things:** put a cup, bottle or ball (he can't recognise a tape roll) on
+  the floor in front of him with his arm put away and say **"learn this spot"**. He looks, reaches
+  out, and starts arm teaching: move it with "shoulder down", "elbow up" and so on until the hand
+  touches the object, then say **"remember this reach"**. Do it at several spots (6 to 9 across the
+  floor in front of him). Then **"touch the cup"** makes him work out the arm position for wherever
+  the cup is, from the spots he learned. **"Forget your reach spots"** clears them.
 - **Routines:** *"When I say goodnight, do stow your arm, then go home, then wave."* Each step
   must be something he already understands, or he tells you which one he doesn't. Saying
   **"goodnight"** then runs the steps in order, each one after the last has finished.

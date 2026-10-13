@@ -1,4 +1,4 @@
-import time,config,logsetup,grip
+import time,config,logsetup,grip,reach_table
 log=logsetup.setup('retrieval')
 
 # FR-1700 Object Detection and Retrieval Task — the "core mission" per the FRD. This is a
@@ -91,6 +91,14 @@ class RetrievalTask:
                 self.safety.stop(); self.state='FAILED'; self._fail_reason='lost sight of target while approaching'
             return
         self._lost_count=0
+        # Taught reach spots (reach_table.py): close enough to one he has learned -> reach from
+        # here with the blended pose, no further lining up.
+        pose,_=reach_table.pose_for(reach_table.box_xy(det))
+        if pose is not None:
+            self._reach_pose=pose; self.safety.stop(); self.state='GRASP'
+            log.info(f'In a taught reach zone: {reach_table.box_xy(det)} -> {pose}')
+            return
+        self._reach_pose=None
         x1,y1,x2,y2=det['bbox']
         cx=(x1+x2)/2/det['frame_w']; cy=(y1+y2)/2/det['frame_h']
         tx,ty=config.RETRIEVAL_TARGET_XY; tolx,toly=config.RETRIEVAL_TARGET_TOL
@@ -157,7 +165,7 @@ class RetrievalTask:
     def _start_grasp(self):
         base_us=config.ARM_SERVO_CENTER_US   # 2026-10-13: lined up by turning the body
         plan=grip.reach_plan(base_us,self._joint_now('shoulder',config.ARM_POSE_REST['shoulder']),
-                             self._joint_now('elbow',None))
+                             self._joint_now('elbow',None),pose=getattr(self,'_reach_pose',None))
         if plan is None:
             self.state='FAILED'; self._fail_reason='reach pose not measured'
             log.warning('Grasp refused: ARM_POSE_REACH is not measured (scripts/arm_jog.py)')
