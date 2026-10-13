@@ -27,10 +27,15 @@ def add(xy,pose):
     try:
         with open(_path()) as f: rows=json.load(f)
     except (OSError,ValueError): rows=[]
-    rows.append({'xy':[round(xy[0],4),round(xy[1],4)],
+    # float()/int(): detections carry numpy float32, which json cannot write (2026-10-13 live:
+    # the save crashed the tick and left a half-written file). Written to a temp file and
+    # renamed, so a failure can never corrupt the table.
+    rows.append({'xy':[round(float(xy[0]),4),round(float(xy[1]),4)],
                  'pose':{j:int(pose[j]) for j in JOINTS if j in pose},
                  'epoch':config.ARM_POSE_EPOCH,'t':time.time()})
-    with open(_path(),'w') as f: json.dump(rows,f,indent=1)
+    tmp=_path()+'.tmp'
+    with open(tmp,'w') as f: json.dump(rows,f,indent=1)
+    os.replace(tmp,_path())
     return len([r for r in rows if r.get('epoch')==config.ARM_POSE_EPOCH])
 
 def clear():
@@ -39,7 +44,7 @@ def clear():
 
 def box_xy(det):
     x1,y1,x2,y2=det['bbox']
-    return ((x1+x2)/2/det['frame_w'],(y1+y2)/2/det['frame_h'])
+    return (float((x1+x2)/2/det['frame_w']),float((y1+y2)/2/det['frame_h']))
 
 def nearest(xy,rows=None):
     rows=load() if rows is None else rows

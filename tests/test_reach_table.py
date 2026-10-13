@@ -83,3 +83,19 @@ def test_touch_with_nothing_learned_says_so():
     b=_brain([CUP])
     b._teach_cmd({'intent':'reach_touch','args':{'object':'cup'}})
     assert "haven't learned" in b.said[-1] and not b.started
+
+
+def test_numpy_floats_are_saved_and_a_failed_write_cannot_corrupt():
+    import numpy as np
+    reach_table.add((np.float32(0.58),np.float32(0.81)),{'shoulder':np.int64(1300),'elbow':1300})
+    assert reach_table.load()[0]['xy']==[0.58,0.81]
+    det={'bbox':(np.float32(10),np.float32(10),np.float32(30),np.float32(30)),'frame_w':100,'frame_h':100}
+    assert all(type(v) is float for v in reach_table.box_xy(det))
+
+def test_save_after_teach_ended_refuses():
+    b=_brain([CUP])
+    b._teach_cmd({'intent':'reach_learn','args':{}})
+    b.teacher.end()                                       # timed out, arm stowed
+    b.arm.p.update({'shoulder':2000,'elbow':1825})
+    b._teach_cmd({'intent':'reach_save','args':{}})
+    assert reach_table.load()==[] and 'again' in b.said[-1]

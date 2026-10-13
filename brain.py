@@ -1571,7 +1571,15 @@ class RoverBrain:
             if not ok: self._say(f"I can't turn: {msg}")
             log.info(f'Voice-triggered rotation {deg:+.0f} deg ({msg})')
         elif cmd.get('intent') in _TEACH_INTENTS:
-            self._teach_cmd(cmd)
+            # A bug in a teaching command must never take the tick down (2026-10-13: a save
+            # error killed the service mid-teach). Log, say so, and stow the arm.
+            try: self._teach_cmd(cmd)
+            except Exception:
+                log.error(f'Teach command {cmd.get("intent")!r} failed',exc_info=True)
+                self.teacher.end(); self._reach_pending=None
+                self._say('Something went wrong with that. I am putting my arm away.')
+                try: self._stow_and_release('teach error')
+                except Exception: self.arm.release()
         elif cmd.get('intent')=='routine':
             a=cmd.get('args',{})
             self.routine.start(a.get('name','routine'),a.get('steps',[]))
@@ -1937,6 +1945,11 @@ class RoverBrain:
         elif i=='reach_save':
             xy=getattr(self,'_reach_pending',None)
             if xy is None: self._say('Say learn this spot first, with the arm put away.'); return
+            if not self.teacher.active:
+                # 2026-10-13 live: teach mode had timed out and the arm was stowed, so this would
+                # have saved the STOWED pose as the reach.
+                self._reach_pending=None
+                self._say('I stopped teaching and put my arm away. Say learn this spot again.'); return
             pose={j:self._arm_now(j) for j in reach_table.JOINTS}
             pose={j:u for j,u in pose.items() if u is not None}
             if 'shoulder' not in pose or 'elbow' not in pose:
@@ -2030,7 +2043,8 @@ class RoverBrain:
             else: self.arm.release()
         if self.teacher.active:
             if self.teacher.timed_out():
-                self.teacher.end(); self.arm.drop_pair(); self._say("I've stopped teaching my arm.")
+                self.teacher.end(); self.arm.drop_pair(); self._reach_pending=None
+                self._say("I've stopped teaching my arm.")
             else:
                 self.arm.keep_alive()   # no idle release while being taught: a released arm falls
         if self.routine.active:
