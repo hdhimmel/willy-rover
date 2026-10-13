@@ -1039,6 +1039,10 @@ MOTOR_RAIL_GRACE_S=1.0            # sustained below threshold before it's report
 ENABLE_STUCK_ALERT_EMAIL=True
 STUCK_ALERT_COOLDOWN_S=600.0      # min seconds between stuck alerts (10 min)
 STUCK_ALERT_MAX_PER_SESSION=5     # hard cap per service run, regardless of cooldown
+# Wheels left out of the stall check because their ENCODER is known bad, not the wheel: rf reads
+# ~0 counts while turning (open since 2026-10-07; owner parked encoders). 10-13 live: a pick-up
+# line-up latched STALL_FAULT on rf within 2 s. The other five still catch a real stall.
+STALL_IGNORE_WHEELS=('rf',)
 STALL_GRACE_S=1.0           # FR-500-003 (Directive 5): how long a commanded wheel may show near-zero
                             # counts_per_sec before brain.py treats it as a real stall rather than
                             # still ramping up. Must clear both SPEED_RAMP_PER_S's worst-case ramp

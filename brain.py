@@ -686,6 +686,7 @@ class RoverBrain:
         # up right after a fresh command isn't mistaken for a stall.
         now=time.time(); sustained=[]
         for wheel,is_commanded in self.motors.commanded.items():
+            if wheel in config.STALL_IGNORE_WHEELS: continue     # bad encoder, see config
             if is_commanded and self.encoders.stalled(wheel,True):
                 self._stall_since.setdefault(wheel,now)
                 if now-self._stall_since[wheel]>config.STALL_GRACE_S: sustained.append(wheel)
