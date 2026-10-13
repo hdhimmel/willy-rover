@@ -502,7 +502,11 @@ ARM_POSE_WAVE_HELLO={'elbow':1000,'shoulder':1500,'wrist_pitch':1275}   # 10-13 
 # turns the other way, so the wave's 750us now drives the shoulder fully DOWN into the body, and
 # rest's 2010us is high. Until both poses are re-measured on the new servos, brain.py refuses
 # wave, stow and home and says so instead of moving. Set True only after re-measuring.
-ARM_SHOULDER_POSES_VERIFIED=True
+ARM_SHOULDER_POSES_VERIFIED=False
+# 2026-10-13 eve: OFF again. The stow shoulder is now 500 (owner), on the opposite side of upright
+# from what the plans assume (they treat < 1500 as forward), so wave/stow/reach/knock/pick plans
+# would move the arm the wrong way. Re-measure upright/reach/base-turn with the camera, fix the
+# plan geometry, then set True.
 # 2026-10-13: both re-measured on the new hardware (wave upright shoulder 1500 / elbow 1000 /
 # wrist 1275; stow shoulder 2000 / elbow 1950 / wrist 1275) -- wave and stow allowed again.
 #
@@ -517,7 +521,12 @@ ARM_SHOULDER_POSES_VERIFIED=True
 #  2. The elbow value is OUT OF SPEC (manufacturer range is 500-2500us). Past about 2530us the
 #     servo stopped responding -- peaks collapsed to ~0.1A -- so 2610 is very likely not a
 #     position it actually reaches. Treat ~2530us as the real limit until re-measured.
-ARM_POSE_REST={'elbow':1775,'shoulder':2000,'wrist_pitch':1200}   # elbow 1825->1800->1775 10-13 eve: stows left it pressing at 3.7 A
+ARM_POSE_REST={'elbow':2050,'shoulder':500,'wrist_pitch':1200}   # owner 10-13 eve: shoulder 500 + elbow 2050 = folded along the top (camera-checked)
+# ⚠ SHOULDER STOW = 500, OWNER-SET 2026-10-13 EVENING (owner: "that is the stowed position for the
+# shoulder -- don't forget it"): upper arm lying back over the REAR of his top. Confirmed with the
+# laptop camera. Supersedes the 2000 above/below, which after the arm was jammed against his front
+# no longer matched the real shoulder angle. Every other shoulder value (upright 1500, reach 1300,
+# base-turn 1650) dates from before that and MUST be re-checked with a camera before it is trusted.   # elbow 1825->1800->1775 10-13 eve: stows left it pressing at 3.7 A
 # 2026-10-13 STOW = lying back over the top (owner). Measured: arm up at shoulder 1500, elbow
 # folded to 1950 (0.15 A; 2000 pressed at >2.5 A), then shoulder stepped back to 2000 (0.11 A,
 # lying on his top; 2100 pressed into him at 3.2 A). Reached only in that order (brain._rest_plan).

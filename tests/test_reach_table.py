@@ -10,6 +10,7 @@ import config,reach_table
 def _mem(tmp_path,monkeypatch):
     monkeypatch.setattr(config,'WILLY_MEMORY_ROOT',str(tmp_path))
     monkeypatch.setattr(config,'SIMULATE_HARDWARE',True)
+    monkeypatch.setattr(config,'ARM_SHOULDER_POSES_VERIFIED',True)   # plan logic, not the 10-13 gate
 
 def test_empty_table_gives_nothing():
     assert reach_table.pose_for((0.5,0.9))==(None,None)
