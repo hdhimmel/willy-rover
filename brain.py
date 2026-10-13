@@ -78,7 +78,8 @@ _ROUTINE_QUEUED=_EMAIL_QUEUEABLE|{'arm_teach','arm_teach_done','arm_jog','arm_mo
                                   'pose_forget','enrol','forget_everyone','demo_start','demo_stop'}
 # Teaching the arm and saved poses (teach.py, 2026-10-13), handled by RoverBrain._teach_cmd().
 _TEACH_INTENTS=frozenset({'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save',
-                          'pose_go','pose_forget','pose_list','reach_learn','reach_save','reach_forget','reach_touch'})
+                          'pose_go','pose_forget','pose_list','reach_learn','reach_save','reach_forget','reach_touch',
+                          'pick_up','let_go'})
 
 # Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
 # that state, before either drain pass, so Willie heard every command and answered none -- with
@@ -973,7 +974,7 @@ class RoverBrain:
             self.steer_override.end('release','voice stop')
             self.routine.abandon('voice stop')   # stop means the rest of the routine too
             if self.teacher.active: self.teacher.end()
-            self._release_after_seq=False
+            self._release_after_seq=False; self._pick=None
             try: self.arm.drop_pair()              # outside review 2026-10-13
             except Exception: pass
             self._abandon_stuck_if_active()
@@ -1898,14 +1899,17 @@ class RoverBrain:
         if self._wave_deadline is not None:
             if now<self._wave_deadline: return
             self._wave_deadline=None
+        if self._wave_step>=len(self._wave_seq):
+            # plan finished (its last delay served). A pick-up continues: close, lift, hold.
+            if getattr(self,'_pick',None) is not None:
+                self._pick_tick(); return
+            if getattr(self,'_release_after_seq',False):
+                self._release_after_seq=False; self.arm.release()   # stowed: let it settle
+            self._go('IDLE'); return
         joint,us,delay=self._wave_seq[self._wave_step]
         self.arm.set_pulse(joint,us)
         self._wave_step+=1
-        if self._wave_step>=len(self._wave_seq):
-            if getattr(self,'_release_after_seq',False):
-                self._release_after_seq=False; self.arm.release()   # stowed: let it settle
-            self._go('IDLE')
-        else: self._wave_deadline=now+delay
+        self._wave_deadline=now+delay
 
     # ---- teaching (teach.py, 2026-10-13) ---------------------------------------------------
     def _arm_now(self,joint):
@@ -1959,6 +1963,25 @@ class RoverBrain:
             log.info(f'Reach spot {n} saved: {xy} -> {pose}')
             self._say(f"Got it. I know {n} reach spot{'s' if n!=1 else ''} now.")
             self._stow_and_release('reach taught')
+        elif i=='pick_up':
+            # 2026-10-13: arm-only pick-up from a taught reach spot (reach_table), no driving.
+            det=self._reach_object(a.get('object'))
+            if det is None: self._say(f"I can't see a {a.get('object') or 'thing'} to pick up."); return
+            xy=reach_table.box_xy(det); pose,dist=reach_table.pose_for(xy)
+            if pose is None:
+                self._say("I haven't learned to reach there yet. Say learn this spot." if dist is None else
+                          "That's too far from anywhere I've learned to reach. Move it closer to a spot I know."); return
+            log.info(f'Pick up {det["class"]} at {xy} -> {pose}')
+            plan=grip.reach_plan(config.ARM_SERVO_CENTER_US,self._shoulder_now(),self._arm_now('elbow'),pose=pose)
+            if not plan: self._say("I can't reach right now."); return
+            self._pick={'phase':'reach','closer':None,'obj':det['class'],'deadline':None}
+            self._say(f"Picking up the {a.get('object')}.")
+            self._start_arm_sequence(plan)
+        elif i=='let_go':
+            self._holding=False
+            self.arm.set_pulse('gripper',config.GRIP_OPEN_US)
+            self._say('Okay, letting go.')
+            self._stow_and_release('let go')
         elif i=='reach_forget':
             reach_table.clear(); self._say("Okay, I've forgotten all my reach spots.")
         elif i=='reach_touch':
@@ -2028,8 +2051,38 @@ class RoverBrain:
         self._release_after_seq=True
         self._start_arm_sequence(self._rest_plan(self._shoulder_now(),self._arm_now('elbow')))
 
+    def _pick_tick(self):
+        """After the reach plan of a pick-up: close with feedback, then lift. True while still busy
+        (the WAVE state keeps running); the arm then HOLDS the object upright until 'let go'."""
+        p=self._pick; now=time.time()
+        if p['deadline'] is not None and now<p['deadline']: return True
+        p['deadline']=None
+        if p['phase']=='reach':
+            p['closer']=grip.GripCloser(lambda us: self.arm.set_pulse('gripper',us),
+                                        lambda: grip.read_feedback(self.adc,self.current))
+            p['phase']='close'; p['deadline']=now; return True
+        if p['phase']=='close':
+            r=p['closer'].step(); p['deadline']=now+config.ARM_WAVE_STEP_S
+            if not r: return True
+            p['result']=r; log.info(f'Pick up: grip result {r}')
+            if r=='empty':
+                self.arm.set_pulse('gripper',config.GRIP_OPEN_US)
+            self._wave_seq=grip.lift_plan(self._shoulder_now()); self._wave_step=0; self._wave_deadline=None
+            p['phase']='lift'; return True
+        # lift finished
+        self._pick=None
+        if p.get('result')=='empty':
+            self._say(f"I missed the {p['obj']}. I'll put my arm away.")
+            self._release_after_seq=False; self._go('IDLE'); self._stow_and_release('missed')
+            return True
+        self._holding=True
+        self._say(f"Got the {p['obj']}." if p.get('result')=='gripped' else
+                  f"I think I have the {p['obj']}, but I can't feel it. Say let go to drop it.")
+        self._go('IDLE'); return True
+
     def _reach_object(self,name=None):
         """The most confident detection of `name`, or of the first REACH_TEACH_CLASSES seen."""
+        if name: name=config.OBJECT_CLASS_ALIASES.get(name,name)
         try:
             dets=self.detector.detect(classes=[name] if name else list(config.REACH_TEACH_CLASSES))
         except Exception:
@@ -2037,7 +2090,10 @@ class RoverBrain:
         return max(dets,key=lambda x:x['conf']) if dets else None
 
     def _teach_tick(self):
-        if getattr(self,'_stow_requested',False) and self._state=='IDLE' and not self.teacher.active:
+        if getattr(self,'_holding',False) and not self.arm.released:
+            self.arm.keep_alive()                    # holding something: no idle stow until "let go"
+        if getattr(self,'_stow_requested',False) and self._state=='IDLE' and not self.teacher.active \
+                and not getattr(self,'_holding',False):
             self._stow_requested=False
             if config.ARM_SHOULDER_POSES_VERIFIED: self._stow_and_release('idle')
             else: self.arm.release()

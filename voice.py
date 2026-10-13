@@ -249,6 +249,10 @@ _POSE_FORGET=re.compile(r"forget (?:the |your )?(?:pose|position) "+_NAME,re.I)
 _REACH_LEARN=re.compile(r"(?:learn|teach me|teach you) (?:this|that|a|the|a new|the new) (?:reach )?(?:spot|place|position)|learn (?:to reach|reaching)(?: this| that| it)?",re.I)
 _REACH_SAVE=re.compile(r"(?:remember|save) (?:this|that|the) reach|that'?s the reach|got it,? remember (?:this|that) reach",re.I)
 _REACH_FORGET=re.compile(r"forget (?:all )?(?:your |the )?reach(?:es| spots)?",re.I)
+# 2026-10-13: arm-only pick-up of something he can already reach (no driving -- that is the gated
+# 'retrieve'). Listed before the LLM so "pick up the cup" no longer falls to the slow local model.
+_PICK_UP=re.compile(r"(?:(?:can|could|would) you |please )?(?:pick up|grab|grip|lift) (?:the |that |this |a )?([a-z][a-z ]{1,20}?)(?: up)?",re.I)
+_LET_GO=re.compile(r"(?:let (?:it )?go|drop it|put it down|release it|open your hand|let go of (?:it|the [a-z ]+))",re.I)
 _REACH_TOUCH=re.compile(r"(?:(?:can|could|would) you |please )?(?:touch|reach for|reach) (?:the |that |this |a )?([a-z][a-z ]{1,20}?)",re.I)
 _POSE_LIST=re.compile(r"what (?:poses|positions) do you know|list (?:your )?(?:poses|positions)",re.I)
 _STEP_SIZE={'bigger':'big','larger':'big','smaller':'small','tiny':'small','small':'small','normal':'normal'}
@@ -281,7 +285,7 @@ _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_
     'come_here','come_to_me','rotate','steer','roam','follow','diagnostics','check_logs','learn_home','go_home','home_address','where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
     'privacy_on','privacy_off','demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date',
     'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save','pose_go','pose_forget','pose_list','routine',
-    'reach_learn','reach_save','reach_forget','reach_touch'})
+    'reach_learn','reach_save','reach_forget','reach_touch','pick_up','let_go'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
 def _fp(core):
@@ -1108,6 +1112,9 @@ class VoicePipeline:
         if _REACH_LEARN.fullmatch(norm): return {'intent':'reach_learn','args':{},'reply':''}
         if _REACH_SAVE.fullmatch(norm): return {'intent':'reach_save','args':{},'reply':''}
         if _REACH_FORGET.fullmatch(norm): return {'intent':'reach_forget','args':{},'reply':''}
+        m=_PICK_UP.fullmatch(norm)
+        if m: return {'intent':'pick_up','args':{'object':m.group(1).strip().lower()},'reply':''}
+        if _LET_GO.fullmatch(norm): return {'intent':'let_go','args':{},'reply':''}
         m=_REACH_TOUCH.fullmatch(norm)
         if m: return {'intent':'reach_touch','args':{'object':m.group(1).strip().lower()},'reply':''}
         m=_POSE_GO.fullmatch(norm)
@@ -1245,7 +1252,8 @@ class VoicePipeline:
                          'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs',
                          'demo_start','demo_stop','demo_replay','enrol','forget_everyone',
                          'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save','pose_go',
-                         'pose_forget','pose_list','routine','reach_learn','reach_save','reach_forget','reach_touch'}
+                         'pose_forget','pose_list','routine','reach_learn','reach_save','reach_forget','reach_touch',
+                         'pick_up','let_go'}
         if name in motion_intents:
             # FR-1500-007: queued only — brain.py applies full Directive 1-5 gating before this
             # is ever executed.

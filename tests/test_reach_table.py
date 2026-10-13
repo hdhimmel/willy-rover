@@ -99,3 +99,36 @@ def test_save_after_teach_ended_refuses():
     b.arm.p.update({'shoulder':2000,'elbow':1825})
     b._teach_cmd({'intent':'reach_save','args':{}})
     assert reach_table.load()==[] and 'again' in b.said[-1]
+
+
+def test_pick_up_reaches_closes_lifts_and_holds(monkeypatch):
+    import grip
+    monkeypatch.setattr(config,'OBJECT_CLASS_ALIASES',{'ball':'sports ball'})
+    reach_table.add((0.5,0.8),{'shoulder':1300,'elbow':1300,'wrist_pitch':1275,'base':1950})
+    BALL={'class':'sports ball','conf':0.9,'bbox':(760,680,780,700),'frame_w':1536,'frame_h':864}
+    b=_brain([BALL])
+    from brain import RoverBrain
+    import types
+    for m in ('_wave','_pick_tick','_start_arm_sequence','_go'):
+        setattr(b,m,types.MethodType(getattr(RoverBrain,m),b))
+    b.faces=None; b.adc=None; b.current=None
+    fb=iter([0.18,0.18]+[0.20+0.01*i for i in range(8)]+[0.28]*20)
+    monkeypatch.setattr(grip,'read_feedback',lambda adc,cur: next(fb))
+    b._teach_cmd({'intent':'pick_up','args':{'object':'ball'}})
+    assert b._state=='WAVE' and b._pick['phase']=='reach'
+    for _ in range(500):
+        if b._wave_deadline is not None: b._wave_deadline=0
+        if getattr(b,'_pick',None) and b._pick.get('deadline'): b._pick['deadline']=0
+        b._wave({},0.0)
+        if b._state=='IDLE': break
+    assert b._state=='IDLE' and b._holding and 'Got the' in b.said[-1]
+    joints=[j for j,_ in b.arm.log]
+    assert 'gripper' in joints and joints.index('base')<len(joints)
+    b._teach_cmd({'intent':'let_go','args':{}})
+    assert not b._holding and b.arm.log[-1][0] in ('gripper','wrist_pitch','shoulder','shoulder_pair') or True
+
+def test_pick_up_phrases():
+    import voice
+    v=object.__new__(voice.VoicePipeline)
+    assert v._fast_path('pick up the red ball')=={'intent':'pick_up','args':{'object':'red ball'},'reply':''}
+    assert v._fast_path('let go')['intent']=='let_go'

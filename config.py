@@ -1379,6 +1379,9 @@ REACH_TABLE_K=3                       # nearest taught spots blended
 REACH_TABLE_MAX_DIST=0.12             # further than this from every taught spot = not learned there
 # YOLO (COCO) cannot see a tape roll: teach and fetch with something it knows. Tried in this order
 # when no class is named.
+# Spoken name -> detector (COCO) class, for "touch/pick up the X" (2026-10-13: "the red ball").
+OBJECT_CLASS_ALIASES={'ball':'sports ball','red ball':'sports ball','tennis ball':'sports ball',
+                      'mug':'cup','phone':'cell phone','remote control':'remote'}
 REACH_TEACH_CLASSES=('cup','bottle','sports ball','remote','cell phone','mouse','book','scissors','teddy bear')
 RETRIEVAL_TARGET_TOL=(0.04,0.03)
 RETRIEVAL_CONFIRM_FRAMES=2      # consecutive in-position detections, rover stopped, before a reach
