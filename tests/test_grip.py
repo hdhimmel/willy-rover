@@ -82,6 +82,10 @@ def test_fetch_refuses_aloud_without_a_reach_pose(monkeypatch):
     assert t.state=='FAILED' and 'reach' in said[-1]
 
 
+def test_shoulder_ramp_pairs_only_forward_of_upright():
+    assert not any(j=='shoulder_pair' for j,_,_ in grip.shoulder_ramp(2000,config.ARM_STOW_UPRIGHT_US))
+    assert not any(j=='shoulder_pair' for j,_,_ in grip.shoulder_ramp(config.ARM_STOW_UPRIGHT_US,1300))  # lowering
+
 def test_shoulder_ramp_engages_the_pair_and_steps_slowly():
     r=grip.shoulder_ramp(1300,1500)
     assert r[0][:2]==('shoulder_pair',1) and r[-1][:2]==('shoulder_pair',0)

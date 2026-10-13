@@ -816,7 +816,10 @@ GRIP_RAIL_MIN_V=5.0           # arm rail below this = no trustworthy ratio
 # Reach-down pose for the floor, MEASURED 2026-10-13 with the owner: upper arm flat forward over
 # the top, forearm straight down, hand at the floor just in front of the right-front wheel; held
 # 0.27 A. Elbow 1300 is the owner's limit that keeps the hand off the wheel.
-ARM_POSE_REACH={'shoulder':1300,'elbow':1300,'wrist_pitch':1275}
+ARM_POSE_REACH={'shoulder':1300,'elbow':1300,'wrist_pitch':1275,'base':1950}
+# base 1950 (2026-10-13, aimed with Willie's own front camera): at 1500 the hand lands beside the
+# right-front wheel, outside the camera's view; stepping the base up brought it in from the right
+# edge and at 1950 the open jaws were on the object at RETRIEVAL_TARGET_XY. 1400 pressed (4.4 A).
 # FR-1000-006 knock at a shut door (knock.py, 2026-10-08). Pose NOT MEASURED: jog it with
 # scripts/arm_jog.py, owner watching, arm pointing at a door from ARM_KNOCK_STANDOFF_CM, then set
 # e.g. {'shoulder':..,'elbow':..,'wrist_pitch':..}. Until then the navigator asks only. The tap

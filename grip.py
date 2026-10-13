@@ -90,11 +90,21 @@ def _ramp(joint,a,b,last_delay=0.3):
 def shoulder_ramp(a,b,last_delay=0.3):
     """A shoulder move from a to b on BOTH servos (CH2+CH3), in ARM_PAIR_STEP_US steps every
     ARM_PAIR_STEP_S, then CH3 dropped again (config.ARM_SHOULDER_PAIR note, 2026-10-13)."""
-    step=config.ARM_PAIR_STEP_US; out=[('shoulder_pair',1,0.2)]
+    # Only FORWARD of upright (2026-10-13, measured): there the arm's weight hangs off the joint and
+    # CH2 alone stalls (3.4 A lifting from the floor) while the pair does it at 0.3-1.6 A. At and
+    # behind upright the pair FIGHTS (standing up from stow: 3.1 A at 1825 with both, 0.10 A with
+    # CH2 alone), so those moves run on CH2 only.
+    # ...and only LIFTING (b>a): going down, gravity does the work and CH2 alone lowered to the
+    # floor at 0.3 A, while engaging CH3 at upright to go down locked them at 3.2 A (10-13).
+    pair=b>a and a<config.ARM_STOW_UPRIGHT_US
+    step=config.ARM_PAIR_STEP_US if pair else config.ARM_WAVE_APPROACH_STEP_US
+    dt=config.ARM_PAIR_STEP_S if pair else config.ARM_WAVE_STEP_S*3
+    out=[('shoulder_pair',1,0.2)] if pair else []
     if a!=b:
         d=step if b>a else -step
-        out+=[('shoulder',v,config.ARM_PAIR_STEP_S) for v in range(a+d,b,d)]
-    return out+[('shoulder',b,last_delay),('shoulder_pair',0,0.2)]
+        out+=[('shoulder',v,dt) for v in range(a+d,b,d)]
+    out.append(('shoulder',b,last_delay))
+    return out+([('shoulder_pair',0,0.2)] if pair else [])
 
 def reach_plan(base_us,shoulder_from,elbow_from,pose=None):
     """Arm steps (joint, us, delay_s) from wherever the arm is to the reach-down pose, honouring the
