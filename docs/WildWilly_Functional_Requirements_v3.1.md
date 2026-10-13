@@ -693,8 +693,14 @@ does.
 ✅ **Rebuilt 2026-10-08 (`grip.py`), not yet run on the rover.** The fixed sequence is gone:
 the reach opens the elbow first and steps the shoulder 50 µs at a time to `ARM_POSE_REACH`,
 and the close stops on the gripper's own feedback (FR-1700 criteria). Still no reach-envelope
-model: `ARM_POSE_REACH` is one jogged pose, **not yet measured** — until it is, a fetch
-refuses aloud.
+model: `ARM_POSE_REACH` is one jogged pose. **Measured 2026-10-13** (new shoulder/DS3225
+elbow): shoulder 1300, elbow 1300, wrist 1275 — upper arm flat forward over the top, forearm
+straight down, hand at the floor just in front of the right-front wheel (0.27 A). The reach now
+stands the arm up, sets the elbow there, then steps the shoulder forward; the lift returns to
+upright. While reaching down (shoulder ≤ 1400) the elbow is held to 1300–1850
+(`ARM_COUPLED_LIMITS_US`: 1300 keeps the hand off the wheel, past 1850 the forearm hits his
+front). Still one fixed point: the object must be placed there. Camera-guided reach is the next
+step. `ENABLE_RETRIEVAL_TASK` stays False until grip and lift are tested live.
 
 **G-4 --- FR-1700-006, hand-off confirmation is timed, not sensed.** The
 implementation waits for either an explicit voice confirmation or a fixed
@@ -3217,7 +3223,8 @@ section behind it until now. Added 2026-08-02, v1.4.
 -   **FR-1500-005/007, retrieve gated** (`a8077b9`). `retrieve` is refused aloud unless
     `ENABLE_RETRIEVAL_TASK` (new, **False**) — FR-1700 was not safe (grasp drove the
     elbow toward its forbidden centre; hand-off released on a timer, G-4). Both fixed in
-    `grip.py` 2026-10-08; it stays False until `ARM_POSE_REACH` is measured.
+    `grip.py` 2026-10-08; `ARM_POSE_REACH` measured 2026-10-13; it stays False until grip
+    and lift are tested on the rover.
     `tests/test_retrieve_gate.py`.
 -   **FR-1500-007, self-test failing** (`5f21108`). See FR-100-004: queries are still
     answered; everything else is refused aloud with the reason.

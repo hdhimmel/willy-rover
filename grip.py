@@ -80,20 +80,28 @@ def released_by_person(fb_at_hold,fb_now):
     return abs(fb_now-fb_at_hold)>=config.GRIP_HANDOFF_DELTA
 
 
+def _ramp(joint,a,b,last_delay=0.3):
+    """Steps from a to b, ARM_WAVE_APPROACH_STEP_US apart (same as brain.RoverBrain._ramp)."""
+    step=config.ARM_WAVE_APPROACH_STEP_US
+    if a==b: return [(joint,b,last_delay)]
+    d=step if b>a else -step
+    return [(joint,v,config.ARM_WAVE_STEP_S) for v in range(a+d,b,d)]+[(joint,b,last_delay)]
+
 def reach_plan(base_us,shoulder_from,elbow_from):
     """Arm steps (joint, us, delay_s) from wherever the arm is to the reach-down pose, honouring the
     owner's rule: OPEN THE ELBOW before the shoulder moves, shoulder in ARM_WAVE_APPROACH_STEP_US
     steps. Returns None when ARM_POSE_REACH has not been measured -- no guessed pose, ever."""
     reach=config.ARM_POSE_REACH
     if not reach or not config.ARM_SHOULDER_POSES_VERIFIED: return None   # rest/lift shoulder values too (10-12)
-    step=config.ARM_WAVE_APPROACH_STEP_US
-    open_us=config.ARM_POSE_WAVE_HELLO['elbow']
-    plan=[('gripper',config.GRIP_OPEN_US,0.3),('base',base_us,0.4)]
-    if elbow_from is None or elbow_from>open_us: plan.append(('elbow',open_us,0.6))
-    d=step if reach['shoulder']>shoulder_from else -step
-    plan+=[('shoulder',v,config.ARM_WAVE_STEP_S) for v in range(shoulder_from+d,reach['shoulder'],d)]
-    plan.append(('shoulder',reach['shoulder'],0.3))
-    plan.append(('elbow',reach['elbow'],0.5))
+    # 2026-10-13 path, matching the measurement: stand the arm up (shoulder ARM_STOW_UPRIGHT_US),
+    # set the elbow to the reach value THERE (1300 keeps the hand off the wheel), then step the
+    # shoulder forward to the floor. Elbow and shoulder both stepped (a jump slams the joint).
+    ramp=_ramp; up=config.ARM_STOW_UPRIGHT_US
+    plan=[('gripper',config.GRIP_OPEN_US,0.3),('wrist_pitch',config.ARM_REST_WRIST_US,0.3)]
+    plan+=ramp('shoulder',shoulder_from,up)
+    plan+=([('elbow',reach['elbow'],0.6)] if elbow_from is None else ramp('elbow',elbow_from,reach['elbow']))
+    plan+=[('base',base_us,0.4)]
+    plan+=ramp('shoulder',up,reach['shoulder'])
     if 'wrist_pitch' in reach: plan.append(('wrist_pitch',reach['wrist_pitch'],0.3))
     return plan
 
@@ -101,7 +109,9 @@ def reach_plan(base_us,shoulder_from,elbow_from):
 def lift_plan(shoulder_from):
     """Back up to carry: shoulder in steps toward the rest shoulder; the elbow is not touched (it
     is holding the object's height and the gripper is shut on it)."""
-    step=config.ARM_WAVE_APPROACH_STEP_US; target=config.ARM_POSE_REST['shoulder']
+    # 2026-10-13: up to UPRIGHT, not to rest -- lying back with the elbow open swings the hand
+    # into his front. Stowing (with the object released) is a separate, later step.
+    step=config.ARM_WAVE_APPROACH_STEP_US; target=config.ARM_STOW_UPRIGHT_US
     d=step if target>shoulder_from else -step
     plan=[('shoulder',v,config.ARM_WAVE_STEP_S) for v in range(shoulder_from+d,target,d)]
     return plan+[('shoulder',target,0.3)]

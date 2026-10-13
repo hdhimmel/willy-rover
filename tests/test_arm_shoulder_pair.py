@@ -11,11 +11,25 @@ def _arm(monkeypatch):
     import arm; return arm.Arm()
 
 def test_shoulder_drives_both_channels_with_the_same_pulse(monkeypatch):
+    monkeypatch.setattr(config,'ARM_SHOULDER_PAIR',True)
     a=_arm(monkeypatch)
     a.set_pulse('shoulder',1700)
     d=[a._pca.channels[c].duty_cycle for c in (config.ARM_SHOULDER,config.ARM_SHOULDER_B)]
     assert d[0]==d[1]>0
     assert 'shoulder_b' not in a.joints            # no way to drive one servo of the pair alone
+
+def test_single_servo_shoulder_leaves_ch3_unpowered(monkeypatch):
+    monkeypatch.setattr(config,'ARM_SHOULDER_PAIR',False)
+    a=_arm(monkeypatch); a.set_pulse('shoulder',1700)
+    assert a._pca.channels[config.ARM_SHOULDER].duty_cycle>0==a._pca.channels[config.ARM_SHOULDER_B].duty_cycle
+
+def test_elbow_limit_while_reaching_down(monkeypatch):
+    monkeypatch.setattr(config,'ARM_JOINT_LIMITS_US',{})
+    a=_arm(monkeypatch)
+    a.set_pulse('shoulder',1500)
+    assert a.set_pulse('elbow',1000)==1000                 # upright: full range
+    a.set_pulse('shoulder',1350)
+    assert a.set_pulse('elbow',1000)==1300 and a.set_pulse('elbow',2000)==1850
 
 def test_release_zeroes_both_shoulder_channels(monkeypatch):
     a=_arm(monkeypatch)

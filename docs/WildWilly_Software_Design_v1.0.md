@@ -1143,7 +1143,10 @@ folded there, then the shoulder laid back; then the arm is released to settle. T
 longer releases in place: `Arm.on_idle` asks the brain to stow first (owner: after any use, always
 back to stow). The over-current guard stows too, and only releases in place if it is still over
 the limit while stowing. The wave runs the stow path in reverse, waves the wrist, sways the base
-`ARM_WAVE_BASE_CYCLES` times, then stows.
+`ARM_WAVE_BASE_CYCLES` times, then stows. Stow values (re-measured 10-13): wrist 1200, shoulder
+upright 1500, elbow 1825, shoulder 2000. The shoulder is driven by CH2 alone
+(`ARM_SHOULDER_PAIR=False`; `Arm._channels`): the two servos locked against each other after any
+jolt. The DS3225 elbow never goes limp, so its stow value is chosen to not press.
 
 **Diagnosis.** A current trace describes the motor, never the arm. Before interpreting a
 trace, check whether the joint physically moved. `arm_jog.py` is the calibration tool

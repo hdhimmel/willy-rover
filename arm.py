@@ -53,7 +53,9 @@ class Arm:
              'gripper':config.ARM_GRIPPER}
     _PAIRED={'shoulder':(config.ARM_SHOULDER,config.ARM_SHOULDER_B)}
     @classmethod
-    def _channels(cls,joint): return cls._PAIRED.get(joint,(cls._JOINTS[joint],))
+    def _channels(cls,joint):
+        if joint in cls._PAIRED and config.ARM_SHOULDER_PAIR: return cls._PAIRED[joint]
+        return (cls._JOINTS[joint],)
     _PERIOD_US=1_000_000/config.SERVO_PWM_FREQ
     def __init__(self,on_idle=None):
         # NO JUMP AT STARTUP (2026-10-02, seen on the rover). Releasing only SLEEPs the PCA9685,
@@ -95,7 +97,7 @@ class Arm:
         """Stop driving every joint. The arm goes limp and will move under gravity.
         Outputs are zeroed before the chip sleeps, so nothing that later wakes it -- a restart,
         a single-joint move -- can replay an old pulse on the other joints."""
-        for ch in sorted({c for j in self._JOINTS for c in self._channels(j)}):
+        for ch in sorted({c for j in self._JOINTS for c in self._channels(j)}|{config.ARM_SHOULDER_B}):
             try: self._pca.channels[ch].duty_cycle=0
             except Exception: pass
         try: self._pca.mode1_reg=self._pca.mode1_reg|0x10      # MODE1 bit4 SLEEP
@@ -119,6 +121,9 @@ class Arm:
         us=max(config.ARM_SERVO_MIN_US,min(config.ARM_SERVO_MAX_US,us))
         lo,hi=config.ARM_JOINT_LIMITS_US.get(joint,(config.ARM_SERVO_MIN_US,config.ARM_SERVO_MAX_US))
         us=max(lo,min(hi,us))
+        for j,other,(olo,ohi),(clo,chi) in getattr(config,'ARM_COUPLED_LIMITS_US',()):
+            if j==joint and other in self._driven and olo<=self._pulse.get(other,0)<=ohi:
+                us=max(clo,min(chi,us))
         duty=int(us/self._PERIOD_US*65535)
         for ch in self._channels(joint): self._pca.channels[ch].duty_cycle=duty
         self._pulse[joint]=us; self._driven.add(joint)

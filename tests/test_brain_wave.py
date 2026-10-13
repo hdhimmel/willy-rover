@@ -62,7 +62,7 @@ assert steps_ok(sh,R["shoulder"]) and W["shoulder"] in sh
 el=[us for j,us in P if j=="elbow"]
 assert steps_ok(el,R["elbow"]) and W["elbow"] in el
 lo,hi=config.ARM_WAVE_WRIST_US
-assert sum(1 for j,us in P if j=="wrist_pitch" and us==lo)==config.ARM_WAVE_CYCLES
+assert sum(1 for j,us in P if j=="wrist_pitch" and us==hi)==config.ARM_WAVE_CYCLES   # lo can equal the rest value
 blo,bhi=config.ARM_WAVE_BASE_US
 assert sum(1 for j,us in P if j=="base" and us==blo)==config.ARM_WAVE_BASE_CYCLES
 assert not any(j=="wrist_rot" for j,_ in P)

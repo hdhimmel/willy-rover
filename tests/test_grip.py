@@ -64,9 +64,11 @@ def test_reach_opens_the_elbow_first_and_steps_the_shoulder(monkeypatch):
     plan=grip.reach_plan(1500,2010,None)
     joints=[j for j,_,_ in plan]
     assert joints[0]=='gripper' and plan[0][1]==config.GRIP_OPEN_US
-    assert joints.index('elbow')<joints.index('shoulder')            # elbow opens first
+    sh_i=[i for i,j in enumerate(joints) if j=='shoulder']; el_i=joints.index('elbow')
+    assert plan[el_i-1][:2]==('shoulder',config.ARM_STOW_UPRIGHT_US)  # elbow set while upright
+    assert max(i for i in sh_i if i<el_i)<el_i<min(i for i in sh_i if i>el_i)
     sh=[u for j,u,_ in plan if j=='shoulder']
-    assert max(abs(b-a) for a,b in zip([2010]+sh,sh))<=config.ARM_WAVE_APPROACH_STEP_US
+    assert max(abs(b-a) for a,b in zip([2010]+sh,sh))<=config.ARM_WAVE_APPROACH_STEP_US and sh[-1]==1200
     assert not any(j=='elbow' and u==config.ARM_SERVO_CENTER_US for j,u,_ in plan)
 
 def test_fetch_refuses_aloud_without_a_reach_pose(monkeypatch):

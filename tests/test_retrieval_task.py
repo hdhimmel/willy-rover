@@ -83,8 +83,8 @@ def test_full_grasp_obeys_the_arm_rules_and_reaches_verify():
     rt=_grasp_task(); _run(rt)
     assert rt.state=='VERIFY' and rt._grip_result=='unsensed'      # no feedback in this fake
     P=rt.arm.pulses; joints=[j for j,_ in P]
-    assert joints.index('elbow')<joints.index('shoulder')            # elbow opens first
-    assert ('elbow',config.ARM_SERVO_CENTER_US) not in P              # never the 1500 us elbow
+    el=joints.index('elbow')                                          # elbow set while upright
+    assert P[el-1]==('shoulder',config.ARM_STOW_UPRIGHT_US)
     sh=[u for j,u in P if j=='shoulder']
     assert max(abs(b-a) for a,b in zip([config.ARM_POSE_REST['shoulder']]+sh,sh))<=config.ARM_WAVE_APPROACH_STEP_US
     g=[u for j,u in P if j=='gripper']

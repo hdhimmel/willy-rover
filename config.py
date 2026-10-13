@@ -389,6 +389,12 @@ ARM_PCA_ADDR=0x43
 # never mirror them (2x1500 - x): they would fight. The 09-17 note that they were "not a pair"
 # was measured while one servo was dead (it drew no current at all on 10-12 until replaced).
 ARM_BASE=6; ARM_WRIST_PITCH=0; ARM_ELBOW=1; ARM_SHOULDER=2; ARM_SHOULDER_B=3
+# 2026-10-13 (owner OK): the shoulder is driven by CH2 ONLY; CH3's servo stays unpowered and turns
+# along as a bearing. Measured: moved gently together the pair agreed (<0.45 A over CH3 1360-1560),
+# but after any jolt (a wave reversal, standing up, a 40 us jump) they settled apart inside their
+# deadbands and locked at 2.9-5.8 A -- every arm jam that day. CH2 alone held the upright arm at
+# 0.04 A. Set True to drive both again (same pulse; never mirrored).
+ARM_SHOULDER_PAIR=False
 ARM_WRIST_ROT=4; ARM_GRIPPER=5
 ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
 # Per-joint limits, clamped in arm.py on top of the servo range: {'joint':(min_us,max_us)}.
@@ -396,14 +402,22 @@ ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
 # MG996R; owner: it holds its position unpowered), fitted 2026-10-13 and not yet mapped. Put each
 # joint's measured stops here.
 ARM_JOINT_LIMITS_US={'elbow':(800,2050),'wrist_pitch':(1075,1475)}
+# Limits that apply only while another joint is in a range: (joint, other, (other_lo,other_hi), (lo,hi)).
+# 2026-10-13, owner, with the arm reaching down to the floor in front (shoulder forward of upright,
+# lower us): the elbow opened down to 1300 keeps the hand off the wheels, and folded past 1850 the
+# forearm presses into his front (1875 held 2.3 A). Upright and back, the elbow keeps its full range.
+# Shoulder bound: reach pose measured at 1300 (hand at the floor), 1400 still forward of upright.
+ARM_COUPLED_LIMITS_US=(('elbow','shoulder',(500,1400),(1300,1850)),)
 # WRIST PITCH (horn refitted 2026-10-13): free 1050-1500 with the forearm level (0.14 A); 1000 and
 # 1550 jammed at ~3.1 A. Every wave jam that day was the wrist driven past 1500.
 # ELBOW 800: held the forearm out level without strain on 10-13 (owner's 1000 was not the end).
 # ELBOW (DS3225, 2026-10-13, owner-set on the rover): 2050 = folded at rest, 1000 = fully open.
 # Lower us opens it. Nothing outside that range is ever sent.
-# Joints that keep their position with the pulses off (owner, 2026-10-13: the DS3225 elbow). After
-# a release their last pulse still describes them, so teaching and pose moves step from it
-# instead of snapping. Every other joint falls when released.
+# Joints that keep their position with the pulses off (the DS3225 elbow, 2026-10-13). MEASURED: it is
+# not limp -- with no pulse it keeps actively HOLDING its last position while the 6 V rail is on
+# (all channels off still drew 0.1-1.1 A depending on the pose). So its last pulse still describes
+# it after a release, and wherever it is left it keeps drawing whatever that pose costs -- stow
+# must leave it where it does not press (ARM_POSE_REST elbow). Every other joint falls when released.
 ARM_HOLDS_UNPOWERED=frozenset({'elbow'})
 #
 # Teaching arm poses by voice (teach.py, 2026-10-13). One jog = one step on one joint.
@@ -497,10 +511,14 @@ ARM_SHOULDER_POSES_VERIFIED=True
 #  2. The elbow value is OUT OF SPEC (manufacturer range is 500-2500us). Past about 2530us the
 #     servo stopped responding -- peaks collapsed to ~0.1A -- so 2610 is very likely not a
 #     position it actually reaches. Treat ~2530us as the real limit until re-measured.
-ARM_POSE_REST={'elbow':1950,'shoulder':2000,'wrist_pitch':1275}
+ARM_POSE_REST={'elbow':1825,'shoulder':2000,'wrist_pitch':1200}
 # 2026-10-13 STOW = lying back over the top (owner). Measured: arm up at shoulder 1500, elbow
 # folded to 1950 (0.15 A; 2000 pressed at >2.5 A), then shoulder stepped back to 2000 (0.11 A,
 # lying on his top; 2100 pressed into him at 3.2 A). Reached only in that order (brain._rest_plan).
+# Refined the same day: the DS3225 elbow keeps HOLDING with the pulses off (it is not limp -- it
+# holds its last pulse while the 6 V rail is on), so in stow it must not press: elbow 1950 held
+# 0.60 A there, and folding UP to it (as stow does) 1875 held 1.53 A, 1900 2.29 A, 1850 0.31 A,
+# 1825 0.12 A -> 1825. Wrist 1275 added ~1 A folded, 1200 nothing.
 ARM_STOW_UPRIGHT_US=1500        # shoulder: arm standing up, where the elbow folds/opens safely
 # ⚠ 2026-10-13 REPLACES the two caveats above (old servos). Re-measured on the new hardware:
 # shoulder pair 1750 (10-12: the furthest back before the hand meets his front, held 0.05 A;
@@ -516,7 +534,7 @@ ARM_WAVE_BASE_LEG_S=0.6
 ARM_WAVE_LEG_S=0.6     # 10-13: slower legs, the quick reversals jolted the shoulder pair
 # Where the wave returns to: ARM_POSE_REST with the wrist at 2300us, the low-current variant noted
 # under ARM_POSE_REST (0.23A vs 0.87A at 2450). The elbow is clamped to ARM_SERVO_MAX_US by arm.py.
-ARM_REST_WRIST_US=1275   # 10-13: 2300 is outside the refitted wrist's range; mid-range until re-measured
+ARM_REST_WRIST_US=1200   # 10-13: stow-measured (1275 pressed ~1 A with the arm folded)
 #
 # Any arm motion should watch INA260 ARM_6V current and release the arm when it stays above this
 # for this long. A threshold checked only AFTER a move completes is useless -- that is how the
@@ -789,9 +807,10 @@ GRIP_SQUEEZE_US=40            # hold this far past where the jaw stopped: grips,
 GRIP_UNSENSED_US=1800         # no feedback: close only this far (well short of the 2210 stall)
 GRIP_HANDOFF_DELTA=0.01       # feedback change while holding that means the person took it
 GRIP_RAIL_MIN_V=5.0           # arm rail below this = no trustworthy ratio
-# Reach-down pose for the floor: NOT MEASURED. Jog it with scripts/arm_jog.py, owner watching, then
-# set e.g. {'shoulder':..,'elbow':..,'wrist_pitch':..}. Until then the fetch refuses to reach.
-ARM_POSE_REACH=None
+# Reach-down pose for the floor, MEASURED 2026-10-13 with the owner: upper arm flat forward over
+# the top, forearm straight down, hand at the floor just in front of the right-front wheel; held
+# 0.27 A. Elbow 1300 is the owner's limit that keeps the hand off the wheel.
+ARM_POSE_REACH={'shoulder':1300,'elbow':1300,'wrist_pitch':1275}
 # FR-1000-006 knock at a shut door (knock.py, 2026-10-08). Pose NOT MEASURED: jog it with
 # scripts/arm_jog.py, owner watching, arm pointing at a door from ARM_KNOCK_STANDOFF_CM, then set
 # e.g. {'shoulder':..,'elbow':..,'wrist_pitch':..}. Until then the navigator asks only. The tap
