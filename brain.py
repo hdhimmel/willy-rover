@@ -1424,12 +1424,18 @@ class RoverBrain:
             if (cmd.get('intent') in ('confirm_receipt','roam')
                     or any(w in words for w in ('yes','yeah','yep','sure','okay','ok'))
                     or 'go ahead' in text):
-                self._end_roam_ask(True)
+                self._end_roam_ask(True); return
             else:
                 log.info('Roam permission declined.')
-                self._say('Okay, maybe later.')
                 self._end_roam_ask(False)
-            return
+                # 2026-10-13 live: "Do you see a red ball?" arrived while the explore ask was
+                # pending and was swallowed as its "no". A real command is a no AND still runs.
+                import voice as _v
+                if cmd.get('intent') in _v._ACTIONABLE_INTENTS-{'confirm_receipt','stop','chat','roam'}:
+                    log.info(f'... and running {cmd.get("intent")!r}, which answered it')
+                else:
+                    self._say('Okay, maybe later.')
+                    return
         # Drop commands that have gone stale in the queue. voice.py has always stamped 'ts' here
         # but nothing ever read it, so a command queued while a task was running executed
         # whenever the task happened to finish -- say "turn right" during a 30s retrieval and the

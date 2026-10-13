@@ -171,3 +171,21 @@ def test_autonomous_roam_asks_permission_before_enabling():
     assert 'ROAM_PERMISSION_OK' in result.stdout, (
         f'roam-permission test failed\n--- stdout ---\n{result.stdout}\n'
         f'--- stderr ---\n{result.stderr}')
+
+
+def test_a_command_given_as_the_answer_still_runs():
+    # 2026-10-13 live: "Do you see a red ball?" was swallowed as the explore ask's "no"
+    env=dict(os.environ,WILLY_SIMULATE='1')
+    script=_SCRIPT.split('# 1.')[0]+'''
+f=fb(); f._roam_allowed()
+f.detector=types.SimpleNamespace(available=True,detect=lambda classes=None:[{"class":"sports ball","conf":0.9,
+    "bbox":(700,400,760,460),"frame_w":1536,"frame_h":864}] if classes in (["sports ball"],None) else [])
+q(f,"see_object",text="do you see a red ball",object="red ball")
+f._drain_voice_commands()
+assert f._roam_permission is False and f._roam_ask_pending is False
+assert not any("later" in s.lower() for s in f.said), f.said
+assert any("Yes, I can see a red ball" in s for s in f.said), f.said
+print("ANSWER_RUNS_OK")
+'''
+    r=subprocess.run([sys.executable,'-c',script],cwd=_REPO_ROOT,env=env,capture_output=True,text=True,timeout=60)
+    assert 'ANSWER_RUNS_OK' in r.stdout, r.stdout+r.stderr
