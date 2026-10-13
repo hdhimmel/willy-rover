@@ -80,6 +80,39 @@ class RetrievalTask:
         self._lost_count=0; self.state='APPROACH'
 
     def _approach(self,d,tilt):
+        # 2026-10-13: line up by IMAGE POSITION (config.RETRIEVAL_TARGET_XY: where the object sits
+        # when the reach lands on it), turning the body for left/right and creeping for near/far.
+        # The camera cannot see under the reached arm, so all lining-up happens before the reach.
+        if self.safety.timed_move_active: return
+        det=self._best(self.detector.detect(classes=[self._target_class]))
+        if det is None:
+            self._lost_count+=1
+            if self._lost_count>20:
+                self.safety.stop(); self.state='FAILED'; self._fail_reason='lost sight of target while approaching'
+            return
+        self._lost_count=0
+        x1,y1,x2,y2=det['bbox']
+        cx=(x1+x2)/2/det['frame_w']; cy=(y1+y2)/2/det['frame_h']
+        tx,ty=config.RETRIEVAL_TARGET_XY; tolx,toly=config.RETRIEVAL_TARGET_TOL
+        if abs(cx-tx)>tolx:
+            (self.safety.turn_right_for if cx>tx else self.safety.turn_left_for)(
+                config.RETRIEVAL_TURN_PULSE_S,config.SPEED_SLOW*0.5)
+            return
+        if cy<ty-toly:
+            if d.get('front',999)<config.DIST_STOP:
+                # something closer than the object is in the way -- never push through it
+                self.safety.stop(); self.state='FAILED'; self._fail_reason='something is in the way'
+                return
+            near,far=config.RETRIEVAL_CREEP_PULSE_S
+            self.safety.forward_for(near if ty-cy<0.15 else far,config.SPEED_SLOW*0.6)
+            return
+        if cy>ty+toly:
+            self.safety.reverse_for(config.RETRIEVAL_CREEP_PULSE_S[0],config.SPEED_SLOW*0.6)
+            return
+        self.safety.stop(); self.state='GRASP'
+        log.info(f'Lined up: object at ({cx:.3f},{cy:.3f}), target ({tx},{ty})')
+
+    def _approach_by_distance_unused(self,d,tilt):
         # FR-1700-003: respects the same obstacle thresholds as brain.py's ROAM/SLOW/AVOID —
         # a real obstacle takes priority over the retrieval path, same as normal driving.
         # Non-blocking (§2): bearing-correction turns are now deadline-based via self.safety,
@@ -122,9 +155,7 @@ class RetrievalTask:
         return int(self.arm.pulse(joint)) if self.arm.was_driven(joint) else default
 
     def _start_grasp(self):
-        half=(config.ARM_SERVO_MAX_US-config.ARM_SERVO_MIN_US)/2
-        base_us=max(config.ARM_SERVO_MIN_US,min(config.ARM_SERVO_MAX_US,
-                    config.ARM_SERVO_CENTER_US+(self._bearing_deg/90.0)*half))
+        base_us=config.ARM_SERVO_CENTER_US   # 2026-10-13: lined up by turning the body
         plan=grip.reach_plan(base_us,self._joint_now('shoulder',config.ARM_POSE_REST['shoulder']),
                              self._joint_now('elbow',None))
         if plan is None:

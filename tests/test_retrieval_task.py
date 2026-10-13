@@ -82,7 +82,7 @@ def test_grasp_retick_before_deadline_is_a_noop():
 def test_full_grasp_obeys_the_arm_rules_and_reaches_verify():
     rt=_grasp_task(); _run(rt)
     assert rt.state=='VERIFY' and rt._grip_result=='unsensed'      # no feedback in this fake
-    P=rt.arm.pulses; joints=[j for j,_ in P]
+    P=[p for p in rt.arm.pulses if p[0]!='shoulder_pair']; joints=[j for j,_ in P]
     el=joints.index('elbow')                                          # elbow set while upright
     assert P[el-1]==('shoulder',config.ARM_STOW_UPRIGHT_US)
     sh=[u for j,u in P if j=='shoulder']
@@ -112,3 +112,29 @@ def test_abort_when_not_active_still_resets_grasp_state():
     rt.abort('reason')
     assert rt.state=='ABORTED'
     assert rt._grasp_step==0 and rt._grasp_deadline is None
+
+
+# --- 2026-10-13: line-up by image position ---
+
+def _lineup(cx,cy,front=999):
+    import types
+    calls=[]
+    s=types.SimpleNamespace(timed_move_active=False,
+        turn_left_for=lambda t,v: calls.append('left'),turn_right_for=lambda t,v: calls.append('right'),
+        forward_for=lambda t,v: calls.append('fwd'),reverse_for=lambda t,v: calls.append('back'),
+        stop=lambda: calls.append('stop'))
+    W,H=1536,864
+    det={'class':'cup','conf':0.9,'bbox':(cx*W-20,cy*H-20,cx*W+20,cy*H+20),'frame_w':W,'frame_h':H}
+    rt=RetrievalTask(s,None,types.SimpleNamespace(detect=lambda classes=None:[det]))
+    rt.state='APPROACH'; rt._target_class='cup'
+    rt._approach({'front':front},0.0)
+    return rt.state,calls
+
+def test_lineup_turns_creeps_backs_off_and_grasps_on_target():
+    tx,ty=config.RETRIEVAL_TARGET_XY
+    assert _lineup(tx+0.2,0.5)[1]==['right'] and _lineup(tx-0.2,0.5)[1]==['left']
+    assert _lineup(tx,0.5)[1]==['fwd']
+    assert _lineup(tx,min(1.0,ty+0.06))[1]==['back']
+    assert _lineup(tx,ty)==('GRASP',['stop'])
+    st,c=_lineup(tx,0.5,front=1)
+    assert st=='FAILED' and 'fwd' not in c                 # never pushes through something closer

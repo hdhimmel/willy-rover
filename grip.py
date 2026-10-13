@@ -87,6 +87,15 @@ def _ramp(joint,a,b,last_delay=0.3):
     d=step if b>a else -step
     return [(joint,v,config.ARM_WAVE_STEP_S) for v in range(a+d,b,d)]+[(joint,b,last_delay)]
 
+def shoulder_ramp(a,b,last_delay=0.3):
+    """A shoulder move from a to b on BOTH servos (CH2+CH3), in ARM_PAIR_STEP_US steps every
+    ARM_PAIR_STEP_S, then CH3 dropped again (config.ARM_SHOULDER_PAIR note, 2026-10-13)."""
+    step=config.ARM_PAIR_STEP_US; out=[('shoulder_pair',1,0.2)]
+    if a!=b:
+        d=step if b>a else -step
+        out+=[('shoulder',v,config.ARM_PAIR_STEP_S) for v in range(a+d,b,d)]
+    return out+[('shoulder',b,last_delay),('shoulder_pair',0,0.2)]
+
 def reach_plan(base_us,shoulder_from,elbow_from):
     """Arm steps (joint, us, delay_s) from wherever the arm is to the reach-down pose, honouring the
     owner's rule: OPEN THE ELBOW before the shoulder moves, shoulder in ARM_WAVE_APPROACH_STEP_US
@@ -98,10 +107,10 @@ def reach_plan(base_us,shoulder_from,elbow_from):
     # shoulder forward to the floor. Elbow and shoulder both stepped (a jump slams the joint).
     ramp=_ramp; up=config.ARM_STOW_UPRIGHT_US
     plan=[('gripper',config.GRIP_OPEN_US,0.3),('wrist_pitch',config.ARM_REST_WRIST_US,0.3)]
-    plan+=ramp('shoulder',shoulder_from,up)
+    plan+=shoulder_ramp(shoulder_from,up)
     plan+=([('elbow',reach['elbow'],0.6)] if elbow_from is None else ramp('elbow',elbow_from,reach['elbow']))
     plan+=[('base',base_us,0.4)]
-    plan+=ramp('shoulder',up,reach['shoulder'])
+    plan+=shoulder_ramp(up,reach['shoulder'])
     if 'wrist_pitch' in reach: plan.append(('wrist_pitch',reach['wrist_pitch'],0.3))
     return plan
 
@@ -111,7 +120,4 @@ def lift_plan(shoulder_from):
     is holding the object's height and the gripper is shut on it)."""
     # 2026-10-13: up to UPRIGHT, not to rest -- lying back with the elbow open swings the hand
     # into his front. Stowing (with the object released) is a separate, later step.
-    step=config.ARM_WAVE_APPROACH_STEP_US; target=config.ARM_STOW_UPRIGHT_US
-    d=step if target>shoulder_from else -step
-    plan=[('shoulder',v,config.ARM_WAVE_STEP_S) for v in range(shoulder_from+d,target,d)]
-    return plan+[('shoulder',target,0.3)]
+    return shoulder_ramp(shoulder_from,config.ARM_STOW_UPRIGHT_US)

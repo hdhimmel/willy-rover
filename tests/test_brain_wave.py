@@ -51,7 +51,7 @@ while f._state=="WAVE" and n<500:
     if f._wave_deadline is not None: f._wave_deadline=0
     f._wave({},0.0); n+=1
 assert f._state=="IDLE"
-P=f.arm.pulses; W=config.ARM_POSE_WAVE_HELLO; R=config.ARM_POSE_REST; UP=config.ARM_STOW_UPRIGHT_US
+P=[p for p in f.arm.pulses if p[0]!="shoulder_pair"]; W=config.ARM_POSE_WAVE_HELLO; R=config.ARM_POSE_REST; UP=config.ARM_STOW_UPRIGHT_US
 def steps_ok(seq,start):
     return all(abs(y-x)<=config.ARM_WAVE_APPROACH_STEP_US for x,y in zip([start]+seq,seq))
 # 2026-10-13 order: stand up folded, open the elbow, raise, wave, sway the base, stow.
@@ -73,14 +73,14 @@ assert P[-1]==("shoulder",R["shoulder"])
 up_before_fold=max(i for i,(j,us) in enumerate(P[:last_el]) if j=="shoulder")
 assert P[up_before_fold]==("shoulder",UP)
 # stow from anywhere: wrist, shoulder to upright, elbow, then shoulder back -- all stepped
-plan=RoverBrain._rest_plan(1000,1000)
+plan=[p for p in RoverBrain._rest_plan(1000,1000) if p[0]!="shoulder_pair"]
 assert [j for j,_,_ in plan][0]=="wrist_pitch"
 order=[j for j,_,_ in plan]
 i_el=order.index("elbow")
 assert plan[i_el-1][:2]==("shoulder",UP) and plan[-1][:2]==("shoulder",R["shoulder"])
 assert steps_ok([u for j,u,_ in plan if j=="shoulder"],1000) and steps_ok([u for j,u,_ in plan if j=="elbow"],1000)
 # elbow position unknown -> sent straight to rest, but only while upright
-plan=RoverBrain._rest_plan(1000)
+plan=[p for p in RoverBrain._rest_plan(1000) if p[0]!="shoulder_pair"]
 k=[j for j,_,_ in plan].index("elbow")
 assert plan[k][:2]==("elbow",R["elbow"]) and plan[k-1][:2]==("shoulder",UP)
 print("WAVE_CHECK_OK")

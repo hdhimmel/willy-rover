@@ -395,6 +395,12 @@ ARM_BASE=6; ARM_WRIST_PITCH=0; ARM_ELBOW=1; ARM_SHOULDER=2; ARM_SHOULDER_B=3
 # deadbands and locked at 2.9-5.8 A -- every arm jam that day. CH2 alone held the upright arm at
 # 0.04 A. Set True to drive both again (same pulse; never mirrored).
 ARM_SHOULDER_PAIR=False
+# ...EXCEPT for the heavy moves (2026-10-13): CH2 alone could not lift the arm back from the floor
+# reach (3.4 A); both servos stepped together ARM_PAIR_STEP_US every ARM_PAIR_STEP_S did it at
+# 0.3-1.6 A. So every shoulder RAMP in a plan engages CH3 ('shoulder_pair' step), moves slowly,
+# then drops CH3 again (grip.shoulder_ramp). Holding and the wave run on CH2 alone.
+ARM_PAIR_STEP_US=25
+ARM_PAIR_STEP_S=0.3
 ARM_WRIST_ROT=4; ARM_GRIPPER=5
 ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
 # Per-joint limits, clamped in arm.py on top of the servo range: {'joint':(min_us,max_us)}.
@@ -1357,7 +1363,16 @@ ENABLE_HAILO_VISION=True  # 2026-08-23: re-enabled after resolving the real powe
                           # independently re-verified post-fix -- check self-test/logs after deploy.
 HAILO_YOLO_MODEL_PATH='/usr/share/hailo-models/yolov8m_h10.hef'
 HAILO_COCO_LABELS_PATH='models/coco.txt'
-RETRIEVAL_APPROACH_STOP_CM=25   # distance from target to halt before attempting grasp
+RETRIEVAL_APPROACH_STOP_CM=25   # distance from target to halt before attempting grasp (unused since 10-13)
+# 2026-10-13 line-up by image position, not distance: the object's box centre, as a fraction of the
+# front-camera frame (x right, y down), where it sits when the hand lands on it at ARM_POSE_REACH.
+# Measured with the arm stowed and a tape roll under the reached hand: it sat at the bottom edge,
+# centre-right (the box is cut off by the frame edge, so y is the visible centre). Base yaw stays
+# centred: he turns his body to line the object up (owner: no extra camera, he turns to see it).
+RETRIEVAL_TARGET_XY=(0.586,0.93)
+RETRIEVAL_TARGET_TOL=(0.04,0.03)
+RETRIEVAL_TURN_PULSE_S=0.12
+RETRIEVAL_CREEP_PULSE_S=(0.12,0.3)   # forward pulse when close / far from the target row
 RETRIEVAL_GRASP_RETRIES=2       # FR-1700-005
 RETRIEVAL_PERSON_MAX_RANGE_CM=150  # FR-1700-008: hand-off proximity gate
 PURSUIT_STANDOFF_CM=60          # FR-1000 come_here/follow: how close is "arrived" -- stop short of a person, not into them

@@ -1828,9 +1828,9 @@ class RoverBrain:
         p=config.ARM_POSE_WAVE_HELLO; up=config.ARM_STOW_UPRIGHT_US
         ramp=RoverBrain._ramp
         plan=[('wrist_pitch',config.ARM_REST_WRIST_US,0.3)]
-        plan+=ramp('shoulder',shoulder_from,up)                       # stand up, still folded
+        plan+=grip.shoulder_ramp(shoulder_from,up)                    # stand up, still folded
         plan+=ramp('elbow',config.ARM_POSE_REST['elbow'] if elbow_from is None else elbow_from,p['elbow'])
-        plan+=ramp('shoulder',up,p['shoulder'])
+        plan+=grip.shoulder_ramp(up,p['shoulder'])
         plan+=[('wrist_pitch',p['wrist_pitch'],0.3)]
         lo,hi=config.ARM_WAVE_WRIST_US
         for _ in range(config.ARM_WAVE_CYCLES):
@@ -1853,9 +1853,9 @@ class RoverBrain:
         straight to its rest value while the arm is upright, the one place that move is safe."""
         r=config.ARM_POSE_REST; up=config.ARM_STOW_UPRIGHT_US; ramp=RoverBrain._ramp
         plan=[('wrist_pitch',config.ARM_REST_WRIST_US,0.3)]
-        plan+=ramp('shoulder',shoulder_from,up)
+        plan+=grip.shoulder_ramp(shoulder_from,up)
         plan+=([('elbow',r['elbow'],0.6)] if elbow_from is None else ramp('elbow',elbow_from,r['elbow']))
-        plan+=ramp('shoulder',up,r['shoulder'])
+        plan+=grip.shoulder_ramp(up,r['shoulder'])
         return plan
 
     def _shoulder_now(self):

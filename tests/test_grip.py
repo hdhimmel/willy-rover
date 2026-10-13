@@ -61,7 +61,7 @@ def test_no_reach_plan_until_the_pose_is_measured(monkeypatch):
 
 def test_reach_opens_the_elbow_first_and_steps_the_shoulder(monkeypatch):
     monkeypatch.setattr(config,'ARM_POSE_REACH',{'shoulder':1200,'elbow':1300,'wrist_pitch':1500})
-    plan=grip.reach_plan(1500,2010,None)
+    plan=[p for p in grip.reach_plan(1500,2010,None) if p[0]!='shoulder_pair']
     joints=[j for j,_,_ in plan]
     assert joints[0]=='gripper' and plan[0][1]==config.GRIP_OPEN_US
     sh_i=[i for i,j in enumerate(joints) if j=='shoulder']; el_i=joints.index('elbow')
@@ -80,3 +80,10 @@ def test_fetch_refuses_aloud_without_a_reach_pose(monkeypatch):
     t=RetrievalTask(types.SimpleNamespace(),arm,types.SimpleNamespace(),voice=voice)
     t.state='GRASP'; t._grasp({},0)
     assert t.state=='FAILED' and 'reach' in said[-1]
+
+
+def test_shoulder_ramp_engages_the_pair_and_steps_slowly():
+    r=grip.shoulder_ramp(1300,1500)
+    assert r[0][:2]==('shoulder_pair',1) and r[-1][:2]==('shoulder_pair',0)
+    sh=[u for j,u,_ in r if j=='shoulder']
+    assert sh[-1]==1500 and all(abs(b-a)<=config.ARM_PAIR_STEP_US for a,b in zip([1300]+sh,sh))

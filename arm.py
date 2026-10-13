@@ -52,10 +52,19 @@ class Arm:
              'elbow':config.ARM_ELBOW,'wrist_rot':config.ARM_WRIST_ROT,'wrist_pitch':config.ARM_WRIST_PITCH,
              'gripper':config.ARM_GRIPPER}
     _PAIRED={'shoulder':(config.ARM_SHOULDER,config.ARM_SHOULDER_B)}
-    @classmethod
-    def _channels(cls,joint):
-        if joint in cls._PAIRED and config.ARM_SHOULDER_PAIR: return cls._PAIRED[joint]
-        return (cls._JOINTS[joint],)
+    def _channels(self,joint):
+        if joint in self._PAIRED and (config.ARM_SHOULDER_PAIR or getattr(self,'_pair',False)):
+            return self._PAIRED[joint]
+        return (self._JOINTS[joint],)
+    def _set_pair(self,on):
+        """Engage CH3 on the shoulder (at CH2's current pulse) for a heavy move, or drop it."""
+        self._pair=bool(on)
+        ch=config.ARM_SHOULDER_B
+        if on and 'shoulder' in self._driven:
+            self._pca.channels[ch].duty_cycle=int(self._pulse['shoulder']/self._PERIOD_US*65535)
+        elif not on and not config.ARM_SHOULDER_PAIR:
+            self._pca.channels[ch].duty_cycle=0
+        return int(on)
     _PERIOD_US=1_000_000/config.SERVO_PWM_FREQ
     def __init__(self,on_idle=None):
         # NO JUMP AT STARTUP (2026-10-02, seen on the rover). Releasing only SLEEPs the PCA9685,
@@ -102,7 +111,7 @@ class Arm:
             except Exception: pass
         try: self._pca.mode1_reg=self._pca.mode1_reg|0x10      # MODE1 bit4 SLEEP
         except Exception: pass
-        self._asleep=True
+        self._asleep=True; self._pair=False
     def _wake(self):
         if not self._asleep: return
         try:
@@ -136,6 +145,7 @@ class Arm:
     # get identical pulses -- NOT mirrored (2*center - x), which would make them fight. The
     # 09-17 "not a pair" finding was made while one of the two servos was dead.
     def set_pulse(self,joint,us):
+        if joint=='shoulder_pair': self._wake(); self._idle_since=time.monotonic(); return self._set_pair(us)
         return self._drive(joint,us)
     def pulse(self,joint): return self._pulse[joint]
     def was_driven(self,joint):

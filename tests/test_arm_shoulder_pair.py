@@ -41,3 +41,13 @@ def test_per_joint_limits_clamp(monkeypatch):
     a=_arm(monkeypatch)
     lo,hi=config.ARM_JOINT_LIMITS_US['elbow']
     assert a.set_pulse('elbow',700)==lo and a.set_pulse('elbow',2600)==hi
+
+
+def test_pair_engages_for_a_move_then_drops(monkeypatch):
+    monkeypatch.setattr(config,'ARM_SHOULDER_PAIR',False)
+    a=_arm(monkeypatch); a.set_pulse('shoulder',1500)
+    a.set_pulse('shoulder_pair',1); a.set_pulse('shoulder',1525)
+    d=[a._pca.channels[c].duty_cycle for c in (config.ARM_SHOULDER,config.ARM_SHOULDER_B)]
+    assert d[0]==d[1]>0
+    a.set_pulse('shoulder_pair',0)
+    assert a._pca.channels[config.ARM_SHOULDER_B].duty_cycle==0
