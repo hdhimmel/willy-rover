@@ -124,3 +124,12 @@ def test_can_you_touch_is_a_reach():
     import voice
     v=object.__new__(voice.VoicePipeline)
     assert v._fast_path('can you touch the cup')['intent']=='reach_touch'
+
+
+@pytest.mark.parametrize('said,obj',[('do you see a red ball','red ball'),('can you see the cup','cup'),
+                                     ('are you seeing a ball','ball'),('is there a bottle in front of you','bottle')])
+def test_seeing_questions_use_the_camera_not_the_web(said,obj):
+    # 2026-10-13 (owner): "do you see a red ball?" went to the internet
+    import voice
+    v=object.__new__(voice.VoicePipeline)
+    assert v._fast_path(said)=={'intent':'see_object','args':{'object':obj},'reply':''}

@@ -71,7 +71,7 @@ _NON_SPOKEN_SOURCES=frozenset({'remote','email','routine'})
 # What an email may queue: everything a spoken command could, through the same gating.
 _EMAIL_QUEUEABLE=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve','map',
     'stop_map','status','battery','arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','follow','diagnostics',
-    'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs','shutdown','demo_replay','roam','check_logs','learn_home','home_address',
+    'where_are_you','what_do_you_see','see_object','what_doing','privacy_on','privacy_off','name_room','mark_stairs','shutdown','demo_replay','roam','check_logs','learn_home','home_address',
     'routine','pose_go','pose_list'})
 # What a routine step is queued as: everything the brain executes (the rest just speak a reply).
 _ROUTINE_QUEUED=_EMAIL_QUEUEABLE|{'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save',
@@ -1692,6 +1692,26 @@ class RoverBrain:
             privacy.enable_mic_camera(); self._say("My microphone and camera are back on.")
         elif cmd.get('intent')=='what_doing':
             self._say(self._activity_phrase())
+        elif cmd.get('intent')=='see_object':
+            # 2026-10-13 (owner): "do you see a red ball?" answered from his camera, never the web.
+            want=cmd.get('args',{}).get('object','').strip()
+            cls=config.OBJECT_CLASS_ALIASES.get(want,want)
+            if not self.detector.available:
+                self._say("My camera isn't available right now.")
+            else:
+                dets=self.detector.detect(classes=[cls])
+                if not dets and ' ' in want:          # "red ball" -> try "ball"
+                    last=want.split()[-1]; cls=config.OBJECT_CLASS_ALIASES.get(last,last)
+                    dets=self.detector.detect(classes=[cls])
+                if dets:
+                    d=max(dets,key=lambda x:x['conf'])
+                    cx=(d['bbox'][0]+d['bbox'][2])/2/d['frame_w']
+                    where='on my left' if cx<0.38 else 'on my right' if cx>0.62 else 'in front of me'
+                    self._say(f"Yes, I can see a {want}, {where}.")
+                else:
+                    seen=sorted({x['class'] for x in self.detector.detect()} - {'person'})
+                    self._say(f"No, I don't see a {want}."+(f" I can see {', '.join(seen[:3])}." if seen else ''))
+                log.info(f'See {want!r} ({cls}): {len(dets)} found')
         elif cmd.get('intent')=='what_do_you_see':
             # v1: names detected object classes from the existing detector, not a real VLM caption.
             # Kept BRIEF (owner 2026-10-07): the three most confident distinct things, "and more".
