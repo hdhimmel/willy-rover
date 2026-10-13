@@ -60,3 +60,9 @@ docs/drawings/__pycache__/
 tof_floor_profile.json
 tof_rear_floor_profile.json
 gps_home.json
+# Rover-taught data (10-13): reach spots, arm poses, battery log state -- on the rover only.
+reach_table.json
+reach_table.json.tmp
+arm_poses.json
+battery_log.csv
+battery_charge_state.json
