@@ -517,7 +517,7 @@ ARM_SHOULDER_POSES_VERIFIED=True
 #  2. The elbow value is OUT OF SPEC (manufacturer range is 500-2500us). Past about 2530us the
 #     servo stopped responding -- peaks collapsed to ~0.1A -- so 2610 is very likely not a
 #     position it actually reaches. Treat ~2530us as the real limit until re-measured.
-ARM_POSE_REST={'elbow':1825,'shoulder':2000,'wrist_pitch':1200}
+ARM_POSE_REST={'elbow':1800,'shoulder':2000,'wrist_pitch':1200}   # elbow 1825->1800 10-13 eve: a stow left it pressing at 3.7 A
 # 2026-10-13 STOW = lying back over the top (owner). Measured: arm up at shoulder 1500, elbow
 # folded to 1950 (0.15 A; 2000 pressed at >2.5 A), then shoulder stepped back to 2000 (0.11 A,
 # lying on his top; 2100 pressed into him at 3.2 A). Reached only in that order (brain._rest_plan).
