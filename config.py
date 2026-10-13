@@ -391,6 +391,41 @@ ARM_PCA_ADDR=0x43
 ARM_BASE=6; ARM_WRIST_PITCH=0; ARM_ELBOW=1; ARM_SHOULDER=2; ARM_SHOULDER_B=3
 ARM_WRIST_ROT=4; ARM_GRIPPER=5
 ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
+# Per-joint limits, clamped in arm.py on top of the servo range: {'joint':(min_us,max_us)}.
+# Empty since 2026-10-13: the elbow servo was replaced twice on 10-12, and the third one has not
+# been mapped (its 500-2500 sweep jammed nowhere). Put each joint's measured stops here.
+ARM_JOINT_LIMITS_US={}
+#
+# Teaching arm poses by voice (teach.py, 2026-10-13). One jog = one step on one joint.
+# ARM_POSE_EPOCH is stamped on every saved pose: BUMP IT whenever a servo or horn changes, and
+# every pose taught before is refused instead of being replayed onto different hardware.
+ARM_POSE_EPOCH='2026-10-13'
+ARM_POSES_PATH='arm_poses.json'          # under WILLY_MEMORY_ROOT, on the rover only
+ARM_TEACH_STEP_US=50
+ARM_TEACH_STEP_SIZES_US={'small':20,'normal':50,'big':150}
+ARM_TEACH_IDLE_S=180.0                   # teach mode ends after this long with no command
+# Which way each spoken direction moves the pulse. shoulder: measured 2026-10-12 (higher = up).
+# wrist pitch: measured 09-17 (higher lowers). gripper: measured (higher closes). Elbow, wrist
+# rotate and base are NOT measured on the current servos -- if "up" goes down, flip the sign here.
+ARM_TEACH_DIRECTIONS={
+    'shoulder':{'up':+1,'down':-1},
+    'elbow':{'up':+1,'down':-1},                       # unverified
+    'wrist_pitch':{'up':-1,'down':+1},
+    'wrist_rot':{'left':+1,'right':-1},                # unverified
+    'base':{'left':+1,'right':-1},                     # unverified
+    'gripper':{'open':-1,'close':+1},
+}
+# Where a joint not yet driven this boot starts when first jogged (its real position is unknown).
+# Shoulder pair and elbow: where their horns were fitted on 10-12. Gripper: measured open.
+ARM_TEACH_START_US={'shoulder':1500,'elbow':1500,'wrist_pitch':1500,'wrist_rot':1500,'base':1500,
+                    'gripper':1150}            # = GRIP_OPEN_US (defined further down)
+#
+# Routines ("when I say X, do A, then B, then C"; teach.py). The next step starts once the brain
+# has been free (IDLE, nothing queued, not speaking) for ROUTINE_STEP_GAP_S; a step that keeps it
+# busy longer than ROUTINE_STEP_TIMEOUT_S abandons the rest.
+ROUTINE_STEP_GAP_S=1.0
+ROUTINE_STEP_TIMEOUT_S=300.0
+ROUTINE_MAX_STEPS=10
 #
 # DO NOT CENTRE CH1. ARM_SERVO_CENTER_US applied to the elbow drives it into the top of Willy:
 # the servo fitted before 2026-09-17 held ~8A there indefinitely and was destroyed by it. Any

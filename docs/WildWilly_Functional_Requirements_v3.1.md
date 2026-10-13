@@ -3806,6 +3806,29 @@ guaranteed-save requirement in particular had none anywhere in the document.
         he says so. An unknown name is reported separately ("I haven't learned a way
         to…"); `replay_demonstration()` now returns `(None, None)` for it.
 
+-   **FR-1900-011 (added 2026-10-13, owner): arm poses taught by voice.** *"Teach your
+    arm"* starts a session; *"shoulder up"*, *"elbow down"*, *"wrist left"*, *"arm right"*
+    (base), *"open/close your hand"* each move one joint one step (`ARM_TEACH_STEP_US` 50 µs;
+    *"bigger/smaller steps"* 150/20); *"more"* repeats; *"remember this as knock"* saves the
+    pulses sent; *"pose knock"* / *"show me pose knock"* goes back to it in 50 µs steps, elbow
+    first; *"forget the pose knock"*, *"what poses do you know"*, *"done teaching"*. A pose is
+    the pulses Willie sent, never a reading: the servos report no position, so moving the arm
+    by hand teaches nothing, and after an idle release (the arm falls) nothing can be saved
+    until a joint is moved again. Each pose carries `ARM_POSE_EPOCH`; bumping it after a servo
+    or horn change makes every older pose refuse to run. Moves go through `Arm.set_pulse`
+    (per-joint limits, the shoulder pair) under the every-tick arm current guard; the idle
+    release is held off while teaching. `teach.py`; tests `tests/test_teach.py`. **Not yet
+    run on the rover.**
+-   **FR-1900-012 (added 2026-10-13, owner): multi-step routines.** FR-1900-007's
+    *"when I say X, do Y"* accepts several steps: *"when I say goodnight, do stow your arm,
+    then go home, then wave"*. Every step must be a command the fast path understands —
+    checked when it is taught, so a routine never stops halfway on an unknown step (up to
+    `ROUTINE_MAX_STEPS`, 10). Saying the trigger queues each step in turn through the brain's
+    normal command path, with all Directive gating; the next starts once the brain has been
+    IDLE, with nothing queued and not speaking, for `ROUTINE_STEP_GAP_S` (1 s). *"Stop"*
+    abandons the rest, and a step still busy after `ROUTINE_STEP_TIMEOUT_S` (300 s) abandons
+    it too. Routine steps never answer a pending yes/no question. **Not yet run on the rover.**
+
 # FR-2000 Email Account and Management
 
 Covers Willie\'s own dedicated Google/Gmail account --- used both as the

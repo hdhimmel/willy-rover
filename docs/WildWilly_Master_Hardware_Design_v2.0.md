@@ -1383,7 +1383,11 @@ of the two servos was dead — on 10-12 it drew no current until replaced.
 - **Watch 0x44 current while the arm moves**, and release above `ARM_CURRENT_LIMIT_A`
   (2.5 A) held `ARM_CURRENT_LIMIT_S` (0.4 s). The rover code does this every tick and
   sleeps the whole PCA9685. Settled current is what matters: 0.05–0.4 A at position.
-- Formal per-joint limits are not yet recorded (§14 item 22; `arm_jog.py`).
+- Formal per-joint limits are not yet recorded (§14 item 22; `arm_jog.py`). When measured they
+  go in `ARM_JOINT_LIMITS_US` (`{'joint':(min_us,max_us)}`), which `arm.py` clamps every command
+  to; it is empty since the 2026-10-12 elbow replacements.
+- **Bump `ARM_POSE_EPOCH` after any servo or horn change.** Poses taught by voice (FR-1900-011)
+  are pulse values for the hardware they were taught on; an old epoch makes them refuse to run.
 
 ---
 

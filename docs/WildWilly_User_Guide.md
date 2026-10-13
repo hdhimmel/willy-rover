@@ -158,6 +158,18 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
 - **"Wave hello"** / **"Say hi"** — raises the arm and waves.
 - **"Stow your arm"** / **"Put your arm away"** — moves it to the rest position, opening the
   elbow first so it doesn't hit him. If the arm strains, he lets it go limp and says so.
+- **Teaching him an arm position:** say **"teach your arm"**, then move one joint at a time:
+  **"shoulder up/down"**, **"elbow up/down"**, **"wrist up/down"**, **"wrist left/right"**,
+  **"arm left/right"** (turns the base), **"open/close your hand"**. **"More"** repeats the last
+  move; **"bigger steps"** / **"smaller steps"** change how far. When it looks right, say
+  **"remember this as"** and a name, e.g. *"remember this as knock"*. **"Done teaching"** ends it.
+  Later, **"pose knock"** (or *"show me pose knock"*) moves the arm back there. **"What poses do
+  you know"** lists them; **"forget the pose knock"** deletes one. Moving his arm by hand teaches
+  him nothing — he only knows where he moved it himself.
+- **Routines:** *"When I say goodnight, do stow your arm, then go home, then wave."* Each step
+  must be something he already understands, or he tells you which one he doesn't. Saying
+  **"goodnight"** then runs the steps in order, each one after the last has finished.
+  **"Stop"** cancels the rest. **"Forget goodnight"** deletes it.
 - **Not yet (since 2026-10-12):** his shoulder servos were replaced and his arm positions have to
   be measured again. Until then, wave and stow get *"I can't move my arm yet. My shoulder was just
   rebuilt and I need to relearn my arm positions."* and the arm stays still.

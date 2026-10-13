@@ -72,6 +72,7 @@ stubbed, disabled, approximate or not yet run on the rover, it says so.
 | `privacy.py` | 59 | Mic/camera disable flag; cloud-send notes; file purge |
 | `steer_override.py` | 65 | FR-600-004: parked steering override, held in IDLE, ended on leaving it |
 | `knock.py` | 70 | FR-1000-006: fixed timed knock step list and player; off until `ARM_POSE_KNOCK` is measured |
+| `teach.py` | 137 | FR-1900-011/012: arm poses taught by voice (jog, save, replay, epoch) and multi-step routines |
 | `hailo_server.py` | 255 | FR-1400-006: child process owning the Hailo chip (YOLO + LLM); client, restart, in-process fallback |
 | `thermal.py` | 70 | M-009: SoC temperature and fan tach, warm/hot levels, fan-stopped check |
 | `storage.py` | 53 | Data root resolution and availability check |
@@ -1120,6 +1121,20 @@ to 2300. Non-blocking, one step per tick deadline.
 
 `arm_stow` and `arm_home` step to `ARM_POSE_REST` (shoulder first, 50 µs at a time, then elbow,
 then wrist); shutdown releases the arm instead (corrected 2026-10-08).
+
+**Teaching by voice (`teach.py`, FR-1900-011/012, 2026-10-13).** `ArmTeacher` turns
+"<joint> <direction>" into one step on one joint (`ARM_TEACH_DIRECTIONS` holds the signs —
+shoulder, wrist pitch and gripper measured; elbow, wrist rotate and base not yet, flip them
+there if a direction comes out backwards). A joint not driven this boot, or any joint after an
+idle release, starts at `ARM_TEACH_START_US` instead of stepping from a placeholder.
+`brain._teach_cmd()` handles the intents; `brain._teach_tick()` holds off the idle release
+(`Arm.keep_alive()`) while teaching and ends the session after `ARM_TEACH_IDLE_S`. Poses are
+saved to `arm_poses.json` under `WILLY_MEMORY_ROOT` with `ARM_POSE_EPOCH`; replay is a stepped
+sequence through `_start_arm_sequence` (elbow, shoulder, then the light joints).
+`RoutineRunner` dispatches a routine's steps one at a time into `pending_commands` (source
+`routine`, which `_NON_SPOKEN_SOURCES` keeps from answering a pending ask); steps that only
+speak (time, date, chat) are said directly. `voice._routine_intent()` resolves the steps at
+trigger time; `_maybe_learn()` validates them when taught.
 
 **Diagnosis.** A current trace describes the motor, never the arm. Before interpreting a
 trace, check whether the joint physically moved. `arm_jog.py` is the calibration tool

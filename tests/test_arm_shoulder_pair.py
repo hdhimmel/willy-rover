@@ -7,6 +7,7 @@ import config
 
 def _arm(monkeypatch):
     monkeypatch.setattr(config,'ARM_RELEASE_WHEN_IDLE',False)
+    monkeypatch.setattr(config,'SIMULATE_HARDWARE',True)   # another test may leave it off
     import arm; return arm.Arm()
 
 def test_shoulder_drives_both_channels_with_the_same_pulse(monkeypatch):
@@ -20,3 +21,9 @@ def test_release_zeroes_both_shoulder_channels(monkeypatch):
     a=_arm(monkeypatch)
     a.set_pulse('shoulder',1700); a.release()
     assert a._pca.channels[config.ARM_SHOULDER].duty_cycle==0==a._pca.channels[config.ARM_SHOULDER_B].duty_cycle
+
+def test_per_joint_limits_clamp(monkeypatch):
+    monkeypatch.setattr(config,'ARM_JOINT_LIMITS_US',{'elbow':(1100,2400)})
+    a=_arm(monkeypatch)
+    lo,hi=config.ARM_JOINT_LIMITS_US['elbow']
+    assert a.set_pulse('elbow',700)==lo and a.set_pulse('elbow',2600)==hi

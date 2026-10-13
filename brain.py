@@ -22,6 +22,7 @@ from rotate import Rotation
 from steer_override import SteerOverride
 import avoidance
 import grip
+import teach
 from email_client import EmailClient
 from remote_cmd import RemoteCommandServer
 from feature_requests import FeatureRequests
@@ -64,11 +65,18 @@ _NON_EXPIRING_INTENTS=frozenset({'confirm_receipt'})
 _SPEECH_ONLY_INTENTS=frozenset({'status','battery','where_are_you','what_doing','privacy_on'})
 # Command sources that are not someone in the room speaking: they never answer a pending
 # yes/no ask (the shutdown confirmation, the roam permission). See answers_ask.
-_NON_SPOKEN_SOURCES=frozenset({'remote','email'})
+_NON_SPOKEN_SOURCES=frozenset({'remote','email','routine'})
 # What an email may queue: everything a spoken command could, through the same gating.
 _EMAIL_QUEUEABLE=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve','map',
     'stop_map','status','battery','arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','follow','diagnostics',
-    'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs','shutdown','demo_replay','roam','check_logs','learn_home','home_address'})
+    'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs','shutdown','demo_replay','roam','check_logs','learn_home','home_address',
+    'routine','pose_go','pose_list'})
+# What a routine step is queued as: everything the brain executes (the rest just speak a reply).
+_ROUTINE_QUEUED=_EMAIL_QUEUEABLE|{'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save',
+                                  'pose_forget','enrol','forget_everyone','demo_start','demo_stop'}
+# Teaching the arm and saved poses (teach.py, 2026-10-13), handled by RoverBrain._teach_cmd().
+_TEACH_INTENTS=frozenset({'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save',
+                          'pose_go','pose_forget','pose_list'})
 
 # Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
 # that state, before either drain pass, so Willie heard every command and answered none -- with
@@ -295,6 +303,8 @@ class RoverBrain:
                                rear_grab=self.rear_cam.grab,
                                say=self._say)
         self.steer_override=SteerOverride(self.steering)   # FR-600-004
+        self.teacher=teach.ArmTeacher()      # arm poses taught by voice (2026-10-13)
+        self.routine=teach.RoutineRunner()   # "when I say X, do A, then B" (2026-10-13)
         # FR-2300 GPS (2026-10-11). Optional: absent or fixless never blocks anything (FR-2300-005).
         self.gps=None
         if config.ENABLE_GPS and not config.SIMULATE_HARDWARE:
@@ -954,6 +964,7 @@ class RoverBrain:
             if self.pursuit.active: self.pursuit.abort('voice stop')
             if self.rotation.active: self.rotation.abort('voice stop')
             self.steer_override.end('release','voice stop')
+            self.routine.abandon('voice stop')   # stop means the rest of the routine too
             self._abandon_stuck_if_active()
             self.safety.emergency_stop('voice stop')
             self._revoke_roam_permission()  # stop means stop, not "pause for 30 seconds"
@@ -1256,6 +1267,7 @@ class RoverBrain:
         self._drain_voice_commands(speech_only=True)
         if (self._state=='IDLE' or self.mapping.active) and not self.retrieval.active and not self.pursuit.active:
             self._drain_voice_commands()
+        self._teach_tick()
 
         {'IDLE':self._idle,'ROAM':self._roam,'SLOW':self._slow,'AVOID':self._avoid,
          'STUCK':self._stuck,'DOCK':self._dock,'WARN':self._warn,'RETRIEVE':self._retrieve,
@@ -1547,6 +1559,12 @@ class RoverBrain:
             ok,msg=self.start_rotation(deg)
             if not ok: self._say(f"I can't turn: {msg}")
             log.info(f'Voice-triggered rotation {deg:+.0f} deg ({msg})')
+        elif cmd.get('intent') in _TEACH_INTENTS:
+            self._teach_cmd(cmd)
+        elif cmd.get('intent')=='routine':
+            a=cmd.get('args',{})
+            self.routine.start(a.get('name','routine'),a.get('steps',[]))
+            log.info(f'Routine "{a.get("name")}" started: {[st.get("text") for st in a.get("steps",[])]}')
         elif cmd.get('intent')=='roam':
             # 2026-10-10 (owner): roam by voice without the screen. Saying it grants the session
             # permission (same grant as the button) and, from IDLE, sets off now.
@@ -1857,6 +1875,76 @@ class RoverBrain:
         self._wave_step+=1
         if self._wave_step>=len(self._wave_seq): self._go('IDLE')
         else: self._wave_deadline=now+delay
+
+    # ---- teaching (teach.py, 2026-10-13) ---------------------------------------------------
+    def _arm_now(self,joint):
+        """The pulse a joint is really at, or None: not driven this boot, or the arm has been
+        released since (it fell, so the last pulse no longer describes it)."""
+        if self.arm.released or not self.arm.was_driven(joint): return None
+        return int(self.arm.pulse(joint))
+
+    def _teach_cmd(self,cmd):
+        i=cmd.get('intent'); a=cmd.get('args',{}); name=a.get('name','').strip()
+        if i=='arm_teach':
+            self.teacher.start()
+            self._say("Okay, teaching my arm. Tell me a joint and a direction, like shoulder up. "
+                      "Say more to repeat it, and remember this as, and a name, to save it.")
+        elif i=='arm_teach_done':
+            self.teacher.end(); self._say('Done teaching.')
+        elif i in ('arm_jog','arm_more','arm_step'):
+            if not self.teacher.active:
+                self._say('Say teach your arm first.'); return
+            if i=='arm_step':
+                self.teacher.set_step(a.get('size','normal'))
+                self._say({'big':'Bigger steps.','small':'Smaller steps.'}.get(a.get('size'),'Normal steps.')); return
+            if i=='arm_jog': joint,us=self.teacher.jog(a.get('joint'),a.get('dir'),self._arm_now(a.get('joint','')))
+            else: joint,us=self.teacher.again(self._arm_now)
+            if joint is None: self._say(us); return
+            self.arm.set_pulse(joint,us)
+            log.info(f'Teach jog: {joint} -> {us} us')
+        elif i=='pose_save':
+            pulses={j:self._arm_now(j) for j in self.arm.joints}
+            pulses={j:u for j,u in pulses.items() if u is not None}
+            if not name: self._say('What should I call it?'); return
+            if not pulses:
+                self._say("I don't know where my arm is yet. Move it first, then I can remember it."); return
+            teach.save_pose(name,pulses)
+            log.info(f'Pose saved: {name} {pulses}')
+            self._say(f'Saved. That pose is {name}.')
+        elif i=='pose_go':
+            target,why=teach.get_pose(name)
+            if why: self._say(why); return
+            plan=teach.pose_plan(target,{j:self._arm_now(j) for j in target})
+            if not plan: self._say("I'm already there."); return
+            log.info(f'Pose {name}: {len(plan)} steps')
+            self._start_arm_sequence(plan)
+        elif i=='pose_forget':
+            self._say(f'Okay, I forgot {name}.' if teach.forget_pose(name) else f"I don't know a pose called {name}.")
+        elif i=='pose_list':
+            names=sorted(teach.load_poses())
+            self._say(('I know '+', '.join(names)+'.') if names else "I haven't learned any arm poses yet.")
+
+    def _teach_tick(self):
+        if self.teacher.active:
+            if self.teacher.timed_out():
+                self.teacher.end(); self._say("I've stopped teaching my arm.")
+            else:
+                self.arm.keep_alive()   # no idle release while being taught: a released arm falls
+        if self.routine.active:
+            speaking=getattr(self.voice,'_speaking',None)
+            free=(self._state=='IDLE' and self.voice.pending_commands.empty()
+                  and not (speaking is not None and speaking.is_set()))
+            step=self.routine.tick(free)
+            if step is not None: self._routine_step(step)
+
+    def _routine_step(self,step):
+        intent=step.get('intent')
+        log.info(f'Routine "{self.routine.name}" step: "{step.get("text")}" -> {intent}')
+        if intent in ('time','date','chat') or (step.get('reply') and intent not in _ROUTINE_QUEUED):
+            if step.get('reply'): self._say(step['reply'])
+            return
+        self.voice.pending_commands.put({'source':'routine','intent':intent,'args':step.get('args',{}),
+                                         'text':step.get('text',''),'ts':time.time()})
 
     def _begin_shutdown(self,reason='voice command'):
         # FR-900-005: halt motion, stow arm, persist state, then `shutdown -h now`. Reuses

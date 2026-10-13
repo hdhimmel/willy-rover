@@ -240,6 +240,8 @@ Other header pins:
   before the 2026-10-12 servo change are invalid; `ARM_SHOULDER_POSES_VERIFIED=False` blocks
   wave/stow/home/reach/knock until they are re-measured.
 - **A released arm falls.** Holding a pose is nearly free; moving costs amps.
+- **Bump `ARM_POSE_EPOCH` after any arm servo or horn change** — voice-taught poses
+  (`teach.py`) are pulse values for the hardware they were taught on.
 - The arm current guard (`_check_arm_current()`, 0x44, `ARM_CURRENT_LIMIT_A` 2.5 A for
   `ARM_CURRENT_LIMIT_S` 0.4 s → release) runs every tick *during* motion. A limit checked
   after a move protects nothing.

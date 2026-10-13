@@ -102,9 +102,14 @@ class Arm:
         self._asleep=False
     @property
     def released(self): return self._asleep
+    def keep_alive(self):
+        """Postpone the idle release (teach mode: the arm is holding a pose being taught)."""
+        if not self._asleep: self._idle_since=time.monotonic()
     def _drive(self,joint,us):
         self._wake(); self._idle_since=time.monotonic()
         us=max(config.ARM_SERVO_MIN_US,min(config.ARM_SERVO_MAX_US,us))
+        lo,hi=config.ARM_JOINT_LIMITS_US.get(joint,(config.ARM_SERVO_MIN_US,config.ARM_SERVO_MAX_US))
+        us=max(lo,min(hi,us))
         duty=int(us/self._PERIOD_US*65535)
         for ch in self._channels(joint): self._pca.channels[ch].duty_cycle=duty
         self._pulse[joint]=us; self._driven.add(joint)

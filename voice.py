@@ -232,6 +232,30 @@ _MARK_STAIRS=re.compile(r"(?:there are |these are )?(?:the )?(?:stairs|steps)(?:
 _DEMO_START=re.compile(r"(?:watch me|follow me)?[\s,]*(?:and )?learn (?:the |this )?(?:way|route|path) (?:to )?(?:the )?([a-z][a-z ]{1,30})",re.I)
 _DEMO_STOP=re.compile(r"(?:that's it|that is it|stop learning|done learning|finished|we're here|we are here)",re.I)
 _DEMO_REPLAY=re.compile(r"(?:do|take|repeat|replay|show me) (?:the )?(?:way|route|path) (?:to )?(?:the )?([a-z][a-z ]{1,30})",re.I)
+# Teaching the arm by voice (teach.py, 2026-10-13). Narrow, fullmatch, like every motion pattern.
+_NAME=r"([a-z][a-z0-9 ]{0,30}?)"
+_ARM_TEACH=re.compile(r"(?:let'?s |lets )?(?:teach|train) (?:your |the |my )?arm|arm (?:teach|teaching|training)(?: mode)?|"
+                      r"(?:start|enter) (?:arm )?(?:teach|teaching|training) mode",re.I)
+_ARM_TEACH_DONE=re.compile(r"(?:done|finished|stop|end|exit|quit) (?:teaching|training)(?: (?:your |the )?arm)?|"
+                           r"(?:exit|leave|end) (?:arm )?(?:teach|teaching|training) mode",re.I)
+_ARM_JOG=re.compile(r"(?:(?:move|turn|bring|raise|lower|put) )?(?:(?:the|your) )?"
+                    r"(shoulder|elbow|wrist turn|wrist twist|wrist rotation|wrist|base|arm) (up|down|left|right)",re.I)
+_ARM_GRIP=re.compile(r"(open|close) (?:(?:the|your) )?(?:hand|gripper|claw|jaws?)",re.I)
+_ARM_MORE=re.compile(r"(?:(?:a )?(?:little |bit |tiny bit )?more|again|keep going|one more|more please)",re.I)
+_ARM_STEP=re.compile(r"(bigger|larger|smaller|tiny|small|normal) steps?",re.I)
+_POSE_SAVE=re.compile(r"(?:remember|save|store|call) (?:this|it)(?: (?:pose|position))? as (?:the |a |an )?"+_NAME,re.I)
+_POSE_GO=re.compile(r"(?:(?:go to|move to|show me|do|strike|take) (?:the |your |a )?)?(?:pose|position) "+_NAME,re.I)
+_POSE_FORGET=re.compile(r"forget (?:the |your )?(?:pose|position) "+_NAME,re.I)
+_POSE_LIST=re.compile(r"what (?:poses|positions) do you know|list (?:your )?(?:poses|positions)",re.I)
+_STEP_SIZE={'bigger':'big','larger':'big','smaller':'small','tiny':'small','small':'small','normal':'normal'}
+
+def _jog_joint(word,direction):
+    w=word.lower(); d=direction.lower()
+    if w.startswith('wrist ') or (w=='wrist' and d in ('left','right')): return 'wrist_rot'
+    if w=='wrist': return 'wrist_pitch'
+    if w=='arm': return 'base' if d in ('left','right') else 'shoulder'
+    return w
+
 # FR-2100: "this is Carolyn" (a NAME -- "this is the kitchen" is a room, matched first).
 _ENROL=re.compile(r"this is ([A-Z][a-z]+)",re.I)
 _FORGET_EVERYONE=re.compile(r"forget everyone|forget all (?:the )?faces",re.I)
@@ -246,7 +270,8 @@ _RECALL=re.compile(r"what do you (?:remember|know)(?: about (.+))?",re.I)
 _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve',
     'confirm_receipt','map','stop_map','shutdown','status','battery','arm_stow','arm_home','wave',
     'come_here','come_to_me','rotate','steer','roam','follow','diagnostics','check_logs','learn_home','go_home','home_address','where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
-    'privacy_on','privacy_off','demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date'})
+    'privacy_on','privacy_off','demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date',
+    'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save','pose_go','pose_forget','pose_list','routine'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
 def _fp(core):
@@ -866,6 +891,9 @@ class VoicePipeline:
             for ins in self.memory.all_instructions():
                 if spoken==ins['trigger_phrase'].strip().rstrip('.!? ').lower():
                     log.info(f'Instruction applied: "{ins["trigger_phrase"]}" -> "{ins["action_text"]}"')
+                    routine=self._routine_intent(ins)
+                    if routine is not None:
+                        self._act_on_intent(routine,text); return
                     text=ins['action_text']; break
         fast=self._fast_path(text)
         if fast is not None:
@@ -937,6 +965,8 @@ class VoicePipeline:
             spoken=text.rstrip('.!? ').lower()
             for ins in self.memory.all_instructions():
                 if spoken==ins['trigger_phrase'].strip().rstrip('.!? ').lower():
+                    routine=self._routine_intent(ins)
+                    if routine is not None: return routine
                     text=ins['action_text']; break
         fast=self._fast_path(text)
         if fast is not None: return fast
@@ -944,9 +974,26 @@ class VoicePipeline:
         intent,confidence=self._interpret_local(text)
         return intent if confidence>=config.LOCAL_LLM_CONFIDENCE_FLOOR else None
 
+    def _routine_intent(self,ins):
+        """A stored instruction with several steps -> one 'routine' intent carrying each step as a
+        fast-path intent (teach.py). None for a single-step instruction (substituted as before)."""
+        import teach
+        steps=teach.split_steps(ins['action_text'])
+        if len(steps)<2: return None
+        resolved=[]
+        for st in steps:
+            r=self._fast_path(st)
+            if r is None:
+                log.warning(f'Routine "{ins["trigger_phrase"]}": step no longer understood: "{st}"')
+                return {'intent':'chat','args':{},'reply':f"I can't run {ins['trigger_phrase']}: I don't know how to {st} any more."}
+            resolved.append({**r,'text':st})
+        return {'intent':'routine','args':{'name':ins['trigger_phrase'],'steps':resolved},
+                'reply':f"Okay, {ins['trigger_phrase']}."}
+
     def _maybe_learn(self,text):
         norm=text.strip().rstrip('.!? ')
         if _FORGET_EVERYONE.fullmatch(norm): return False   # FR-2100: brain's intent, not a fact
+        if _POSE_FORGET.fullmatch(norm): return False       # teach.py: a saved arm pose, not a fact
         # FR-1900-008: correction and deletion by voice. Both delete paths existed; nothing
         # spoken reached them.
         m=_FORGET.fullmatch(norm)
@@ -988,8 +1035,22 @@ class VoicePipeline:
             self.memory.add_fact(key,m.group(1))
             self.speak(f"Got it, I'll remember that{', ' + who if who else ''}."); return True
         m=re.match(r"when i say (.+?), do (.+)",text,re.I)
-        if m: self.memory.add_instruction(m.group(1).strip(),m.group(2).strip())
-        if m: self.speak(f"Understood — when you say '{m.group(1)}', I'll {m.group(2)}."); return True
+        if m:
+            import teach
+            steps=teach.split_steps(m.group(2))
+            if len(steps)>1:
+                # 2026-10-13 routines: every step must be something the fast path understands,
+                # checked NOW so a routine never stops halfway on a step he can't do.
+                bad=[st for st in steps if self._fast_path(st) is None]
+                if bad:
+                    self.speak(f"I can't make that a routine. I don't know how to: {bad[0]}."); return True
+                if len(steps)>config.ROUTINE_MAX_STEPS:
+                    self.speak(f"That's too many steps. I can do up to {config.ROUTINE_MAX_STEPS}."); return True
+                self.memory.add_instruction(m.group(1).strip(),', then '.join(steps))
+                self.speak(f"Got it. When you say {m.group(1)}, I'll do {len(steps)} things: "+', then '.join(steps)+'.')
+                return True
+            self.memory.add_instruction(m.group(1).strip(),m.group(2).strip())
+            self.speak(f"Understood — when you say '{m.group(1)}', I'll {m.group(2)}."); return True
         return False
 
     def _fast_path(self,text):
@@ -998,6 +1059,22 @@ class VoicePipeline:
         # LLM rather than risk matching on a fragment (e.g. "don't stop" must never hit 'stop').
         norm=text.strip().rstrip('.!? ')
         norm=re.sub(r'^(?:(?:hey|ok|okay)[\s,]+)?willie[\s,]+','',norm,flags=re.I)
+        if _ARM_TEACH.fullmatch(norm): return {'intent':'arm_teach','args':{},'reply':''}
+        if _ARM_TEACH_DONE.fullmatch(norm): return {'intent':'arm_teach_done','args':{},'reply':''}
+        m=_ARM_JOG.fullmatch(norm)
+        if m: return {'intent':'arm_jog','args':{'joint':_jog_joint(m.group(1),m.group(2)),'dir':m.group(2).lower()},'reply':''}
+        m=_ARM_GRIP.fullmatch(norm)
+        if m: return {'intent':'arm_jog','args':{'joint':'gripper','dir':m.group(1).lower()},'reply':''}
+        if _ARM_MORE.fullmatch(norm): return {'intent':'arm_more','args':{},'reply':''}
+        m=_ARM_STEP.fullmatch(norm)
+        if m: return {'intent':'arm_step','args':{'size':_STEP_SIZE[m.group(1).lower()]},'reply':''}
+        m=_POSE_SAVE.fullmatch(norm)
+        if m: return {'intent':'pose_save','args':{'name':m.group(1).strip().lower()},'reply':''}
+        m=_POSE_FORGET.fullmatch(norm)
+        if m: return {'intent':'pose_forget','args':{'name':m.group(1).strip().lower()},'reply':''}
+        if _POSE_LIST.fullmatch(norm): return {'intent':'pose_list','args':{},'reply':''}
+        m=_POSE_GO.fullmatch(norm)
+        if m: return {'intent':'pose_go','args':{'name':m.group(1).strip().lower()},'reply':''}
         if _PRIVACY_ON.fullmatch(norm): return {'intent':'privacy_on','args':{},'reply':''}
         if _PRIVACY_OFF.fullmatch(norm): return {'intent':'privacy_off','args':{},'reply':''}
         m=_STEER.fullmatch(norm)
@@ -1120,7 +1197,9 @@ class VoicePipeline:
                          'confirm_receipt','map','stop_map','shutdown','status','battery',
                          'arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','roam','follow','diagnostics','check_logs','learn_home','go_home','home_address',
                          'where_are_you','what_do_you_see','what_doing','privacy_on','privacy_off','name_room','mark_stairs',
-                         'demo_start','demo_stop','demo_replay','enrol','forget_everyone'}
+                         'demo_start','demo_stop','demo_replay','enrol','forget_everyone',
+                         'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save','pose_go',
+                         'pose_forget','pose_list','routine'}
         if name in motion_intents:
             # FR-1500-007: queued only — brain.py applies full Directive 1-5 gating before this
             # is ever executed.
