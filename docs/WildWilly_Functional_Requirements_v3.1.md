@@ -438,6 +438,10 @@ Requirements are implemented and unit-tested off-hardware unless noted.
 - **FR-100 Start-up sensor check (owner, 2026-10-14).** 12 s after start he checks that every
   sensor is delivering readings (not just answering) and says which are not working
   (`startup_check.py`). Report only; the boot self-test still gates motion.
+- **FR-1500 Voice: he has a body (owner, 2026-10-14).** Asked things, he kept answering that he is
+  "an AI without a physical presence". The chat prompt (`CLAUDE_CHAT_SYSTEM`) and the on-board
+  intent prompt now start from `config.WILLIE_BODY`: wheels, arm and gripper, cameras, sensors,
+  screen face; never claim to have no body; for physical requests give the words that work.
 - **Battery log.** Rows were written at every restart and hours-on-charge only counted 2 min per
   restart; fixed (heartbeat). ~0.1 V/h, about 4%/h with some driving.
 

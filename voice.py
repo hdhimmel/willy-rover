@@ -1174,7 +1174,7 @@ class VoicePipeline:
         # model is asked to self-report its own confidence rather than confidence being inferred
         # from whether the JSON happened to parse.
         ctx=self.memory.get_context_for(text,person=self.current_person()) if self.memory else {}
-        prompt=(f'You are Willie, a home-assistant rover. Known facts: {json.dumps(ctx)}\n'
+        prompt=(f'{config.WILLIE_BODY} Known facts: {json.dumps(ctx)}\n'
                 f'User said: "{text}"\n'
                 f'If the user is asking you to fetch/bring/collect an object -- phrasings like '
                 f'"retrieve", "get", "pick up", "grab", or "bring me" the object -- use '
