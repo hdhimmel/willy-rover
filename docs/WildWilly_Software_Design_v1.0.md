@@ -1082,7 +1082,7 @@ identical, 0.07–0.38 A) — most likely stripped when the arm was driven again
 alone does move the shoulder. The owner-set stow (arm folded along the top) was recorded as
 shoulder 500 / elbow 2050, but 500 was CH2's pulse while the arm was placed by hand, so it drives
 nothing. **2026-10-14:** the shoulder now runs on CH3 (CH2 is loose), where lower µs moves the
-arm forward; stow is shoulder **2000** / elbow **1825** (both measured 10-13 lying back, 0.11 / 0.12 A). **On 2026-10-15 both shoulder servos (CH2, CH3) are being replaced with servos that hold
+arm forward; stow is shoulder **1900** (owner, after 2000 stopped short) / elbow **1825**. **On 2026-10-15 both shoulder servos (CH2, CH3) are being replaced with servos that hold
 position unpowered, on metal horns.** After that: map the shoulder from scratch with the front
 and laptop cameras (stow, upright, reach, base-turn height), add the shoulder to
 `ARM_HOLDS_UNPOWERED` and bump `ARM_POSE_EPOCH`. Note: the shoulder gate (`ARM_SHOULDER_POSES_VERIFIED`) was removed on 2026-10-14 (owner), so every arm plan runs; re-check the shoulder values with the cameras after the swap.
