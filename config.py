@@ -558,10 +558,14 @@ ARM_GRIP_POINT_MM=165         # wrist-pitch pivot -> centre of an object in the 
 # move the arm there, verify with the camera"). None = not measured: the pick-up then falls back
 # to the image-position line-up and says what is missing.
 PICK_USE_IK=True
-CAM_FRONT_HEIGHT_MM=None      # floor -> front lens centre (fit by scripts/calibrate_camera_floor.py)
-CAM_FRONT_TILT_DEG=None       # optical axis below horizontal (fit)
-CAM_FRONT_HFOV_DEG=None       # horizontal field of view of the DETECTION frame (fit; datasheet 66)
-CAM_FRONT_X_MM=None           # lens ahead of the arm base axis, tape-measured
+# Calibrated 2026-10-14 on the CURRENT body: ball at 6 taped spots 40-100 cm out
+# (hardware/calibration/front_camera_2026-10-14.json). Height held at the taped 280 (a free fit
+# gave 284); rms 12 mm on the floor. Nearest floor the camera sees: ~314 mm ahead of the lens
+# (454 mm from the base axis) -- beyond the arm's reach band (220-380 mm).
+CAM_FRONT_HEIGHT_MM=280       # floor -> front lens centre (owner tape)
+CAM_FRONT_TILT_DEG=19.8       # optical axis below horizontal (fit)
+CAM_FRONT_HFOV_DEG=71.4       # horizontal field of view of the 1280x720 detection frame (fit)
+CAM_FRONT_X_MM=140            # lens ahead of the arm base axis (owner tape)
 CAM_FRONT_Y_MM=0.0            # lens left of the base axis
 # {joint: (us at 0 deg, us per deg)} in arm_ik.py's angle conventions (measurement sheet):
 # base 0 = straight ahead (+ left); shoulder 0 = upper-arm hole line level forward (+ up);

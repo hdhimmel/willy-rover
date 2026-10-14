@@ -103,3 +103,9 @@ def test_fit_camera_recovers_height_tilt_fov():
     samples=[dict(_ball(x,y),x=x,y=y) for x,y in spots]
     hgt,tilt,hfov,rms=arm_ik.fit_camera(samples,CAM['CAM_FRONT_X_MM'],CAM['CAM_FRONT_Y_MM'])
     assert abs(hgt-330)<8 and abs(tilt-15)<1.0 and abs(hfov-66)<2.0 and rms<5
+
+def test_fit_camera_with_the_height_tape_measured():
+    spots=[(450,0),(600,0),(800,0),(600,200)]
+    samples=[dict(_ball(x,y),x=x,y=y) for x,y in spots]
+    hgt,tilt,hfov,rms=arm_ik.fit_camera(samples,CAM['CAM_FRONT_X_MM'],CAM['CAM_FRONT_Y_MM'],height=330)
+    assert hgt==330 and abs(tilt-15)<1.0 and abs(hfov-66)<2.0 and rms<5

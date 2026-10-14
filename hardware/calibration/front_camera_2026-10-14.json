@@ -1,0 +1,90 @@
+{
+ "date": "2026-10-14",
+ "camera": "front imx708, current body",
+ "tape": {
+  "lens_height_mm": 280,
+  "lens_ahead_of_base_axis_mm": 140
+ },
+ "note": "fwd/left measured along the floor from the point under the lens; left = Willie's left",
+ "fit": {
+  "CAM_FRONT_HEIGHT_MM": 280,
+  "CAM_FRONT_TILT_DEG": 19.8,
+  "CAM_FRONT_HFOV_DEG": 71.4,
+  "rms_mm": 12.1,
+  "free_height_fit_mm": 284
+ },
+ "samples": [
+  {
+   "bbox": [
+    567.0,
+    484.0,
+    682.0,
+    610.0
+   ],
+   "frame_w": 1280,
+   "frame_h": 720,
+   "fwd_cm": 40,
+   "left_cm": 0
+  },
+  {
+   "bbox": [
+    590.06,
+    356.36,
+    672.8,
+    439.64
+   ],
+   "frame_w": 1280,
+   "frame_h": 720,
+   "fwd_cm": 60,
+   "left_cm": 0
+  },
+  {
+   "bbox": [
+    611.0,
+    288.0,
+    673.0,
+    351.0
+   ],
+   "frame_w": 1280,
+   "frame_h": 720,
+   "fwd_cm": 80,
+   "left_cm": 0
+  },
+  {
+   "bbox": [
+    616.56,
+    244.85,
+    667.74,
+    296.03
+   ],
+   "frame_w": 1280,
+   "frame_h": 720,
+   "fwd_cm": 100,
+   "left_cm": 0
+  },
+  {
+   "bbox": [
+    850.29,
+    365.33,
+    937.03,
+    450.23
+   ],
+   "frame_w": 1280,
+   "frame_h": 720,
+   "fwd_cm": 60,
+   "left_cm": -20
+  },
+  {
+   "bbox": [
+    322.29,
+    350.0,
+    408.01,
+    434.65
+   ],
+   "frame_w": 1280,
+   "frame_h": 720,
+   "fwd_cm": 60,
+   "left_cm": 20
+  }
+ ]
+}

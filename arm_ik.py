@@ -180,10 +180,11 @@ def reach_band(z=35.0):
 
 # ---------------------------------------------------------------- camera calibration
 
-def fit_camera(samples,cam_x,cam_y=0.0):
+def fit_camera(samples,cam_x,cam_y=0.0,height=None):
     """samples: [{'bbox','frame_w','frame_h','x','y'}] -- detections of an object whose FLOOR
     CONTACT point was taped at (x forward, y left) mm from the base axis. Fits height, tilt and
-    HFOV to the boxes' bottom-centres. Returns (height_mm, tilt_deg, hfov_deg, rms_mm)."""
+    HFOV to the boxes' bottom-centres (height held at `height` if given, e.g. tape-measured).
+    Returns (height_mm, tilt_deg, hfov_deg, rms_mm)."""
     def err(hgt,tilt,hfov):
         e=0.0
         for s in samples:
@@ -194,16 +195,18 @@ def fit_camera(samples,cam_x,cam_y=0.0):
         return e
     best=None
     # coarse grid, then refine around the best point
-    H=[150+10*i for i in range(46)]; T=[0+2*i for i in range(31)]; F=[50+4*i for i in range(16)]
+    H=[height] if height is not None else [150+10*i for i in range(46)]
+    T=[0+2*i for i in range(31)]; F=[50+4*i for i in range(16)]
     for hgt in H:
         for tilt in T:
             for hfov in F:
                 v=err(hgt,tilt,hfov)
                 if best is None or v<best[0]: best=(v,hgt,tilt,hfov)
-    _,hgt,tilt,hfov=best; step=(5.0,1.0,2.0)
+    _,hgt,tilt,hfov=best; step=(0.0 if height is not None else 5.0,1.0,2.0)
     for _ in range(60):
         moved=False
         for i,ds in enumerate(step):
+            if ds==0: continue
             for sgn in (1,-1):
                 cand=[hgt,tilt,hfov]; cand[i]+=sgn*ds
                 v=err(*cand)
