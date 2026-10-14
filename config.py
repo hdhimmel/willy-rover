@@ -1100,6 +1100,11 @@ BAT_ADC_STALE_S=5.0         # 2026-08-24: how long ADC.battery_volts may go with
 # In-memory only -- a service restart clears it, so an override never outlives its session.
 # Deliberately scoped to the startup self-test: TILT/STALL/SENSOR faults are NOT overridable.
 SELFTEST_RETRY_S=30.0
+# Start-up SENSOR check (startup_check.py, 2026-10-14, owner): STARTUP_SENSOR_CHECK_S after start,
+# check every sensor is delivering readings (not just answering), log + say what isn't. Report only.
+STARTUP_SENSOR_CHECK=True
+STARTUP_SENSOR_CHECK_S=12.0
+STARTUP_GRIP_FB_RANGE=(0.10,0.60)   # gripper feedback ratio anywhere from open (0.19) to closed (0.45), with margin
 SELFTEST_OVERRIDE_AFTER=3
 
 # STUCK help-photo alert (owner request 2026-08-24). When Willie enters STUCK -- he has exhausted

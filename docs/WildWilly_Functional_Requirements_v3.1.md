@@ -435,6 +435,9 @@ Requirements are implemented and unit-tested off-hardware unless noted.
   roam that starts within 40 cm turns away first. Pulled and restarted on the rover: pending.
 - **FR-500 Encoders.** The stall check is skipped during the pick-up line-up (its pulses read as
   stalls). Real stalls today were contact (chair, coffee table).
+- **FR-100 Start-up sensor check (owner, 2026-10-14).** 12 s after start he checks that every
+  sensor is delivering readings (not just answering) and says which are not working
+  (`startup_check.py`). Report only; the boot self-test still gates motion.
 - **Battery log.** Rows were written at every restart and hours-on-charge only counted 2 min per
   restart; fixed (heartbeat). ~0.1 V/h, about 4%/h with some driving.
 

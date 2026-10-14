@@ -24,6 +24,7 @@ import avoidance
 import grip
 import teach
 import battery_log
+import startup_check
 import reach_table,arm_ik
 from email_client import EmailClient
 from remote_cmd import RemoteCommandServer
@@ -314,6 +315,7 @@ class RoverBrain:
         except Exception: pass
         self.routine=teach.RoutineRunner()   # "when I say X, do A, then B" (2026-10-13)
         self.battery_log=battery_log.BatteryLogger(self._battery_reading) if config.ENABLE_BATTERY_LOG else None
+        self.startup_check=startup_check.StartupCheck(self)
         # FR-2300 GPS (2026-10-11). Optional: absent or fixless never blocks anything (FR-2300-005).
         self.gps=None
         if config.ENABLE_GPS and not config.SIMULATE_HARDWARE:
@@ -968,6 +970,7 @@ class RoverBrain:
         self._thermal_tick()
         self._gps_tick()
         if self.battery_log is not None: self.battery_log.tick()   # owner 2026-10-13: every 2 h
+        self.startup_check.tick()   # owner 2026-10-14: report any sensor not delivering, once after start
         self.steer_override.tick(self._state)   # FR-600-004: held in IDLE, ended on leaving it
         if self.voice.stop_requested.is_set():
             # Checked before any Directive gating below — see voice.py's stop_requested docstring.
