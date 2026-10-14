@@ -200,7 +200,7 @@ def _sonar_returns(d):
     2026-10-01 an open room plotted a phantom wall SONAR_MAX_CM out on every tick, and a
     stale link plotted one on top of the rover. Only a reading strictly inside
     (0, SONAR_MAX_CM) is a return."""
-    return {n:cm for n,cm in d.items() if 0.0<cm<config.SONAR_MAX_CM}
+    return {n:cm for n,cm in d.items() if n in config.SONAR_BEARING_DEG and 0.0<cm<config.SONAR_MAX_CM}
 
 def _init_device(ctor,name,attempts=8,delay_s=0.75):
     for attempt in range(attempts):

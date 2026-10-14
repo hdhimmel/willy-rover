@@ -215,9 +215,14 @@ class Rotation:
                     self._finish('FAILED',f'I am not allowed to move: {res.reason}'); return
                 self.state='SPIN'; self._spin_t0=now; self._hist=[]
             return
-        near=min(d.get('front',999),d.get('left',999),d.get('right',999))
+        # 2026-10-14: a drop ahead does not matter to a turn on the spot (front_obstacle), and the
+        # message names the side -- 'something is 0 centimetres away' told the owner nothing
+        sides={'front':d.get('front_obstacle',d.get('front',999)),'left':d.get('left',999),'right':d.get('right',999)}
+        side=min(sides,key=sides.get); near=sides[side]
         if near<config.ROTATE_CLEAR_CM:
-            self._finish('FAILED',f'something is {near:.0f} centimetres away'); return
+            log.info(f'Rotation stopped: {side} reads {near:.0f} cm ({sides})')
+            self._finish('FAILED',(f'my {side} sensor reads zero, it may not be working' if near<=0.5 else
+                                   f'something is {near:.0f} centimetres away on my {side}')); return
         turned=self._turned()
         self._hist.append((now,turned))
         while self._hist and now-self._hist[0][0]>config.ROTATE_STALL_WINDOW_S: self._hist.pop(0)

@@ -107,7 +107,20 @@ def test_something_close_stops_the_spin_and_says_so():
     r,s,dr,imu,clk,said=_task()
     r.start(90); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
     r.tick({'front':999,'left':8,'right':999},0)
-    assert r.state=='FAILED' and dr.stops==1 and 'centimetres' in said[-1]
+    assert r.state=='FAILED' and dr.stops==1 and 'centimetres' in said[-1] and 'left' in said[-1]
+
+def test_a_drop_ahead_does_not_stop_a_turn_on_the_spot():
+    # 2026-10-14: false drops forced front=0 and every turn said "something is 0 centimetres away"
+    r,s,dr,imu,clk,said=_task()
+    r.start(90); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
+    r.tick({'front':0.0,'front_obstacle':120.0,'left':999,'right':999},0)
+    assert r.state!='FAILED' and dr.stops==0
+
+def test_a_dead_sensor_reading_zero_is_named_as_such():
+    r,s,dr,imu,clk,said=_task()
+    r.start(90); clk.t+=config.ROTATE_SETTLE_S; r.tick(_CLEAR,0)
+    r.tick({'front':999,'left':999,'right':0.0},0)
+    assert r.state=='FAILED' and 'right sensor reads zero' in said[-1]
 
 def test_turning_the_wrong_way_stops():
     r,s,dr,imu,clk,_=_task()

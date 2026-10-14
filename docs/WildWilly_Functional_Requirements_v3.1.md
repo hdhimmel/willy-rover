@@ -442,6 +442,12 @@ Requirements are implemented and unit-tested off-hardware unless noted.
   "an AI without a physical presence". The chat prompt (`CLAUDE_CHAT_SYSTEM`) and the on-board
   intent prompt now start from `config.WILLIE_BODY`: wheels, arm and gripper, cameras, sensors,
   screen face; never claim to have no body; for physical requests give the words that work.
+- **FR-600 Rotation stops (owner, 2026-10-14).** He kept saying "I stopped turning, something is
+  0 centimetres away": a false ToF drop forces 'front' to 0, and turns checked that. A drop ahead
+  no longer stops a turn on the spot (`front_obstacle`, the front reading without the drop); the
+  message names the side, and a 0 reading is reported as that sensor perhaps not working. The
+  owner's "10 centimetres away" reports are not explained yet (suspect: the stowed arm in the front
+  ToF's view) -- check the log when he is back.
 - **Battery log.** Rows were written at every restart and hours-on-charge only counted 2 min per
   restart; fixed (heartbeat). ~0.1 V/h, about 4%/h with some driving.
 

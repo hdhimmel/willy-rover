@@ -186,7 +186,7 @@ class SonarArray:
         real sonar obstacle. Sides are untouched: this is a front sensor, and the
         left/right sonars are the only side coverage there is."""
         d = self._read_all()
-        front = d['front']
+        front = d['front']; nodrop = None
         tof = self.tof
         # NOT gated on tof.available (fixed 2026-10-10). available only turns True inside a read,
         # and this was the read that never happened: gated on it, the front ToF stayed "unavailable"
@@ -217,13 +217,18 @@ class SonarArray:
                     (log.warning if drop else log.info)(
                         f'ToF: DROP AHEAD -- stopping forward motion ({z})' if drop else 'ToF: floor ahead again')
                 if drop:
-                    front = 0.0
+                    nodrop = front; front = 0.0
             except Exception:
                 # distances() runs on the 20Hz tick. An exception escaping here would stop
                 # obstacle checks entirely -- strictly worse than having no ToF at all.
                 log.warning('ToF read raised inside distances(); using sonar alone',
                             exc_info=True)
-        return {'front': front, 'left': d['left'], 'right': d['right']}
+        out = {'front': front, 'left': d['left'], 'right': d['right']}
+        # 2026-10-14: a drop ahead forces 'front' to 0 so nothing drives forward -- but a turn on the
+        # spot does not move forward, and "something is 0 centimetres away" stopped every turn on a
+        # false drop. 'front_obstacle' is the front reading WITHOUT the drop, for rotation only.
+        out['front_obstacle'] = front if nodrop is None else nodrop
+        return out
 
     def rear_sonar_cm(self):
         """The REAR sonar (Pico B b-0.2, fields 10/11 of $S), cm. SONAR_MAX_CM = no echo (clear);
