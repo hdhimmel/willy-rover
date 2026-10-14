@@ -21,7 +21,8 @@ class _Bno:
     def __init__(self, fail=False):
         self.fail = fail
     @property
-    def quaternion(self):
+    def game_quaternion(self):
+        # 2026-10-13 (3031dc4): sensors.IMU reads the game rotation vector, not .quaternion
         if self.fail: raise OSError('wedged')
         return (0.0, 0.0, 0.0, 1.0)
 
@@ -126,7 +127,7 @@ def test_reset_imu_without_an_ack_reports_failure(sonar):
 
 class _FrozenBno:
     """What the live driver did after a reset it did not cause: no error, same answer forever."""
-    quaternion = (0.0, 0.0, 0.0, 1.0)
+    game_quaternion = (0.0, 0.0, 0.0, 1.0)   # 2026-10-13: the game rotation vector
 
 
 def test_a_frozen_quaternion_counts_as_failure_and_recovers(imu, monkeypatch):
