@@ -60,6 +60,14 @@ def approve_curve(deg,*,tilt_deg=0.0,bat_tier='normal',motion_enabled=True,**_):
     d=max(-config.ROAM_STEER_MAX_DEG,min(config.ROAM_STEER_MAX_DEG,float(deg)))
     return ApprovedMotion('curve',d,None)
 
+def approve_crab(deg,*,tilt_deg=0.0,bat_tier='normal',motion_enabled=True,**_):
+    """2026-10-14 (owner): all six wheels to one angle for a side-step. Same gates as motion."""
+    if not motion_enabled: return Rejected('motion disabled (self-test failed)')
+    if tilt_deg>config.IMU_TILT_LIMIT: return Rejected(f'tilt {tilt_deg:.1f}deg exceeds limit')
+    if bat_tier in('shutdown','safe'): return Rejected(f'battery tier {bat_tier!r} forbids motion')
+    d=max(-config.SIDESTEP_MAX_DEG,min(config.SIDESTEP_MAX_DEG,float(deg)))
+    return ApprovedMotion('crab',d,None)
+
 class SafetyController:
     def __init__(self,drive_base,steering=None):
         self._drive=drive_base
@@ -116,6 +124,8 @@ class SafetyController:
         """True while an approved drive is held back for the wheels to straighten."""
         now=time.time()
         if self._settle_until is None:
+            if getattr(self,'_keep_steer',False):          # a side-step: drive on the crab angle
+                self._keep_steer=False; return False
             from_rest=(self._deadline is None and not any(getattr(self._drive,'commanded',{}).values()))
             st=self._steering
             if not from_rest or st is None or getattr(st,'straight',True): return False
@@ -179,6 +189,19 @@ class SafetyController:
         r=approve_steer(deg,wheels_moving=moving,**self._ctx)
         if isinstance(r,Rejected): log.warning(f'steering override rejected: {r.reason}')
         return r
+
+    def crab(self,deg):
+        """Point all six wheels `deg` right (negative = left) for a side-step; the NEXT drive
+        from rest keeps them there instead of straightening first. Approved degrees or None."""
+        r=approve_crab(deg,**self._ctx)
+        if isinstance(r,Rejected):
+            log.warning(f'side-step rejected: {r.reason}'); return None
+        st=self._steering
+        if st is None: return None
+        from rotate import corner_us
+        for c in ('lf','rf','lm','rm','lr','rr'): st.set_pulse(c,corner_us(c,r.speed))
+        self._keep_steer=True
+        return r.speed
 
     def steer_curve(self,deg):
         """Set a gentle driving curve (+ = right, 0 = straight): front corners deg, rear -deg,

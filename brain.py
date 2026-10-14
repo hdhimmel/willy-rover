@@ -2332,6 +2332,14 @@ class RoverBrain:
         if not _ok: f=0.0   # fail closed: never treat an uncomputable keep-out as clear
         if self.safety.timed_move_active:
             self._upd('stop',f'Avoiding l={l:.0f} r={r:.0f}',d,tilt); return
+        if self._avoid_phase=='sidestep_settle':
+            self._sidestep_move(d,tilt); return
+        if self._avoid_phase=='sidestep_move':
+            # the timed move has ended (timed_move_active is False here): straighten, carry on
+            self._avoid_phase=None; self._avoid_repeats=0
+            try: self.steering.center_all()
+            except Exception: pass
+            self._upd('stop',f'Side-stepped l={l:.0f} r={r:.0f}',d,tilt); return
         if self._avoid_phase=='turn_after_reverse':
             self._avoid_phase=None
             turn=self._avoid_turn(d) or 'turn_right'
@@ -2349,6 +2357,7 @@ class RoverBrain:
             self._avoid_start=time.time(); self.safety.request('reverse',None,config.BACK_UP_TIME); return
         if f>config.DIST_CLEAR: self._stuck_count=0; self._go('ROAM'); return
         self.safety.stop()
+        if self._start_sidestep(d,f): self._upd('stop',f'Side-stepping l={l:.0f} r={r:.0f}',d,tilt); return
         turn=self._avoid_turn(d)
         if turn:
             # Rotation mode (live-verified 2026-10-07) when allowed; the skid turn if it will not start.
@@ -2363,6 +2372,36 @@ class RoverBrain:
             self.safety.request('reverse',None,config.BACK_UP_TIME)
             self._avoid_phase='turn_after_reverse'; self._last_action='back_turn'
         self._upd('stop',f'Avoiding l={l:.0f} r={r:.0f}',d,tilt)
+
+    def _start_sidestep(self,d,f):
+        """2026-10-14 (owner): after trying twice, blocked on one side -> crab toward the open side.
+        Sets the wheels now; _sidestep_move drives once they have had STEER_SETTLE_S to get there."""
+        if not config.SIDESTEP or getattr(self,'_avoid_repeats',0)<config.SIDESTEP_AFTER: return False
+        l=d.get('left',0.0); r=d.get('right',0.0)
+        if l<config.SIDESTEP_BLOCKED_CM and r>config.SIDESTEP_OPEN_CM: open_side=1      # go right
+        elif r<config.SIDESTEP_BLOCKED_CM and l>config.SIDESTEP_OPEN_CM: open_side=-1   # go left
+        else: return False
+        forward=f>=config.SIDESTEP_FRONT_ROOM_CM
+        # forward with wheels toward the open side; reverse with them the other way (still toward it)
+        deg=config.SIDESTEP_DEG*open_side*(1 if forward else -1)
+        if self.safety.crab(deg) is None: return False
+        self._sidestep=('forward' if forward else 'reverse',time.time()+config.STEER_SETTLE_S)
+        self._avoid_phase='sidestep_settle'
+        log.info(f'Side-step {"right" if open_side>0 else "left"}: l={l:.0f} r={r:.0f} front={f:.0f} cm, '
+                 f'wheels {deg:+.0f} deg, {self._sidestep[0]} (avoid #{self._avoid_repeats})')
+        return True
+
+    def _sidestep_move(self,d,tilt):
+        action,at=self._sidestep
+        if time.time()<at: return
+        res=self.safety.request(action,config.SPEED_SLOW,config.SIDESTEP_TIME_S)
+        if type(res).__name__=='Rejected':
+            log.info(f'Side-step refused: {res.reason}')
+            self._avoid_phase=None; self._avoid_repeats=0
+            try: self.steering.center_all()
+            except Exception: pass
+            return
+        self._avoid_phase='sidestep_move'
 
     def _avoid_turn(self,d):
         # FR-1000-002 (owner 2026-10-06): side sonar + ToF columns + front camera pick the side.
@@ -2491,7 +2530,12 @@ class RoverBrain:
                 except Exception: pass
                 self._curve_deg=0.0
             log.info(f'  {self._state}->{state}'); self._state=state
-            if state=='AVOID': self._avoid_start=time.time(); self._avoid_phase=None
+            if state=='AVOID':
+                self._avoid_start=time.time(); self._avoid_phase=None
+                now=time.time()   # 2026-10-14: avoids in quick succession -> side-step (_avoid)
+                self._avoid_repeats=(getattr(self,'_avoid_repeats',0)+1
+                                     if now-getattr(self,'_last_avoid_t',-1e9)<config.SIDESTEP_WINDOW_S else 1)
+                self._last_avoid_t=now
             if state=='IDLE': self._idle_t=0.0
             elif getattr(self,'faces',None) is not None:
                 self.faces.set_scanning(False)   # FR-2100: face scans run from IDLE only

@@ -454,6 +454,13 @@ Requirements are implemented and unit-tested off-hardware unless noted.
   columns) and keep moving; he straightens once clear and whenever he leaves ROAM. Gated by
   `safety.approve_curve` (same gates as motion, clamped to 20 deg). The 40 cm slow-down and 20 cm
   stop are unchanged.
+- **FR-1000 Side-step (owner, 2026-10-14).** Blocked on one side he went back and forth. On the
+  3rd avoid within 15 s, with one side under 40 cm and the other over 60 cm, all six wheels turn
+  40 deg toward the open side (crab, `safety.crab`, clamped 45) and he drives 1 s at slow speed:
+  forward-diagonal if there is 35 cm in front, otherwise in reverse with the wheels the other way
+  (still toward the open side); then straight. The drive keeps the crab angle (the
+  straighten-before-moving rule is skipped once). Never run on the rover yet: the middle wheels
+  have not been steered that far -- watch the first one.
 - **Battery log.** Rows were written at every restart and hours-on-charge only counted 2 min per
   restart; fixed (heartbeat). ~0.1 V/h, about 4%/h with some driving.
 

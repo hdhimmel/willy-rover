@@ -18,7 +18,8 @@ Honest caveats, not fine print:
   people in his path (since 2026-10-14) -- table tops and seats stick out further than his
   sonar sees. If he starts exploring with something close in front, he turns away first, and
   while exploring he starts curving away from things about a metre ahead instead of driving
-  straight at them.
+  straight at them. If he is boxed in on one side and has tried twice, he turns all his wheels
+  hard toward the open side and side-steps.
 - **Don't leave him roaming unattended** around anything you care about, near pets or a
   toddler, or near the top of stairs. His depth sensor can now see a drop just in front of him,
   but only close up, and it has not been tested at a real edge.

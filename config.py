@@ -201,6 +201,21 @@ ROAM_STEER_EARLY_CM=100         # start curving away when something in the path 
 ROAM_STEER_DEG=15               # how hard (corner degrees); safety clamps to ROAM_STEER_MAX_DEG
 ROAM_STEER_MAX_DEG=20
 ROAM_STEER_HOLD_S=1.0           # keep a curve at least this long before switching sides
+# SIDE-STEP (2026-10-14, owner): blocked on one side, he went back and forth. On the
+# SIDESTEP_AFTER-th avoid within SIDESTEP_WINDOW_S, with one side under SIDESTEP_BLOCKED_CM and the
+# other over SIDESTEP_OPEN_CM, all six wheels turn SIDESTEP_DEG toward the open side ("crab") and he
+# drives SIDESTEP_TIME_S at slow speed: forward-diagonal if the front has room, else in reverse with
+# the wheels the other way (still toward the open side). Then straight again. The middles have never
+# been steered this far on the rover -- watch the first one.
+SIDESTEP=True
+SIDESTEP_AFTER=3
+SIDESTEP_WINDOW_S=15.0
+SIDESTEP_BLOCKED_CM=40
+SIDESTEP_OPEN_CM=60
+SIDESTEP_DEG=40
+SIDESTEP_MAX_DEG=45
+SIDESTEP_TIME_S=1.0
+SIDESTEP_FRONT_ROOM_CM=35       # forward-diagonal only with at least this much in front
 # Rotation mode (rotate.py, owner 2026-10-07): corners steered onto the turning circle, spin on IMU.
 ROTATE_SPEED=1.0              # fraction of the mph cap for the corners; a skid turn needed full duty
 ROTATE_SETTLE_S=0.6           # steering reaches its angle before any wheel drives

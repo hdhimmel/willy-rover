@@ -78,3 +78,14 @@ def test_a_held_back_timed_move_counts_as_active(monkeypatch):
     assert sc.timed_move_active and ('reverse',0.4) not in d.calls
     clock[0]+=config.STEER_SETTLE_S+0.01
     assert sc.tick() and ('reverse',0.4) in d.calls
+
+
+def test_a_side_step_drives_on_the_crab_angle_without_straightening(monkeypatch):
+    # 2026-10-14: crab() sets all six wheels; the next drive from rest must keep them there
+    clock=[100.0]; sc,d,st=_sc(True,monkeypatch,clock)
+    st.pulses={}; st.set_pulse=lambda c,us: (st.pulses.__setitem__(c,us),setattr(st,'straight',False))
+    assert sc.crab(40)==40 and len(st.pulses)==6
+    sc.request('forward',0.3,1.0)
+    assert st.centred==0 and ('forward',0.3) in d.calls          # drove crabbed, not centred first
+    sc.stop(); sc.forward(0.5)                                  # but only once: the next one centres
+    assert st.centred==1
