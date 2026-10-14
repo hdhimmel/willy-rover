@@ -227,7 +227,7 @@ def test_a_stale_link_means_stop_not_clear(monkeypatch):
     array, link = _sonar_with(FakePort([_s(1, ((1500, 0), (1500, 0), (1500, 0)))]))
     _drain(link)
     d = array.distances
-    assert d == {'front': 0.0, 'left': 0.0, 'right': 0.0}
+    assert d == {'front': 0.0, 'left': 0.0, 'right': 0.0, 'front_obstacle': 0.0}   # front_obstacle: 2026-10-14
     assert array.obstacle_ahead(), 'a dead link was treated as clear path'
     link.stop()
 
