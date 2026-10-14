@@ -29,12 +29,15 @@ Needs `trimesh` and `manifold3d`.
 
 ## `build_hand_camera_mount.py` (2026-10-14)
 
-Hand back plate (`El.stl`, downloaded as `hand back.stl`) with a leaning wall that holds the
+Hand back plate (`El.stl`, downloaded as `hand back.stl`) with a **two-piece case** for the
 InnoMaker U20CAM-1080P hand camera (32 x 32 mm board, four 2.2 mm M2 holes, M12 lens, 1 m cable).
-- Looks past the **angled end** of the plate (the end that points at the fingertips), tilted
-  **20 deg down** so the jaws sit mid-picture with the floor ahead still in view.
-- The hole spacing is not in InnoMaker's manual, so the holes are **slots covering 26-30 mm**.
-  M2 x 8 screws with nuts behind the wall. A 24 x 24 x 2.5 mm pocket clears the parts on the
-  back of the board.
-- Keeps clear of all six plate screws. Assumes the plate's top face (as downloaded) is the outside.
-- Output: `~/Downloads/hand_back_camera.stl`; preview `hand_back_camera_preview.png`.
+- `hand_back_camera.stl`: the plate with the case's back on its outer face -- a wall leaning to
+  look past the **angled end** (the fingertip end) **20 deg down**, a rim the board sits in, a
+  24 x 24 mm pocket for the parts on the board's back, and a **12 x 8 mm cable hole out the back**.
+- `hand_camera_cap.stl`: the front, 34.4 x 34.4 x 6 mm, with a 17 mm lens hole and corner bosses
+  that clamp the board. Print face down.
+- Four **M2 x 16** screws through cap, board and wall, nuts behind. The hole spacing is not in
+  InnoMaker's manual, so all holes are slots covering 26-30 mm.
+- Checked by the script: the cap clears the plate (1.7 mm), and a 4 mm screwdriver still reaches
+  all six plate screws from above. Assumes the plate's top face (as downloaded) is the outside.
+- Outputs go to `~/Downloads`; preview `hand_back_camera_preview.png`.
