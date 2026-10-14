@@ -181,6 +181,17 @@ DIST_STOP=20; DIST_SLOW=40; DIST_CLEAR=60; DIST_SIDE_CLEAR=25
 # FR-1000-002 turn choice (avoidance.py, owner 2026-10-06): the front camera's detections bias
 # WHICH WAY he turns. Never whether he stops -- Master Hardware Design §12 rule 15.
 AVOID_USE_CAMERA=True
+# CAMERA BRAKE (2026-10-14, owner): he hit a chair and a coffee table that sonar and ToF looked
+# under. The calibrated front camera (CAM_FRONT_*) turns where these objects meet the floor into a
+# distance, and ROAM/SLOW use the nearer of that and the sonar/ToF reading (arm_ik.obstacle_cm).
+CAMERA_BRAKE=True
+CAMERA_BRAKE_CLASSES=('chair','couch','dining table','bed','person','bench','potted plant','toilet','suitcase','tv')
+CAMERA_BRAKE_PERIOD_S=0.3       # look this often while roaming (a detect costs ~50 ms)
+CAMERA_BRAKE_HALF_WIDTH_MM=250  # his path: body/wheels half-width plus margin
+CAMERA_BRAKE_OVERHANG_CM=10     # table tops / seats stick out past their legs
+CAMERA_BRAKE_CUTOFF_FRAC=0.98   # box bottom this low = cut off by the frame: closer than it looks
+CAMERA_BRAKE_CUTOFF_EXTRA_CM=10
+ROAM_START_CLEAR_CM=40          # roaming starts with something nearer than this: turn away first
 # Rotation mode (rotate.py, owner 2026-10-07): corners steered onto the turning circle, spin on IMU.
 ROTATE_SPEED=1.0              # fraction of the mph cap for the corners; a skid turn needed full duty
 ROTATE_SETTLE_S=0.6           # steering reaches its angle before any wheel drives
@@ -469,7 +480,8 @@ ROUTINE_STEP_GAP_S=1.0
 # and posted to Home Assistant if the HA token file exists. Offline: the next cycle pushes it all.
 ENABLE_BATTERY_LOG=True
 BATTERY_LOG_INTERVAL_S=7200
-BATTERY_LOG_FIRST_S=120          # first reading two minutes after start
+BATTERY_LOG_FIRST_S=120          # first reading two minutes after start (unless a row is <2 h old)
+BATTERY_LOG_HEARTBEAT_S=60       # running time is added to hours_on_charge this often (2026-10-14)
 BATTERY_LOG_CHARGE_JUMP_V=0.3     # a rise this big between readings = he was charged
 BATTERY_LOG_CSV='battery_log.csv'
 BATTERY_LOG_BRANCH='battery-log'

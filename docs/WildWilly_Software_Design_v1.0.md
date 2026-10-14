@@ -72,7 +72,7 @@ stubbed, disabled, approximate or not yet run on the rover, it says so.
 | `privacy.py` | 59 | Mic/camera disable flag; cloud-send notes; file purge |
 | `steer_override.py` | 65 | FR-600-004: parked steering override, held in IDLE, ended on leaving it |
 | `knock.py` | 70 | FR-1000-006: fixed timed knock step list and player; off until `ARM_POSE_KNOCK` is measured |
-| `battery_log.py` | 139 | Battery log: every 2 h volts/%/hours-running-since-charge to a CSV, pushed to the `battery-log` branch, posted to HA if a token exists |
+| `battery_log.py` | 139 | Battery log: every 2 h volts/%/hours-running-since-charge to a CSV, pushed to the `battery-log` branch, posted to HA if a token exists. Running time comes from a once-a-minute heartbeat, and a restart no longer writes its own row (2026-10-14: it logged 0.83 h for ~6.7 h of running) |
 | `reach_table.py` | 65 | Reach by example: taught (image x,y) → arm pose spots, blended by inverse distance for a new object |
 | `teach.py` | 137 | FR-1900-011/012: arm poses taught by voice (jog, save, replay, epoch) and multi-step routines |
 | `hailo_server.py` | 255 | FR-1400-006: child process owning the Hailo chip (YOLO + LLM); client, restart, in-process fallback |

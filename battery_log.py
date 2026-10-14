@@ -23,12 +23,37 @@ class BatteryLogger:
     def __init__(self,read,clock=time.time,publish=None,start_thread=True):
         """read() -> dict with FIELDS minus 'time'. publish(path) -> bool (default: GitHub + HA)."""
         self._read=read; self._clock=clock; self._publish=publish or self._publish_all
-        self._next_record=clock()+config.BATTERY_LOG_FIRST_S
         self._next_publish=None; self._busy=False; self._start_thread=start_thread
-        self._t0=clock()
+        self._t0=clock(); self._last_beat=None
+        # 2026-10-14: a restart no longer writes a row of its own -- the next row is due one
+        # interval after the last one (it wrote a row 2 min after every service restart).
+        last=self._load().get('last_record_t')
+        due=clock()+config.BATTERY_LOG_FIRST_S
+        if last and clock()-last<config.BATTERY_LOG_INTERVAL_S: due=max(due,last+config.BATTERY_LOG_INTERVAL_S)
+        self._next_record=due
+
+    @staticmethod
+    def _state_path(): return os.path.join(config.WILLY_LOG_ROOT,'battery_charge_state.json')
+    def _load(self):
+        try:
+            with open(self._state_path()) as f: return json.load(f)
+        except (OSError,ValueError): return {}
+    def _save(self,st):
+        with open(self._state_path(),'w') as f: json.dump(st,f)
+
+    def heartbeat(self,now):
+        """Add this process's running time to hours_on_charge (2026-10-14). Every
+        BATTERY_LOG_HEARTBEAT_S: the time since the last beat, or since start; nothing for time
+        switched off. The old count only ever added the 2 min before a restart's first row."""
+        st=self._load()
+        st['on_h']=st.get('on_h',0.0)+max(0.0,now-(self._last_beat or self._t0))/3600.0
+        self._last_beat=now; self._save(st)
 
     def tick(self):
         now=self._clock()
+        if self._last_beat is None or now-self._last_beat>=config.BATTERY_LOG_HEARTBEAT_S:
+            try: self.heartbeat(now)
+            except Exception: log.warning('Battery log: heartbeat failed',exc_info=True)
         if now>=self._next_record:
             self._next_record=now+config.BATTERY_LOG_INTERVAL_S
             try:
@@ -44,22 +69,15 @@ class BatteryLogger:
                 self._do_publish()
 
     def _charge_state(self,now,volts):
-        """Hours RUNNING since the last charge, persisted across reboots. He is switched off for
-        long spells, so wall-clock time would overstate it: between two readings only the gap is
-        added when he ran straight through (gap <= 1.1 x interval); after a restart only the time
-        since this process started."""
-        p=os.path.join(config.WILLY_LOG_ROOT,'battery_charge_state.json')
-        try:
-            with open(p) as f: st=json.load(f)
-        except (OSError,ValueError): st={}
-        last_t=st.get('last_t')
-        if 'on_h' not in st or volts-st.get('last_v',volts)>=config.BATTERY_LOG_CHARGE_JUMP_V:
+        """Hours RUNNING since the last charge, persisted across reboots: heartbeat() adds the
+        running time; a voltage jump of BATTERY_LOG_CHARGE_JUMP_V since the last row = a charge,
+        and the count restarts from zero."""
+        self.heartbeat(now)
+        st=self._load()
+        if 'last_v' not in st or volts-st['last_v']>=config.BATTERY_LOG_CHARGE_JUMP_V:
             st['on_h']=0.0
-        else:
-            ran=now-last_t if last_t and self._t0<last_t and now-last_t<=1.1*config.BATTERY_LOG_INTERVAL_S else now-self._t0
-            st['on_h']+=max(0.0,ran)/3600.0
-        st['last_v']=volts; st['last_t']=now
-        with open(p,'w') as f: json.dump(st,f)
+        st['last_v']=volts; st['last_t']=now; st['last_record_t']=now
+        self._save(st)
         return round(st['on_h'],2)
 
     def record(self,now):

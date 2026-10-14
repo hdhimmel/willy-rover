@@ -88,6 +88,31 @@ def _cam():
     return (*vals,getattr(config,'CAM_FRONT_Y_MM',0.0) or 0.0)
 
 
+def obstacle_cm(dets,cam=None):
+    """Camera brake (2026-10-14): distance in cm from the FRONT OF THE WHEELS to the nearest
+    detection standing in his path, judged where its box meets the floor, or None.
+    A box cut off by the bottom of the frame is closer than the camera can see: it is placed
+    at the nearest visible floor. CAMERA_BRAKE_OVERHANG_CM is taken off for table tops and seats
+    that stick out past their legs."""
+    c=cam or _cam()
+    if c is None or not dets: return None
+    hgt,tilt,hfov,cx,cy=c; best=None; half=config.CAMERA_BRAKE_HALF_WIDTH_MM
+    for d in dets:
+        x1,y1,x2,y2=d['bbox']; w=d['frame_w']; h=d['frame_h']
+        v=min(y2,h-1)
+        lft=_hit(_ray(x1,v,w,h,hfov,tilt),(cx,cy,hgt),0.0)
+        rgt=_hit(_ray(x2,v,w,h,hfov,tilt),(cx,cy,hgt),0.0)
+        mid=_hit(_ray((x1+x2)/2,v,w,h,hfov,tilt),(cx,cy,hgt),0.0)
+        if mid is None or lft is None or rgt is None: continue
+        ys=sorted((lft[0][1],rgt[0][1]))
+        if ys[1]<-half or ys[0]>half: continue              # beside his path, not in it
+        cm=(mid[0][0]-config.ARM_FRONT_REACH_CLEAR_MM)/10.0-config.CAMERA_BRAKE_OVERHANG_CM
+        if y2>=config.CAMERA_BRAKE_CUTOFF_FRAC*h: cm-=config.CAMERA_BRAKE_CUTOFF_EXTRA_CM
+        cm=max(0.0,cm)
+        if best is None or cm<best: best=cm
+    return best
+
+
 # ---------------------------------------------------------------- arm IK
 
 def solve(x,y,z,grip_mm=None,accept=None):

@@ -2253,13 +2253,39 @@ class RoverBrain:
             if self._roam_allowed():
                 self._idle_t=0.0; self._go('ROAM')
 
+    def _camera_front_cm(self):
+        """Camera brake (2026-10-14): nearest chair/table/... in his path, cm from the front of
+        the wheels, or None. Looks at most every CAMERA_BRAKE_PERIOD_S; never raises."""
+        if not config.CAMERA_BRAKE or getattr(self,'detector',None) is None: return None
+        now=time.time()
+        if now-getattr(self,'_cam_brake_t',0.0)<config.CAMERA_BRAKE_PERIOD_S:
+            return getattr(self,'_cam_brake_cm',None)
+        self._cam_brake_t=now
+        try: cm=arm_ik.obstacle_cm(self.detector.detect(classes=list(config.CAMERA_BRAKE_CLASSES)))
+        except Exception:
+            log.warning('Camera brake: detect failed',exc_info=True); cm=None
+        if cm is not None and cm<config.DIST_SLOW and (getattr(self,'_cam_brake_cm',None) is None
+                                                         or self._cam_brake_cm>=config.DIST_SLOW):
+            log.info(f'Camera brake: obstacle in my path at {cm:.0f} cm')
+        self._cam_brake_cm=cm
+        return cm
+
+    def _front_with_camera(self,f):
+        c=self._camera_front_cm()
+        return f if c is None else min(f,c)
+
     def _roam(self,d,tilt):
         f,ok=self._stair_planning_front(d)
         if not ok:
             self.safety.stop(); self._go('IDLE')
             self._upd('idle','Not roaming: can\'t check the stair map (no fresh position)',d,tilt); return
+        f=self._front_with_camera(f)
         if tilt>config.IMU_TILT_WARN: self._go('WARN'); return
         if f<config.DIST_STOP: self.safety.obstacle_stop(); self._go('AVOID'); return   # brake, not ramp
+        # 2026-10-14: setting off with something already close -> turn away, don't creep at it
+        fresh=getattr(self,'_roam_fresh',False); self._roam_fresh=False
+        if fresh and f<config.ROAM_START_CLEAR_CM:
+            log.info(f'Roam start: something at {f:.0f} cm, turning away first'); self._go('AVOID'); return
         if f<config.DIST_SLOW: self._go('SLOW'); return
         self.safety.forward(config.SPEED_ROAM); self._last_action='forward'
         self._upd('roam',f'Cruising f={f:.0f}cm bat={self.adc.battery_pct}%',d,tilt,config.SPEED_ROAM)
@@ -2267,6 +2293,7 @@ class RoverBrain:
     def _slow(self,d,tilt):
         f,ok=self._stair_planning_front(d)
         if not ok: self.safety.stop(); self._go('IDLE'); return
+        f=self._front_with_camera(f)
         if f>config.DIST_CLEAR: self._go('ROAM'); return
         if f<config.DIST_STOP: self.safety.obstacle_stop(); self._go('AVOID'); return   # brake, not ramp
         self.safety.forward(config.SPEED_SLOW); self._upd('slow',f'Slowing f={f:.0f}cm',d,tilt,config.SPEED_SLOW)
@@ -2435,6 +2462,7 @@ class RoverBrain:
                 # an arm sequence ending -- finished or interrupted -- never leaves the pair driven
                 try: self.arm.drop_pair()
                 except Exception: pass
+            if state=='ROAM' and self._state=='IDLE': self._roam_fresh=True   # a roam setting off
             log.info(f'  {self._state}->{state}'); self._state=state
             if state=='AVOID': self._avoid_start=time.time(); self._avoid_phase=None
             if state=='IDLE': self._idle_t=0.0

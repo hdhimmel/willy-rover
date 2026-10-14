@@ -2388,6 +2388,13 @@ separately under FR-1200.
     and classification only. Verified by confirming the rover still stops for
     an obstacle with the vision pipeline disabled entirely.
     *(2026-10-08: the stop is sonar + ToF; the encoders add stall detection.)*
+    **Camera brake (2026-10-14, owner):** after he hit a chair and a coffee table that sonar and
+    ToF looked under, ROAM/SLOW also use the calibrated front camera: for chairs, tables, couches,
+    beds, people and similar, where the box meets the floor gives a distance
+    (`arm_ik.obstacle_cm`, minus `CAMERA_BRAKE_OVERHANG_CM` for overhangs) and the nearer of that
+    and sonar/ToF is used. Vision can only ADD a stop, never remove one -- with it off the rover
+    still stops on sonar + ToF, so the requirement above holds. A roam that sets off with
+    something within `ROAM_START_CLEAR_CM` turns away first instead of creeping at it.
     ✅ **Turn choice built 2026-10-06 (owner: "avoidance needs to use tof and cameras"),
     turns live while roaming 2026-10-07.** `avoidance.py::choose_turn()` picks the side for both
     `brain._avoid()` and `Navigator._avoiding()` from the side sonars, the ToF's column

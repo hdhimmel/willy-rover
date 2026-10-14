@@ -123,3 +123,31 @@ def test_plan_takes_the_last_fix_near_the_bottom_of_the_image(cal,monkeypatch):
     assert abs(x-(info['x']-act[2]))<1 and abs(y-info['y'])<1
     high={'class':'sports ball','conf':0.9,'bbox':(600,300,670,365),'frame_w':W,'frame_h':H}
     assert arm_ik.plan_for(high)[0]=='forward'           # further out: keep driving while it is visible
+
+# ---------------------------------------------------------------- camera brake (2026-10-14)
+REAL=dict(CAM_FRONT_HEIGHT_MM=280,CAM_FRONT_TILT_DEG=19.8,CAM_FRONT_HFOV_DEG=71.4,CAM_FRONT_X_MM=140,CAM_FRONT_Y_MM=0)
+
+def _leg_box(x,y_left,y_right,top_px=100,c=REAL):
+    """A box whose bottom edge stands on the floor at x, spanning y_left..y_right."""
+    p=lambda X,Y: _pixel((X,Y,0),c)
+    u1,v=p(x,y_left); u2,_=p(x,y_right)
+    return {'class':'dining table','conf':0.8,'bbox':(min(u1,u2),top_px,max(u1,u2),v),'frame_w':W,'frame_h':H}
+
+def test_camera_brake_distance_from_where_it_meets_the_floor(monkeypatch):
+    for k,v in REAL.items(): monkeypatch.setattr(config,k,v)
+    cm=arm_ik.obstacle_cm([_leg_box(715,-300,300)])            # legs 50 cm past the wheels
+    assert abs(cm-(50-config.CAMERA_BRAKE_OVERHANG_CM))<2
+
+def test_camera_brake_ignores_things_beside_the_path(monkeypatch):
+    for k,v in REAL.items(): monkeypatch.setattr(config,k,v)
+    assert arm_ik.obstacle_cm([_leg_box(715,400,700)]) is None
+
+def test_camera_brake_box_cut_off_by_the_frame_is_close(monkeypatch):
+    for k,v in REAL.items(): monkeypatch.setattr(config,k,v)
+    det={'class':'chair','conf':0.8,'bbox':(400,200,900,720),'frame_w':W,'frame_h':H}
+    cm=arm_ik.obstacle_cm([det])
+    assert cm is not None and cm<config.DIST_SLOW
+
+def test_camera_brake_needs_a_calibrated_camera(monkeypatch):
+    monkeypatch.setattr(config,'CAM_FRONT_TILT_DEG',None)
+    assert arm_ik.obstacle_cm([{'bbox':(0,0,10,10),'frame_w':W,'frame_h':H}]) is None
