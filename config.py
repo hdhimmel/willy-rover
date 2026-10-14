@@ -521,7 +521,10 @@ ARM_POSE_WAVE_HELLO={'elbow':1000,'shoulder':1500,'wrist_pitch':1275}   # 10-13 
 # 2026-10-14 (owner): elbow 2050 folded too far in with the arm down -- the stow pressed into him
 # and tripped the arm over-current (3.06 A, 10:39). Stow elbow 1825 = the fold measured 10-13 to
 # hold at 0.12 A (1850 0.31 A, 1875 1.53 A, 1900 2.29 A); the elbow limit is capped at 1850.
-ARM_POSE_REST={'elbow':1825,'shoulder':500,'wrist_pitch':1200}
+# 2026-10-14 (owner go): shoulder 500 -> 2000. On CH3 lower us = FORWARD, so 500 made the stow
+# stand the arm up and then extend it out in front again. 2000 = lying back on his top, measured
+# 10-13 with both servos at one pulse (0.11 A; 2100 pressed into him at 3.2 A).
+ARM_POSE_REST={'elbow':1825,'shoulder':2000,'wrist_pitch':1200}
 # ⚠ SHOULDER STOW = 500, OWNER-SET 2026-10-13 EVENING (owner: "that is the stowed position for the
 # shoulder -- don't forget it"): upper arm lying back over the REAR of his top. Confirmed with the
 # laptop camera. Supersedes the 2000 above/below, which after the arm was jammed against his front
