@@ -593,10 +593,12 @@ ARM_HAND_TILT_CHOICES_DEG=(0,15,30,45,60)  # hand from vertical, tried in order 
 ARM_IK_MARGIN_MM=10           # never ask for a fully straight or fully folded arm
 ARM_IK_MIN_ELBOW_HEIGHT_MM=200  # elbow stays above the wheels / body edge
 ARM_IK_MAX_GRIP_HEIGHT_MM=60  # grip at most this far above the floor (tall things: grip low)
-# Keep-out box for the elbow, wrist and grip point: the chassis + wheels + body, centred on the base
-# axis (half length, half width, top height above the floor), mm. Top = shoulder minus ~80 mm for
-# the arm base, an ESTIMATE for the current body.
-ARM_IK_KEEPOUT_MM=(215,200,ARM_SHOULDER_HEIGHT_MM-80)
+# Keep-out boxes the whole arm must stay out of (every link, not just the joints, since 2026-10-14),
+# centred on the base axis: (half length, half width, top above the floor), mm.
+#   chassis + wheels: 430 x 400 mm, frame top 150 mm (owner)
+#   body: front face ~170 mm ahead of the base axis and top = shoulder - 80 mm -- both ESTIMATES
+#   for the current body; measure them (tape) before trusting a reach close to the body.
+ARM_IK_KEEPOUT_MM=((215,200,150),(170,200,ARM_SHOULDER_HEIGHT_MM-80))
 # LAST FIX + BLIND CREEP (2026-10-14, owner): the front camera's nearest floor (~450 mm) is beyond
 # the arm's reach (220-380 mm), so: drive until the object is just above the bottom of the image,
 # take that as the last good fix, creep the rest with it out of view (encoder distance, rf left out),
@@ -886,6 +888,12 @@ GRIP_FB_DIVIDER_SCALE=0.5  # 47k/(47k+47k); ADS1115 input impedance pulls the re
 # linear, ~0.00026 ratio per us. 2205 was a squeeze past closed.
 GRIP_OPEN_US=1150; GRIP_CLOSED_US=2150
 GRIP_OPEN_WIDTH_MM=73   # jaw gap at GRIP_OPEN_US, owner-measured; 0 at GRIP_CLOSED_US
+# 2026-10-14: every grasp "stopped near 1150 us" (fully open) -- the feedback never moved, so a dead
+# or misread feedback looked like an object in the jaws. The jaw is open when closing starts, so the
+# first reading must be near the open ratio measured 2026-10-11 (0.189); otherwise the feedback is
+# not trusted and the close is unsensed (fixed close + the camera check after the lift).
+GRIP_FB_OPEN_RATIO=0.189
+GRIP_FB_SANE_TOL=0.06
 # Grasp with feedback (grip.py, 2026-10-08). Feedback = A2 wiper / arm rail volts (ratio), so the
 # 10-05 run-to-run shift with the rail drops out. Starting values -- to be checked against the A2
 # curve (scripts/grip_feedback_curve.py) on the rover before fetch is switched on.

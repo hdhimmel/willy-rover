@@ -136,14 +136,24 @@ def solve(x,y,z,grip_mm=None,accept=None):
            'wrist_pitch':math.degrees(thf-ha)}
         if ez+sz<config.ARM_IK_MIN_ELBOW_HEIGHT_MM: continue   # elbow would hit the floor/wheels
         cb,sb=math.cos(math.radians(base)),math.sin(math.radians(base))
-        pts=((sx+ex,ez+sz),(sx+wx,wz+sz),(r,z))                   # elbow, wrist, grip (radial, height)
-        if any(_in_body(pr*cb,pr*sb,pz) for pr,pz in pts): continue
+        # 2026-10-14 (review): the whole of every link, not just its end points -- a link can pass
+        # through the body box with both ends outside it
+        joints=((sx,sz),(sx+ex,ez+sz),(sx+wx,wz+sz),(r,z))       # shoulder, elbow, wrist, grip
+        if any(_in_body(pr*cb,pr*sb,pz) for pr,pz in _along(joints)): continue
         if _within_angle_limits(a) and (accept is None or accept(a)): return a
     return None
 
+def _along(joints,step=5.0):
+    """Points every `step` mm along the chain of (radial, height) joints, the first excluded
+    (the shoulder sits on top of the body by design)."""
+    out=[]
+    for (r0,z0),(r1,z1) in zip(joints[:-1],joints[1:]):
+        n=max(1,int(math.hypot(r1-r0,z1-z0)/step))
+        out+=[(r0+(r1-r0)*k/n,z0+(z1-z0)*k/n) for k in range(1,n+1)]
+    return out
+
 def _in_body(x,y,z):
-    hl,hw,top=config.ARM_IK_KEEPOUT_MM
-    return abs(x)<=hl and abs(y)<=hw and z<=top
+    return any(abs(x)<=hl and abs(y)<=hw and z<=top for hl,hw,top in config.ARM_IK_KEEPOUT_MM)
 
 def _within_angle_limits(a):
     lim=getattr(config,'ARM_ANGLE_LIMITS_DEG',{}) or {}

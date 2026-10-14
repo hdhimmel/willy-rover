@@ -48,6 +48,10 @@ class GripCloser:
         fb=self.feedback()
         if self.fb0 is None:
             self.fb0=fb; self.hist=[fb]
+            if fb is not None and abs(fb-config.GRIP_FB_OPEN_RATIO)>config.GRIP_FB_SANE_TOL:
+                log.warning(f'Gripper feedback reads {fb:.3f} with the jaw open (expected '
+                            f'{config.GRIP_FB_OPEN_RATIO:.3f}): not trusted, closing unsensed')
+                fb=None
             if fb is None:
                 self.set_pulse(config.GRIP_UNSENSED_US); self.cmd=config.GRIP_UNSENSED_US
                 self.result='unsensed'; self.held_us=self.cmd
@@ -63,7 +67,8 @@ class GripCloser:
             stop_us=self.cmd-n*config.GRIP_CLOSE_STEP_US
             self.held_us=min(self.closed_us,stop_us+config.GRIP_SQUEEZE_US)
             self.set_pulse(self.held_us); self.cmd=self.held_us; self.result='gripped'
-            log.info(f'Gripped: jaw stopped near {stop_us:.0f} us, holding at {self.held_us:.0f} us')
+            log.info(f'Gripped: jaw stopped near {stop_us:.0f} us, holding at {self.held_us:.0f} us '
+                     f'(feedback {self.fb0:.3f} open -> {self.hist[-1]:.3f})')
             return self.result
         if self.cmd>=self.closed_us:
             self.result='empty'; self.held_us=self.cmd

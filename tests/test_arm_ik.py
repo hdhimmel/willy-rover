@@ -151,3 +151,10 @@ def test_camera_brake_box_cut_off_by_the_frame_is_close(monkeypatch):
 def test_camera_brake_needs_a_calibrated_camera(monkeypatch):
     monkeypatch.setattr(config,'CAM_FRONT_TILT_DEG',None)
     assert arm_ik.obstacle_cm([{'bbox':(0,0,10,10),'frame_w':W,'frame_h':H}]) is None
+
+def test_a_link_through_the_body_is_rejected_even_with_both_ends_outside(monkeypatch):
+    # 2026-10-14 review: check whole links, not just joint points
+    pts=arm_ik._along(((0,446),(300,100)))              # a line that dips through the box top
+    assert any(arm_ik._in_body(r,0,z) for r,z in pts)
+    assert not arm_ik._in_body(0,0,446) and not arm_ik._in_body(300,0,100)   # both ends outside
+    assert arm_ik.solve(280,0,35) is not None           # a normal floor reach still solves

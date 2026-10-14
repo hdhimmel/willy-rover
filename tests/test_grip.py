@@ -115,3 +115,14 @@ def test_camera_check_after_lift():
     assert grip.camera_check(lambda: None,None)=='unknown'
     def boom(): raise RuntimeError('no camera')
     assert grip.camera_check(boom,spot)=='unknown'
+
+
+def test_feedback_that_does_not_read_open_at_the_start_is_not_trusted():
+    # 2026-10-14: a dead/misread feedback made every grasp "grip" at the open position
+    import grip
+    sent=[]
+    gc=grip.GripCloser(sent.append,lambda: 0.02)          # nowhere near the open ratio
+    assert gc.step()=='unsensed' and sent==[config.GRIP_UNSENSED_US]
+    sent.clear()
+    gc=grip.GripCloser(sent.append,lambda: config.GRIP_FB_OPEN_RATIO+0.01)
+    assert gc.step() is None and sent==[]                 # a sane open reading: normal close
