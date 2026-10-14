@@ -271,7 +271,12 @@ REAR_CAM_STOP_CLASSES=('person','dog','cat')
 TOF_REAR_PORT='/dev/ttyAMA3'   # REAR (swapped 2026-10-10, see TOF_PORT)
 TOF_REAR_FLOOR_ROWS=(0,1)   # 2026-10-14: row 2 dropped -- he now sits nose-down and row 2 grazes the floor (540-1117 mm, erratic). Was (0,1,2): 2026-10-10: row 2 meets floor at 43-46 cm, only 3-6 cm past
                               # TOF_NOFLOOR_OBSTACLE_MM -- a little pitch would read as an obstacle
-TOF_REAR_DROP_ROWS=(0,1)         # drop detection only where floor returns are solid (row 2 grazes)
+TOF_REAR_DROP_ROWS=(0,)          # 2026-10-14: row 0 only -- row 1 went empty across 5 columns while
+                                 # driving (pitch). Was (0,1): only where returns are solid (row 2 grazes)
+# FRONT drop rows (2026-10-14): row 7 only (~35 cm out, steady). Row 6 meets the floor at ~50 cm at a
+# shallow angle; a degree or two of nose-up pitch while driving pushed it to 650-920 mm / nothing,
+# so he flipped between ROAM and AVOID. Row 6 still counts for obstacles (TOF_FLOOR_ROWS).
+TOF_FRONT_DROP_ROWS=(7,)
 TOF_REAR_LEFT_COLUMNS=(0,1,2,3)     # WILLIE's left, not the sensor's
 TOF_REAR_FLOOR_PROFILE_PATH='tof_rear_floor_profile.json'
 TOF_PROFILE_SAMPLES=10

@@ -1067,7 +1067,12 @@ columns 0–1: `TOF_LEFT_COLUMNS=(0,1,2,3)`; row 7 is the bottom of the view (ne
 Any remount re-opens this — repeat the test. The old cover's window edge (0–5 cm returns in
 one corner) is gone with the new housing. Rows 6–7 see floor at 37–60 cm; rows 0–5 see the
 room (`TOF_FLOOR_ROWS=(6,7)`, the only rows the floor profile keeps). Profile saved
-2026-10-07 (rows 6–7 only).
+2026-10-07 (rows 6–7 only). **Re-captured 2026-10-14** (front rows 6–7, rear rows 0–1): Willie now
+sits nose-down (front floor 35–90 mm nearer, rear 45–85 mm further), which made zones flap and
+trapped him in an avoid loop. Drops now need `TOF_DROP_CONFIRM_S` (0.3 s) front and rear, and only
+the steady near rows judge a drop: front row 7 (`TOF_FRONT_DROP_ROWS`), rear row 0
+(`TOF_REAR_DROP_ROWS`) -- the far rows meet the floor at a shallow angle and swing with pitch while
+driving. Re-capture after any change that alters his pitch (arm stow, the 10-15 shoulder swap).
 
 **Second SEN0628 — the REAR ToF. Fitted and answering 2026-10-10** (full 8×8 frames every
 0.14 s after a ~9 s first-frame start-up). `dtoverlay=uart0-pi5` added to `config.txt` (backup

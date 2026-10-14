@@ -642,7 +642,10 @@ processed output, so the 48 → 16 kHz decimation disappears. The heartbeat logs
 ### 6.5 Front obstacle fusion (DFRobot SEN0628)
 
 **As built:** `tof.py` reads the sensor, `sensors.py::SonarArray.distances` fuses it,
-`scripts/calibrate_tof_floor.py` captures the floor profile. `ENABLE_TOF=True`.
+`scripts/calibrate_tof_floor.py` captures the floor profile. `ENABLE_TOF=True`. Drop detection
+(2026-10-14): a drop must last `TOF_DROP_CONFIRM_S` (0.3 s) front and rear, and only the near rows
+judge it -- front row 7 (`TOF_FRONT_DROP_ROWS`), rear row 0 (`TOF_REAR_DROP_ROWS`); the far floor
+rows still count for obstacles.
 
 **Transport.** `SerialFrameSource` speaks the DFRobot MatrixLidar protocol on
 `/dev/ttyAMA3` (`uart3-pi5`) at 115200: request `[0x55][argsNumH][argsNumL][cmd][args]`

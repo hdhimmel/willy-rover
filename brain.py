@@ -238,7 +238,8 @@ class RoverBrain:
         if config.ENABLE_TOF and not config.SIMULATE_HARDWARE:
             try:
                 from tof import ToFSensor,SerialFrameSource,BackgroundFrames
-                self.sonars.tof=ToFSensor(source=BackgroundFrames(SerialFrameSource()))
+                self.sonars.tof=ToFSensor(source=BackgroundFrames(SerialFrameSource()),
+                                          drop_rows=config.TOF_FRONT_DROP_ROWS)
                 if self.sonars.tof.profile is None:
                     log.warning('ToF fitted but no floor profile -- it reports nothing until '
                                 'scripts/calibrate_tof_floor.py is run on clear floor')
