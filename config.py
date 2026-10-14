@@ -1066,6 +1066,7 @@ STUCK_ALERT_MAX_PER_SESSION=5     # hard cap per service run, regardless of cool
 # ~0 counts while turning (open since 2026-10-07; owner parked encoders). 10-13 live: a pick-up
 # line-up latched STALL_FAULT on rf within 2 s. The other five still catch a real stall.
 STALL_IGNORE_WHEELS=('rf',)
+STALL_SKIP_IN_LINEUP=True   # 2026-10-14: no stall check during the retrieval line-up (brain._check_stall)
 STALL_GRACE_S=1.0           # FR-500-003 (Directive 5): how long a commanded wheel may show near-zero
                             # counts_per_sec before brain.py treats it as a real stall rather than
                             # still ramping up. Must clear both SPEED_RAMP_PER_S's worst-case ramp

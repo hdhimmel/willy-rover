@@ -1856,6 +1856,9 @@ Pico A a-0.3 reports signed counts.
     wheels — on 2026-08-25 a sagging R5 looked exactly like six dead channels.
     R5 low is a WARNING only (owner decision): it never stops the rover by
     itself, since nobody has measured the voltage these encoders quit at.
+    **Line-up exception (2026-10-14, owner):** no stall check while a pick-up or fetch is
+    lining up (`STALL_SKIP_IN_LINEUP`). Its 0.12-0.3 s slow pulses read as a stall and cut
+    every line-up off in 1-2 s; bump and distance stops still apply.
     (2026-10-08: a low R5 does refuse motion at the startup self-test, FR-100-003.)
     ⚠ **Open, 2026-10-07: false stalls on rf.** The rf encoder counts near zero while the
     wheel turns (-39, 0, 1, 16, -10 against thousands on the others), so the stall stop

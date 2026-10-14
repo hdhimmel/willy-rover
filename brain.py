@@ -685,6 +685,11 @@ class RoverBrain:
         # sustained-past-a-grace-period shape as _check_health() above, so a wheel still ramping
         # up right after a fresh command isn't mistaken for a stall.
         now=time.time(); sustained=[]
+        # 2026-10-14 (owner go): no stall check while a pick-up/fetch is lining up. Its creep and
+        # turn pulses are 0.12-0.3 s at slow speed, too short and slow for the encoders to show
+        # motion, so every line-up was cut off in 1-2 s (lf, rr). Bump and distance stops still apply.
+        if config.STALL_SKIP_IN_LINEUP and getattr(getattr(self,'retrieval',None),'state',None) in ('LOCALIZE','APPROACH'):
+            self._stall_since.clear(); return sustained
         for wheel,is_commanded in self.motors.commanded.items():
             if wheel in config.STALL_IGNORE_WHEELS: continue     # bad encoder, see config
             if is_commanded and self.encoders.stalled(wheel,True):

@@ -889,7 +889,8 @@ live one. Tick-serviced step machines (grasp, wave) keep any single tick short.
 
 **S-7 — Stall and overcurrent.** `_check_stall()` checks each commanded wheel
 (`DriveBase.commanded`) every tick; near-zero counts past `STALL_GRACE_S` (1.0 s) →
-`emergency_stop()`, `MOTOR_STALL`, `STALL_FAULT`. `_check_overcurrent()` trips per rail
+`emergency_stop()`, `MOTOR_STALL`, `STALL_FAULT` -- skipped while the retrieval task is lining
+up (`LOCALIZE`/`APPROACH`, `STALL_SKIP_IN_LINEUP`, 2026-10-14). `_check_overcurrent()` trips per rail
 (`OVERCURRENT_LIMIT_A`, 90% of the 10 A F2/F4 fuses) → `OVERCURRENT`, latched
 `OVERCURRENT_FAULT`. The arm rail has `ARM_CURRENT_LIMIT_A` → release. Rail-level, not
 per-motor. The inverse — counts with nothing commanded — is `UNCOMMANDED_MOTION`.

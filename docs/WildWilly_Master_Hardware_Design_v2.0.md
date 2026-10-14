@@ -1632,6 +1632,7 @@ Item numbers are stable; closed items are removed, not renumbered.
 22a. **Rotation overshoot** — "turn left 30°" turned ~76° on 10-13 (full-duty spin, BNO085 ~5 Hz):
     slow the spin for small turns and/or raise the IMU report rate.
 22b. **rf encoder** reads ~0 while turning; left out of the stall check (`STALL_IGNORE_WHEELS`).
+    The whole stall check is also skipped during a pick-up line-up (`STALL_SKIP_IN_LINEUP`, 10-14).
 22c. **Rear sonar** reported "not updated" for the whole 10-13 session (SONAR_FAULT, rear).
 23. **Odometry and IMU** — drive a measured straight line (rolling diameter, other five
     wheels' scale); check the IMU yaw sign; BNO085 report rate ~5 Hz, cause unknown.
