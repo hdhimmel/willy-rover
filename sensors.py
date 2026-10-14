@@ -201,11 +201,21 @@ class SonarArray:
                 # The ToF is the ONLY cliff detection (dedicated IR cliff sensors were dropped
                 # 2026-09-12). Open space where the profile expects floor reads as an obstacle
                 # at zero, so every forward gate stops. A dark rug can trip it: the safe way.
-                drop = tof.drop_detected()
+                # 2026-10-14: believed only once it has lasted TOF_DROP_CONFIRM_S (2+ frames), as
+                # the rear: single frames with one empty floor zone every 5-7 s made him back up and
+                # retry forward in a loop. At creep speed 0.3 s is a few cm; the front sees ~45 cm.
+                raw = tof.drop_detected(); now = time.monotonic()
+                if raw:
+                    since = getattr(self, '_front_drop_since', None)
+                    if since is None: since = self._front_drop_since = now
+                    drop = now - since >= config.TOF_DROP_CONFIRM_S
+                else:
+                    self._front_drop_since = None; drop = False
                 if drop != getattr(self, '_tof_drop', False):
                     self._tof_drop = drop
+                    z = ', '.join(f'r{i//8}c{i%8}={v}' for i, v in getattr(tof, 'last_drop_zones', [])[:6])
                     (log.warning if drop else log.info)(
-                        'ToF: DROP AHEAD -- stopping forward motion' if drop else 'ToF: floor ahead again')
+                        f'ToF: DROP AHEAD -- stopping forward motion ({z})' if drop else 'ToF: floor ahead again')
                 if drop:
                     front = 0.0
             except Exception:

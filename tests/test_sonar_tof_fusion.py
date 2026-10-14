@@ -128,3 +128,23 @@ def test_a_tof_not_yet_marked_available_is_still_read(array):
     _set_front(array, 100.0)
     array.tof = s
     assert array.distances['front'] == pytest.approx(15.0)
+
+
+class _DropToF(_FakeToF):
+    def __init__(self): super().__init__(); self.drop=False; self.last_drop_zones=[(52,None)]
+    def drop_detected(self): return self.drop
+
+
+def test_front_drop_must_last_before_it_stops_him(array, monkeypatch):
+    # 2026-10-14: one-frame "drops" every 5-7 s trapped him backing and forth; like the rear, a
+    # drop now has to last TOF_DROP_CONFIRM_S
+    import sensors
+    t=[100.0]; monkeypatch.setattr(sensors.time,'monotonic',lambda: t[0])
+    array.tof=_DropToF()
+    array.tof.drop=True
+    assert array.distances['front'] == pytest.approx(100.0)          # first frame: not yet
+    t[0]+=0.1; array.tof.drop=False
+    assert array.distances['front'] == pytest.approx(100.0)          # flicker gone: never stopped
+    array.tof.drop=True; assert array.distances['front'] == pytest.approx(100.0)
+    t[0]+=config.TOF_DROP_CONFIRM_S+0.01
+    assert array.distances['front'] == 0.0                            # it lasted: a real edge

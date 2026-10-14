@@ -291,7 +291,7 @@ GPS_LEARN_S=60.0            # "this is home": average this long
 GPS_LEARN_MIN_FIXES=20
 GPS_LEARN_MAX_SPREAD_M=15.0
 TOF_STARTUP_IGNORE_DROP_S=3.0
-TOF_DROP_CONFIRM_S=0.3          # rear: a drop must persist this long (2+ frames) before it stops reversing   # no DROP verdicts for this long after a ToF starts giving frames      # frames averaged when capturing; one frame carries per-zone noise
+TOF_DROP_CONFIRM_S=0.3          # front (since 10-14) and rear: a drop must persist this long (2+ frames) before it stops reversing   # no DROP verdicts for this long after a ToF starts giving frames      # frames averaged when capturing; one frame carries per-zone noise
                             # straight into the baseline everything else is measured against
 
 # I2C bus 1 clock. THE KERNEL IS AUTHORITATIVE, NOT THIS CONSTANT -- the bus speed is set by
