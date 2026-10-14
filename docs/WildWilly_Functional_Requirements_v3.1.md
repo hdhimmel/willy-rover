@@ -3845,6 +3845,9 @@ guaranteed-save requirement in particular had none anywhere in the document.
     camera, drive/turn until it is inside the arm's reach, IK for the joint angles. Built and
     unit-tested; waits on the camera calibration (`scripts/calibrate_camera_floor.py`) and the
     joint calibration (`ARM_JOINT_CAL`; the shoulder after the 2026-10-15 servo swap).
+    Camera calibrated 2026-10-14; it cannot see the floor inside the arm's reach, so the last
+    5-15 cm are crept blind from the last fix, and the rover backs off again before the camera
+    check (owner's choice until the hand camera is fitted).
 -   **FR-1900-012 (added 2026-10-13, owner): multi-step routines.** FR-1900-007's
     *"when I say X, do Y"* accepts several steps: *"when I say goodnight, do stow your arm,
     then go home, then wave"*. Every step must be a command the fast path understands —

@@ -580,6 +580,17 @@ ARM_IK_MAX_GRIP_HEIGHT_MM=60  # grip at most this far above the floor (tall thin
 # axis (half length, half width, top height above the floor), mm. Top = shoulder minus ~80 mm for
 # the arm base, an ESTIMATE for the current body.
 ARM_IK_KEEPOUT_MM=(215,200,ARM_SHOULDER_HEIGHT_MM-80)
+# LAST FIX + BLIND CREEP (2026-10-14, owner): the front camera's nearest floor (~450 mm) is beyond
+# the arm's reach (220-380 mm), so: drive until the object is just above the bottom of the image,
+# take that as the last good fix, creep the rest with it out of view (encoder distance, rf left out),
+# reach to the remembered spot, then back off the same distance and look again to verify.
+PICK_FIX_BOTTOM_FRAC=0.95     # box bottom this far down the frame = close enough for the last fix
+PICK_MAX_BLIND_MM=220         # never creep further than this out of view
+PICK_IK_TARGET_FRAC=0.8       # aim for this far across the reach band (0 near, 1 far): less blind creep
+PICK_CREEP_PULSE_S=0.12       # one blind creep pulse at RETRIEVAL_CREEP_SPEED
+PICK_CREEP_MAX_PULSES=40      # give up creeping after this many
+PICK_CREEP_TOL_MM=10
+PICK_CREEP_MM_PER_PULSE=10    # ESTIMATE, used only when the encoders are not healthy
 ARM_STOW_UPRIGHT_US=1500        # shoulder: arm standing up, where the elbow folds/opens safely
 ARM_BASE_TURN_SHOULDER_US=1650  # owner 10-13: shoulder raised/back while the base turns (hand high)
 # ⚠ 2026-10-13 REPLACES the two caveats above (old servos). Re-measured on the new hardware:

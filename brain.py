@@ -292,6 +292,7 @@ class RoverBrain:
                                  arm=self.arm)   # arm: the knock at a shut door (knock.py)
         self.retrieval=RetrievalTask(self.safety,self.arm,self.detector,display=self.display,voice=self.voice,
                                      feedback=lambda: grip.read_feedback(self.adc,self.current))
+        self.retrieval.encoders=self.encoders   # 2026-10-14: blind-creep distance (arm_ik last fix)
         self.pursuit=PursuitTask(self.safety,self.detector,display=self.display,voice=self.voice)  # FR-1000
         # Rotation mode (rotate.py, live-verified 2026-10-07). Drives THROUGH SafetyController
         # (set_wheels is approved like a turn). Front camera only here: the rear camera is not

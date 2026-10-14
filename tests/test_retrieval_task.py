@@ -201,3 +201,41 @@ def test_vision_reach_stops_for_an_obstacle_and_reports_failures(monkeypatch):
     rt.state='APPROACH'; monkeypatch.setattr(arm_ik,'plan_for',lambda d: ('fail',"no arm position reaches it"))
     rt._approach({'front':999},0)
     assert rt.state=='FAILED' and rt._fail_reason=='no arm position reaches it'
+
+def test_blind_creep_then_reach_then_back_off_before_looking(monkeypatch):
+    # 2026-10-14: last fix -> creep out of view by encoder distance -> reach -> back off -> look
+    import types,arm_ik
+    calls=[]
+    enc=types.SimpleNamespace(is_healthy=True,counts={w:0 for w in ('lf','lm','lr','rf','rm','rr')})
+    def move(sign):
+        def f(t,v):
+            calls.append(('fwd' if sign>0 else 'back',t))
+            for w in enc.counts:
+                if w!='rf': enc.counts[w]+=sign*config.ENCODER_SIGN[w]*24   # ~10 mm per pulse
+        return f
+    s=types.SimpleNamespace(timed_move_active=False,forward_for=move(1),reverse_for=move(-1),stop=lambda: calls.append('stop'))
+    det={'class':'sports ball','conf':0.9,'bbox':(600,600,670,665),'frame_w':1280,'frame_h':720}
+    rt=RetrievalTask(s,None,types.SimpleNamespace(detect=lambda classes=None:[det]))
+    rt.encoders=enc
+    rt.start('sports ball',pick_only=True); rt.state='APPROACH'
+    info={'x':420.0,'y':10.0,'z':35.0,'size_mm':70.0,'range_mm':420.0}
+    monkeypatch.setattr(arm_ik,'ready',lambda: True)
+    monkeypatch.setattr(arm_ik,'plan_for',lambda d: ('fix',info,100.0))
+    got={}
+    def after(i,t):
+        got['t']=t; return ({'base':1500,'shoulder':1200,'elbow':1400,'wrist_pitch':1250},{'base':0,'shoulder':-10,'elbow':60,'wrist_pitch':10})
+    monkeypatch.setattr(arm_ik,'reach_after_creep',after)
+    rt._approach({'front':999},0); rt._approach({'front':999},0)          # two confirming frames
+    assert rt._blind and rt._spot_xy
+    for _ in range(30):
+        if rt.state!='APPROACH': break
+        rt._approach({'front':999},0)
+    assert rt.state=='GRASP' and 85<=got['t']<=110 and rt._reach_pose['shoulder']==1200
+    n_fwd=sum(1 for c in calls if c[0]=='fwd')
+    # verify: backs off about the same distance before looking
+    rt._grip_result='gripped'; rt.state='VERIFY'; rt.detector=types.SimpleNamespace(detect=lambda classes=None: [])
+    for _ in range(30):
+        if rt.state!='VERIFY': break
+        rt._verify({},0)
+    n_back=sum(1 for c in calls if c[0]=='back')
+    assert rt.state=='HOLDING' and abs(n_back-n_fwd)<=1

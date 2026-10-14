@@ -9,7 +9,8 @@ Pure maths, no hardware -- everything here is testable off the rover.
   solve(x, y, z)         arm angles (deg) putting the grip point at (x, y, z), or None
   pose_from_angles(a)    angles -> servo pulses {joint: us}, or None while a joint is uncalibrated
   plan_for(det)          ('reach', pose, info) | ('turn', deg) | ('forward'|'reverse', mm) |
-                         ('fail', reason)
+                         ('fix', info, creep_mm) | ('fail', reason)
+  reach_after_creep()    the pose once the blind creep is done
   fit_camera(samples)    camera height / tilt / HFOV from objects placed at taped spots
 
 ANGLE CONVENTIONS (same as the arm measurement sheet, docs/drawings/WildWilly_Arm_Measurements.html)
@@ -166,9 +167,21 @@ def plan_for(det):
         return ('turn',base)
     band=reach_band(z)
     if band is None: return ('fail',"no arm position reaches the floor in front of me")
-    best=(band[0]+band[1])/2; err=p['range_mm']-best
-    if err>0: return ('forward',err)
-    return ('reverse',-err)
+    best=band[0]+(band[1]-band[0])*config.PICK_IK_TARGET_FRAC  # far part of the band: less blind creep
+    if abs(p['y'])>=best: return ('turn',base)
+    tx=math.sqrt(best*best-p['y']*p['y'])                   # a straight creep keeps y
+    if p['x']<=tx: return ('reverse',tx-p['x'])
+    if det['bbox'][3]>=config.PICK_FIX_BOTTOM_FRAC*det['frame_h']:
+        creep=p['x']-tx
+        if creep>config.PICK_MAX_BLIND_MM: return ('forward',creep)
+        return ('fix',info,creep)
+    return ('forward',p['x']-tx)
+
+def reach_after_creep(info,travelled_mm):
+    """(pose, angles) for the remembered object after driving travelled_mm straight forward,
+    or (None, None)."""
+    a=solve(info['x']-travelled_mm,info['y'],info['z'],accept=lambda a: pose_from_angles(a) is not None)
+    return (pose_from_angles(a),a) if a else (None,None)
 
 def reach_band(z=35.0):
     """(nearest, furthest) range in mm, straight ahead, where solve() finds a reach that the

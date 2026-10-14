@@ -1,4 +1,4 @@
-import time,config,logsetup,grip,reach_table,arm_ik
+import time,config,logsetup,grip,reach_table,arm_ik,odometry
 
 
 def base_for_x(x):
@@ -52,6 +52,7 @@ class RetrievalTask:
     def start(self,target_class,requester_hint=None,pick_only=False,colour=None):
         if self.active: return False,'retrieval task already in progress'
         self.pick_only=pick_only      # 2026-10-13 "pick up the X": no hand-off, end HOLDING
+        self._blind=None; self._backoff=None; self._backoff_mm=0
         self.colour=colour
         self.state='LOCALIZE'; self._target_class=target_class; self._requester_hint=requester_hint
         self.turn_request=None
@@ -103,6 +104,7 @@ class RetrievalTask:
         # when the reach lands on it), turning the body for left/right and creeping for near/far.
         # The camera cannot see under the reached arm, so all lining-up happens before the reach.
         if self.safety.timed_move_active: return
+        if getattr(self,'_blind',None): return self._blind_creep(d)
         det=self._best(self.detector.detect(classes=[self._target_class]))
         if det is None:
             self._lost_count+=1; self._confirm_key=None
@@ -203,7 +205,7 @@ class RetrievalTask:
                          f"{ {k:round(v,1) for k,v in info['angles'].items()} } -> {pose}")
                 self.state='GRASP'
             return
-        self._confirm_key=None
+        if kind!='fix': self._confirm_key=None
         if kind=='turn':
             self.turn_request=act[1]
             log.info(f'Vision reach: object {act[1]:+.0f} deg off the arm, turning'); return
@@ -214,7 +216,46 @@ class RetrievalTask:
             self.safety.forward_for(near if act[1]<100 else far,config.RETRIEVAL_CREEP_SPEED); return
         if kind=='reverse':
             self.safety.reverse_for(config.RETRIEVAL_CREEP_PULSE_S[0],config.RETRIEVAL_CREEP_SPEED); return
+        if kind=='fix':
+            self.safety.stop()
+            if self._confirm(('fix',)):
+                info,creep=act[1],act[2]
+                self._blind={'info':info,'creep':creep,'start':self._wheel_mm(),'pulses':0}
+                self._spot_xy=(cx,cy); self._object_cm=info['size_mm']/10
+                log.info(f"Last fix: object at x {info['x']:.0f} y {info['y']:.0f} mm, "
+                         f"{info['size_mm']:.0f} mm across; creeping {creep:.0f} mm out of view")
+            return
         self.safety.stop(); self.state='FAILED'; self._fail_reason=act[1]
+
+    def _wheel_mm(self):
+        """Mean signed wheel travel in mm (bad-encoder wheels left out), or None."""
+        enc=getattr(self,'encoders',None)
+        if enc is None or not getattr(enc,'is_healthy',False): return None
+        c=enc.counts; ws=[w for w in c if w not in config.STALL_IGNORE_WHEELS]
+        if not ws: return None
+        return sum(c[w]*config.ENCODER_SIGN[w] for w in ws)/len(ws)*odometry._COUNTS_TO_M*1000.0
+
+    def _moved_mm(self,b):
+        now=self._wheel_mm()
+        if b['start'] is None or now is None: return b['pulses']*config.PICK_CREEP_MM_PER_PULSE
+        return abs(now-b['start'])
+
+    def _blind_creep(self,d):
+        """Creep the last stretch with the object out of view, then reach to where it was."""
+        b=self._blind; done=self._moved_mm(b)
+        if done>=b['creep']-config.PICK_CREEP_TOL_MM or b['pulses']>=config.PICK_CREEP_MAX_PULSES:
+            self.safety.stop(); self._blind=None
+            pose,a=arm_ik.reach_after_creep(b['info'],done)
+            how='' if b['start'] is not None else ' (encoders unavailable: pulse estimate)'
+            log.info(f"Blind creep done: {done:.0f} of {b['creep']:.0f} mm in {b['pulses']} pulses{how}")
+            if pose is None:
+                self.state='FAILED'; self._fail_reason="after creeping up, it's out of my reach"; return
+            self._reach_pose=pose; self._backoff_mm=done
+            log.info(f"Vision reach (blind): angles { {k:round(v,1) for k,v in a.items()} } -> {pose}")
+            self.state='GRASP'; return
+        if d.get('front',999)<config.RETRIEVAL_PICK_STOP_CM:
+            self.safety.stop(); self._blind=None; self.state='FAILED'; self._fail_reason='something is in the way'; return
+        self.safety.forward_for(config.PICK_CREEP_PULSE_S,config.RETRIEVAL_CREEP_SPEED); b['pulses']+=1
 
     def _confirm(self,key):
         """True once the same in-position verdict has held for RETRIEVAL_CONFIRM_FRAMES
@@ -313,6 +354,15 @@ class RetrievalTask:
                 self._phase=None; self.state='VERIFY'
 
     def _verify(self,d,tilt):
+        # 2026-10-14 blind creep: back off the same distance first, so the camera sees the floor
+        # spot of the last fix again before it judges the pick.
+        if getattr(self,'_backoff_mm',0)>0:
+            if self.safety.timed_move_active: return
+            b=getattr(self,'_backoff',None)
+            if b is None: b=self._backoff={'start':self._wheel_mm(),'pulses':0}
+            if self._moved_mm(b)<self._backoff_mm-config.PICK_CREEP_TOL_MM and b['pulses']<config.PICK_CREEP_MAX_PULSES:
+                self.safety.reverse_for(config.PICK_CREEP_PULSE_S,config.RETRIEVAL_CREEP_SPEED); b['pulses']+=1; return
+            self.safety.stop(); self._backoff=None; self._backoff_mm=0
         # FR-1700-005. The gripper's own feedback first: 'empty' means it closed on nothing.
         # 2026-10-14 (owner): a stopped jaw is not proof -- the front camera then checks the object
         # left the floor (grip.camera_check). Still on the floor = a miss, retried.

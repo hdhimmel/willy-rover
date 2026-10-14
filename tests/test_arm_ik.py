@@ -109,3 +109,17 @@ def test_fit_camera_with_the_height_tape_measured():
     samples=[dict(_ball(x,y),x=x,y=y) for x,y in spots]
     hgt,tilt,hfov,rms=arm_ik.fit_camera(samples,CAM['CAM_FRONT_X_MM'],CAM['CAM_FRONT_Y_MM'],height=330)
     assert hgt==330 and abs(tilt-15)<1.0 and abs(hfov-66)<2.0 and rms<5
+
+def test_plan_takes_the_last_fix_near_the_bottom_of_the_image(cal,monkeypatch):
+    # a ball just above the bottom edge of the real camera's view (current body calibration)
+    for k,v in dict(CAM_FRONT_HEIGHT_MM=280,CAM_FRONT_TILT_DEG=19.8,CAM_FRONT_HFOV_DEG=71.4,
+                    CAM_FRONT_X_MM=140,CAM_FRONT_Y_MM=0).items(): monkeypatch.setattr(config,k,v)
+    det={'class':'sports ball','conf':0.9,'bbox':(570,560,710,700),'frame_w':W,'frame_h':H}
+    act=arm_ik.plan_for(det)
+    assert act[0]=='fix' and 0<act[2]<=config.PICK_MAX_BLIND_MM
+    info=act[1]; pose,a=arm_ik.reach_after_creep(info,act[2])
+    assert pose is not None
+    x,y,z=arm_ik.forward(a)
+    assert abs(x-(info['x']-act[2]))<1 and abs(y-info['y'])<1
+    high={'class':'sports ball','conf':0.9,'bbox':(600,300,670,365),'frame_w':W,'frame_h':H}
+    assert arm_ik.plan_for(high)[0]=='forward'           # further out: keep driving while it is visible

@@ -1114,6 +1114,15 @@ missing; once ready, taught reach spots are no longer used. Camera values come f
 `scripts/calibrate_camera_floor.py` (ball at 4-6 taped spots); joint values from the measurement
 sheet. The 10-14 shoulder move to CH3 bumped `ARM_POSE_EPOCH` to `2026-10-14-ch3`, retiring every
 CH2-era taught pose.
+**Camera calibrated 2026-10-14** (current body): lens 280 mm up, 140 mm ahead of the base axis,
+tilt 19.8 deg, HFOV 71.4 deg, 12 mm rms. Its nearest floor is ~450 mm from the base axis -- past
+the arm's reach -- and the camera cannot be moved (owner), so the pick-up uses a **last fix and
+blind creep**: drive until the object's box bottom is `PICK_FIX_BOTTOM_FRAC` (0.95) down the
+image, remember its floor position, creep the rest (aiming `PICK_IK_TARGET_FRAC` 0.8 across the
+reach band, at most `PICK_MAX_BLIND_MM`) measured by the encoders with rf left out
+(`RetrievalTask._wheel_mm`; a pulse estimate if the encoders are down), reach to the remembered
+spot (`arm_ik.reach_after_creep`), then back off the same distance so the camera's check after the
+lift looks at the same floor spot. The hand camera is the proper fix for the blind stretch.
 
 **Pick-up by voice (built and run live 2026-10-13).** "Pick up the red ball": the object is found
 by the detector, or — when the spoken name starts with a colour and YOLO misses it — by the
