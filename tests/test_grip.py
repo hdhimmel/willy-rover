@@ -101,3 +101,17 @@ def test_hover_height_follows_the_object():
     tall=grip.reach_plan(2200,2000,1775,object_cm=10); short=grip.reach_plan(2200,2000,1775,object_cm=2)
     top=lambda p: [u for j,u,dl in p if j=='elbow' and dl==0.8][0]        # the hover step
     assert top(tall)>top(short)>config.ARM_POSE_REACH['elbow']
+
+
+def test_camera_check_after_lift():
+    import grip
+    spot=(0.5,0.8)
+    def det(x,y): return {'bbox':(x*100-5,y*100-5,x*100+5,y*100+5),'frame_w':100,'frame_h':100}
+    assert grip.camera_check(lambda: det(0.52,0.79),spot)=='on_floor'
+    assert grip.camera_check(lambda: None,spot)=='gone'
+    assert grip.camera_check(lambda: det(0.5,0.3),spot)=='in_hand'
+    seq=iter([None,det(0.5,0.8)])                       # one sighting at the spot = a miss
+    assert grip.camera_check(lambda: next(seq),spot)=='on_floor'
+    assert grip.camera_check(lambda: None,None)=='unknown'
+    def boom(): raise RuntimeError('no camera')
+    assert grip.camera_check(boom,spot)=='unknown'

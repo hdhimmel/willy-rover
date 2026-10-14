@@ -1416,6 +1416,11 @@ OBJECT_CLASS_ALIASES={'ball':'sports ball','red ball':'sports ball','tennis ball
 REACH_TEACH_CLASSES=('cup','bottle','sports ball','remote','cell phone','mouse','book','scissors','teddy bear')
 RETRIEVAL_TARGET_TOL=(0.04,0.03)
 RETRIEVAL_CONFIRM_FRAMES=2
+# 2026-10-14 (owner): after the lift, the front camera checks the object left the floor. Seen
+# within this distance (normalised image units) of where it was lined up = still on the floor =
+# a miss, even if the jaw stopped (it can close on the floor or the object's edge).
+PICK_VERIFY_RADIUS=0.12
+PICK_VERIFY_FRAMES=2
 RETRIEVAL_PICK_STOP_CM=8
 # Pick-up line-up (10-13 live): turn pulses at SPEED_SLOW*0.5 (17% duty) could not break the
 # wheels away on a spin -> real STALL_FAULT on lf/lr. Now: an x error bigger than

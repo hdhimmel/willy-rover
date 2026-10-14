@@ -3835,8 +3835,12 @@ guaranteed-save requirement in particular had none anywhere in the document.
     with the arm base, hovered, lowered, gripped on feedback, lifted and said so; owner: "the ball
     is now perfectly in his hand". A second run tripped the arm current guard on the lift fold
     (both shoulder servos now hold during it). The full fetch (`ENABLE_RETRIEVAL_TASK`, driving
-    and hand-off) stays off; all arm plans are refused until the shoulder is rebuilt and re-mapped
-    (2026-10-15).
+    and hand-off) stays off. (The shoulder gate that refused arm plans was removed 2026-10-14.)
+    **Pick verified by camera (2026-10-14, owner):** a stopped jaw is no longer enough to say
+    "Got the X". After the lift the front camera looks twice at where the object was lined up
+    (`grip.camera_check`, `PICK_VERIFY_RADIUS` 0.12): still there = a miss (retried, or
+    "I missed the X, it's still on the floor"); gone or seen elsewhere = got it; camera failed =
+    "I think I have it, but I couldn't check".
 -   **FR-1900-012 (added 2026-10-13, owner): multi-step routines.** FR-1900-007's
     *"when I say X, do Y"* accepts several steps: *"when I say goodnight, do stow your arm,
     then go home, then wave"*. Every step must be a command the fast path understands —

@@ -1,3 +1,4 @@
+import math
 import config,logsetup
 log=logsetup.setup('grip')
 
@@ -71,6 +72,31 @@ class GripCloser:
         self.cmd=min(self.closed_us,self.cmd+config.GRIP_CLOSE_STEP_US)
         self.set_pulse(self.cmd)
         return None
+
+
+def camera_check(detect,spot_xy,frames=None,radius=None):
+    """After the lift: is the object still on the floor where it was lined up? (2026-10-14)
+    detect() returns the best detection of the target or None. Looks `frames` times.
+      'on_floor' -- seen near spot_xy in any frame: the pick missed
+      'in_hand'  -- seen, but away from the spot: it moved with the hand
+      'gone'     -- not seen: it left the floor
+      'unknown'  -- no spot or the camera failed
+    Conservative on purpose: one sighting at the spot is a miss."""
+    if spot_xy is None: return 'unknown'
+    frames=frames or config.PICK_VERIFY_FRAMES; radius=radius or config.PICK_VERIFY_RADIUS
+    seen_away=False
+    for _ in range(frames):
+        try: det=detect()
+        except Exception as e:
+            log.warning(f'Pick check: camera failed ({e})'); return 'unknown'
+        if det is None: continue
+        x1,y1,x2,y2=det['bbox']
+        xy=((x1+x2)/2/det['frame_w'],(y1+y2)/2/det['frame_h'])
+        if math.dist(xy,spot_xy)<=radius:
+            log.info(f'Pick check: object still on the floor at ({xy[0]:.3f},{xy[1]:.3f})'); return 'on_floor'
+        seen_away=True
+    r='in_hand' if seen_away else 'gone'
+    log.info(f'Pick check: {r}'); return r
 
 
 def released_by_person(fb_at_hold,fb_now):

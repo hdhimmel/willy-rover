@@ -101,17 +101,19 @@ def test_save_after_teach_ended_refuses():
     assert reach_table.load()==[] and 'again' in b.said[-1]
 
 
-def test_pick_up_reaches_closes_lifts_and_holds(monkeypatch):
+def _run_pick(monkeypatch,ball_leaves_floor):
     import grip
     monkeypatch.setattr(config,'OBJECT_CLASS_ALIASES',{'ball':'sports ball'})
     reach_table.add((0.5,0.8),{'shoulder':1300,'elbow':1300,'wrist_pitch':1275,'base':1950})
     BALL={'class':'sports ball','conf':0.9,'bbox':(760,680,780,700),'frame_w':1536,'frame_h':864}
-    b=_brain([BALL])
+    dets=[BALL]
+    b=_brain(dets)
     from brain import RoverBrain
     import types
     for m in ('_wave','_pick_tick','_start_arm_sequence','_go'):
         setattr(b,m,types.MethodType(getattr(RoverBrain,m),b))
     b.faces=None; b.adc=None; b.current=None
+    b._stow_and_release=lambda why: b.started.append(('stow',why))
     fb=iter([0.18,0.18]+[0.20+0.01*i for i in range(8)]+[0.28]*20)
     monkeypatch.setattr(grip,'read_feedback',lambda adc,cur: next(fb))
     b._teach_cmd({'intent':'pick_up','args':{'object':'ball'}})
@@ -119,11 +121,22 @@ def test_pick_up_reaches_closes_lifts_and_holds(monkeypatch):
     for _ in range(500):
         if b._wave_deadline is not None: b._wave_deadline=0
         if getattr(b,'_pick',None) and b._pick.get('deadline'): b._pick['deadline']=0
+        if ball_leaves_floor and getattr(b,'_pick',None) and b._pick.get('phase')=='lift': dets.clear()
         b._wave({},0.0)
         if b._state=='IDLE': break
+    return b
+
+def test_pick_up_reaches_closes_lifts_and_holds(monkeypatch):
+    b=_run_pick(monkeypatch,ball_leaves_floor=True)
     assert b._state=='IDLE' and b._holding and 'Got the' in b.said[-1]
     joints=[j for j,_ in b.arm.log]
     assert 'gripper' in joints and joints.index('base')<len(joints)
+
+def test_pick_up_ball_still_on_floor_is_a_miss(monkeypatch):
+    # 2026-10-14: the jaw stopped, but the camera still sees the ball where it was -> missed
+    b=_run_pick(monkeypatch,ball_leaves_floor=False)
+    assert not getattr(b,'_holding',False) and 'still on the floor' in b.said[-1]
+    assert ('stow','missed') in b.started
     b._teach_cmd({'intent':'let_go','args':{}})
     assert not b._holding and b.arm.log[-1][0] in ('gripper','wrist_pitch','shoulder','shoulder_pair') or True
 

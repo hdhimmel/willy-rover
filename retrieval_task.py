@@ -145,7 +145,7 @@ class RetrievalTask:
         if self._confirm(('target',)):
             self._object_cm=grip.object_height_cm(det)
             log.info(f'Object height estimate: {self._object_cm} cm')
-            self.state='GRASP'
+            self.state='GRASP'; self._spot_xy=(cx,cy)
             log.info(f'Lined up: object at ({cx:.3f},{cy:.3f}), target ({tx},{ty})')
 
     def _approach_pick(self,d,det,cx,cy):
@@ -179,7 +179,7 @@ class RetrievalTask:
         self.safety.stop()
         if self._confirm(('pick',)):
             self._object_cm=grip.object_height_cm(det)
-            self._reach_pose=dict(config.ARM_POSE_REACH,base=base_for_x(cx))
+            self._reach_pose=dict(config.ARM_POSE_REACH,base=base_for_x(cx)); self._spot_xy=(cx,cy)
             log.info(f'Lined up: object at ({cx:.3f},{cy:.3f}), height {self._object_cm} cm, base {self._reach_pose["base"]}')
             self.state='GRASP'
 
@@ -280,12 +280,17 @@ class RetrievalTask:
                 self._phase=None; self.state='VERIFY'
 
     def _verify(self,d,tilt):
-        # FR-1700-005. The gripper's own feedback first: 'empty' means it closed on nothing;
-        # 'gripped' means something stopped the jaw. Vision only decides when it was unsensed.
-        if self._grip_result=='gripped':
+        # FR-1700-005. The gripper's own feedback first: 'empty' means it closed on nothing.
+        # 2026-10-14 (owner): a stopped jaw is not proof -- the front camera then checks the object
+        # left the floor (grip.camera_check). Still on the floor = a miss, retried.
+        look='unknown'
+        if self._grip_result!='empty':
+            look=grip.camera_check(lambda: self._best(self.detector.detect(classes=[self._target_class])),
+                                   getattr(self,'_spot_xy',None))
+        self.verify_result=look
+        if self._grip_result=='gripped' and look!='on_floor':
             self.state='HOLDING' if getattr(self,'pick_only',False) else 'DELIVER'; return
-        det=None if self._grip_result=='empty' else self._best(self.detector.detect(classes=[self._target_class]))
-        if self._grip_result=='empty' or det is not None:
+        if self._grip_result=='empty' or look=='on_floor':
             self.arm.set_pulse('gripper',config.GRIP_OPEN_US)
             self._retries+=1
             if self._retries>=config.RETRIEVAL_GRASP_RETRIES:

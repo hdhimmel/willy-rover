@@ -1100,7 +1100,9 @@ largest blob of that colour (`ObjectDetector.detect_colour`). If it is not at a 
 `RetrievalTask` runs in `pick_only` mode: line up by image position (`RETRIEVAL_TARGET_XY`, his
 left, where the front camera can see the hand), body turns off (`RETRIEVAL_ROTATE_X=1.0`), the arm
 base aims (`RETRIEVAL_BASE_X_MAP`), creep at `SPEED_SLOW`, two confirming frames; then reach,
-grip on feedback, lift, end HOLDING until "let go". The reach turns the base only with the elbow
+grip on feedback, lift, then (2026-10-14) a front-camera check that the object left the floor
+(`grip.camera_check`: seen within `PICK_VERIFY_RADIUS` of the line-up spot = a miss), end HOLDING
+until "let go". The reach turns the base only with the elbow
 folded and the shoulder raised (`grip.fold_first`, `grip.turn_base`) and lowers the jaws onto the
 object by opening the elbow, pausing at a hover height from the object's image size. First live
 run: the ball was "perfectly in his hand" (owner). "Do you see a red ball?" is answered from the

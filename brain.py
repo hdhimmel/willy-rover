@@ -1763,7 +1763,10 @@ class RoverBrain:
             return
         if self.retrieval.state=='HOLDING':
             self._holding=True
-            self._say(f"Got the {getattr(self,'_spoken_object',None) or self.retrieval._target_class}.")
+            obj=getattr(self,'_spoken_object',None) or self.retrieval._target_class
+            look=getattr(self.retrieval,'verify_result','unknown')
+            self._say(f"Got the {obj}." if look in('gone','in_hand') else
+                      f"I think I have the {obj}, but I couldn't check with my camera. Say let go to drop it.")
             self.retrieval.reset(); self._go('IDLE'); return
         if self.retrieval.state in('DONE','FAILED','ABORTED'):
             if self.retrieval.state=='DONE' and self.voice.available: self.voice.speak('All done!')
@@ -2030,7 +2033,7 @@ class RoverBrain:
             log.info(f'Pick up {det["class"]} at {xy} -> {pose}')
             plan=grip.reach_plan(config.ARM_SERVO_CENTER_US,self._shoulder_now(),self._arm_now('elbow'),pose=pose)
             if not plan: self._say("I can't reach right now."); return
-            self._pick={'phase':'reach','closer':None,'obj':det['class'],'deadline':None}
+            self._pick={'phase':'reach','closer':None,'obj':det['class'],'deadline':None,'xy':xy,'colour':None}
             self._say(f"Picking up the {a.get('object')}.")
             self._start_arm_sequence(plan)
         elif i=='let_go':
@@ -2137,9 +2140,16 @@ class RoverBrain:
             self._say(f"I missed the {p['obj']}. I'll put my arm away.")
             self._release_after_seq=False; self._go('IDLE'); self._stow_and_release('missed')
             return True
+        # 2026-10-14 (owner): check with the front camera that it left the floor
+        look=grip.camera_check(lambda: self._reach_object(p['obj']),p.get('xy'))
+        if look=='on_floor':
+            self.arm.set_pulse('gripper',config.GRIP_OPEN_US)
+            self._say(f"I missed the {p['obj']}, it's still on the floor. I'll put my arm away.")
+            self._release_after_seq=False; self._go('IDLE'); self._stow_and_release('missed')
+            return True
         self._holding=True
-        self._say(f"Got the {p['obj']}." if p.get('result')=='gripped' else
-                  f"I think I have the {p['obj']}, but I can't feel it. Say let go to drop it.")
+        if p.get('result')=='gripped' and look in('gone','in_hand'): self._say(f"Got the {p['obj']}.")
+        else: self._say(f"I think I have the {p['obj']}, but I couldn't check. Say let go to drop it.")
         self._go('IDLE'); return True
 
     def _reach_object(self,name=None):
