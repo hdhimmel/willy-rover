@@ -1142,8 +1142,9 @@ protects nothing. Settled current is what matters — a joint at position relaxe
 0.05–0.4 A; one that stays higher is still fighting.
 
 **Presets.** All shoulder values are void until the 2026-10-15 shoulder rebuild is re-mapped
-(see the note at the top of this section). Elbow (DS3225): 2050 = folded along the top, 1000 =
-open; limits 800–2050 (`ARM_JOINT_LIMITS_US`), 1300–1850 while reaching down
+(see the note at the top of this section). Elbow (DS3225): 1825 = stow fold (was 2050 until
+2026-10-14: too far in with the arm down, tripped the over-current), 1000 = open; limits 800–1850
+(`ARM_JOINT_LIMITS_US`), 1300–1850 while reaching down
 (`ARM_COUPLED_LIMITS_US`). Wrist pitch free 1075–1475.
 
 **Wave** (`brain.py::_wave_plan`): elbow to 1000, shoulder stepped to 750, wrist pitch

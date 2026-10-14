@@ -407,7 +407,7 @@ ARM_SERVO_MIN_US=500; ARM_SERVO_MAX_US=2500; ARM_SERVO_CENTER_US=1500
 # Empty since 2026-10-13: ELBOW is now a DS3225 (270-degree travel, ~0.135 deg/us vs ~0.09 for the
 # MG996R; owner: it holds its position unpowered), fitted 2026-10-13 and not yet mapped. Put each
 # joint's measured stops here.
-ARM_JOINT_LIMITS_US={'elbow':(800,2050),'wrist_pitch':(1075,1475)}
+ARM_JOINT_LIMITS_US={'elbow':(800,1850),'wrist_pitch':(1075,1475)}   # elbow fold capped 1850 (owner 10-14)
 # Limits that apply only while another joint is in a range: (joint, other, (other_lo,other_hi), (lo,hi)).
 # 2026-10-13, owner, with the arm reaching down to the floor in front (shoulder forward of upright,
 # lower us): the elbow opened down to 1300 keeps the hand off the wheels, and folded past 1850 the
@@ -514,7 +514,10 @@ ARM_POSE_WAVE_HELLO={'elbow':1000,'shoulder':1500,'wrist_pitch':1275}   # 10-13 
 #  2. The elbow value is OUT OF SPEC (manufacturer range is 500-2500us). Past about 2530us the
 #     servo stopped responding -- peaks collapsed to ~0.1A -- so 2610 is very likely not a
 #     position it actually reaches. Treat ~2530us as the real limit until re-measured.
-ARM_POSE_REST={'elbow':2050,'shoulder':500,'wrist_pitch':1200}   # owner 10-13 eve: shoulder 500 + elbow 2050 = folded along the top (camera-checked)
+# 2026-10-14 (owner): elbow 2050 folded too far in with the arm down -- the stow pressed into him
+# and tripped the arm over-current (3.06 A, 10:39). Stow elbow 1825 = the fold measured 10-13 to
+# hold at 0.12 A (1850 0.31 A, 1875 1.53 A, 1900 2.29 A); the elbow limit is capped at 1850.
+ARM_POSE_REST={'elbow':1825,'shoulder':500,'wrist_pitch':1200}
 # ⚠ SHOULDER STOW = 500, OWNER-SET 2026-10-13 EVENING (owner: "that is the stowed position for the
 # shoulder -- don't forget it"): upper arm lying back over the REAR of his top. Confirmed with the
 # laptop camera. Supersedes the 2000 above/below, which after the arm was jammed against his front
