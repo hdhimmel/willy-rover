@@ -29,7 +29,7 @@ def return_plan(shoulder_from,elbow_from):
 def knock_plan(shoulder_from,elbow_from):
     """The whole knock, approach to rest, or None while ARM_POSE_KNOCK is unmeasured."""
     k=config.ARM_POSE_KNOCK
-    if not k or not config.ARM_SHOULDER_POSES_VERIFIED: return None   # its return-to-rest uses the old shoulder (10-12)
+    if not k: return None
     open_us=config.ARM_POSE_WAVE_HELLO['elbow']
     plan=[]
     if elbow_from is None or elbow_from>open_us: plan.append(('elbow',open_us,0.6))

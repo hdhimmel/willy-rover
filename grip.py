@@ -121,7 +121,7 @@ def reach_plan(base_us,shoulder_from,elbow_from,pose=None,object_cm=None):
     owner's rule: OPEN THE ELBOW before the shoulder moves, shoulder in ARM_WAVE_APPROACH_STEP_US
     steps. Returns None when ARM_POSE_REACH has not been measured -- no guessed pose, ever."""
     reach=pose or config.ARM_POSE_REACH      # pose: from reach_table (taught spots), 2026-10-13
-    if not reach or not config.ARM_SHOULDER_POSES_VERIFIED: return None
+    if not reach: return None
     if 'base' in reach: base_us=reach['base']   # rest/lift shoulder values too (10-12)
     # 2026-10-13 path, matching the measurement: stand the arm up (shoulder ARM_STOW_UPRIGHT_US),
     # set the elbow to the reach value THERE (1300 keeps the hand off the wheel), then step the

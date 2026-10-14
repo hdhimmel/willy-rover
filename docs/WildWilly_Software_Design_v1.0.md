@@ -1043,8 +1043,8 @@ Bench procedures with blank result fields are in `docs/WildWilly_Bench_Test_Proc
 5. **Stair standoff drift** — measure dead-reckoning drift on the floor before relying on
    the 15 cm margin.
 6. **Arm shoulder rebuild (2026-10-15)** — CH2 decoupled on 10-13; both shoulder servos being
-   replaced with holding servos on metal horns. Re-map with the cameras, then set
-   `ARM_SHOULDER_POSES_VERIFIED=True` (all arm plans refused until then).
+   replaced with holding servos on metal horns. Re-map with the cameras. (The pose gate that
+   refused all arm plans was removed 2026-10-14, owner.)
 6a. **Rotation overshoot** — 30° asked, ~76° turned (10-13). Slow small spins / faster IMU.
 7. **Gripper feedback curve** — run `scripts/grip_feedback_curve.py` empty and loaded, store the
    curve, consult it in `RetrievalTask._await_confirm()` (S-5).
@@ -1084,8 +1084,13 @@ shoulder 500 / elbow 2050, but 500 was CH2's pulse while the arm was placed by h
 nothing. **On 2026-10-15 both shoulder servos (CH2, CH3) are being replaced with servos that hold
 position unpowered, on metal horns.** After that: map the shoulder from scratch with the front
 and laptop cameras (stow, upright, reach, base-turn height), add the shoulder to
-`ARM_HOLDS_UNPOWERED`, bump `ARM_POSE_EPOCH`, then set `ARM_SHOULDER_POSES_VERIFIED=True`. Until
-then every arm plan (wave, stow, reach, pick-up, knock) is refused.
+`ARM_HOLDS_UNPOWERED` and bump `ARM_POSE_EPOCH`. Note: the shoulder gate (`ARM_SHOULDER_POSES_VERIFIED`) was removed on 2026-10-14 (owner), so every arm plan runs; re-check the shoulder values with the cameras after the swap.
+
+**Arm geometry (2026-10-14, `config.ARM_*_MM`):** upper arm L1 200.1 mm and forearm L2 140.1 mm
+pivot to pivot (the original designs; ducted reprints in `hardware/arm/` keep the lengths), hand
+227 mm closed / 180 mm open from the wrist-pitch pivot to the fingertips, shoulder pivot 446 mm
+above the floor on the current body, base axis at the top centre, 215 mm behind the front of the
+front wheels.
 
 **Pick-up by voice (built and run live 2026-10-13).** "Pick up the red ball": the object is found
 by the detector, or — when the spoken name starts with a colour and YOLO misses it — by the
@@ -1111,11 +1116,11 @@ the same pulse to CH2 and CH3 (`Arm._PAIRED`); `release()` zeroes both. There is
 shoulder as the pulse goes up, so mirrored pulses would make them fight. Other joints are a
 plain clamped write (`ARM_SERVO_MIN_US` 500 – `ARM_SERVO_MAX_US` 2500).
 
-**Pose gate (2026-10-12).** The new pair turns the opposite way to the old servo, so every
-shoulder value measured before that day is wrong — the wave's 750 µs would drive the arm down
-into the body. `config.ARM_SHOULDER_POSES_VERIFIED=False` makes `brain._arm_poses_ok()`
-refuse wave, stow and home with a spoken reason, and makes `grip.reach_plan()` and
-`knock.knock_plan()` return None (no reach, no knock). Set it True only after re-measuring.
+**Pose gate (2026-10-12 to 2026-10-14, REMOVED).** `config.ARM_SHOULDER_POSES_VERIFIED`
+and `brain._arm_poses_ok()` used to refuse wave, stow, home, reach and knock while the shoulder
+values were unverified after the servo change. It also missed pick-up, which drove and stowed
+before failing at the reach. The owner removed it on 2026-10-14; the arm plans now run on the
+stored values.
 
 **3. Never centre the elbow (CH1).** `ARM_SERVO_CENTER_US` (1500 µs) drives it into the
 top of the chassis. `center_all()` skips it.

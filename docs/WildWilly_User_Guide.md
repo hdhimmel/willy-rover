@@ -184,9 +184,8 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
   must be something he already understands, or he tells you which one he doesn't. Saying
   **"goodnight"** then runs the steps in order, each one after the last has finished.
   **"Stop"** cancels the rest. **"Forget goodnight"** deletes it.
-- **Not yet (since 2026-10-12):** his shoulder servos were replaced and his arm positions have to
-  be measured again. Until then, wave and stow get *"I can't move my arm yet. My shoulder was just
-  rebuilt and I need to relearn my arm positions."* and the arm stays still.
+- **Arm positions are being re-measured** after the shoulder rebuild (servos replaced
+  2026-10-15). Wave, stow and pick-up run, but watch the arm the first few times.
 
 **Saying stop:**
 - **"Stop"** / **"Halt"** / **"Freeze"** / **"Whoa"** — recognised instantly and handled before

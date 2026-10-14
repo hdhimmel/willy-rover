@@ -2082,8 +2082,8 @@ and Master Hardware Design §8 / §16.11 carry the same table.
     smoothly; `arm.py` drives both from every shoulder command. Mirroring them would make
     them fight, so the warning above still stands. The new servos turn the opposite way to
     the old one, so the hand-verified shoulder values below (wave 750 µs, rest 2010 µs) are
-    invalid until re-measured; `ARM_SHOULDER_POSES_VERIFIED=False` blocks wave, stow, home,
-    reach and knock meanwhile.
+    invalid until re-measured. The gate that blocked wave, stow, home, reach and knock
+    meanwhile (`ARM_SHOULDER_POSES_VERIFIED`) was removed on 2026-10-14 (owner).
 
     **The "confirm a servo is seated on CH0" caution was correct and is what
     surfaced all of this** --- it is retained in spirit as the rule below.

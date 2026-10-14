@@ -10,7 +10,6 @@ _REPO_ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 _SCRIPT='''
 import types,time as _t,config,threading
-config.ARM_SHOULDER_POSES_VERIFIED=True   # tests the guard logic, not the 10-13 pose gate
 import brain
 from brain import RoverBrain
 clock=[100.0]

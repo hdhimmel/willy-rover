@@ -1314,8 +1314,13 @@ shoulder 500 / elbow 2050, but 500 was CH2's pulse while the arm was placed by h
 nothing. **On 2026-10-15 both shoulder servos (CH2, CH3) are being replaced with servos that hold
 position unpowered, on metal horns.** After that: map the shoulder from scratch with the front
 and laptop cameras (stow, upright, reach, base-turn height), add the shoulder to
-`ARM_HOLDS_UNPOWERED`, bump `ARM_POSE_EPOCH`, then set `ARM_SHOULDER_POSES_VERIFIED=True`. Until
-then every arm plan (wave, stow, reach, pick-up, knock) is refused.
+`ARM_HOLDS_UNPOWERED` and bump `ARM_POSE_EPOCH`. Note: the shoulder gate (`ARM_SHOULDER_POSES_VERIFIED`) was removed on 2026-10-14 (owner), so every arm plan runs; re-check the shoulder values with the cameras after the swap.
+
+**Arm geometry (2026-10-14, `config.ARM_*_MM`):** upper arm L1 200.1 mm and forearm L2 140.1 mm
+pivot to pivot (the original designs; ducted reprints in `hardware/arm/` keep the lengths), hand
+227 mm closed / 180 mm open from the wrist-pitch pivot to the fingertips, shoulder pivot 446 mm
+above the floor on the current body, base axis at the top centre, 215 mm behind the front of the
+front wheels.
 
 5-DOF plus gripper, 7 servos on PCA9685 0x43, V+ from R3 6 V. Servos plug into 3-pin
 channel headers through a bulkhead connector, so the arm detaches without desoldering.
@@ -1622,7 +1627,7 @@ Item numbers are stable; closed items are removed, not renumbered.
 21. *(closed 2026-10-02 — all three sonars working, owner-confirmed.)*
 22. **Arm shoulder rebuild (2026-10-15)** — CH2 shoulder servo decoupled on 10-13; both shoulder
     servos to be replaced with holding servos on metal horns. Then re-map stow / upright / reach /
-    base-turn with the cameras and set `ARM_SHOULDER_POSES_VERIFIED=True` (see §8 note).
+    base-turn with the cameras (see §8 note). The pose gate was removed 2026-10-14 (owner).
 22a. **Rotation overshoot** — "turn left 30°" turned ~76° on 10-13 (full-duty spin, BNO085 ~5 Hz):
     slow the spin for small turns and/or raise the IMU report rate.
 22b. **rf encoder** reads ~0 while turning; left out of the stall check (`STALL_IGNORE_WHEELS`).

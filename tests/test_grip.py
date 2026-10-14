@@ -4,10 +4,6 @@ os.environ.setdefault('WILLY_SIMULATE','1')
 import pytest, config, grip
 
 
-@pytest.fixture(autouse=True)
-def _shoulder_poses_verified(monkeypatch):
-    # These test the plan logic with measured poses; the 2026-10-12 refusal is tested separately.
-    monkeypatch.setattr(config,'ARM_SHOULDER_POSES_VERIFIED',True)
 
 
 # 2026-10-08 grasp rebuild: gripper closed against its own position feedback, measured end points

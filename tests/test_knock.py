@@ -5,10 +5,6 @@ import pytest
 import config
 
 
-@pytest.fixture(autouse=True)
-def _shoulder_poses_verified(monkeypatch):
-    # These test the plan logic with measured poses; the 2026-10-12 refusal is tested separately.
-    monkeypatch.setattr(config,'ARM_SHOULDER_POSES_VERIFIED',True)
 
 
 # FR-1000-006 knock at a shut door: a bounded, timed arm oscillation from a sonar-measured

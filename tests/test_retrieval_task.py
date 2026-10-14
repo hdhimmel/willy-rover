@@ -36,10 +36,6 @@ class _FakeDetector:
 import pytest
 
 
-@pytest.fixture(autouse=True)
-def _shoulder_poses_verified(monkeypatch):
-    # These test the plan logic with measured poses; the 2026-10-12 refusal is tested separately.
-    monkeypatch.setattr(config,'ARM_SHOULDER_POSES_VERIFIED',True)
 
 _REACH={'shoulder':1210,'elbow':1300,'wrist_pitch':1500}   # a stand-in; the real one is unmeasured
 

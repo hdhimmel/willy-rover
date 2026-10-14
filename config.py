@@ -476,7 +476,7 @@ ROUTINE_MAX_STEPS=10
 # DIRECTIONS, owner-confirmed on hardware 2026-09-17 (shoulder re-measured 2026-10-12):
 #   shoulder CH2+CH3 : INCREASING us RAISES (new servos 10-12 -- the OPPOSITE of the old servo,
 #                  which raised with decreasing us; every shoulder value measured before 10-12
-#                  is therefore wrong, see ARM_SHOULDER_POSES_VERIFIED)
+#                  is therefore wrong)
 #   gripper  CH5 : INCREASING us closes, decreasing opens. LONGER FINGERS fitted by 2026-10-05:
 #                  jaws now shut at ~2205us (0.39A); 2210us drew 0.49A = stalling. Widest open
 #                  without load is 1150us (0.07A); the open stop is ~1100 and 1050us stalls at 0.8A. The ~1700us
@@ -498,17 +498,10 @@ ROUTINE_MAX_STEPS=10
 # shoulder -- not as a single jump, which would slam the joint.
 ARM_POSE_WAVE_HELLO={'elbow':1000,'shoulder':1500,'wrist_pitch':1275}   # 10-13 new hardware: upright, held 0.18 A; wrist mid-range
 #
-# ⚠ SHOULDER VALUES ABOVE AND IN ARM_POSE_REST ARE FROM THE OLD SERVO (2026-10-12). The new pair
-# turns the other way, so the wave's 750us now drives the shoulder fully DOWN into the body, and
-# rest's 2010us is high. Until both poses are re-measured on the new servos, brain.py refuses
-# wave, stow and home and says so instead of moving. Set True only after re-measuring.
-ARM_SHOULDER_POSES_VERIFIED=False
-# 2026-10-13 eve: OFF again. The stow shoulder is now 500 (owner), on the opposite side of upright
-# from what the plans assume (they treat < 1500 as forward), so wave/stow/reach/knock/pick plans
-# would move the arm the wrong way. Re-measure upright/reach/base-turn with the camera, fix the
-# plan geometry, then set True.
-# 2026-10-13: both re-measured on the new hardware (wave upright shoulder 1500 / elbow 1000 /
-# wrist 1275; stow shoulder 2000 / elbow 1950 / wrist 1275) -- wave and stow allowed again.
+# 2026-10-14 (owner): the shoulder gate (ARM_SHOULDER_POSES_VERIFIED, added 10-12 after the
+# servo change) is REMOVED -- wave, stow, home, pick and knock run without it. The shoulder
+# values here still date from before CH2's horn came loose on 10-13 and before the 10-15 servo
+# swap; re-check them with a camera after the swap.
 #
 # REST pose, owner-designated 2026-09-17. TWO CAVEATS, both measured, neither yet resolved:
 #
@@ -534,12 +527,22 @@ ARM_POSE_REST={'elbow':2050,'shoulder':500,'wrist_pitch':1200}   # owner 10-13 e
 # holds its last pulse while the 6 V rail is on), so in stow it must not press: elbow 1950 held
 # 0.60 A there, and folding UP to it (as stow does) 1875 held 1.53 A, 1900 2.29 A, 1850 0.31 A,
 # 1825 0.12 A -> 1825. Wrist 1275 added ~1 A folded, 1200 nothing.
+# ARM GEOMETRY (2026-10-14, for IK; pivot centre to pivot centre, mm). Upper arm and forearm are
+# the ORIGINAL designs (hardware/arm/: the ducted reprints keep these lengths). The old 220 mm
+# stretched forearm is retired. Upper arm hole line runs 10.9 deg off the part's long edge.
+ARM_L1_MM=200.1               # shoulder pivot -> elbow pivot (Alt_Kol, from the STL)
+ARM_L2_MM=140.1               # elbow hub -> wrist-pitch axle (On_Kol, from the STL)
+ARM_HAND_TIP_CLOSED_MM=227    # wrist-pitch pivot -> fingertips, jaws closed (owner-measured)
+ARM_HAND_TIP_OPEN_MM=180      # same, jaws open: the tips pull back 47 mm as the jaws open
+ARM_SHOULDER_HEIGHT_MM=446    # floor -> shoulder pivot on the CURRENT body (owner); the new body changes it
+ARM_BASE_OFFSET_MM=(0,0)      # base axis at the top centre of the body (owner): x forward, y left
+ARM_FRONT_REACH_CLEAR_MM=215  # base axis -> front of the front wheels (430 mm chassis / 2)
 ARM_STOW_UPRIGHT_US=1500        # shoulder: arm standing up, where the elbow folds/opens safely
 ARM_BASE_TURN_SHOULDER_US=1650  # owner 10-13: shoulder raised/back while the base turns (hand high)
 # ⚠ 2026-10-13 REPLACES the two caveats above (old servos). Re-measured on the new hardware:
 # shoulder pair 1750 (10-12: the furthest back before the hand meets his front, held 0.05 A;
 # then a release lets the arm settle into the fold), elbow 2050 (DS3225, owner-set as rest),
-# wrist pitch 2300. Wave shoulder still to re-measure, so ARM_SHOULDER_POSES_VERIFIED stays False.
+# wrist pitch 2300.
 ARM_WAVE_WRIST_US=(1200,1350)  # inside the wrist's 1075-1475 (10-13); was 1380/1620   # oscillate the wrist between these, ~0.35s per leg, 4 cycles
 ARM_WAVE_APPROACH_STEP_US=50    # shoulder step size travelling to the pose
 ARM_WAVE_STEP_S=0.06            # time between shoulder steps (2026-10-02, brain._wave)
