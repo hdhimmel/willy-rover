@@ -26,3 +26,15 @@ Needs `trimesh` and `manifold3d`.
   up, `arm_ik.solve` finds no pose reaching the floor past the front wheels (2026-10-14). Willie runs
   the 220 mm stretched forearm; the ducted forearm needs stretching to match before it is fitted.
 - Hand, wrist-pitch pivot to fingertip: 227 mm closed, 180 mm open
+
+## `build_hand_camera_mount.py` (2026-10-14)
+
+Hand back plate (`El.stl`, downloaded as `hand back.stl`) with a leaning wall that holds the
+InnoMaker U20CAM-1080P hand camera (32 x 32 mm board, four 2.2 mm M2 holes, M12 lens, 1 m cable).
+- Looks past the **angled end** of the plate (the end that points at the fingertips), tilted
+  **20 deg down** so the jaws sit mid-picture with the floor ahead still in view.
+- The hole spacing is not in InnoMaker's manual, so the holes are **slots covering 26-30 mm**.
+  M2 x 8 screws with nuts behind the wall. A 24 x 24 x 2.5 mm pocket clears the parts on the
+  back of the board.
+- Keeps clear of all six plate screws. Assumes the plate's top face (as downloaded) is the outside.
+- Output: `~/Downloads/hand_back_camera.stl`; preview `hand_back_camera_preview.png`.
