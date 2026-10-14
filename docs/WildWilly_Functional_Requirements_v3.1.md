@@ -8,7 +8,7 @@ Version 3.1**
   ----------------------- -----------------------------------------------
   Revision                3.5
 
-  Date                    2026-10-08
+  Date                    2026-10-14
 
   Owner                   Howard Himmel
 
@@ -409,6 +409,34 @@ Requirements are implemented and unit-tested off-hardware unless noted.
                           not run hot             and fan tach, log, spoken
                                                   warning, face readout.
   -----------------------------------------------------------------------
+
+**Register update 2026-10-14** (supersedes the rows above where they differ):
+
+- **FR-700 Arm.** Shoulder gate removed (owner). The shoulder now runs on **CH3** (CH2's horn is
+  loose); stow = shoulder 1900 / elbow 1825 (elbow fold capped at 1850: 2050 pressed into him
+  and tripped the guard). Wave, stow and pick-up run live; over-current release live. Geometry in
+  config: L1 200.1, L2 220 (the stretched forearm on him; the 140 mm original cannot reach the
+  floor), hand 227/180 mm, shoulder 446 mm up. Both shoulder servos are replaced 2026-10-15,
+  after which the shoulder is re-mapped.
+- **FR-1700 Pick-up.** Live 2026-10-14: line-up runs (no false stall faults), the reach misses
+  with the CH2-era pose, and the camera check after the lift caught every miss. Built, not yet
+  active: the vision-guided reach (`arm_ik.py`: floor position from the calibrated front camera,
+  IK, last fix + blind creep because the camera cannot see inside the reach). Waits on the
+  joint-angle calibration (`ARM_JOINT_CAL`). Gripper feedback reads flat (every grasp "stops"
+  at the open position) -- check with `scripts/grip_feedback_curve.py`. Hand camera (InnoMaker
+  U20CAM-1080P) chosen and its case designed (`hardware/arm/`).
+- **FR-800 Sensors.** Both ToF had no frames all morning: reversed TX/RX wiring, fixed by the
+  owner. Floor profiles re-captured (he sits nose-down now); drops need 0.3 s front and rear and
+  are judged on the near rows only (front 7, rear 0). Front camera calibrated (280 mm up, 19.8
+  deg down, 71.4 deg HFOV, 12 mm rms). **Rear sonar dead all day** (reads 0 cm, blocks reverse)
+  -- wiring to check.
+- **FR-1000 Navigation.** He hit a chair and a coffee table that sonar/ToF looked under: camera
+  brake built (ROAM/SLOW use the camera's floor-contact distance for chairs, tables, etc.) and a
+  roam that starts within 40 cm turns away first. Pulled and restarted on the rover: pending.
+- **FR-500 Encoders.** The stall check is skipped during the pick-up line-up (its pulses read as
+  stalls). Real stalls today were contact (chair, coffee table).
+- **Battery log.** Rows were written at every restart and hours-on-charge only counted 2 min per
+  restart; fixed (heartbeat). ~0.1 V/h, about 4%/h with some driving.
 
 Anything marked "built 2026-10-01/02" below is simulated tests only unless a later note
 says it ran on the rover.

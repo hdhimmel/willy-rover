@@ -2,7 +2,7 @@
 
 ## Master Hardware Design — As-Built
 
-**Revision 2.6 · Current Configuration · 2026-10-02**
+**Revision 2.6 · Current Configuration · 2026-10-02, updated 2026-10-14**
 
 ---
 
@@ -1325,7 +1325,13 @@ and laptop cameras (stow, upright, reach, base-turn height), add the shoulder to
 **Arm geometry (2026-10-14, `config.ARM_*_MM`):** upper arm L1 200.1 mm and forearm L2 **220 mm**
 pivot to pivot -- the stretched forearm on Willie now. The original forearm (140.1 mm, and the
 ducted reprint in `hardware/arm/`) **cannot reach the floor past the front wheels at all**
-(`arm_ik.solve` finds no pose); stretch it before fitting it. Hand
+(`arm_ik.solve` finds no pose); stretch it before fitting it.
+**Hand camera (chosen 2026-10-14, not fitted):** InnoMaker U20CAM-1080P -- 32 x 32 mm board,
+four 2.2 mm (M2) holes (spacing not published), M12 lens, 130 deg diagonal / 106 deg horizontal,
+1080p30 UVC, 1 m USB cable. Two-piece case on the hand's back plate looking past the fingertip
+end 20 deg down, cable out the back (`hardware/arm/build_hand_camera_mount.py`). Front camera
+(current body): 280 mm up, 140 mm ahead of the arm base axis, 19.8 deg down, 71.4 deg HFOV
+(calibrated 2026-10-14); it cannot see the floor inside the arm's reach. Hand
 227 mm closed / 180 mm open from the wrist-pitch pivot to the fingertips, shoulder pivot 446 mm
 above the floor on the current body, base axis at the top centre, 215 mm behind the front of the
 front wheels.

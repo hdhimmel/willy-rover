@@ -2,7 +2,7 @@
 
 ## Software Design — As-Built
 
-**Revision 1.4 · Current Implementation · 2026-10-02**
+**Revision 1.4 · Current Implementation · 2026-10-02, updated 2026-10-14**
 
 ---
 

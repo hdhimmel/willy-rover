@@ -13,8 +13,10 @@ Honest caveats, not fine print:
 
 - **He can still bump into things.** He watches ahead with sonar plus a close-range depth
   sensor, and to the sides with sonar. Sonar is poor at soft furniture, chair legs and anything
-  at an angle. **Nothing watches behind him**, which matters most when he turns on the spot.
-  His cameras help him choose which way to turn, but they never decide whether to stop.
+  at an angle. Behind him there is a second depth sensor (the rear sonar is not working at the
+  moment). While exploring, his **front camera also brakes** for chairs, tables, couches, beds and
+  people in his path (since 2026-10-14) -- table tops and seats stick out further than his
+  sonar sees. If he starts exploring with something close in front, he turns away first.
 - **Don't leave him roaming unattended** around anything you care about, near pets or a
   toddler, or near the top of stairs. His depth sensor can now see a drop just in front of him,
   but only close up, and it has not been tested at a real edge.
@@ -147,7 +149,7 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
 - **"Forget everyone"** — deletes every face he has learned.
 
 **Remembering things:**
-- **Battery log:** every 2 hours while he is on, he records his battery voltage, estimated %, and how many hours he has been running since his last charge, and pushes it to the `battery-log` branch on GitHub (https://github.com/hdhimmel/willy-rover/blob/battery-log/battery_log.csv). Readings taken offline go up with the next one.
+- **Battery log:** every 2 hours while he is on, he records his battery voltage, estimated %, and how many hours he has been running since his last charge (counted minute by minute; restarting him no longer adds a row), and pushes it to the `battery-log` branch on GitHub (https://github.com/hdhimmel/willy-rover/blob/battery-log/battery_log.csv). Readings taken offline go up with the next one.
 - *"Remember that [something]"* — stores a fact "Remember, …", "remember …" and "I want you to remember …" work too.
 - *"My name is Howard"* (or *"call me Howard"*, *"remember, my name is Howard"*) — he remembers it; *"what's my name?"* answers from that, or from your face if he recognises you.
 - **"What do you remember?"** / **"What do you know about [something]?"**
@@ -172,8 +174,10 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
   him nothing — he only knows where he moved it himself.
 - **Picking things up:** *"Pick up the red ball"* — he finds it (by colour if he can't name it),
   lines it up on his left side, reaches down, grips and lifts it, and holds it until you say
-  **"let go"**. *(Off until 2026-10-15: the shoulder servos are being replaced; he says his arm
-  needs relearning.)*
+  **"let go"**. After the lift he looks with his camera: if the ball is still on the floor he says
+  he missed and tries again (twice), so "Got the ball" now means it left the floor.
+  *(2026-10-14: the reach still misses until his arm angles are measured; a camera-guided reach
+  is built and switches on once they are.)*
 - **Teaching him to reach things:** put a cup, bottle or ball (he can't recognise a tape roll) on
   the floor in front of him with his arm put away and say **"learn this spot"**. He looks, reaches
   out, and starts arm teaching: move it with "shoulder down", "elbow up" and so on until the hand
