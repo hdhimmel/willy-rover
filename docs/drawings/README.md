@@ -10,6 +10,7 @@ old one.
 | `WildWilly_Pico_Carrier_Boards.html` | <https://claude.ai/artifact/8bPyEf8FYqyxdj2pgd9k2M> | §4.7's two Pico 2 W carrier boards — hole-by-hole layout, nets, build order. **This is what the boards were soldered from** (2026-09-27). |
 | `WildWilly_Pinout_Card.html` | <https://claude.ai/artifact/A8exZZ4LfAfNEtcXwLKCZk> | Pi 5 + both Picos, every pin, printable harness card. |
 | `WildWilly_Hardware_Map.html` | <https://claude.ai/artifact/4fuaSpynW9e6Q79Y3YC1uD> | One-page authoritative map: what owns what, Pi 5 / Pico A / Pico B / controllers / PCA9685s / INA260s / ADS1115. |
+| `WildWilly_Arm_Measurements.html` | <https://claude.ai/artifact/VvrVvYLfF7TjdpVYsHEeMi> | Side + top views of the arm marking every length, height and joint angle needed for IK, with fill-in fields (2026-10-14). |
 
 ## Regenerating the carrier figures
 

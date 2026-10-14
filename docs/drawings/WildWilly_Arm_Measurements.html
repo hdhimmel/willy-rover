@@ -1,0 +1,265 @@
+<title>Willie Arm Measurements</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one drafting sheet — side view, top view, then the joint-angle sheet with live slope maths */
+:root{
+  --paper:#f3f4f1; --sheet:#fbfbf9; --ink:#1f2724; --muted:#5c6763; --rule:#c9cfcb;
+  --dim:#1d5fa8; --angle:#b4630a; --fill:#e3e7e3;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#141917; --sheet:#1b211f; --ink:#e3e8e5; --muted:#9aa5a0; --rule:#38423e;
+  --dim:#6fb0f5; --angle:#f0a24a; --fill:#26302c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#141917; --sheet:#1b211f; --ink:#e3e8e5; --muted:#9aa5a0; --rule:#38423e;
+  --dim:#6fb0f5; --angle:#f0a24a; --fill:#26302c; color-scheme:dark}
+body{background:var(--paper);color:var(--ink);font:15px/1.5 var(--f-body);padding:24px 16px 48px}
+.wrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px 24px;border-bottom:2px solid var(--ink);padding-bottom:10px}
+h1{font:700 30px/1.1 var(--f-display);margin:0;letter-spacing:.01em;text-wrap:balance}
+.meta{font:12px var(--f-mono);color:var(--muted)}
+h2{font:600 13px var(--f-display);text-transform:uppercase;letter-spacing:.12em;margin:0 0 10px;color:var(--muted)}
+.view{background:var(--sheet);border:1px solid var(--rule);padding:16px}
+.svgbox{overflow-x:auto}
+svg{display:block;width:100%;min-width:620px;height:auto}
+svg text{font-family:var(--f-mono);font-size:13px;fill:var(--ink)}
+svg .lbl{font-weight:500}
+svg .dimt{fill:var(--dim);font-weight:500}
+svg .angt{fill:var(--angle);font-weight:500}
+svg .note{fill:var(--muted);font-size:11px}
+.ink{stroke:var(--ink);fill:none;stroke-width:1.6}
+.body{stroke:var(--ink);fill:var(--fill);stroke-width:1.4}
+.link{stroke:var(--ink);stroke-width:7;stroke-linecap:round;fill:none}
+.pivot{fill:var(--sheet);stroke:var(--ink);stroke-width:2}
+.dim{stroke:var(--dim);stroke-width:1.2;fill:none}
+.ext{stroke:var(--dim);stroke-width:.8;stroke-dasharray:3 3;fill:none}
+.axis{stroke:var(--muted);stroke-width:1;stroke-dasharray:10 3 2 3;fill:none}
+.ang{stroke:var(--angle);stroke-width:1.4;fill:none}
+.angref{stroke:var(--angle);stroke-width:.8;stroke-dasharray:3 3;fill:none}
+.ghost{stroke:var(--muted);stroke-width:5;stroke-linecap:round;stroke-dasharray:2 7;fill:none}
+.fov{stroke:var(--muted);stroke-width:.8;fill:none;stroke-dasharray:2 4}
+.ah{fill:var(--dim)} .aa{fill:var(--angle)}
+.target{stroke:var(--angle);stroke-width:1.6}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+@media (max-width:760px){.grid2{grid-template-columns:1fr}}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font:600 12px var(--f-display);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+td.k{font:500 14px var(--f-mono);color:var(--dim);white-space:nowrap}
+td.num,.num{font-variant-numeric:tabular-nums;font-family:var(--f-mono)}
+input{font:14px var(--f-mono);width:5.2em;padding:4px 6px;border:1px solid var(--rule);background:var(--paper);color:var(--ink);border-radius:2px}
+input:focus-visible,button:focus-visible{outline:2px solid var(--dim);outline-offset:1px}
+.out{font:500 14px var(--f-mono);color:var(--angle);white-space:nowrap}
+.hold{font-size:12px;color:var(--angle)}
+ol{margin:0;padding-left:20px;max-width:68ch} li{margin-bottom:4px}
+.bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+button{font:600 13px var(--f-display);letter-spacing:.06em;text-transform:uppercase;padding:9px 16px;background:var(--ink);color:var(--sheet);border:0;border-radius:2px;cursor:pointer}
+#copied{font:12px var(--f-mono);color:var(--muted)}
+textarea{width:100%;box-sizing:border-box;font:12px var(--f-mono);background:var(--paper);color:var(--ink);border:1px solid var(--rule);padding:8px}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Willie Arm Measurements</h1>
+  <span class="meta">for IK · 2026-10-14 · all lengths mm, pivot centre to pivot centre</span>
+</header>
+
+<section class="view">
+  <h2>Side view · lengths and heights</h2>
+  <div class="svgbox">
+  <svg viewBox="0 0 760 460" role="img" aria-label="Side view of Willie with the arm, showing link lengths and heights to measure">
+    <defs>
+      <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="ah" d="M0 1 L10 5 L0 9 z"/></marker>
+      <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="aa" d="M0 1 L10 5 L0 9 z"/></marker>
+    </defs>
+    <!-- floor -->
+    <line class="ink" x1="40" y1="400" x2="740" y2="400"/>
+    <text class="note" x="44" y="394">floor</text>
+    <text class="lbl" x="660" y="40">FRONT →</text>
+    <!-- body + wheels -->
+    <rect class="body" x="140" y="250" width="380" height="96"/>
+    <circle class="body" cx="200" cy="364" r="36"/><circle class="body" cx="330" cy="364" r="36"/><circle class="body" cx="460" cy="364" r="36"/>
+    <!-- base turntable + axis -->
+    <line class="axis" x1="420" y1="190" x2="420" y2="262"/>
+    <rect class="body" x="396" y="236" width="48" height="14"/>
+    <rect class="body" x="404" y="204" width="32" height="32"/>
+    <!-- arm links -->
+    <polyline class="link" points="420,214 510,104 628,186 655,224"/>
+    <line class="link" style="stroke-width:4" x1="655" y1="224" x2="662" y2="262"/>
+    <line class="link" style="stroke-width:4" x1="655" y1="224" x2="690" y2="246"/>
+    <circle class="pivot" cx="420" cy="214" r="7"/><circle class="pivot" cx="510" cy="104" r="7"/><circle class="pivot" cx="628" cy="186" r="7"/>
+    <!-- grip point -->
+    <line class="target" x1="669" y1="248" x2="681" y2="260"/><line class="target" x1="681" y1="248" x2="669" y2="260"/>
+    <!-- joint names -->
+    <text class="note" x="356" y="200">shoulder</text>
+    <text class="note" x="478" y="86">elbow</text>
+    <text class="note" x="640" y="176">wrist pitch</text>
+    <text class="note" x="690" y="270">jaw centre</text>
+    <text class="note" x="350" y="232">base</text>
+    <!-- link labels -->
+    <text class="dimt" x="440" y="150">L1</text>
+    <text class="dimt" x="580" y="128">L2</text>
+    <text class="dimt" x="668" y="212">L3</text>
+    <!-- Hs -->
+    <line class="ext" x1="410" y1="214" x2="92" y2="214"/>
+    <line class="dim" x1="100" y1="398" x2="100" y2="216" marker-start="url(#a)" marker-end="url(#a)"/>
+    <text class="dimt" x="108" y="312">Hs</text>
+    <!-- camera -->
+    <rect class="body" x="520" y="272" width="14" height="18"/>
+    <text class="note" x="478" y="268">cam</text>
+    <line class="angref" x1="534" y1="281" x2="728" y2="281"/>
+    <line class="ang" x1="534" y1="281" x2="648" y2="350"/>
+    <path class="ang" d="M594 281 A60 60 0 0 1 585.4 311.9" marker-end="url(#b)"/>
+    <text class="angt" x="600" y="306">θc tilt</text>
+    <!-- Hc -->
+    <line class="dim" x1="720" y1="283" x2="720" y2="398" marker-start="url(#a)" marker-end="url(#a)"/>
+    <text class="dimt" x="712" y="350" text-anchor="end">Hc</text>
+    <!-- Xs, Xc below floor -->
+    <line class="ext" x1="420" y1="406" x2="420" y2="440"/><line class="ext" x1="520" y1="406" x2="520" y2="440"/>
+    <line class="dim" x1="422" y1="432" x2="518" y2="432" marker-start="url(#a)" marker-end="url(#a)"/>
+    <text class="dimt" x="455" y="452">Xs</text>
+    <text class="note" x="530" y="436">to front face</text>
+  </svg>
+  </div>
+</section>
+
+<section class="view">
+  <h2>Top view · base axis, offsets, camera</h2>
+  <div class="svgbox">
+  <svg viewBox="0 0 760 330" role="img" aria-label="Top view of Willie showing base axis offset, base angle and camera position">
+    <rect class="body" x="182" y="48" width="36" height="22"/><rect class="body" x="312" y="48" width="36" height="22"/><rect class="body" x="442" y="48" width="36" height="22"/>
+    <rect class="body" x="182" y="260" width="36" height="22"/><rect class="body" x="312" y="260" width="36" height="22"/><rect class="body" x="442" y="260" width="36" height="22"/>
+    <rect class="body" x="140" y="70" width="380" height="190"/>
+    <line class="axis" x1="110" y1="165" x2="740" y2="165"/>
+    <text class="note" x="114" y="158">centreline</text>
+    <text class="lbl" x="660" y="320">FRONT →</text>
+    <text class="note" x="150" y="40">left side ↑</text>
+    <!-- camera + fov -->
+    <rect class="body" x="512" y="156" width="14" height="18"/>
+    <line class="fov" x1="526" y1="165" x2="720" y2="70"/><line class="fov" x1="526" y1="165" x2="720" y2="260"/>
+    <!-- arm forward + rotated ghost -->
+    <line class="ghost" x1="420" y1="130" x2="593" y2="30"/>
+    <line class="link" x1="420" y1="130" x2="676" y2="130"/>
+    <circle class="pivot" cx="420" cy="130" r="8"/>
+    <text class="note" x="430" y="150">base axis</text>
+    <line class="target" x1="670" y1="124" x2="682" y2="136"/><line class="target" x1="682" y1="124" x2="670" y2="136"/>
+    <!-- base angle -->
+    <path class="ang" d="M490 130 A70 70 0 0 0 480.6 95" marker-end="url(#b)"/>
+    <text class="angt" x="500" y="104">φ base</text>
+    <!-- Ys -->
+    <line class="ext" x1="412" y1="130" x2="372" y2="130"/>
+    <line class="dim" x1="380" y1="132" x2="380" y2="163" marker-start="url(#a)" marker-end="url(#a)"/>
+    <text class="dimt" x="372" y="152" text-anchor="end">Ys</text>
+    <!-- Yc -->
+    <text class="dimt" x="534" y="190">Yc</text>
+    <text class="note" x="556" y="190">lens from centreline</text>
+    <!-- Xb -->
+    <line class="ext" x1="420" y1="290" x2="420" y2="314"/><line class="ext" x1="520" y1="266" x2="520" y2="314"/>
+    <line class="dim" x1="422" y1="306" x2="518" y2="306" marker-start="url(#a)" marker-end="url(#a)"/>
+    <text class="dimt" x="458" y="300">Xb</text>
+  </svg>
+  </div>
+</section>
+
+<div class="grid2">
+<section>
+  <h2>Lengths</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Key</th><th>What</th><th>mm</th></tr></thead>
+    <tbody>
+      <tr><td class="k">L1</td><td>shoulder pivot → elbow pivot</td><td><input id="L1" inputmode="decimal"></td></tr>
+      <tr><td class="k">L2</td><td>elbow pivot → wrist-pitch pivot</td><td><input id="L2" inputmode="decimal"></td></tr>
+      <tr><td class="k">L3</td><td>wrist-pitch pivot → jaw centre (where the object sits, jaws closed)</td><td><input id="L3" inputmode="decimal"></td></tr>
+      <tr><td class="k">Hs</td><td>floor → shoulder pivot</td><td><input id="Hs" inputmode="decimal"></td></tr>
+      <tr><td class="k">Xs</td><td>shoulder pivot → front face (horizontal)</td><td><input id="Xs" inputmode="decimal"></td></tr>
+      <tr><td class="k">So</td><td>base axis → shoulder pivot, if the pivot is off the axis (0 if on it)</td><td><input id="So" inputmode="decimal"></td></tr>
+      <tr><td class="k">Xb</td><td>base axis → front face</td><td><input id="Xb" inputmode="decimal"></td></tr>
+      <tr><td class="k">Ys</td><td>centreline → base axis (+ = left)</td><td><input id="Ys" inputmode="decimal"></td></tr>
+      <tr><td class="k">Hc</td><td>floor → front camera lens centre</td><td><input id="Hc" inputmode="decimal"></td></tr>
+      <tr><td class="k">Xc</td><td>lens set back from front face (0 if flush)</td><td><input id="Xc" inputmode="decimal"></td></tr>
+      <tr><td class="k">Yc</td><td>centreline → lens (+ = left)</td><td><input id="Yc" inputmode="decimal"></td></tr>
+      <tr><td class="k" style="color:var(--angle)">θc</td><td>camera tilt below horizontal, degrees</td><td><input id="Tc" inputmode="decimal"></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>How to measure</h2>
+  <ol>
+    <li>Lengths go between <b>output-shaft centres</b>, not horn edges or bracket ends.</li>
+    <li>Willie on a flat floor, tyres at normal pressure: Hs and Hc depend on it.</li>
+    <li>Angles: phone level app laid along the link, read at two pulses per joint. Two readings give degrees per µs and the zero pulse. Pick pulses far apart.</li>
+    <li>θc: level the phone on the camera board, or aim at a floor mark of known distance and work it out from the frame.</li>
+    <li>Gripper is already known: open 1150 µs = 73 mm, closed 2150 µs = 0.</li>
+  </ol>
+</section>
+</div>
+
+<section>
+  <h2>Joint angles · two-point slope</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Joint</th><th>0° is</th><th>µs A</th><th>° at A</th><th>µs B</th><th>° at B</th><th>°/µs</th><th>0° at µs</th></tr></thead>
+    <tbody id="joints"></tbody>
+  </table></div>
+</section>
+
+<section class="view">
+  <h2>Send me the numbers</h2>
+  <div class="bar">
+    <button id="copy" type="button">Copy all values</button>
+    <span id="copied"></span>
+  </div>
+  <p class="meta">Values stay in this browser only. Paste the text into the chat.</p>
+  <textarea id="dump" rows="6" readonly aria-label="All entered values as text"></textarea>
+</section>
+</div>
+
+<script>
+const JOINTS=[
+ {k:'base',ch:'CH6',zero:'arm pointing straight ahead; + = left',a:1300,b:1700},
+ {k:'shoulder',ch:'CH2/3',zero:'upper arm horizontal, forward; + = up',a:'',b:'',hold:'after the 10-15 servo swap'},
+ {k:'elbow',ch:'CH1',zero:'forearm straight in line with upper arm; + = folding',a:1000,b:1800},
+ {k:'wrist_pitch',ch:'CH0',zero:'hand in line with forearm; + = curling down',a:1100,b:1450},
+ {k:'wrist_rot',ch:'CH4',zero:'jaws open left/right (horizontal); + = clockwise seen from behind',a:'',b:'',hold:'range untested, look first'},
+];
+const tb=document.getElementById('joints');
+JOINTS.forEach(j=>{
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td class="k">${j.k}<br><span class="meta">${j.ch}</span></td>
+  <td>${j.zero}${j.hold?`<br><span class="hold">${j.hold}</span>`:''}</td>
+  <td><input id="${j.k}_ua" inputmode="numeric" value="${j.a}"></td>
+  <td><input id="${j.k}_da" inputmode="decimal"></td>
+  <td><input id="${j.k}_ub" inputmode="numeric" value="${j.b}"></td>
+  <td><input id="${j.k}_db" inputmode="decimal"></td>
+  <td class="out" id="${j.k}_s">—</td><td class="out" id="${j.k}_z">—</td>`;
+  tb.appendChild(tr);
+});
+const KEY='willie-arm-meas-v1';
+const inputs=[...document.querySelectorAll('input')];
+try{const s=JSON.parse(localStorage.getItem(KEY)||'{}');inputs.forEach(i=>{if(s[i.id]!==undefined)i.value=s[i.id]})}catch(e){}
+const n=id=>{const v=parseFloat(document.getElementById(id).value);return isFinite(v)?v:null};
+function calc(){
+  const lines=['Willie arm measurements (mm, deg):'];
+  ['L1','L2','L3','Hs','Xs','So','Xb','Ys','Hc','Xc','Yc','Tc'].forEach(k=>{const v=document.getElementById(k).value.trim();if(v)lines.push(`${k==='Tc'?'theta_c':k} = ${v}`)});
+  JOINTS.forEach(j=>{
+    const ua=n(j.k+'_ua'),da=n(j.k+'_da'),ub=n(j.k+'_ub'),db=n(j.k+'_db');
+    const S=document.getElementById(j.k+'_s'),Z=document.getElementById(j.k+'_z');
+    if([ua,da,ub,db].every(v=>v!==null)&&ub!==ua){
+      const s=(db-da)/(ub-ua),z=s?ua-da/s:NaN;
+      S.textContent=s.toFixed(4);Z.textContent=isFinite(z)?Math.round(z):'—';
+      lines.push(`${j.k}: ${ua}us=${da}deg, ${ub}us=${db}deg -> ${s.toFixed(4)} deg/us, 0deg at ${isFinite(z)?Math.round(z):'?'}us`);
+    }else{S.textContent='—';Z.textContent='—';}
+  });
+  document.getElementById('dump').value=lines.join('\n');
+  try{const s={};inputs.forEach(i=>s[i.id]=i.value);localStorage.setItem(KEY,JSON.stringify(s))}catch(e){}
+}
+inputs.forEach(i=>i.addEventListener('input',calc));calc();
+document.getElementById('copy').addEventListener('click',()=>{
+  const t=document.getElementById('dump'),m=document.getElementById('copied');
+  navigator.clipboard.writeText(t.value).then(()=>m.textContent='Copied',()=>{t.select();m.textContent='Selected, press Ctrl+C'});
+});
+</script>
