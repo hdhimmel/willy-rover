@@ -433,7 +433,7 @@ ARM_HOLDS_UNPOWERED=frozenset({'elbow'})
 # Teaching arm poses by voice (teach.py, 2026-10-13). One jog = one step on one joint.
 # ARM_POSE_EPOCH is stamped on every saved pose: BUMP IT whenever a servo or horn changes, and
 # every pose taught before is refused instead of being replayed onto different hardware.
-ARM_POSE_EPOCH='2026-10-13-ds3225'   # elbow -> DS3225 270-degree, 2026-10-13
+ARM_POSE_EPOCH='2026-10-14-ch3'   # shoulder now driven on CH3 (2026-10-14); was '2026-10-13-ds3225'
 ARM_POSES_PATH='arm_poses.json'          # under WILLY_MEMORY_ROOT, on the rover only
 ARM_TEACH_STEP_US=50
 ARM_TEACH_STEP_SIZES_US={'small':20,'normal':50,'big':150}
@@ -541,12 +541,41 @@ ARM_POSE_REST={'elbow':1825,'shoulder':1900,'wrist_pitch':1200}   # owner 10-14:
 # the ORIGINAL designs (hardware/arm/: the ducted reprints keep these lengths). The old 220 mm
 # stretched forearm is retired. Upper arm hole line runs 10.9 deg off the part's long edge.
 ARM_L1_MM=200.1               # shoulder pivot -> elbow pivot (Alt_Kol, from the STL)
-ARM_L2_MM=140.1               # elbow hub -> wrist-pitch axle (On_Kol, from the STL)
+ARM_L2_MM=220.0               # elbow -> wrist-pitch axle ON WILLIE NOW: the stretched forearm (owner
+                              # measured 22 cm). The ORIGINAL On_Kol is 140.1 mm and CANNOT reach the
+                              # floor past the front wheels at all (arm_ik.solve finds no pose,
+                              # 2026-10-14) -- don't fit the 140 mm ducted print without stretching it.
 ARM_HAND_TIP_CLOSED_MM=227    # wrist-pitch pivot -> fingertips, jaws closed (owner-measured)
 ARM_HAND_TIP_OPEN_MM=180      # same, jaws open: the tips pull back 47 mm as the jaws open
 ARM_SHOULDER_HEIGHT_MM=446    # floor -> shoulder pivot on the CURRENT body (owner); the new body changes it
 ARM_BASE_OFFSET_MM=(0,0)      # base axis at the top centre of the body (owner): x forward, y left
 ARM_FRONT_REACH_CLEAR_MM=215  # base axis -> front of the front wheels (430 mm chassis / 2)
+ARM_SHOULDER_FWD_MM=0         # shoulder pivot ahead of the base axis (0: on the axis -- check)
+ARM_GRIP_POINT_MM=165         # wrist-pitch pivot -> centre of an object in the open jaws. ESTIMATE
+                              # (tips 180 mm open, minus a ball's radius); measure with a ball held
+#
+# VISION-GUIDED REACH (arm_ik.py, 2026-10-14, owner: "judge where an object is via the camera,
+# move the arm there, verify with the camera"). None = not measured: the pick-up then falls back
+# to the image-position line-up and says what is missing.
+PICK_USE_IK=True
+CAM_FRONT_HEIGHT_MM=None      # floor -> front lens centre (fit by scripts/calibrate_camera_floor.py)
+CAM_FRONT_TILT_DEG=None       # optical axis below horizontal (fit)
+CAM_FRONT_HFOV_DEG=None       # horizontal field of view of the DETECTION frame (fit; datasheet 66)
+CAM_FRONT_X_MM=None           # lens ahead of the arm base axis, tape-measured
+CAM_FRONT_Y_MM=0.0            # lens left of the base axis
+# {joint: (us at 0 deg, us per deg)} in arm_ik.py's angle conventions (measurement sheet):
+# base 0 = straight ahead (+ left); shoulder 0 = upper-arm hole line level forward (+ up);
+# elbow 0 = straight (+ folding down); wrist 0 = in line with the forearm (+ curling down).
+ARM_JOINT_CAL={'base':None,'shoulder':None,'elbow':None,'wrist_pitch':None}
+ARM_ANGLE_LIMITS_DEG={'base':(-70,70)}   # extra angle-space limits; pulses are also held to ARM_JOINT_LIMITS_US
+ARM_HAND_TILT_CHOICES_DEG=(0,15,30,45,60)  # hand from vertical, tried in order (more tilt = more reach)
+ARM_IK_MARGIN_MM=10           # never ask for a fully straight or fully folded arm
+ARM_IK_MIN_ELBOW_HEIGHT_MM=200  # elbow stays above the wheels / body edge
+ARM_IK_MAX_GRIP_HEIGHT_MM=60  # grip at most this far above the floor (tall things: grip low)
+# Keep-out box for the elbow, wrist and grip point: the chassis + wheels + body, centred on the base
+# axis (half length, half width, top height above the floor), mm. Top = shoulder minus ~80 mm for
+# the arm base, an ESTIMATE for the current body.
+ARM_IK_KEEPOUT_MM=(215,200,ARM_SHOULDER_HEIGHT_MM-80)
 ARM_STOW_UPRIGHT_US=1500        # shoulder: arm standing up, where the elbow folds/opens safely
 ARM_BASE_TURN_SHOULDER_US=1650  # owner 10-13: shoulder raised/back while the base turns (hand high)
 # ⚠ 2026-10-13 REPLACES the two caveats above (old servos). Re-measured on the new hardware:

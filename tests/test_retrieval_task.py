@@ -166,3 +166,38 @@ def test_pick_lineup_rotates_big_errors_and_aims_the_base_for_small_ones():
     rt=task(tx+0.1,ty); rt._approach({'front':999},0); rt._approach({'front':999},0)
     assert rt.state=='GRASP' and rt._reach_pose['base']==retrieval_task.base_for_x(tx+0.1)
     assert retrieval_task.base_for_x(0.26)==2200 and 2100<retrieval_task.base_for_x(0.35)<2200 and retrieval_task.base_for_x(0.5)==2050
+
+
+def test_vision_reach_drives_turns_then_reaches(monkeypatch):
+    # 2026-10-14: when arm_ik is calibrated the pick-up line-up follows arm_ik.plan_for()
+    import types,arm_ik
+    calls=[]
+    s=types.SimpleNamespace(timed_move_active=False,forward_for=lambda t,v: calls.append(('fwd',t)),
+        reverse_for=lambda t,v: calls.append(('back',t)),stop=lambda: calls.append('stop'))
+    det={'class':'sports ball','conf':0.9,'bbox':(600,500,660,560),'frame_w':1280,'frame_h':720}
+    rt=RetrievalTask(s,None,types.SimpleNamespace(detect=lambda classes=None:[det]))
+    rt.start('sports ball',pick_only=True); rt.state='APPROACH'
+    monkeypatch.setattr(arm_ik,'ready',lambda: True)
+    plans=iter([('forward',300.0),('turn',40.0),('reach',{'base':1600,'shoulder':1300,'elbow':1400,'wrist_pitch':1250},
+                {'x':300,'y':20,'size_mm':70,'angles':{'base':2,'shoulder':-10,'elbow':60,'wrist_pitch':15}})]*1+
+               [('reach',{'base':1600,'shoulder':1300,'elbow':1400,'wrist_pitch':1250},
+                {'x':300,'y':20,'size_mm':70,'angles':{'base':2,'shoulder':-10,'elbow':60,'wrist_pitch':15}})])
+    monkeypatch.setattr(arm_ik,'plan_for',lambda d: next(plans))
+    rt._approach({'front':999},0); assert calls[-1]==('fwd',config.RETRIEVAL_CREEP_PULSE_S[1])
+    rt._approach({'front':999},0); assert rt.turn_request==40.0
+    rt._approach({'front':999},0); rt._approach({'front':999},0)        # two confirming frames
+    assert rt.state=='GRASP' and rt._reach_pose['base']==1600 and abs(rt._object_cm-7.0)<1e-6
+
+def test_vision_reach_stops_for_an_obstacle_and_reports_failures(monkeypatch):
+    import types,arm_ik
+    s=types.SimpleNamespace(timed_move_active=False,forward_for=lambda t,v: None,reverse_for=lambda t,v: None,stop=lambda: None)
+    det={'class':'sports ball','conf':0.9,'bbox':(600,500,660,560),'frame_w':1280,'frame_h':720}
+    rt=RetrievalTask(s,None,types.SimpleNamespace(detect=lambda classes=None:[det]))
+    rt.start('sports ball',pick_only=True); rt.state='APPROACH'
+    monkeypatch.setattr(arm_ik,'ready',lambda: True)
+    monkeypatch.setattr(arm_ik,'plan_for',lambda d: ('forward',200.0))
+    rt._approach({'front':config.RETRIEVAL_PICK_STOP_CM-1},0)
+    assert rt.state=='FAILED' and 'in the way' in rt._fail_reason
+    rt.state='APPROACH'; monkeypatch.setattr(arm_ik,'plan_for',lambda d: ('fail',"no arm position reaches it"))
+    rt._approach({'front':999},0)
+    assert rt.state=='FAILED' and rt._fail_reason=='no arm position reaches it'

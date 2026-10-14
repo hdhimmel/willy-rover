@@ -1088,11 +1088,32 @@ position unpowered, on metal horns.** After that: map the shoulder from scratch 
 and laptop cameras (stow, upright, reach, base-turn height), add the shoulder to
 `ARM_HOLDS_UNPOWERED` and bump `ARM_POSE_EPOCH`. Note: the shoulder gate (`ARM_SHOULDER_POSES_VERIFIED`) was removed on 2026-10-14 (owner), so every arm plan runs; re-check the shoulder values with the cameras after the swap.
 
-**Arm geometry (2026-10-14, `config.ARM_*_MM`):** upper arm L1 200.1 mm and forearm L2 140.1 mm
-pivot to pivot (the original designs; ducted reprints in `hardware/arm/` keep the lengths), hand
+**Arm geometry (2026-10-14, `config.ARM_*_MM`):** upper arm L1 200.1 mm and forearm L2 **220 mm**
+pivot to pivot -- the stretched forearm on Willie now. The original forearm (140.1 mm, and the
+ducted reprint in `hardware/arm/`) **cannot reach the floor past the front wheels at all**
+(`arm_ik.solve` finds no pose); stretch it before fitting it. Hand
 227 mm closed / 180 mm open from the wrist-pitch pivot to the fingertips, shoulder pivot 446 mm
 above the floor on the current body, base axis at the top centre, 215 mm behind the front of the
 front wheels.
+
+**Vision-guided reach (`arm_ik.py`, built 2026-10-14, not yet calibrated).** Owner: a fixed or
+taught reach "does not work in the real world" -- he must judge where the object is from the
+camera, move the arm there, and verify with the camera. `arm_ik.floor_point()` turns a detection
+into a floor position (mm from the arm base axis) from the front camera's height, tilt and HFOV
+(`CAM_FRONT_*`): the box's bottom centre sizes the object, its centre ray then meets the plane at
+half that size. `arm_ik.solve()` is a planar two-link IK (L1, L2, grip point `ARM_GRIP_POINT_MM`)
+with the hand coming down from above, straight first then tilted forward
+(`ARM_HAND_TILT_CHOICES_DEG`), elbow up, the elbow/wrist/grip kept out of the body box
+(`ARM_IK_KEEPOUT_MM`). `pose_from_angles()` maps angles to pulses through `ARM_JOINT_CAL`
+(us at 0 deg, us per deg). `plan_for()` returns reach / turn / forward / reverse / fail;
+`RetrievalTask._approach_ik` follows it, looking again after every move, and the line-up's two
+confirming frames still gate the reach. With the 220 mm forearm the floor reach band straight
+ahead is 220-380 mm from the base axis. Until every `CAM_FRONT_*` and `ARM_JOINT_CAL` value is
+set (`arm_ik.missing()`), the image-position line-up runs as before and the log says what is
+missing; once ready, taught reach spots are no longer used. Camera values come from
+`scripts/calibrate_camera_floor.py` (ball at 4-6 taped spots); joint values from the measurement
+sheet. The 10-14 shoulder move to CH3 bumped `ARM_POSE_EPOCH` to `2026-10-14-ch3`, retiring every
+CH2-era taught pose.
 
 **Pick-up by voice (built and run live 2026-10-13).** "Pick up the red ball": the object is found
 by the detector, or — when the spoken name starts with a colour and YOLO misses it — by the

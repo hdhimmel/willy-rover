@@ -22,5 +22,7 @@ Needs `trimesh` and `manifold3d`.
 ## Link lengths (pivot centre to pivot centre)
 
 - Upper arm L1 = **200.1 mm** (hole line runs 10.9 deg off the part's long edge)
-- Forearm L2 = **140.1 mm** (original length; elbow hub to wrist axle)
+- Forearm L2 = **140.1 mm** original (elbow hub to wrist axle). **Too short:** with the shoulder 446 mm
+  up, `arm_ik.solve` finds no pose reaching the floor past the front wheels (2026-10-14). Willie runs
+  the 220 mm stretched forearm; the ducted forearm needs stretching to match before it is fitted.
 - Hand, wrist-pitch pivot to fingertip: 227 mm closed, 180 mm open

@@ -24,7 +24,7 @@ import avoidance
 import grip
 import teach
 import battery_log
-import reach_table
+import reach_table,arm_ik
 from email_client import EmailClient
 from remote_cmd import RemoteCommandServer
 from feature_requests import FeatureRequests
@@ -2016,7 +2016,9 @@ class RoverBrain:
             self._spoken_object=a.get('object','')
             det=self._reach_object(a.get('object'))
             if det is None: self._say(f"I can't see a {a.get('object') or 'thing'} to pick up."); return
-            xy=reach_table.box_xy(det); pose,dist=reach_table.pose_for(xy)
+            xy=reach_table.box_xy(det)
+            # 2026-10-14: a calibrated vision reach (arm_ik) replaces taught spots
+            pose,dist=(None,None) if arm_ik.ready() else reach_table.pose_for(xy)
             if pose is None:
                 # 2026-10-13 (owner): move so the object is on his left, where the hand lands and
                 # the camera can see it -- the retrieval task's line-up, then reach/grip/lift; no

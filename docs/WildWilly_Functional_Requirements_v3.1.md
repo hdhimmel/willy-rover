@@ -3841,6 +3841,10 @@ guaranteed-save requirement in particular had none anywhere in the document.
     (`grip.camera_check`, `PICK_VERIFY_RADIUS` 0.12): still there = a miss (retried, or
     "I missed the X, it's still on the floor"); gone or seen elsewhere = got it; camera failed =
     "I think I have it, but I couldn't check".
+    **Vision-guided reach (2026-10-14, owner):** `arm_ik.py` -- floor position from the front
+    camera, drive/turn until it is inside the arm's reach, IK for the joint angles. Built and
+    unit-tested; waits on the camera calibration (`scripts/calibrate_camera_floor.py`) and the
+    joint calibration (`ARM_JOINT_CAL`; the shoulder after the 2026-10-15 servo swap).
 -   **FR-1900-012 (added 2026-10-13, owner): multi-step routines.** FR-1900-007's
     *"when I say X, do Y"* accepts several steps: *"when I say goodnight, do stow your arm,
     then go home, then wave"*. Every step must be a command the fast path understands —

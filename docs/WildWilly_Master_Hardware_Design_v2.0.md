@@ -1317,8 +1317,10 @@ position unpowered, on metal horns.** After that: map the shoulder from scratch 
 and laptop cameras (stow, upright, reach, base-turn height), add the shoulder to
 `ARM_HOLDS_UNPOWERED` and bump `ARM_POSE_EPOCH`. Note: the shoulder gate (`ARM_SHOULDER_POSES_VERIFIED`) was removed on 2026-10-14 (owner), so every arm plan runs; re-check the shoulder values with the cameras after the swap.
 
-**Arm geometry (2026-10-14, `config.ARM_*_MM`):** upper arm L1 200.1 mm and forearm L2 140.1 mm
-pivot to pivot (the original designs; ducted reprints in `hardware/arm/` keep the lengths), hand
+**Arm geometry (2026-10-14, `config.ARM_*_MM`):** upper arm L1 200.1 mm and forearm L2 **220 mm**
+pivot to pivot -- the stretched forearm on Willie now. The original forearm (140.1 mm, and the
+ducted reprint in `hardware/arm/`) **cannot reach the floor past the front wheels at all**
+(`arm_ik.solve` finds no pose); stretch it before fitting it. Hand
 227 mm closed / 180 mm open from the wrist-pitch pivot to the fingertips, shoulder pivot 446 mm
 above the floor on the current body, base axis at the top centre, 215 mm behind the front of the
 front wheels.

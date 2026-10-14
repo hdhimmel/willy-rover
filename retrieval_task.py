@@ -1,4 +1,4 @@
-import time,config,logsetup,grip,reach_table
+import time,config,logsetup,grip,reach_table,arm_ik
 
 
 def base_for_x(x):
@@ -112,7 +112,8 @@ class RetrievalTask:
         self._lost_count=0
         # Taught reach spots (reach_table.py): close enough to one he has learned -> reach from
         # here with the blended pose, no further lining up.
-        pose,_=reach_table.pose_for(reach_table.box_xy(det))
+        # 2026-10-14: once the vision reach is calibrated it decides; taught spots are not used.
+        pose=None if arm_ik.ready() else reach_table.pose_for(reach_table.box_xy(det))[0]
         if pose is not None:
             self.safety.stop()
             if self._confirm(('zone',)):
@@ -151,6 +152,10 @@ class RetrievalTask:
     def _approach_pick(self,d,det,cx,cy):
         """Pick-up line-up: rotate the body for a big x error, creep for y, then let the arm
         base take up the rest of x (RETRIEVAL_BASE_X_MAP)."""
+        if arm_ik.ready(): return self._approach_ik(d,det,cx,cy)
+        if getattr(config,'PICK_USE_IK',False) and not getattr(self,'_ik_note',False):
+            self._ik_note=True
+            log.info(f'Vision reach not calibrated ({", ".join(arm_ik.missing())}): image-position line-up')
         tx,ty=config.RETRIEVAL_TARGET_XY; _,toly=config.RETRIEVAL_TARGET_TOL
         ex=cx-tx
         lo=min(x for _,x in config.RETRIEVAL_BASE_X_MAP); hi=max(x for _,x in config.RETRIEVAL_BASE_X_MAP)
@@ -182,6 +187,34 @@ class RetrievalTask:
             self._reach_pose=dict(config.ARM_POSE_REACH,base=base_for_x(cx)); self._spot_xy=(cx,cy)
             log.info(f'Lined up: object at ({cx:.3f},{cy:.3f}), height {self._object_cm} cm, base {self._reach_pose["base"]}')
             self.state='GRASP'
+
+    def _approach_ik(self,d,det,cx,cy):
+        """2026-10-14 vision-guided pick-up (arm_ik.py): where is it on the floor? Reach it if the
+        arm can; otherwise turn or creep so it comes into reach, looking again after every move."""
+        act=arm_ik.plan_for(det)
+        kind=act[0]
+        if kind=='reach':
+            self.safety.stop()
+            if self._confirm(('ik',)):
+                pose,info=act[1],act[2]
+                self._reach_pose=pose; self._spot_xy=(cx,cy); self._object_cm=info['size_mm']/10
+                log.info(f"Vision reach: object at x {info['x']:.0f} y {info['y']:.0f} mm, "
+                         f"{info['size_mm']:.0f} mm across -> angles "
+                         f"{ {k:round(v,1) for k,v in info['angles'].items()} } -> {pose}")
+                self.state='GRASP'
+            return
+        self._confirm_key=None
+        if kind=='turn':
+            self.turn_request=act[1]
+            log.info(f'Vision reach: object {act[1]:+.0f} deg off the arm, turning'); return
+        if kind=='forward':
+            if d.get('front',999)<config.RETRIEVAL_PICK_STOP_CM:
+                self.safety.stop(); self.state='FAILED'; self._fail_reason='something is in the way'; return
+            near,far=config.RETRIEVAL_CREEP_PULSE_S
+            self.safety.forward_for(near if act[1]<100 else far,config.RETRIEVAL_CREEP_SPEED); return
+        if kind=='reverse':
+            self.safety.reverse_for(config.RETRIEVAL_CREEP_PULSE_S[0],config.RETRIEVAL_CREEP_SPEED); return
+        self.safety.stop(); self.state='FAILED'; self._fail_reason=act[1]
 
     def _confirm(self,key):
         """True once the same in-position verdict has held for RETRIEVAL_CONFIRM_FRAMES
