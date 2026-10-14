@@ -1176,7 +1176,8 @@ longer releases in place: `Arm.on_idle` asks the brain to stow first (owner: aft
 back to stow). The over-current guard stows too, and only releases in place if it is still over
 the limit while stowing. The wave runs the stow path in reverse, waves the wrist, sways the base
 `ARM_WAVE_BASE_CYCLES` times, then stows. Stow values (re-measured 10-13): wrist 1200, shoulder
-upright 1500, elbow 1825, shoulder 2000. The shoulder is driven by CH2 alone
+upright 1500, elbow 1825, shoulder 2000. (2026-10-14: the shoulder's primary servo is now CH3,
+`ARM_SHOULDER=3` -- CH2's horn is loose; the stow shoulder must be re-mapped on CH3.) The shoulder is driven by CH2 alone
 (`ARM_SHOULDER_PAIR=False`; `Arm._channels`): the two servos locked against each other after any
 jolt. The DS3225 elbow never goes limp, so its stow value is chosen to not press.
 

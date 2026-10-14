@@ -388,7 +388,11 @@ ARM_PCA_ADDR=0x43
 # smoothly. arm.py writes every 'shoulder' command to both channels. Never drive them apart, and
 # never mirror them (2x1500 - x): they would fight. The 09-17 note that they were "not a pair"
 # was measured while one servo was dead (it drew no current at all on 10-12 until replaced).
-ARM_BASE=6; ARM_WRIST_PITCH=0; ARM_ELBOW=1; ARM_SHOULDER=2; ARM_SHOULDER_B=3
+# 2026-10-14 (owner): CH2's horn is loose (10-13) -- it moves nothing -- so the shoulder runs on CH3
+# and CH2 is the passenger. With CH2 as primary, every hold and lowering move ran on the loose servo
+# and the arm fell forward at the end of a stow. ARM_POSE_REST['shoulder'] (500) was CH2's pulse with
+# the arm placed by hand: re-map the stow on CH3 with a camera before trusting it.
+ARM_BASE=6; ARM_WRIST_PITCH=0; ARM_ELBOW=1; ARM_SHOULDER=3; ARM_SHOULDER_B=2
 # 2026-10-13 (owner OK): the shoulder is driven by CH2 ONLY; CH3's servo stays unpowered and turns
 # along as a bearing. Measured: moved gently together the pair agreed (<0.45 A over CH3 1360-1560),
 # but after any jolt (a wave reversal, standing up, a 40 us jump) they settled apart inside their
