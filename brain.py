@@ -2256,6 +2256,25 @@ class RoverBrain:
             if self._roam_allowed():
                 self._idle_t=0.0; self._go('ROAM')
 
+    def _roam_curve(self,d,f):
+        """2026-10-14 (owner): curve gently away from something in the path within
+        ROAM_STEER_EARLY_CM, toward the clearer side; straighten once the path is clear."""
+        if not config.ROAM_STEER_EARLY: return
+        now=time.time(); cur=getattr(self,'_curve_deg',0.0)
+        want=0.0
+        if f<config.ROAM_STEER_EARLY_CM:
+            side=avoidance.choose_turn(d,getattr(self.sonars,'tof',None),None)
+            want=config.ROAM_STEER_DEG if side=='turn_right' else -config.ROAM_STEER_DEG if side=='turn_left' else cur
+        if want!=cur and cur and want and now-getattr(self,'_curve_t',0.0)<config.ROAM_STEER_HOLD_S:
+            want=cur                                       # no flip-flopping between sides
+        if want!=cur:
+            got=self.safety.steer_curve(want)
+            if got is not None:
+                if want: log.info(f'Steering early: something {f:.0f} cm ahead, curving {"right" if want>0 else "left"} {abs(got):.0f} deg')
+                self._curve_deg=got; self._curve_t=now; self._curve_resteer=now
+        elif cur and now-getattr(self,'_curve_resteer',0.0)>=config.ROTATE_RESTEER_S:
+            self.safety.steer_curve(cur); self._curve_resteer=now   # beat the idle release
+
     def _camera_front_cm(self):
         """Camera brake (2026-10-14): nearest chair/table/... in his path, cm from the front of
         the wheels, or None. Looks at most every CAMERA_BRAKE_PERIOD_S; never raises."""
@@ -2290,6 +2309,7 @@ class RoverBrain:
         if fresh and f<config.ROAM_START_CLEAR_CM:
             log.info(f'Roam start: something at {f:.0f} cm, turning away first'); self._go('AVOID'); return
         if f<config.DIST_SLOW: self._go('SLOW'); return
+        self._roam_curve(d,f)
         self.safety.forward(config.SPEED_ROAM); self._last_action='forward'
         self._upd('roam',f'Cruising f={f:.0f}cm bat={self.adc.battery_pct}%',d,tilt,config.SPEED_ROAM)
 
@@ -2466,6 +2486,10 @@ class RoverBrain:
                 try: self.arm.drop_pair()
                 except Exception: pass
             if state=='ROAM' and self._state=='IDLE': self._roam_fresh=True   # a roam setting off
+            if self._state=='ROAM' and getattr(self,'_curve_deg',0.0):         # leaving a curve: straighten
+                try: self.steering.center_all()
+                except Exception: pass
+                self._curve_deg=0.0
             log.info(f'  {self._state}->{state}'); self._state=state
             if state=='AVOID': self._avoid_start=time.time(); self._avoid_phase=None
             if state=='IDLE': self._idle_t=0.0

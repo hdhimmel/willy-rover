@@ -51,6 +51,15 @@ def approve_steer(deg,*,wheels_moving,tilt_deg=0.0,bat_tier='normal',motion_enab
     d=max(-config.STEER_OVERRIDE_MAX_DEG,min(config.STEER_OVERRIDE_MAX_DEG,float(deg)))
     return ApprovedMotion('steer',d,None)
 
+def approve_curve(deg,*,tilt_deg=0.0,bat_tier='normal',motion_enabled=True,**_):
+    """2026-10-14 (owner): steering WHILE roaming, to curve away early. Same gates as any motion;
+    unlike approve_steer the wheels may be turning. Clamped to ROAM_STEER_MAX_DEG."""
+    if not motion_enabled: return Rejected('motion disabled (self-test failed)')
+    if tilt_deg>config.IMU_TILT_LIMIT: return Rejected(f'tilt {tilt_deg:.1f}deg exceeds limit')
+    if bat_tier in('shutdown','safe'): return Rejected(f'battery tier {bat_tier!r} forbids motion')
+    d=max(-config.ROAM_STEER_MAX_DEG,min(config.ROAM_STEER_MAX_DEG,float(deg)))
+    return ApprovedMotion('curve',d,None)
+
 class SafetyController:
     def __init__(self,drive_base,steering=None):
         self._drive=drive_base
@@ -170,6 +179,20 @@ class SafetyController:
         r=approve_steer(deg,wheels_moving=moving,**self._ctx)
         if isinstance(r,Rejected): log.warning(f'steering override rejected: {r.reason}')
         return r
+
+    def steer_curve(self,deg):
+        """Set a gentle driving curve (+ = right, 0 = straight): front corners deg, rear -deg,
+        middles straight. Returns the approved degrees, or None if refused."""
+        r=approve_curve(deg,**self._ctx)
+        if isinstance(r,Rejected):
+            log.warning(f'curve rejected: {r.reason}'); return None
+        st=self._steering
+        if st is None: return None
+        if r.speed==0: st.center_all(); return 0.0
+        from steer_override import override_pulses
+        pulses,_=override_pulses(r.speed)
+        for c,us in pulses.items(): st.set_pulse(c,us)
+        return r.speed
 
     @property
     def timed_move_active(self):

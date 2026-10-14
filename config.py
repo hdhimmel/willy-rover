@@ -192,6 +192,15 @@ CAMERA_BRAKE_OVERHANG_CM=10     # table tops / seats stick out past their legs
 CAMERA_BRAKE_CUTOFF_FRAC=0.98   # box bottom this low = cut off by the frame: closer than it looks
 CAMERA_BRAKE_CUTOFF_EXTRA_CM=10
 ROAM_START_CLEAR_CM=40          # roaming starts with something nearer than this: turn away first
+# STEER EARLY (2026-10-14, owner go): while roaming, something in his path within ROAM_STEER_EARLY_CM
+# -> curve gently toward the clearer side (front corners +deg, rear -deg) and keep moving, instead
+# of driving straight at it until the 40 cm slow-down / 20 cm stop (which stay as the backstop).
+# This is steered DRIVING, deferred since 2026-08-18 and released by the owner on 2026-10-14.
+ROAM_STEER_EARLY=True
+ROAM_STEER_EARLY_CM=100         # start curving away when something in the path is this close
+ROAM_STEER_DEG=15               # how hard (corner degrees); safety clamps to ROAM_STEER_MAX_DEG
+ROAM_STEER_MAX_DEG=20
+ROAM_STEER_HOLD_S=1.0           # keep a curve at least this long before switching sides
 # Rotation mode (rotate.py, owner 2026-10-07): corners steered onto the turning circle, spin on IMU.
 ROTATE_SPEED=1.0              # fraction of the mph cap for the corners; a skid turn needed full duty
 ROTATE_SETTLE_S=0.6           # steering reaches its angle before any wheel drives

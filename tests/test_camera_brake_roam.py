@@ -19,7 +19,7 @@ def brain(cam_cm):
     b._go=lambda s: b.calls.append(('go',s))
     b.adc=types.SimpleNamespace(battery_pct=80)
     b.detector=types.SimpleNamespace(detect=lambda classes=None:[{'x':1}])
-    b._cam_brake_t=0.0
+    b._cam_brake_t=0.0; b._roam_curve=lambda d,f: None   # steering early is tested in test_roam_steer_early
     for m in ('_roam','_slow','_camera_front_cm','_front_with_camera'): setattr(b,m,types.MethodType(getattr(RoverBrain,m),b))
     arm_ik.obstacle_cm=lambda dets,cam=None: cam_cm
     return b

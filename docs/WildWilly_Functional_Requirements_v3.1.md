@@ -448,6 +448,12 @@ Requirements are implemented and unit-tested off-hardware unless noted.
   message names the side, and a 0 reading is reported as that sensor perhaps not working. The
   owner's "10 centimetres away" reports are not explained yet (suspect: the stowed arm in the front
   ToF's view) -- check the log when he is back.
+- **FR-1000 / FR-600 Steer early (owner, 2026-10-14).** Steered DRIVING, deferred since
+  2026-08-18, is released for one use: while roaming, something in his path within
+  `ROAM_STEER_EARLY_CM` (100 cm) makes him curve 15 deg toward the clearer side (sonar sides + ToF
+  columns) and keep moving; he straightens once clear and whenever he leaves ROAM. Gated by
+  `safety.approve_curve` (same gates as motion, clamped to 20 deg). The 40 cm slow-down and 20 cm
+  stop are unchanged.
 - **Battery log.** Rows were written at every restart and hours-on-charge only counted 2 min per
   restart; fixed (heartbeat). ~0.1 V/h, about 4%/h with some driving.
 
