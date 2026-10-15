@@ -1079,6 +1079,24 @@ ASK_YES_WORDS=('yes','yeah','yep','yup','yah','ya','yea','sure','okay','ok','alr
 ASK_NO_WORDS=('no','nope','nah','not',"don't",'dont','later','stop','wait','never')   # any of these = no, whatever else was said
 ASK_YES_PHRASES=('go ahead','go for it','do it','you can','you may','of course','all right','uh huh','why not')
 VOICE_LOCAL_AI_MAX_S=8.0  # 2026-10-15: the local model's typical answer is ~5 s; past this he asks the cloud instead of waiting (30-39 s seen)
+# FR-2400 engagement words (2026-10-15). The cloud writes the line; these fill in when it is slow,
+# offline or returns junk. Keys: topic kind, or kind_about for callback/change. {fields} come from
+# Topic.facts; a template whose fields are missing is skipped.
+ENGAGE_WORDS_TIMEOUT_S=3.0
+ENGAGE_LINE_MAX_CHARS=200
+ENGAGE_TEMPLATES={
+    'greet_known':["Hi {name}!","Hello {name}, good to see you.","Hey {name}!"],
+    'greet_known_back':["Hi {name}! I last saw you {when}.","Hello again, {name}. Last time I saw you was {when}."],
+    'greet_stranger':["Hi, I'm Willie! What's your name?"],
+    'ask_room':["What room is this?","Can you tell me what room I'm in?"],
+    'ask_thing':["Whose {thing} is that?","Is that someone's {thing}?"],
+    'callback_seen':["{who}! I last saw you {when}.","Hello again, {who}. Last time I saw you was {when}."],
+    'callback_thing':["There's {label}. I last saw it {when}."],
+    'callback_note':["{name}, last time you told me you {note}. How did that go?"],
+    'change_new':["I haven't seen a {thing} in the {room} before."],
+    'change_missing':["{label} isn't in the {room}. It was here {when}."],
+    'ask_person':["How's your day going, {name}?","What have you been up to, {name}?"],
+}
 VOICE_REOPEN_MAX_S=60.0   # 2026-10-15: a failed mic stream is reopened (2,4,8.. s, capped here) instead of going deaf
 VOICE_PLAY_FALLBACK_S=30.0       # if the length cannot be read
 LOG_MAX_BYTES=5_000_000; LOG_BACKUP_COUNT=10   # 2026-10-15 (owner): keep more (still swept at DATA_RETENTION_DAYS)
