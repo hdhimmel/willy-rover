@@ -41,3 +41,14 @@ InnoMaker U20CAM-1080P hand camera (32 x 32 mm board, four 2.2 mm M2 holes, M12 
 - Checked by the script: the cap clears the plate (1.7 mm), and a 4 mm screwdriver still reaches
   all six plate screws from above. Assumes the plate's top face (as downloaded) is the outside.
 - Outputs go to `~/Downloads`; preview `hand_back_camera_preview.png`.
+
+## `build_forearm_split.py` (2026-10-15)
+
+Splits the ducted forearm into **two pieces joined with four M3 x 30 bolts and nuts** (owner), so it
+fits the bed easily. Run after `build_arm_ducts.py` with the same `FOREARM_PIVOT_MM` (default 265).
+- Half-lap joint, 44 mm long, in the plain middle of the tongue, split at the duct's centre height:
+  the 10 mm duct is a half-channel in each piece (lay the wires in, then close it). The joint is
+  widened to 34 mm so the bolts sit 4.8 mm clear of the duct.
+- `On_Kol_duct10_265_A.stl` (wrist end, 162 mm): print flat; hex nut traps underneath.
+- `On_Kol_duct10_265_B.stl` (elbow end, 180 mm): print upright, supports under the lap only.
+- Pivot distance unchanged (265 mm) when joined.
