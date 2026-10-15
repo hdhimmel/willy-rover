@@ -117,6 +117,16 @@ f = fb(sneaky); f._stuck(D, TILT)
 assert 'MOTION' in kinds(f), (
     'the motion gate read the model self-report instead of action_confidence: %r' % (f.calls,))
 
+# --- 7b. 2026-10-15, live crash: a timed-out Hailo call gives action_confidence None. The log
+#     line formatted it with :.2f, raised TypeError and killed the program mid-STUCK.
+timed_out = AIResult(False, 0.0, None, False, None, 'ServerDown: handle is closed')
+f = fb(timed_out); f._stuck(D, TILT)
+assert 'MOTION' not in kinds(f), f.calls
+assert 'ESCALATE' in kinds(f), f.calls
+odd = AIResult(True, 0.9, None, True, {'action': 'reverse', 'duration': 0.8, 'speed': 0.3}, '')
+f = fb(odd); f._stuck(D, TILT)
+assert 'MOTION' not in kinds(f) and 'ESCALATE' in kinds(f), f.calls
+
 # --- 8. On the accepted path the exchange is recorded for the next turn's context, and bounded.
 f = fb(good); f._stuck(D, TILT)
 assert len(f._stuck_history) == 2, f._stuck_history

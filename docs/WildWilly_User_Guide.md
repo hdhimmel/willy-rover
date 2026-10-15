@@ -109,7 +109,7 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
 - **"Steer left"** / **"Steer right 20 degrees"**: the front wheels point that way and the
   back wheels the other way. He doesn't drive. With no angle given it's 15 degrees, and the
   most is 37.
-- **"Wheels straight"**: back to straight.
+- **"Wheels straight"** or **"Straighten your wheels"** (with or without "please"): back to straight.
 
   He holds them there until you say "wheels straight" or "stop", or until he moves off. When
   he moves off he straightens them first. He refuses while his wheels are turning.

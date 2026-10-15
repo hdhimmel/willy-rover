@@ -233,8 +233,11 @@ _TURN_DEGREES=re.compile(r"(?:turn|rotate|spin) (left|right) (\d{1,3}) degrees",
 # FR-600-004 steering override (2026-10-08): wheels only, parked. "steer" never drives, so it
 # cannot be confused with the "turn left" nudge.
 _STEER=re.compile(r"steer (?:your wheels |the wheels )?(left|right)(?: (\d{1,2})(?: degrees)?)?",re.I)
-_STEER_STRAIGHT=re.compile(r"(?:(?:wheels|steering) straight|straighten (?:your |the )?(?:wheels|steering)|"
-                           r"cent(?:er|re) (?:your |the )?(?:wheels|steering))",re.I)
+# 2026-10-15: "Straighten your wheels please." missed (no address/trailer here) and waited 37 s on
+# the model. Same politeness wrappers as _fp(); parking the wheels moves nothing but the servos.
+_STEER_STRAIGHT=re.compile(_ADDRESS+r"(?:(?:put |get )?(?:your |the )?(?:wheels|steering) (?:straight|centred|centered)|"
+                           r"straighten (?:up )?(?:your |the |all )?(?:wheels|steering)(?: out| up)?|"
+                           r"cent(?:er|re) (?:your |the )?(?:wheels|steering))(?:,? (?:please|now|for me))?",re.I)
 # FR-1800-005 privacy (2026-10-08). Turning it ON by voice only: once on he cannot hear, so the
 # way back is the screen (two-tap RESUME) or an owner email "privacy off".
 _PRIVACY_ON=re.compile(r"(?:privacy mode(?: on)?|turn on privacy(?: mode)?|go private|stop listening(?: to (?:me|us))?|"

@@ -2627,7 +2627,8 @@ class RoverBrain:
             self._hailo_pending=False
             log.info(f'Hailo(primary): parse_success={result.parse_success} '
                      f'action_confidence={result.action_confidence} payload={result.payload}')
-            if result.parse_success and result.action_confidence>=config.HAILO_LLM_CONFIDENCE_FLOOR:
+            conf=result.action_confidence
+            if result.parse_success and conf is not None and conf>=config.HAILO_LLM_CONFIDENCE_FLOOR:
                 # High confidence on-device decision — proceed without Claude
                 self._apply_ai_motion(result,d,tilt,'Hailo(primary)')
                 self._stuck_history.append({'role':'user','content':self._last_stuck_prompt})
@@ -2635,7 +2636,9 @@ class RoverBrain:
                 self._stuck_history=self._stuck_history[-12:]
                 return
             # Hailo failed or low confidence — escalate to Claude
-            log.info(f'Hailo confidence {result.action_confidence:.2f} < floor '
+            # 2026-10-15: a timed-out Hailo call returns confidence None; formatting it with :.2f
+            # raised TypeError and killed the whole program mid-STUCK (14:30:51).
+            log.info(f'Hailo confidence {"none" if conf is None else f"{conf:.2f}"} < floor '
                      f'{config.HAILO_LLM_CONFIDENCE_FLOOR} or parse failed, escalating to Claude')
             self._escalate_to_claude(d,tilt); return
         if self._claude_pending:

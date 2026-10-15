@@ -133,3 +133,14 @@ def test_seeing_questions_use_the_camera_not_the_web(said,obj):
     import voice
     v=object.__new__(voice.VoicePipeline)
     assert v._fast_path(said)=={'intent':'see_object','args':{'object':obj},'reply':''}
+
+
+def test_straighten_wheels_with_please_is_matched_on_the_spot():
+    # 2026-10-15 live: "Straighten your wheels please." fell through to the model (37 s).
+    import voice
+    vp=object.__new__(voice.VoicePipeline)
+    for t in ("Straighten your wheels please.","Willie, straighten your wheels","straighten the wheels, please",
+              "Can you straighten your wheels?","wheels straight","Please center your wheels",
+              "put your wheels straight","straighten your wheels out"):
+        r=vp._fast_path(t)
+        assert r and r['intent']=='steer' and r['args']['degrees']==0, t
