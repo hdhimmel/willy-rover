@@ -52,7 +52,20 @@ def test_a_check_that_raises_is_reported_not_fatal():
 def test_runs_once_after_the_delay(monkeypatch):
     monkeypatch.setattr(config,'SIMULATE_HARDWARE',False)
     t=[0.0]; b=_brain(sonars=types.SimpleNamespace(is_healthy=False,failed_channels={},tof=None,tof_rear=None))
-    sc=startup_check.StartupCheck(b,clock=lambda: t[0])
+    sc=startup_check.StartupCheck(b,clock=lambda: t[0],background=False)
     sc.tick(); assert not sc.done
     t[0]=config.STARTUP_SENSOR_CHECK_S; sc.tick(); assert sc.done and sc.result
     n=len(b.said); sc.tick(); assert len(b.said)==n          # reported once
+
+
+def test_runs_off_the_tick_thread(monkeypatch):
+    # 2026-10-15: on the tick it stalled the loop 914 ms
+    import threading
+    monkeypatch.setattr(config,'SIMULATE_HARDWARE',False)
+    seen=[]; b=_brain()
+    monkeypatch.setattr(startup_check,'failures',lambda b: seen.append(threading.current_thread().name) or [])
+    t=[0.0]; sc=startup_check.StartupCheck(b,clock=lambda: t[0])
+    t[0]=config.STARTUP_SENSOR_CHECK_S; sc.tick()
+    for th in threading.enumerate():
+        if th.name=='startup-check': th.join(2)
+    assert seen==['startup-check']

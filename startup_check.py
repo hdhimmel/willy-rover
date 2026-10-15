@@ -61,9 +61,9 @@ def failures(b):
 
 class StartupCheck:
     """Tick-driven: primes the on-demand rear camera first, checks once, reports once."""
-    def __init__(self,brain,clock=time.monotonic):
+    def __init__(self,brain,clock=time.monotonic,background=True):
         self.b=brain; self.clock=clock; self.t0=clock(); self.primed=False; self.done=False
-        self.result=None
+        self.result=None; self.background=background
 
     def tick(self):
         if self.done or config.SIMULATE_HARDWARE or not config.STARTUP_SENSOR_CHECK: return
@@ -74,8 +74,20 @@ class StartupCheck:
             except Exception: pass
         if el<config.STARTUP_SENSOR_CHECK_S: return
         self.done=True
-        self.result=failures(self.b)
-        report(self.b,self.result)
+        # 2026-10-15: on the tick it cost 914 ms (camera grabs, I2C reads) -- run it on its own
+        # thread; the report only logs, speaks and sets the screen.
+        if self.background:
+            import threading
+            threading.Thread(target=self._run,daemon=True,name='startup-check').start()
+        else:
+            self._run()
+
+    def _run(self):
+        try:
+            self.result=failures(self.b)
+            report(self.b,self.result)
+        except Exception:
+            log.warning('Start-up sensor check failed to run',exc_info=True)
 
 
 def report(b,fails):
