@@ -38,7 +38,7 @@ def test_the_listening_circle_is_on_for_the_whole_capture_and_off_after():
     p=object.__new__(voice.VoicePipeline)
     seen=[]
     p.display=types.SimpleNamespace(update_state=lambda **k: None,set_listening=seen.append)
-    def capture(stream,frame_len,t_wake,on_text): seen.append('capturing')
+    def capture(stream,frame_len,t_wake,on_text,*rest): seen.append('capturing')
     p._capture_utterance=capture
     p._handle_wake(None,1280,0.0)
     assert seen==[True,'capturing',False]

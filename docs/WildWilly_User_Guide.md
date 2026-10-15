@@ -88,6 +88,9 @@ your day, notes about people are kept 30 days; labels for things and room names 
 ## Waking Willie up
 
 Say **"Hey Willie"**, then your request. Wait for him to answer before the next one.
+**Keep talking:** after he answers, the green circle comes back on for about 6 seconds -- just say
+your next thing, no "Hey Willie" needed. If nobody speaks, it goes off quietly.
+
 A **solid green circle** (top left of his screen) stays on for as long as he is recording you;
 when it goes off he has stopped listening and is thinking. A green tick after that means he
 understood words.

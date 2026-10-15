@@ -3287,6 +3287,11 @@ section behind it until now. Added 2026-08-02, v1.4.
 
 # Acceptance Criteria
 
+-   **Follow-up listening (owner, 2026-10-15) -- extends FR-1500-001.** After answering a spoken
+    request he listens again for `VOICE_FOLLOWUP_S` (6 s) with no wake word, the green circle on,
+    starting once his reply has finished. Speech in the window is handled like a wake-word request;
+    an empty transcript is ignored quietly; not after a stop or while his own question is listening.
+    `tests/test_voice_followup.py`. Not yet run live.
 -   **Hailo intent re-qualification (2026-10-08).** `experiments/hailo_qualification.py hailo
     --repeats 3` on the current code (ChatML, context clearing, streaming): **78.1% usable, 25.0%
     strict, 12 wrong intent, 9 unparseable, precision above the 0.7 confidence floor 85.4%,

@@ -604,7 +604,8 @@ class VoicePipeline:
         """2026-10-15 (FR-2400): speaking, recording or answering, or a prompted listen is open --
         engagement must not start a new remark on top."""
         return (self._speaking.is_set() or getattr(self,'_prompt',None) is not None
-                or getattr(self,'_in_utterance',False) or not self._speak_queue.empty())
+                or getattr(self,'_in_utterance',False) or not self._speak_queue.empty()
+                or getattr(self,'_followup',None) is not None)
 
     def start(self):
         if not self._enabled: return
@@ -733,6 +734,9 @@ class VoicePipeline:
                     self._heartbeat()
                     if self._speaking.is_set():
                         self._hb['muted']+=1
+                        fu=getattr(self,'_followup',None)
+                        if fu is not None and fu['until'] is not None:
+                            fu['until']=None; self._set_listening(False)   # restart after he finishes
                         p=getattr(self,'_prompt',None)
                         if p: p['seen_speaking']=True
                         continue  # still drain the buffer, just don't score our own echo
@@ -746,6 +750,8 @@ class VoicePipeline:
                             self._prompt=None
                             self._handle_wake(stream,frame_len,time.time(),on_text=p['cb'])
                             continue
+                    if getattr(self,'_followup',None) is not None and self._followup_step(stream,frame_len,flat):
+                        continue
                     rms=float(np.sqrt(np.mean((flat.astype(np.float32)/32768.0)**2)))
                     self._update_noise(flat)
                     hb=self._hb; hb['peak']=max(hb['peak'],rms)
@@ -770,6 +776,30 @@ class VoicePipeline:
                             break
         except Exception as e:
             log.error(f'Voice input stream failed: {e}')
+
+    def _followup_step(self,stream,frame_len,flat):
+        """One block of the follow-up window (see _arm_followup). True = it took the block."""
+        fu=self._followup
+        if getattr(self,'_prompt',None) is not None:
+            self._followup=None; return False                # one of his questions has the mic
+        if not self._speak_queue.empty(): return False      # reply still queued
+        now=time.time()
+        if fu['until'] is None:
+            import collections
+            fu.update(until=now+config.VOICE_FOLLOWUP_S,pre=collections.deque(maxlen=config.VOICE_FOLLOWUP_PREROLL_BLOCKS),loud=0)
+            self._set_listening(True)
+        if now>fu['until']:
+            self._followup=None; self._set_listening(False); return False
+        fu['pre'].append(flat)
+        rms=float(np.sqrt(np.mean((flat.astype(np.float32)/32768.0)**2)))
+        thresh=max(config.VOICE_VAD_FLOOR,(self._noise_rms or 0.0)*config.VOICE_VAD_NOISE_MULT)
+        fu['loud']=fu['loud']+1 if rms>=thresh else 0
+        if fu['loud']<2: return False                       # wake word still works meanwhile
+        self._followup=None
+        log.info('Follow-up: speech heard, no wake word needed')
+        self._handle_wake(stream,frame_len,now,preroll=list(fu['pre']),quiet_empty=True)
+        self._drop_backlog()
+        return True
 
     def _drop_backlog(self):
         """After an utterance is handled: discard audio queued while he was transcribing and
@@ -859,7 +889,7 @@ class VoicePipeline:
         except Exception as e:
             log.info(f'Done chirp skipped: {e}')
 
-    def _handle_wake(self,stream,frame_len,t_wake,on_text=None):
+    def _handle_wake(self,stream,frame_len,t_wake,on_text=None,preroll=None,quiet_empty=False):
         # FR-1500-001 satisfied (wake word seen) — now capture an utterance and process it.
         # Endpointed capture (2026-08-21, was a fixed 4s window): ends once the speaker stops,
         # so a short command no longer pays a long command's latency. Falls back to the old
@@ -867,7 +897,7 @@ class VoicePipeline:
         # decide (nothing above threshold, or a room noisy enough that nothing reads as silence).
         if self.display: self.display.update_state(state='listening',status='Listening...')
         self._set_listening(True); self._in_utterance=True
-        try: self._capture_utterance(stream,frame_len,t_wake,on_text)
+        try: self._capture_utterance(stream,frame_len,t_wake,on_text,preroll,quiet_empty)
         finally: self._set_listening(False); self._in_utterance=False
 
     def _set_listening(self,on):
@@ -875,8 +905,10 @@ class VoicePipeline:
             if self.display is not None and hasattr(self.display,'set_listening'): self.display.set_listening(on)
         except Exception: pass
 
-    def _capture_utterance(self,stream,frame_len,t_wake,on_text):
-        self._play_ack()
+    def _capture_utterance(self,stream,frame_len,t_wake,on_text,preroll=None,quiet_empty=False):
+        # preroll (2026-10-15, follow-up listening): speech already started -- keep its first
+        # blocks, no chirp, and it already counts as heard.
+        if not preroll: self._play_ack()
         fps=16000.0/frame_len
         # NOTE: capture starts immediately. An earlier version discarded _ACK_SKIP_S of frames
         # here so the chirp wouldn't be recorded (no echo cancellation on this puck) -- that was
@@ -895,10 +927,10 @@ class VoicePipeline:
         # and capture cuts at min_frames while they are still talking -- live 2026-08-21 that
         # truncated every command to 0.9s and Whisper returned nothing at all ("How can I help?").
         # Its audio is still kept; only the endpoint decision ignores this window.
-        deaf_frames=int((_ACK_TONE_S+0.14)*fps) if config.VOICE_ACK_ENABLED else 0
+        deaf_frames=int((_ACK_TONE_S+0.14)*fps) if config.VOICE_ACK_ENABLED and not preroll else 0
         # Two consecutive loud frames to latch, so a click or a single transient can't arm the
         # endpointer either.
-        audio=[]; heard=False; silent=0; loud=0
+        audio=list(preroll or []); heard=bool(preroll); silent=0; loud=0
         for i in range(max_frames):
             s=self._read_frame(stream); audio.append(s)
             if self._speaking.is_set():
@@ -931,7 +963,19 @@ class VoicePipeline:
             except Exception:
                 log.warning('Prompted transcription failed',exc_info=True); text=''
             on_text(text or None); return
-        self._process_utterance(pcm,t_wake)
+        self._last_heard=None
+        self._process_utterance(pcm,t_wake,quiet_empty=quiet_empty)
+        self._arm_followup()
+
+    def _arm_followup(self):
+        """2026-10-15 (owner): in a conversation he listens again after his reply, no "Hey Willie"
+        needed, for VOICE_FOLLOWUP_S. The window opens once his reply has finished playing (the
+        capture loop starts the clock). Not after a stop, nor when one of his own questions is
+        already listening for its answer."""
+        t=getattr(self,'_last_heard',None)
+        if (config.VOICE_FOLLOWUP_S>0 and t and not is_emergency_stop(t)
+                and not self.stop_requested.is_set() and getattr(self,'_prompt',None) is None):
+            self._followup={'until':None}
 
     def _display_quiet(self):
         """Context: the face draws at DISPLAY_FPS_QUIET while speech is transcribed (2026-10-08)."""
@@ -949,7 +993,7 @@ class VoicePipeline:
                 except Exception: pass
         return cm()
 
-    def _process_utterance(self,pcm,t_wake):
+    def _process_utterance(self,pcm,t_wake,quiet_empty=False):
         # FR-1500-002: onboard STT, no cloud dependency. Also satisfies FR-1800-001 (raw
         # audio never transmitted off-device): cloud_ai.ask_sync() below is only ever given
         # already-transcribed text, never the PCM buffer, so no cloud fallback path exists that
@@ -960,8 +1004,11 @@ class VoicePipeline:
             text=' '.join(s.text for s in segments).strip()
         t_stt=time.time()
         if not text:
+            if quiet_empty:
+                log.info('Follow-up: nothing understood -- staying quiet'); return
             self.speak("How can I help?"); return
         log.info(f'Heard: "{text}"')
+        self._last_heard=text
         self._reply_tone=config.VOICE_TONE_DEFAULT
         if _BASHFUL_TRIGGER.search(text):
             self._reply_tone='bashful'

@@ -682,6 +682,13 @@ skips local entirely. Before this, 30-39 s waits left him deaf.
 `ASK_NO_WORDS` is a no, else `ASK_YES_WORDS` / `ASK_YES_PHRASES` / a roam intent is a yes. The
 answer text is logged (`Answer heard: ...`, `Roam permission declined (heard ...)`).
 
+**Follow-up listening** (2026-10-15, owner): after a reply to a spoken request, `_arm_followup()` opens a
+`VOICE_FOLLOWUP_S` (6 s) window, started once his reply has finished playing (the clock restarts if he
+speaks again). Two loud blocks above the capture threshold start a normal capture with the last
+~0.5 s kept (`VOICE_FOLLOWUP_PREROLL_BLOCKS`), no chirp, and an empty transcript is ignored quietly.
+Not armed after a stop or while one of his own questions holds the mic; the wake word still works
+during the window; `busy` is true while it is open (engagement waits).
+
 While an utterance is recorded, `display.set_listening(True)` draws a solid green circle
 (top left) that the brain's per-tick `update_state()` cannot overwrite; it goes off when
 recording ends, in a `finally` (2026-10-15, owner).

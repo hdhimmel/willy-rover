@@ -1078,6 +1078,8 @@ ASK_YES_WORDS=('yes','yeah','yep','yup','yah','ya','yea','sure','okay','ok','alr
                'definitely','certainly','please','go','course')
 ASK_NO_WORDS=('no','nope','nah','not',"don't",'dont','later','stop','wait','never')   # any of these = no, whatever else was said
 ASK_YES_PHRASES=('go ahead','go for it','do it','you can','you may','of course','all right','uh huh','why not')
+VOICE_FOLLOWUP_S=6.0       # 2026-10-15 (owner): after his reply he listens this long with no "Hey Willie" (0 = off)
+VOICE_FOLLOWUP_PREROLL_BLOCKS=6   # ~0.5 s kept from before speech is detected, so the first word isn't cut
 VOICE_LOCAL_AI_MAX_S=8.0  # 2026-10-15: the local model's typical answer is ~5 s; past this he asks the cloud instead of waiting (30-39 s seen)
 # FR-2400 engagement words (2026-10-15). The cloud writes the line; these fill in when it is slow,
 # offline or returns junk. Keys: topic kind, or kind_about for callback/change. {fields} come from
