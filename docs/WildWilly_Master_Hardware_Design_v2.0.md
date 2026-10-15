@@ -1326,6 +1326,10 @@ and laptop cameras (stow, upright, reach, base-turn height), add the shoulder to
 pivot to pivot -- the stretched forearm on Willie now. The original forearm (140.1 mm, and the
 ducted reprint in `hardware/arm/`) **cannot reach the floor past the front wheels at all**
 (`arm_ik.solve` finds no pose); stretch it before fitting it.
+**Steering at 40 deg (2026-10-14, owner):** all six wheels, middles included, clear the body at
+the side-step angle (`SIDESTEP_DEG` 40). **Forearm prints:** the ducted forearm is built at 220 mm
+pivot to pivot (`hardware/arm/build_arm_ducts.py`, `On_Kol_duct10_220.stl`), matching the arm on
+him; the 140 mm original cannot reach the floor.
 **Hand camera (chosen 2026-10-14, not fitted):** InnoMaker U20CAM-1080P -- 32 x 32 mm board,
 four 2.2 mm (M2) holes (spacing not published), M12 lens, 130 deg diagonal / 106 deg horizontal,
 1080p30 UVC, 1 m USB cable. Two-piece case on the hand's back plate looking past the fingertip

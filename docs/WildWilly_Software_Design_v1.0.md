@@ -416,6 +416,38 @@ mission is ask-only after that. A door opening mid-knock sends the arm home befo
 
 ---
 
+### 3.x Driving changes, 2026-10-14 (owner)
+
+All in `brain.py` unless named; the 40 cm slow-down (`DIST_SLOW`) and 20 cm stop (`DIST_STOP`)
+are unchanged and remain the backstop.
+
+- **Camera brake.** `_camera_front_cm()` looks every `CAMERA_BRAKE_PERIOD_S` (0.3 s) for
+  `CAMERA_BRAKE_CLASSES` (chair, couch, dining table, bed, person, ...) and
+  `arm_ik.obstacle_cm()` turns where a box meets the floor into cm from the front of the wheels
+  (minus `CAMERA_BRAKE_OVERHANG_CM`; a box cut off by the frame counts as closer; only boxes in his
+  path). `_roam`/`_slow` use `min(sonar/ToF, camera)`. Vision only adds stops.
+- **Turn away at roam start.** `_roam_fresh` (set entering ROAM from IDLE): something within
+  `ROAM_START_CLEAR_CM` (40) -> AVOID instead of creeping at it in SLOW.
+- **Steer early.** `_roam_curve()`: something within `ROAM_STEER_EARLY_CM` (100) -> curve
+  `ROAM_STEER_DEG` (15) toward `avoidance.choose_turn()`'s side, held at least
+  `ROAM_STEER_HOLD_S`, re-asserted every `ROTATE_RESTEER_S`, straightened when clear and on leaving
+  ROAM (`_go`). `SafetyController.steer_curve()` / `approve_curve()` -- steered driving, deferred
+  since 2026-08-18, released for this.
+- **Side-step.** `_go('AVOID')` counts avoids within `SIDESTEP_WINDOW_S`; on the
+  `SIDESTEP_AFTER`-th with one side < `SIDESTEP_BLOCKED_CM` and the other > `SIDESTEP_OPEN_CM`,
+  `_start_sidestep()` calls `SafetyController.crab()` (all six wheels `SIDESTEP_DEG` toward the open
+  side, `approve_crab`, clamped `SIDESTEP_MAX_DEG`), waits `STEER_SETTLE_S`, then `_sidestep_move()`
+  drives `SIDESTEP_TIME_S` slow -- forward with `SIDESTEP_FRONT_ROOM_CM` in front, else reverse with
+  the wheels flipped -- and AVOID straightens afterwards. `crab()` sets `_keep_steer` so the
+  straighten-before-moving rule (`_settling`) is skipped for that one drive.
+- **Rotation vs drops.** `SonarArray.distances` adds `front_obstacle` (front without a ToF drop's
+  forced 0). `rotate.py` stops a turn on that, names the side, and words a 0 reading as "that
+  sensor may not be working". `_sonar_returns()` plots only real sonar names.
+- **ToF drops.** Confirmed over `TOF_DROP_CONFIRM_S` front and rear, judged on the near rows only
+  (`TOF_FRONT_DROP_ROWS` (7,), `TOF_REAR_DROP_ROWS` (0,)).
+- **Voice persona.** `config.WILLIE_BODY` leads `CLAUDE_CHAT_SYSTEM` and the on-board intent
+  prompt (`voice._interpret_local`), so answers stop claiming he has no body.
+
 ## 4. Startup and Shutdown
 
 ### 4.1 Startup sequence
@@ -1127,6 +1159,13 @@ reach band, at most `PICK_MAX_BLIND_MM`) measured by the encoders with rf left o
 (`RetrievalTask._wheel_mm`; a pulse estimate if the encoders are down), reach to the remembered
 spot (`arm_ik.reach_after_creep`), then back off the same distance so the camera's check after the
 lift looks at the same floor spot. The hand camera is the proper fix for the blind stretch.
+
+**Gripper feedback sanity (2026-10-14).** `grip.GripCloser` distrusts a first reading further
+than `GRIP_FB_SANE_TOL` from `GRIP_FB_OPEN_RATIO` (the jaw is open when closing starts) and closes
+unsensed (`GRIP_UNSENSED_US`) with the camera check deciding; every grasp that day had "gripped" at
+the open position. **IK keep-out (2026-10-14):** `arm_ik.solve()` checks points every 5 mm along
+every link against `ARM_IK_KEEPOUT_MM`, two boxes -- chassis + wheels (215 x 200 mm, 150 mm up) and
+the body (170 x 200 mm, to shoulder - 80 mm; both body numbers estimates).
 
 **Pick-up by voice (built and run live 2026-10-13).** "Pick up the red ball": the object is found
 by the detector, or — when the spoken name starts with a colour and YOLO misses it — by the

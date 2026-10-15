@@ -152,6 +152,8 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
 - **"Forget everyone"** — deletes every face he has learned.
 
 **Remembering things:**
+- **Start-up check:** about 12 seconds after he starts, he checks every sensor is actually giving
+  readings and tells you any that are not ("Start-up check: my rear sonar is not working").
 - **Battery log:** every 2 hours while he is on, he records his battery voltage, estimated %, and how many hours he has been running since his last charge (counted minute by minute; restarting him no longer adds a row), and pushes it to the `battery-log` branch on GitHub (https://github.com/hdhimmel/willy-rover/blob/battery-log/battery_log.csv). Readings taken offline go up with the next one.
 - *"Remember that [something]"* — stores a fact "Remember, …", "remember …" and "I want you to remember …" work too.
 - *"My name is Howard"* (or *"call me Howard"*, *"remember, my name is Howard"*) — he remembers it; *"what's my name?"* answers from that, or from your face if he recognises you.
