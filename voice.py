@@ -382,6 +382,18 @@ _STOP_NEGATED=re.compile(r"\b(?:do\s*n[o']?t|do not|does\s*n[o']?t|did\s*n[o']?t
                          r"\b",re.I)
 
 
+def answer_is_yes(text,intent=None):
+    """A spoken reply to one of his questions (explore permission). Any no-word wins ("no, don't
+    go" contains "go"); otherwise a yes-word or phrase, or a yes-like intent, is a yes. Anything
+    else is a no -- the cheap direction to be wrong in."""
+    text=(text or '').lower()
+    words=re.findall(r"[a-z']+",text)
+    if any(w in words for w in config.ASK_NO_WORDS): return False
+    return (intent in ('confirm_receipt','roam')
+            or any(w in words for w in config.ASK_YES_WORDS)
+            or any(p in text for p in config.ASK_YES_PHRASES))
+
+
 def is_emergency_stop(text):
     """True when `text` is an imperative stop command.
 
@@ -1019,6 +1031,8 @@ class VoicePipeline:
         queued; the ask then lapses on its own timeout as before."""
         self.speak(question)
         def queue_answer(text):
+            # 2026-10-15: answers were read as "no" and nobody could see why -- log the words.
+            log.info(f'Answer heard: {text!r}' if text else 'Answer: nothing heard')
             if text: self.pending_commands.put({'intent':None,'text':text,'source':'voice','ts':time.time()})
         self.prompt_listen(queue_answer,timeout_s if timeout_s is not None else config.VOICE_ASK_LISTEN_S)
 
@@ -1251,6 +1265,29 @@ class VoicePipeline:
             return {'intent':'stop','args':{},'reply':'Stopping.'}
         return None
 
+    def _ask_local_capped(self,prompt):
+        """The local model, but never more than VOICE_LOCAL_AI_MAX_S (2026-10-15: 30-39 s waits
+        live, deaf the whole time). The request cannot be cancelled on the Hailo, so a slow one
+        keeps running in the background; while it does, the next utterance skips local
+        entirely instead of queueing behind it. None = no answer in time."""
+        import threading
+        prev=getattr(self,'_local_thread',None)
+        if prev is not None and prev.is_alive():
+            log.info('Local model still busy with an earlier request -- going straight to the cloud')
+            return None
+        box={}
+        def run():
+            try: box['r']=self._local_ai.ask_sync(prompt,schema=_INTENT_SCHEMA)
+            except Exception as e: box['e']=e
+        t=threading.Thread(target=run,daemon=True,name='local-ai'); self._local_thread=t; t.start()
+        t.join(config.VOICE_LOCAL_AI_MAX_S)
+        if t.is_alive():
+            log.info(f'Local model gave no answer in {config.VOICE_LOCAL_AI_MAX_S:.0f} s -- asking the cloud')
+            return None
+        if 'e' in box:
+            log.info(f'Local model failed: {box["e"]}'); return None
+        return box.get('r')
+
     def _interpret_local(self,text):
         # FR-1500-003/§15: parse_success and intent_confidence are independent AIResult signals
         # now, not one masquerading as the other — see ai_provider.py's module docstring. The
@@ -1285,7 +1322,9 @@ class VoicePipeline:
                 f'\"reply\":\"On my way to get the newspaper.\",\"confidence\":0.9}}\n'
                 f'Example: {{\"intent\":\"battery\",\"args\":{{}},'
                 f'\"reply\":\"I am at 80 percent.\",\"confidence\":0.9}}')
-        result=self._local_ai.ask_sync(prompt,schema=_INTENT_SCHEMA)
+        result=self._ask_local_capped(prompt)
+        if result is None:
+            return None,0.0          # too slow or still busy: not understood -> the cloud
         if not result.parse_success:
             log.info(f'Local interpretation low-confidence/failed: {result.reason}')
             return result.payload,0.0

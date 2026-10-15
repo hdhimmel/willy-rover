@@ -670,6 +670,15 @@ mic (48 kHz mono, 3840-sample block)
 `_read_frame()` is the single rate boundary, used by both the wake loop and utterance
 capture, so everything downstream assumes 16 kHz / 1280.
 
+**Local model wait is capped** (2026-10-15): `_ask_local_capped()` gives the on-device model
+`VOICE_LOCAL_AI_MAX_S` (8 s); past that the utterance counts as not understood and goes to the
+cloud. The Hailo request cannot be cancelled, so while it is still running the next utterance
+skips local entirely. Before this, 30-39 s waits left him deaf.
+
+**Answers to his own questions** (explore permission): `voice.answer_is_yes()` -- any of
+`ASK_NO_WORDS` is a no, else `ASK_YES_WORDS` / `ASK_YES_PHRASES` / a roam intent is a yes. The
+answer text is logged (`Answer heard: ...`, `Roam permission declined (heard ...)`).
+
 While an utterance is recorded, `display.set_listening(True)` draws a solid green circle
 (top left) that the brain's per-tick `update_state()` cannot overwrite; it goes off when
 recording ends, in a `finally` (2026-10-15, owner).

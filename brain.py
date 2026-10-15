@@ -1438,13 +1438,11 @@ class RoverBrain:
             # a yes counts as a no -- and a no costs only a cooldown, so reading an ambiguous reply
             # as refusal is the cheap direction to be wrong in.
             text=cmd.get('text','').lower()
-            words=re.findall(r"[a-z']+",text)   # "Yes." from a prompted answer keeps its full stop
-            if (cmd.get('intent') in ('confirm_receipt','roam')
-                    or any(w in words for w in ('yes','yeah','yep','sure','okay','ok'))
-                    or 'go ahead' in text):
+            import voice as _v
+            if _v.answer_is_yes(text,cmd.get('intent')):
                 self._end_roam_ask(True); return
             else:
-                log.info('Roam permission declined.')
+                log.info(f'Roam permission declined (heard {text!r}).')
                 self._end_roam_ask(False)
                 # 2026-10-13 live: "Do you see a red ball?" arrived while the explore ask was
                 # pending and was swallowed as its "no". A real command is a no AND still runs.

@@ -1072,6 +1072,13 @@ BAT_CROSSCHECK_GRACE_S=5.0   # sustained disagreement before reporting -- rides 
 LOG_FILE='willy.log'
 VOICE_MAX_SPOKEN_CHARS=320       # ~20 s of speech; longer replies are cut at a sentence end (2026-10-15)
 VOICE_PLAY_MARGIN_S=5.0          # playback limit = the reply's own length + this
+# Yes to a question he asked (explore permission). 2026-10-15: "yes" answers were logged only as
+# "declined"; widened, and the answer text is now logged so a miss can be read.
+ASK_YES_WORDS=('yes','yeah','yep','yup','yah','ya','yea','sure','okay','ok','alright','fine','absolutely',
+               'definitely','certainly','please','go','course')
+ASK_NO_WORDS=('no','nope','nah','not',"don't",'dont','later','stop','wait','never')   # any of these = no, whatever else was said
+ASK_YES_PHRASES=('go ahead','go for it','do it','you can','you may','of course','all right','uh huh','why not')
+VOICE_LOCAL_AI_MAX_S=8.0  # 2026-10-15: the local model's typical answer is ~5 s; past this he asks the cloud instead of waiting (30-39 s seen)
 VOICE_REOPEN_MAX_S=60.0   # 2026-10-15: a failed mic stream is reopened (2,4,8.. s, capped here) instead of going deaf
 VOICE_PLAY_FALLBACK_S=30.0       # if the length cannot be read
 LOG_MAX_BYTES=5_000_000; LOG_BACKUP_COUNT=10   # 2026-10-15 (owner): keep more (still swept at DATA_RETENTION_DAYS)

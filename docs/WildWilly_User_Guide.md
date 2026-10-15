@@ -39,7 +39,9 @@ and a green **LET ME ROAM** button appears on his screen.
 
 After asking, he **beeps and listens for your answer** — no need to say "Hey Willie" first.
 
-**To say yes:** say *"yes"* (or "sure", "okay", "go ahead", "go explore"), **or** tap the button.
+**To say yes:** say *"yes"* (or "yeah", "sure", "okay", "alright", "go ahead", "go for it", "of course",
+"go explore"), **or** tap the button. Anything with "no", "not", "don't", "later" or "wait" in it is a no.
+Say it after the beep, while the green circle is on.
 
 **To say no:** say *"no"*, or ignore him. He stays put and asks again in about ten minutes.
 
