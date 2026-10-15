@@ -339,6 +339,9 @@ class CloudAIProvider(AIProvider):
             log_event(log,'AI_UNAVAILABLE',severity='info',subsystem='ai_provider',provider='cloud')
             return AIResult(False,0.0,None,False,None,'cloud AI not configured/enabled')
         log_event(log,'AI_REQUEST',severity='info',subsystem='ai_provider',provider='cloud')
+        # 2026-10-15: a free-text answer is spoken by Willie -- with no system prompt the model
+        # said "I'm an AI without a body or eyes" (voice's not-understood fallback sent none).
+        if system is None and schema is None: system=config.CLAUDE_CHAT_SYSTEM
         messages=(history or [])+[{'role':'user','content':prompt}]
         try:
             txt=self._post_anthropic(system,messages)

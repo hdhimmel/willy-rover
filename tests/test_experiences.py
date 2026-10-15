@@ -89,3 +89,15 @@ def test_long_replies_are_cut_at_a_sentence_and_played_to_their_length(tmp_path)
     with wave.open(str(p),'wb') as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(22050); w.writeframes(b'\x00\x00'*22050*18)
     assert abs(voice.wav_seconds(str(p))-18.0)<0.01
+
+
+def test_free_text_cloud_answers_speak_as_willie(monkeypatch):
+    # 2026-10-15: "I can't turn or look at you. I'm an AI without a body or eyes" -- no system prompt
+    import ai_provider
+    p=object.__new__(ai_provider.CloudAIProvider)
+    sent={}
+    monkeypatch.setattr(type(p),'available',property(lambda self: True),raising=False)
+    p._post_anthropic=lambda system,messages: (sent.__setitem__('system',system),'Sure.')[1]
+    p._call('Turn and look at me')
+    assert sent['system']==config.CLAUDE_CHAT_SYSTEM and 'body' in sent['system']
+    p._call('x',system='custom'); assert sent['system']=='custom'
