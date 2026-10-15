@@ -649,6 +649,21 @@ class VoicePipeline:
         return downsample_to_16k(raw,self._rate_factor)
 
     def _loop(self):
+        # 2026-10-15: one stalled capture ("no audio from the capture callback for 2 s", no USB
+        # disconnect) stopped the whole pipeline at 11:26 and he was deaf until restarted. Reopen
+        # the mic instead; only stop() ends this loop.
+        fails=0
+        while self._running:
+            t0=time.time()
+            self._capture()
+            if not self._running: break
+            fails=0 if time.time()-t0>60 else fails+1
+            delay=min(config.VOICE_REOPEN_MAX_S,2.0*(2**min(fails,5)))
+            log.warning(f'Voice input: reopening the microphone in {delay:.0f} s')
+            end=time.time()+delay
+            while self._running and time.time()<end: time.sleep(0.2)
+
+    def _capture(self):
         import sounddevice as sd
         frame_len=_WAKE_FRAME  # what the REST of the pipeline sees: openwakeword's 80ms @16kHz
         # The mic may not support 16kHz (2026-09-09: the current one supports only 48000/44100),
@@ -731,8 +746,7 @@ class VoicePipeline:
                             self._drop_backlog()
                             break
         except Exception as e:
-            log.error(f'Voice input stream failed, pipeline stopping: {e}')
-            self._running=False
+            log.error(f'Voice input stream failed: {e}')
 
     def _drop_backlog(self):
         """After an utterance is handled: discard audio queued while he was transcribing and

@@ -1064,6 +1064,7 @@ BAT_CROSSCHECK_GRACE_S=5.0   # sustained disagreement before reporting -- rides 
 LOG_FILE='willy.log'
 VOICE_MAX_SPOKEN_CHARS=320       # ~20 s of speech; longer replies are cut at a sentence end (2026-10-15)
 VOICE_PLAY_MARGIN_S=5.0          # playback limit = the reply's own length + this
+VOICE_REOPEN_MAX_S=60.0   # 2026-10-15: a failed mic stream is reopened (2,4,8.. s, capped here) instead of going deaf
 VOICE_PLAY_FALLBACK_S=30.0       # if the length cannot be read
 LOG_MAX_BYTES=5_000_000; LOG_BACKUP_COUNT=10   # 2026-10-15 (owner): keep more (still swept at DATA_RETENTION_DAYS)
 
