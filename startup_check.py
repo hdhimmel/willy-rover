@@ -45,9 +45,15 @@ def failures(b):
         if getattr(d,'_hailo_backend',False) and d.capture_frame() is None: return 'no picture'
     chk('front camera',front_cam)
     def rear_cam():
+        # 2026-10-15: the rear camera opens in the background and closes itself when idle, so one
+        # grab can land on a closed camera -- a false "no picture". Keep asking for a few seconds.
         r=getattr(b,'rear_cam',None)
         if r is None: return 'not set up'
-        return None if r.grab() is not None else 'no picture'
+        end=time.monotonic()+config.STARTUP_CAM_WAIT_S
+        while True:
+            if r.grab() is not None: return None
+            if time.monotonic()>=end: return 'no picture'
+            time.sleep(0.25)
     chk('rear camera',rear_cam)
     def gripper():
         import grip

@@ -1136,6 +1136,7 @@ SELFTEST_RETRY_S=30.0
 # check every sensor is delivering readings (not just answering), log + say what isn't. Report only.
 STARTUP_SENSOR_CHECK=True
 STARTUP_SENSOR_CHECK_S=12.0
+STARTUP_CAM_WAIT_S=5.0           # keep asking the on-demand rear camera for a frame this long
 STARTUP_GRIP_FB_RANGE=(0.10,0.60)   # gripper feedback ratio anywhere from open (0.19) to closed (0.45), with margin
 SELFTEST_OVERRIDE_AFTER=3
 

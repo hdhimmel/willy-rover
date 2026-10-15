@@ -69,3 +69,12 @@ def test_runs_off_the_tick_thread(monkeypatch):
     for th in threading.enumerate():
         if th.name=='startup-check': th.join(2)
     assert seen==['startup-check']
+
+
+def test_a_rear_camera_that_is_still_opening_is_not_a_failure(monkeypatch):
+    # 2026-10-15 09:40: it had just closed itself; the next grab reopens in the background
+    frames=iter([None,None,'frame'])
+    monkeypatch.setattr(config,'STARTUP_CAM_WAIT_S',2.0)
+    monkeypatch.setattr(startup_check.time,'sleep',lambda s: None)
+    b=_brain(rear_cam=types.SimpleNamespace(grab=lambda: next(frames)))
+    assert 'rear camera' not in dict(startup_check.failures(b))
