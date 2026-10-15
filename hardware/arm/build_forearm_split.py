@@ -22,8 +22,9 @@ S=math.sqrt(L**2-(ELBOW_HUB[2]-WRIST_AXLE[2])**2)-(ELBOW_HUB[0]-WRIST_AXLE[0])
 DUCT_Y,DUCT_Z,DUCT_R=28.0,14.0,5.0
 X0,X1=56.0,98.0+S          # straight duct run (build_arm_ducts.py path)
 LAP_MM=44.0
-JOINT_W=34.0               # joint section width (y), centred on the duct
-BOLT_DY=11.5               # bolts this far either side of the duct centre
+JOINT_W=37.0               # joint section width (y), centred on the duct (clears the nut traps at the bottom chamfer)
+TAPER_MM=18.0              # blend from the arm's width to JOINT_W over this length each side
+BOLT_DY=10.5               # bolts this far either side of the duct centre (clear of the arm's edge chamfer)
 BOLT_D=3.4; HEAD_D=6.2; HEAD_DEPTH=3.2
 NUT_AF=5.7; NUT_DEPTH=2.8  # M3 nut 5.5 AF + clearance
 BOLT_LEN=30               # 26 mm of material + the nut
@@ -38,7 +39,17 @@ def build():
     xa,xb=xj-LAP_MM/2,xj+LAP_MM/2
     # widen the joint: the tongue's own section height there, full JOINT_W wide
     sec=m.section(plane_origin=[xj,0,0],plane_normal=[1,0,0]); zb=sec.bounds[:,2]
-    boss=box(bounds=[[xa-6,DUCT_Y-JOINT_W/2,zb[0]],[xb+6,DUCT_Y+JOINT_W/2,zb[1]]])
+    # 2026-10-15 (owner: "smooth the overlap to match the arm profile"): the joint is the arm's own
+    # cross-section widened to JOINT_W (chamfered corners kept), blending back to the arm's width
+    # over TAPER_MM each side -- a convex hull of the sections, so a straight, smooth swell.
+    def ring(x,w=None):
+        v=m.section(plane_origin=[x,0,0],plane_normal=[1,0,0]).vertices.copy()
+        if w is not None:   # spread the two sides apart, so the corners keep the arm's own chamfer
+            grow=(w-np.ptp(v[:,1]))/2
+            v[:,1]=np.where(v[:,1]<DUCT_Y,v[:,1]-grow,v[:,1]+grow)
+        return v
+    pts=np.vstack([ring(xa-TAPER_MM),ring(xa-2,JOINT_W),ring(xj,JOINT_W),ring(xb+2,JOINT_W),ring(xb+TAPER_MM)])
+    boss=trimesh.Trimesh(pts).convex_hull
     m=trimesh.boolean.union([m,boss],engine='manifold')
     duct=cylinder(radius=DUCT_R,height=xb-xa+40,transform=trimesh.transformations.rotation_matrix(math.pi/2,[0,1,0],[0,0,0]))
     duct.apply_translation([xj,DUCT_Y,DUCT_Z])
