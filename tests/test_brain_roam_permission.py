@@ -45,7 +45,7 @@ def fb(tapped=False,shutdown_pending=False,state="IDLE"):
     )
     ns.said=said; ns.offers=offers; ns.calls=calls
     for m in ("_roam_allowed","_begin_roam_ask","_end_roam_ask","_service_roam_ask",
-              "_revoke_roam_permission","_drain_voice_commands","_say","_ask"):
+              "_revoke_roam_permission","_drain_voice_commands","_say","_ask","_end_purpose"):
         setattr(ns,m,types.MethodType(getattr(RoverBrain,m),ns))
     return ns
 
