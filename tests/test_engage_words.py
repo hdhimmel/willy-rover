@@ -32,11 +32,19 @@ def test_line_uses_the_cloud():
 
 def test_bad_cloud_lines_fall_back():
     t=T('ask_thing',{'thing':'ball'},question=True)
+    ok=[s.format(thing='ball') for s in config.ENGAGE_TEMPLATES['ask_thing']]
     for payload in ('','x'*500,'{"intent":"chat"}',"I'm sorry, I can't help with that."):
-        assert ew.line(t,cloud(AIResult(True,1.0,None,True,payload,'')))=='Whose ball is that?'
-    assert ew.line(t,cloud(raises=True))=='Whose ball is that?'
-    assert ew.line(t,cloud(available=False))=='Whose ball is that?'
-    assert ew.line(t,None)=='Whose ball is that?'
+        assert ew.line(t,cloud(AIResult(True,1.0,None,True,payload,'')))in ok
+    assert ew.line(t,cloud(raises=True))in ok
+    assert ew.line(t,cloud(available=False))in ok
+    assert ew.line(t,None)in ok
+
+def test_line_never_raises_on_odd_facts():
+    assert ew.line(T('greet_known',{1:'x'}),None)=='Hello!'
+    r=AIResult(True,1.0,None,True,'Nice to see you.','')
+    assert ew.line(T('change',{'room':'kitchen','facts':{'x':1},'thing':'cup'}),cloud(r))=='Nice to see you.'
+    assert ew.line(T('ask_person',{'name':'Howard','bag':{1,2},'obj':object()}),cloud(r))=='Nice to see you.'
+    assert ew.line(T('ask_person',{'name':'Howard','bag':{1,2}}),None) in [s.format(name='Howard') for s in config.ENGAGE_TEMPLATES['ask_person']]
 
 def test_line_slow_cloud_times_out():
     t=T('ask_room',{},question=True)
@@ -62,3 +70,34 @@ def test_extract_unusable_is_none():
     assert ew.extract(T('greet_stranger',{},True),"",off) is None
     assert ew.extract(T('greet_stranger',{},True),"I don't know what you mean by that",off) is None
     assert ew.extract(T('ask_room',{},True),"No.",off) is None
+
+def test_extract_offline_rejects_non_answers():
+    off=cloud(available=False)
+    for s in ("Hi","Hello","Thanks","Yeah","Nothing","I'm"):
+        assert ew.extract(T('greet_stranger',{},True),s,off) is None, s
+    assert ew.extract(T('ask_room',{},True),"I have no idea",off) is None
+    assert ew.extract(T('ask_room',{},True),"what do you mean",off) is None
+    assert ew.extract(T('ask_room',{},True),"why",off) is None
+    assert ew.extract(T('ask_thing',{'thing':'ball'},True),"Yes",off) is None
+    assert ew.extract(T('ask_thing',{'thing':'ball'},True),"No idea",off) is None
+    assert ew.extract(T('ask_thing',{'thing':'ball'},True),"Mine",off) is None
+
+def test_extract_offline_normalises():
+    off=cloud(available=False)
+    assert ew.extract(T('ask_room',{},True),"in the kitchen",off)=={'room':'kitchen'}
+    assert ew.extract(T('ask_thing',{'thing':'ball'},True),"its storm's",off)=={'owner':'Storm','label':"Storm's ball"}
+
+def test_extract_cloud_empty_is_none_not_offline():
+    assert ew.extract(T('greet_stranger',{},True),"Bob",cloud(AIResult(True,1.0,None,True,{},''))) is None
+
+def test_extract_cloud_wrong_key_is_none():
+    r=AIResult(True,1.0,None,True,{'name':'Howard'},'')
+    assert ew.extract(T('ask_room',{},True),"the kitchen",cloud(r)) is None
+
+def test_extract_cloud_junk_values_rejected():
+    assert ew.extract(T('greet_stranger',{},True),"Bob",cloud(AIResult(True,1.0,None,True,{'name':'null'},''))) is None
+    assert ew.extract(T('greet_stranger',{},True),"Bob",cloud(AIResult(True,1.0,None,True,{'name':['Bob']},''))) is None
+
+def test_extract_parse_fail_or_raise_uses_offline():
+    assert ew.extract(T('greet_stranger',{},True),"Bob",cloud(AIResult(False,0.0,None,False,None,''))) == {'name':'Bob'}
+    assert ew.extract(T('greet_stranger',{},True),"Bob",cloud(raises=True)) == {'name':'Bob'}
