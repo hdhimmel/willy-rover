@@ -141,6 +141,7 @@ def test_straighten_wheels_with_please_is_matched_on_the_spot():
     vp=object.__new__(voice.VoicePipeline)
     for t in ("Straighten your wheels please.","Willie, straighten your wheels","straighten the wheels, please",
               "Can you straighten your wheels?","wheels straight","Please center your wheels",
-              "put your wheels straight","straighten your wheels out"):
+              "put your wheels straight","straighten your wheels out",
+              "Wheel Straight.","Wheel Street.","straighten your wheel"):
         r=vp._fast_path(t)
         assert r and r['intent']=='steer' and r['args']['degrees']==0, t
