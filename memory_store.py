@@ -24,6 +24,11 @@ CREATE TABLE IF NOT EXISTS routines(
 CREATE TABLE IF NOT EXISTS experiences(
     id INTEGER PRIMARY KEY, at REAL NOT NULL, kind TEXT NOT NULL, what TEXT NOT NULL,
     x REAL, y REAL, room TEXT);
+CREATE TABLE IF NOT EXISTS things(
+    id INTEGER PRIMARY KEY, kind TEXT NOT NULL, label TEXT, owner TEXT, room TEXT,
+    first_seen REAL NOT NULL, last_seen REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS person_notes(
+    id INTEGER PRIMARY KEY, name TEXT NOT NULL, note TEXT NOT NULL, at REAL NOT NULL);
 """
 
 class MemoryStore:
@@ -199,6 +204,51 @@ class MemoryStore:
                                 (since,)).fetchall()
         return [dict(zip(('at','kind','what','x','y','room'),r)) for r in rows]
 
+    # --- engagement (FR-2400, 2026-10-15): things he has seen, what people told him ---
+    _THING_COLS=('kind','label','owner','room','first_seen','last_seen')
+
+    def upsert_thing(self,kind,room=None,at=None):
+        """A sighting. Returns the previous last_seen for (kind, room), None if never seen there --
+        read BEFORE the update, so engagement can tell 'back again after hours' and 'new here'."""
+        at=at or time.time()
+        with self._lock:
+            row=self._conn.execute('SELECT MAX(last_seen) FROM things WHERE kind=? AND room IS ?',
+                                   (kind,room)).fetchone()
+            prev=row[0] if row else None
+            if prev is None:
+                self._conn.execute('INSERT INTO things(kind,room,first_seen,last_seen) VALUES(?,?,?,?)',
+                                   (kind,room,at,at))
+            else:
+                self._conn.execute('UPDATE things SET last_seen=? WHERE kind=? AND room IS ?',(at,kind,room))
+            self._conn.commit()
+        return prev
+
+    def name_thing(self,kind,room,owner,label,at=None):
+        at=at or time.time()
+        with self._lock:
+            cur=self._conn.execute('UPDATE things SET owner=?,label=? WHERE kind=? AND room IS ?',
+                                   (owner,label,kind,room))
+            if cur.rowcount==0:
+                self._conn.execute('INSERT INTO things(kind,label,owner,room,first_seen,last_seen) '
+                                   'VALUES(?,?,?,?,?,?)',(kind,label,owner,room,at,at))
+            self._conn.commit()
+
+    def things(self,kind=None,room=None,any_room=False):
+        q='SELECT '+','.join(self._THING_COLS)+' FROM things WHERE 1=1'; args=[]
+        if kind is not None: q+=' AND kind=?'; args.append(kind)
+        if not any_room: q+=' AND room IS ?'; args.append(room)
+        return [dict(zip(self._THING_COLS,r)) for r in self._conn.execute(q+' ORDER BY last_seen DESC',args)]
+
+    def add_person_note(self,name,note,at=None):
+        with self._lock:
+            self._conn.execute('INSERT INTO person_notes(name,note,at) VALUES(?,?,?)',(name,note,at or time.time()))
+            self._conn.commit()
+
+    def person_notes(self,name,n=3):
+        rows=self._conn.execute('SELECT note,at FROM person_notes WHERE lower(name)=lower(?) '
+                                'ORDER BY at DESC LIMIT ?',(name,n)).fetchall()
+        return [{'note':r[0],'at':r[1]} for r in rows]
+
     def purge_expired(self,max_age_days=None):
         # FR-1800-004/FR-1900-010: demonstrations/facts/instructions are small structured rows,
         # not raw audio/frames, but still subject to the same retention ceiling.
@@ -208,6 +258,7 @@ class MemoryStore:
             self._conn.execute('DELETE FROM demonstrations WHERE created_at<?',(cutoff,))
             self._conn.execute('DELETE FROM instructions WHERE created_at<?',(cutoff,))
             self._conn.execute('DELETE FROM experiences WHERE at<?',(cutoff,))
+            self._conn.execute('DELETE FROM person_notes WHERE at<?',(cutoff,))
             self._conn.commit()
 
     def close(self):
