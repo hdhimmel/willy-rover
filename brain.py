@@ -13,7 +13,7 @@ from navigation import Navigator,Mission
 from arm import Arm
 from memory_store import MemoryStore
 from smart_home import SmartHomeClient
-from voice import VoicePipeline
+from voice import VoicePipeline,is_emergency_stop
 from vision import ObjectDetector
 from retrieval_task import RetrievalTask
 from pursuit_task import PursuitTask
@@ -846,7 +846,22 @@ class RoverBrain:
             log.info(f'Engage: not turning ({msg}); speaking from here')
         self._go('ENGAGE')
 
+    # Every worker re-checks `self._engage_topic is t` before it speaks, listens or moves the phase:
+    # a stop or timeout can land while line()/extract() wait on the cloud (fix round 1, 2026-10-15).
+    def _engage_lock(self): return self.__dict__.setdefault('_engage_lk',threading.RLock())
+
+    def _engage_apply_pending(self):
+        """Tick thread only: rooms are stored here, never from the answer worker (world_model is read
+        by the tick thread)."""
+        p=getattr(self,'_engage_pending_room',None)
+        if p is None: return
+        self._engage_pending_room=None
+        try: self.world_model.add_room(*p); self.world_model.save()
+        except Exception: log.warning('Engage: room not stored',exc_info=True)
+
     def _engage_tick(self,d,tilt):
+        self.safety.stop()   # ENGAGE behaves like IDLE for safety (spec §2.4)
+        self._engage_apply_pending()
         self._upd('idle','',d,tilt)
         t=self._engage_topic
         if t is None: return self._engage_end('no topic')
@@ -862,22 +877,32 @@ class RoverBrain:
         import engage_words
         try:
             text=engage_words.line(t,getattr(self,'cloud_ai',None))
-            self.voice.speak(text)
-            log.info(f'ENGAGE said kind={t.kind} subject={t.subject}: {text!r}')
-            if t.question:
-                self._engage_phase='listening'
-                self.voice.prompt_listen(lambda ans,t=t: self._engage_answer(t,ans),config.FACE_ASK_TIMEOUT_S)
-                return
+            with self._engage_lock():   # _engage_end takes it too: no remark or listen after a stop
+                if self._engage_topic is not t:
+                    log.info(f'Engage line dropped (topic ended): {text!r}'); return
+                self.voice.speak(text)
+                log.info(f'ENGAGE said kind={t.kind} subject={t.subject}: {text!r}')
+                if t.question:
+                    self._engage_phase='listening'
+                    cb=lambda ans,t=t: self._engage_answer(t,ans); self._engage_cb=cb
+                    self.voice.prompt_listen(cb,config.FACE_ASK_TIMEOUT_S)
+                    return
         except Exception: log.warning('Engage: saying failed',exc_info=True)
-        self._engage_phase='done'
+        if self._engage_topic is t: self._engage_phase='done'
 
     def _engage_answer(self,t,text):
         if self._engage_topic is not t:
             log.info(f'Engage answer ignored (topic ended): {text!r}'); return
+        if text and is_emergency_stop(text):
+            # prompt_listen hands the next utterance here, not to the stop matcher: a "stop" said
+            # as the answer must still stop him (the voice-stop branch ends the topic next tick).
+            log.info(f'Engage answer was a stop: {text!r}')
+            self.voice.stop_requested.set(); return
         def work():
             try: self._engage_store(t,text)
             except Exception: log.warning('Engage: storing failed',exc_info=True)
-            finally: self._engage_phase='done'
+            finally:
+                if self._engage_topic is t: self._engage_phase='done'
         self._engage_thread=threading.Thread(target=work,daemon=True,name='engage-answer'); self._engage_thread.start()
 
     def _engage_store(self,t,text):
@@ -885,7 +910,8 @@ class RoverBrain:
         if not text:
             log.info(f'ENGAGE answered=no kind={t.kind}'); return
         data=engage_words.extract(t,text,getattr(self,'cloud_ai',None))
-        if self._engage_topic is not t: return
+        if self._engage_topic is not t:
+            log.info(f'Engage answer not used (topic ended): {t.kind} heard {text!r}'); return
         if not data:
             log.info(f'Engage answer not used: {t.kind} heard {text!r}'); return
         log.info(f'ENGAGE stored kind={t.kind} {data}')
@@ -900,7 +926,7 @@ class RoverBrain:
                 self.voice.speak(f'Nice to meet you, {name}!')
         elif t.kind=='ask_room':
             pose=self.world_model.get_robot_pose()
-            self.world_model.add_room(data['room'],pose.x,pose.y); self.world_model.save()
+            self._engage_pending_room=(data['room'],pose.x,pose.y)   # stored by the tick thread
             self.voice.speak(f"Got it, this is the {data['room']}.")
         elif t.kind=='ask_thing':
             label=data.get('label') or f"the {t.facts.get('thing','thing')}"
@@ -911,10 +937,16 @@ class RoverBrain:
             self.voice.speak('Thanks for telling me.')
 
     def _engage_end(self,reason):
-        t=self._engage_topic; self._engage_topic=None
+        with self._engage_lock():
+            t=self._engage_topic; self._engage_topic=None
+            cb=getattr(self,'_engage_cb',None); self._engage_cb=None
+            if cb is not None and getattr(self.voice,'cancel_prompt',None):
+                try: self.voice.cancel_prompt(cb)   # no wake-free listen left open after a stop
+                except Exception: pass
+        self._engage_apply_pending()
         if t is not None: log_event(log,'ENGAGE',subsystem='engage',kind=t.kind,subject=t.subject,status=reason)
         back=self._engage_prev_state if self._engage_prev_state in config.ENGAGE_STATES else 'IDLE'
-        if reason=='voice stop': back='IDLE'   # stop means stop: never resume a roam
+        if reason in ('voice stop','operator stop button'): back='IDLE'   # stop means stop: never resume a roam
         if (back in ('ROAM','SLOW') and config.ROAM_PERMISSION_REQUIRED
                 and not getattr(self,'_roam_permission',True)): back='IDLE'
         if self._state=='ENGAGE': self._go('ROAM' if back=='SLOW' else back)
@@ -1048,6 +1080,7 @@ class RoverBrain:
         if self.display.stop_tapped():
             log.warning('STOP SVC tapped on screen — braking and stopping the service.')
             self.safety.emergency_stop('operator stop button')
+            if self._engage_topic is not None: self._engage_end('operator stop button')
             if self.retrieval.active: self.retrieval.abort('operator stop button')
             if self.mapping.active: self.mapping.abort('operator stop button')
             if self.navigator.active: self.navigator.abort('operator stop button')
@@ -2827,7 +2860,7 @@ class RoverBrain:
                 # an arm sequence ending -- finished or interrupted -- never leaves the pair driven
                 try: self.arm.drop_pair()
                 except Exception: pass
-            if state=='ROAM' and self._state=='IDLE': self._roam_fresh=True   # a roam setting off
+            if state=='ROAM' and self._state in ('IDLE','ENGAGE'): self._roam_fresh=True   # a roam setting off (ENGAGE: 2026-10-15)
             if self._state=='ROAM' and getattr(self,'_curve_deg',0.0):         # leaving a curve: straighten
                 try: self.steering.center_all()
                 except Exception: pass

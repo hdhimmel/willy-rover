@@ -44,12 +44,14 @@ print('OK')
 
 _ENGAGE=_COMMON+r'''
 from engage import Topic
-said=[]; prompts=[]; rot=[]
+import threading,engage_words
+said=[]; prompts=[]; rot=[]; cancelled=[]
 def b2(state='ROAM',rotate_ok=True):
     b=brain()
     b._state=state; b._engage_topic=None; b._engage_prev_state=None
     b.voice=types.SimpleNamespace(available=True,busy=False,speak=said.append,
-        prompt_listen=lambda cb,t: prompts.append(cb),set_current_person=lambda n: None)
+        prompt_listen=lambda cb,t: prompts.append(cb),set_current_person=lambda n: None,
+        stop_requested=threading.Event(),cancel_prompt=cancelled.append)
     b.cloud_ai=None
     b.safety=types.SimpleNamespace(stop=lambda: None,emergency_stop=lambda why: None)
     def start_rotation(deg,then='IDLE'):
@@ -57,7 +59,8 @@ def b2(state='ROAM',rotate_ok=True):
     b.start_rotation=start_rotation
     went=[]; b._go=lambda s: (went.append(s),setattr(b,'_state',s)); b.went=went
     b._upd=lambda *a,**k: None
-    for n in ('_start_engage','_engage_tick','_engage_say','_engage_answer','_engage_store','_engage_end'):
+    for n in ('_start_engage','_engage_tick','_engage_say','_engage_answer','_engage_store','_engage_end',
+              '_engage_lock','_engage_apply_pending'):
         setattr(b,n,types.MethodType(getattr(RoverBrain,n),b))
     return b
 def wait(b):
@@ -98,6 +101,7 @@ b=b2('IDLE')
 b._start_engage(Topic('ask_room','0,0',{},True,None))
 b._engage_tick({},0.0); wait(b)
 b._engage_end('voice stop')
+assert cancelled==[prompts[0]], cancelled                # our open listen withdrawn
 prompts[0]('This is the kitchen'); wait(b)
 assert not hasattr(b.world_model,'added'), 'stored after stop'
 assert said==['What room is this?'] or said==["Can you tell me what room I'm in?"]
@@ -118,3 +122,45 @@ print('OK')
 def test_stranger_danger_is_gone():
     src=open(os.path.join(_REPO_ROOT,'brain.py'),encoding='utf8').read()
     assert 'Stranger danger' not in src
+
+def test_stop_said_as_the_answer_stops_him():
+    _run(_ENGAGE+r'''
+b=b2('ROAM')
+b._start_engage(Topic('ask_thing','sports ball@kitchen',{'thing':'sports ball','room':'kitchen'},True,None))
+b._engage_tick({},0.0); wait(b)
+prompts[0]('Willie, stop'); wait(b)
+assert b.voice.stop_requested.is_set()
+assert not b.memory.things('sports ball','kitchen') or not b.memory.things('sports ball','kitchen')[0].get('label')
+assert b._engage_phase!='done' and b.went[-1]=='ENGAGE', (b._engage_phase,b.went)   # no resume
+print('OK')
+''')
+
+def test_topic_ended_while_line_runs_says_nothing():
+    _run(_ENGAGE+r'''
+gate=threading.Event(); real=engage_words.line
+engage_words.line=lambda t,c,timeout_s=None: (gate.wait(5),real(t,None))[1]
+b=b2('IDLE')
+b._start_engage(Topic('ask_room','0,0',{},True,None))
+b._engage_tick({},0.0)                                  # worker now blocked in line()
+b._engage_end('voice stop'); gate.set(); wait(b)
+assert said==[] and prompts==[], (said,prompts)
+print('OK')
+''')
+
+def test_old_answer_worker_does_not_touch_new_topic():
+    _run(_ENGAGE+r'''
+gate=threading.Event(); real=engage_words.extract
+engage_words.extract=lambda t,x,c,timeout_s=None: (gate.wait(5),real(t,x,None))[1]
+b=b2('IDLE')
+a=Topic('ask_thing','sports ball@kitchen',{'thing':'sports ball','room':'kitchen'},True,None)
+b._start_engage(a); b._engage_tick({},0.0); wait(b)
+prompts[0]("It's Storm's")                              # answer worker blocked in extract()
+old=b._engage_thread
+b._engage_end('timed out')
+b._start_engage(Topic('greet_known','Howard',{'name':'Howard'},False,None))
+assert b._engage_phase=='say'
+gate.set(); old.join(5)
+assert b._engage_phase=='say', b._engage_phase          # old 'done' did not clobber it
+assert not any(r.get('label') for r in b.memory.things('sports ball','kitchen'))
+print('OK')
+''')

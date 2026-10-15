@@ -1051,6 +1051,14 @@ class VoicePipeline:
         self._prompt={'cb':on_text,'deadline':time.time()+timeout_s+6.0,'seen_speaking':False,
                       't0':time.time()}
 
+    def cancel_prompt(self,on_text):
+        """2026-10-15 (FR-2400): withdraw a prompted listen, but only if it is still `on_text`'s --
+        a stop must not leave a wake-free listen window open. True if one was withdrawn."""
+        p=getattr(self,'_prompt',None)
+        if p is not None and p.get('cb') is on_text:
+            self._prompt=None; return True
+        return False
+
     def interpret_text(self,text):
         """FR-2000-012: the voice interpreter for text that did not come from the microphone
         (an authenticated owner email). Same steps as a spoken utterance -- bare-address check,
