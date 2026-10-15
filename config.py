@@ -1097,6 +1097,24 @@ ENGAGE_TEMPLATES={
     'change_missing':["{label} isn't in the {room}. It was here {when}."],
     'ask_person':["How's your day going, {name}?","What have you been up to, {name}?"],
 }
+# FR-2400 engagement rules (2026-10-15, owner: idle + roaming, moderate, all four topic kinds,
+# friendly to strangers). See docs/superpowers/specs/2026-10-15-engagement-design.md.
+ENABLE_ENGAGEMENT=True
+ENGAGE_STATES=('IDLE','ROAM','SLOW')
+ENGAGE_GAP_S=300.0              # at most one non-greeting topic this often
+ENGAGE_VISIT_S=1800.0           # unseen this long = the next sighting is a new visit (greet again)
+ENGAGE_STRANGER_CONFIRM_N=3     # consecutive face scans with an UNKNOWN face before he says hello
+ENGAGE_ASK_ROOM_GAP_S=3600.0
+ENGAGE_ASK_PERSON_AFTER_S=120.0 # greeted this long ago and still here -> may ask about their day
+ENGAGE_CALLBACK_MIN_H=2.0       # 'last time I saw you' only if it was at least this long ago
+ENGAGE_MISSING_H=4.0            # a thing usually here, unseen this long while he has looked
+ENGAGE_LOOK_ROOM_S=60.0         # ...and he has been in this room at least this long
+ENGAGE_THING_CLASSES=('sports ball','frisbee','teddy bear','cup','bottle','wine glass','bowl','backpack',
+                      'handbag','suitcase','umbrella','cell phone','remote','laptop','book','scissors',
+                      'kite','skateboard')
+ENGAGE_TURN_MIN_DEG=15.0
+ENGAGE_MAX_S=20.0
+ENGAGE_LOOK_S=2.0               # IDLE: run a detection this often for engagement
 VOICE_REOPEN_MAX_S=60.0   # 2026-10-15: a failed mic stream is reopened (2,4,8.. s, capped here) instead of going deaf
 VOICE_PLAY_FALLBACK_S=30.0       # if the length cannot be read
 LOG_MAX_BYTES=5_000_000; LOG_BACKUP_COUNT=10   # 2026-10-15 (owner): keep more (still swept at DATA_RETENTION_DAYS)
