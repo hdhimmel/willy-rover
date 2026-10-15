@@ -670,6 +670,10 @@ mic (48 kHz mono, 3840-sample block)
 `_read_frame()` is the single rate boundary, used by both the wake loop and utterance
 capture, so everything downstream assumes 16 kHz / 1280.
 
+While an utterance is recorded, `display.set_listening(True)` draws a solid green circle
+(top left) that the brain's per-tick `update_state()` cannot overwrite; it goes off when
+recording ends, in a `finally` (2026-10-15, owner).
+
 If no audio arrives for 2 s, the stream is closed and the mic **reopened** (2, 4, 8 … s, capped at
 `VOICE_REOPEN_MAX_S`); only `stop()` ends the loop. Before 2026-10-15 one stall left him deaf
 until a restart.

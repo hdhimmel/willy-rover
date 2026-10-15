@@ -50,6 +50,10 @@ class WillyFace:
         self._talk_env=None; self._talk_step=0.05; self._talk_t0=0.0   # talking mouth (set_talking)
         self._quiet=False   # set_quiet(): low frame rate while voice transcribes
         self._heard_until=0.0  # note_heard() flashes a small corner icon, separate from state='listening'
+        # 2026-10-15 (owner): "when he is in listen mode the green circle should stay on". The
+        # 'listening' STATE is overwritten by the brain's next tick (~50 ms), so it never showed.
+        # set_listening() is a flag of its own, on for the whole capture.
+        self._listening=False
         # FR-300-003, applied to all faults not just E-stop (owner decision 2026-08-18): once a
         # fault condition clears, brain.py stops calling _go('IDLE') automatically and instead
         # waits here for an operator screen-tap. _reset_event is the thread-safe handoff -- set
@@ -251,6 +255,9 @@ class WillyFace:
         # anything was understood as speech yet.
         with self._lock: self._heard_until=self._t+duration
 
+    def set_listening(self,on):
+        with self._lock: self._listening=bool(on)
+
     def update_state(self,state,status='',distances=None,tilt=0.0,speed=0.0,awaiting_reset=False,
                      offer_override=False):
         with self._lock:
@@ -373,6 +380,7 @@ class WillyFace:
             dists=dict(self._dists); tilt=self._tilt; speed=self._speed
             personality=self._personality if self._t<self._personality_until else None
             heard=self._t<self._heard_until
+            listening=self._listening
             net_text=self._net_text; net_color=self._net_color
             pwr_text=self._pwr_text; pwr_color=self._pwr_color
             temp_text=self._temp_text; temp_color=self._temp_color
@@ -461,7 +469,11 @@ class WillyFace:
         # truncated (via _wrap with max_lines=1) rather than silently clipped off-screen.
         status_ln=self._wrap(self.f_sm,status,W-24,max_lines=1)[0]
         s.blit(self.f_sm.render(status_ln,True,C_TEXT),(12,STATUS_Y+34))
-        if heard:
+        if listening:   # solid green circle + ring, steady while he records you
+            cx,cy=36,36
+            pygame.draw.circle(s,C_GREEN,(cx,cy),24)
+            pygame.draw.circle(s,C_GREEN,(cx,cy),31,3)
+        elif heard:
             cx,cy=36,36
             pygame.draw.circle(s,C_GREEN,(cx,cy),22)
             pygame.draw.lines(s,C_BG,False,[(cx-10,cy),(cx-3,cy+9),(cx+12,cy-11)],5)

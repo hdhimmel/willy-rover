@@ -55,6 +55,9 @@ revokes permission. He always starts up without permission, so a reboot never le
 ## Waking Willie up
 
 Say **"Hey Willie"**, then your request. Wait for him to answer before the next one.
+A **solid green circle** (top left of his screen) stays on for as long as he is recording you;
+when it goes off he has stopped listening and is thinking. A green tick after that means he
+understood words.
 
 Common commands (the ones listed in **bold** below) are recognised instantly. Anything else he
 has to think about, which takes a few seconds. Thinking no longer stops him: his on-board model

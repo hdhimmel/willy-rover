@@ -31,3 +31,26 @@ def test_stop_ends_the_loop_without_reopening(monkeypatch):
     p._capture=capture
     p._loop()
     assert calls==[1]
+
+
+def test_the_listening_circle_is_on_for_the_whole_capture_and_off_after():
+    import types
+    p=object.__new__(voice.VoicePipeline)
+    seen=[]
+    p.display=types.SimpleNamespace(update_state=lambda **k: None,set_listening=seen.append)
+    def capture(stream,frame_len,t_wake,on_text): seen.append('capturing')
+    p._capture_utterance=capture
+    p._handle_wake(None,1280,0.0)
+    assert seen==[True,'capturing',False]
+
+
+def test_the_listening_circle_goes_off_even_if_capture_fails():
+    import types
+    p=object.__new__(voice.VoicePipeline)
+    seen=[]
+    p.display=types.SimpleNamespace(update_state=lambda **k: None,set_listening=seen.append)
+    def capture(*a): raise RuntimeError('mic')
+    p._capture_utterance=capture
+    try: p._handle_wake(None,1280,0.0)
+    except RuntimeError: pass
+    assert seen[-1] is False

@@ -843,6 +843,16 @@ class VoicePipeline:
         # behaviour exactly -- a full VOICE_CAPTURE_MAX_S window -- whenever endpointing can't
         # decide (nothing above threshold, or a room noisy enough that nothing reads as silence).
         if self.display: self.display.update_state(state='listening',status='Listening...')
+        self._set_listening(True)
+        try: self._capture_utterance(stream,frame_len,t_wake,on_text)
+        finally: self._set_listening(False)
+
+    def _set_listening(self,on):
+        try:
+            if self.display is not None and hasattr(self.display,'set_listening'): self.display.set_listening(on)
+        except Exception: pass
+
+    def _capture_utterance(self,stream,frame_len,t_wake,on_text):
         self._play_ack()
         fps=16000.0/frame_len
         # NOTE: capture starts immediately. An earlier version discarded _ACK_SKIP_S of frames
@@ -885,6 +895,7 @@ class VoicePipeline:
                 loud=0
                 if heard: silent+=1
             if heard and silent>=end_frames and i>=min_frames: break
+        self._set_listening(False)          # recording done: the circle goes off as he thinks
         pcm=np.concatenate(audio).astype(np.float32)/32768.0
         log.info('capture: %.1fs of %.1fs max (endpointed=%s)',
                   len(audio)/fps,config.VOICE_CAPTURE_MAX_S,heard and silent>=end_frames)
