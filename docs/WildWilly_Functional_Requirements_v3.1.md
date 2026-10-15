@@ -494,6 +494,11 @@ Requirements are implemented and unit-tested off-hardware unless noted.
   names and places learned, pick-ups done -- with time and room. "When did you last see Storm?"
   and "What did you do today?" answer from it. Swept at DATA_RETENTION_DAYS like other records.
   Logs: willy.log 5 MB x 10; the system journal is now kept across reboots (on Willie).
+- **FR-1500 Long answers were silent (2026-10-15).** 32 "TTS playback failed: pw-play timed out
+  after 15 seconds" (10-13..15), every one right after a cloud answer: the reply was longer than
+  the fixed 15 s playback limit and was killed. The limit is now the WAV's own length + 5 s, replies
+  are trimmed at a sentence end to `VOICE_MAX_SPOKEN_CHARS` (~20 s), and voice.speak logs every
+  spoken line ("Say:"), cloud answers included.
 - **Battery log.** Rows were written at every restart and hours-on-charge only counted 2 min per
   restart; fixed (heartbeat). ~0.1 V/h, about 4%/h with some driving.
 

@@ -1062,6 +1062,9 @@ BAT_CROSSCHECK_GRACE_S=5.0   # sustained disagreement before reporting -- rides 
 # §13: the directory itself is now WILLY_LOG_ROOT above (was a bare 'logs' joined against the
 # script's own directory here — that join now happens once, in storage.resolve_root()).
 LOG_FILE='willy.log'
+VOICE_MAX_SPOKEN_CHARS=320       # ~20 s of speech; longer replies are cut at a sentence end (2026-10-15)
+VOICE_PLAY_MARGIN_S=5.0          # playback limit = the reply's own length + this
+VOICE_PLAY_FALLBACK_S=30.0       # if the length cannot be read
 LOG_MAX_BYTES=5_000_000; LOG_BACKUP_COUNT=10   # 2026-10-15 (owner): keep more (still swept at DATA_RETENTION_DAYS)
 
 # World model (§9/§10, WildWilly_Claude_Fix_Implementation_Plan.md) — spatial/semantic memory,

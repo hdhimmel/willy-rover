@@ -76,3 +76,16 @@ def test_brain_records_sightings_and_answers():
     env=dict(os.environ,WILLY_SIMULATE='1')
     r=subprocess.run([sys.executable,'-c',_SCRIPT],cwd=_REPO_ROOT,env=env,capture_output=True,text=True,timeout=60)
     assert 'EXPERIENCES_OK' in r.stdout, f'--- stdout ---\n{r.stdout}\n--- stderr ---\n{r.stderr[-3000:]}'
+
+
+def test_long_replies_are_cut_at_a_sentence_and_played_to_their_length(tmp_path):
+    # 2026-10-15: a fixed 15 s playback limit killed every long cloud answer
+    import voice,wave
+    long='This is a sentence about Storm. '*30
+    t=voice.trim_spoken(long)
+    assert len(t)<=config.VOICE_MAX_SPOKEN_CHARS and t.endswith('.')
+    assert voice.trim_spoken('Short answer.')=='Short answer.'
+    p=tmp_path/'x.wav'
+    with wave.open(str(p),'wb') as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(22050); w.writeframes(b'\x00\x00'*22050*18)
+    assert abs(voice.wav_seconds(str(p))-18.0)<0.01

@@ -120,6 +120,20 @@ def general_question(text):
     t=re.sub(r'^(?:(?:hey|ok|okay)[\s,]+)?willie[\s,]+','',text.strip(),flags=re.I)
     return bool(_GENERAL_QUESTION.match(t)) and not _COMMAND_WORDS.search(t)
 
+def trim_spoken(text,limit=None):
+    """2026-10-15: at most `limit` characters (about 20 s of speech), cut at a sentence end --
+    long cloud answers ran past the old 15 s playback limit and were lost entirely."""
+    limit=limit or config.VOICE_MAX_SPOKEN_CHARS
+    if not text or len(text)<=limit: return text
+    cut=max(text.rfind(p,0,limit) for p in ('. ','! ','? '))
+    return text[:cut+1] if cut>40 else text[:limit].rsplit(' ',1)[0]+'.'
+
+def wav_seconds(path):
+    import wave
+    try:
+        with wave.open(path,'rb') as w: return w.getnframes()/float(w.getframerate())
+    except Exception: return None
+
 def speakable(text):
     """Text as it should be SAID (2026-10-10, owner: he was reading out "asterisk"). Cloud
     replies arrive with markdown -- *emphasis*, **bold**, # headings, - bullets, `code`,
@@ -1316,11 +1330,12 @@ class VoicePipeline:
         # FR-1500-004 + FR-1500-010: force neutral tone for anything safety-shaped, regardless
         # of what the caller asked for. Non-blocking — safe to call from brain.py's tick thread
         # (see module docstring); actual synthesis happens on _speaker_loop's own thread.
-        text=speakable(text)
+        text=trim_spoken(speakable(text))
         if _SAFETY_PATTERN.search(text): tone='neutral'
         if self.display: self.display.update_state(state='speak',status=text)
         if not self._enabled:
             log.info(f'(voice disabled) would say: {text}'); return
+        log.info(f'Say: {text}')    # 2026-10-15: every spoken line, whoever asked for it
         timing=self._utterance_timing; self._utterance_timing=None
         self._speak_queue.put((text,timing,tone))
 
@@ -1377,7 +1392,11 @@ class VoicePipeline:
             if env and self.display is not None:
                 try: self.display.set_talking(env,config.MOUTH_TALK_STEP_S)   # FR-1600-009
                 except Exception: log.warning('talking mouth unavailable',exc_info=True)
-            subprocess.run(['pw-play',wav_path],capture_output=True,timeout=15)
+            # 2026-10-15: the limit follows the reply's length -- a fixed 15 s killed every long
+            # cloud answer (32 times, 2026-10-13..15) and he said nothing at all.
+            dur=wav_seconds(wav_path)
+            subprocess.run(['pw-play',wav_path],capture_output=True,
+                           timeout=(dur+config.VOICE_PLAY_MARGIN_S) if dur else config.VOICE_PLAY_FALLBACK_S)
         except Exception as e:
             log.warning(f'TTS playback failed: {e}')
         finally:
