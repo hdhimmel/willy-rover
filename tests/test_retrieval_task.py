@@ -282,3 +282,31 @@ def test_a_handoff_timeout_never_opens_the_gripper(monkeypatch):
     assert rt.state=='HOLDING' and rt.pick_outcome=='handoff_unconfirmed'
     assert ('gripper',config.GRIP_OPEN_US) not in arm.pulses
     assert any('still holding' in s for s in said)
+
+
+def test_a_sensed_handoff_needs_several_readings_and_uses_the_handoff_baseline(monkeypatch):
+    import types
+    arm=_FakeArm(); fb=[0.300]
+    rt=RetrievalTask(types.SimpleNamespace(timed_move_active=False,stop=lambda: None),arm,_FakeDetector(),
+                     voice=types.SimpleNamespace(speak=lambda s: None,pending_commands=__import__('queue').Queue()))
+    rt.feedback=lambda: fb[0]
+    rt.start('sports ball'); rt._fb_hold=fb[0]; rt._handoff_hits=0   # what _deliver sets
+    rt._confirm_deadline=__import__('time').time()+60; rt.state='AWAIT_CONFIRM'
+    fb[0]=0.300+config.GRIP_HANDOFF_DELTA+0.001
+    for _ in range(config.GRIP_HANDOFF_READS-1):
+        rt._await_confirm({},0); assert rt.state=='AWAIT_CONFIRM'
+    rt._await_confirm({},0)
+    assert rt.state=='DONE' and ('gripper',config.GRIP_OPEN_US) in arm.pulses
+
+
+def test_one_noisy_reading_is_not_a_handoff():
+    import types
+    arm=_FakeArm(); fb=[0.300]
+    rt=RetrievalTask(types.SimpleNamespace(timed_move_active=False,stop=lambda: None),arm,_FakeDetector(),
+                     voice=types.SimpleNamespace(speak=lambda s: None,pending_commands=__import__('queue').Queue()))
+    rt.feedback=lambda: fb[0]
+    rt.start('sports ball'); rt._fb_hold=0.300; rt._handoff_hits=0
+    rt._confirm_deadline=__import__('time').time()+60; rt.state='AWAIT_CONFIRM'
+    for v in (0.310,0.300,0.310,0.300):
+        fb[0]=v; rt._await_confirm({},0)
+    assert rt.state=='AWAIT_CONFIRM'

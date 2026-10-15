@@ -178,6 +178,7 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
 - **"Wave hello"** / **"Say hi"** — raises the arm and waves.
 - **"Stow your arm"** / **"Put your arm away"** — moves it to the rest position, opening the
   elbow first so it doesn't hit him. If the arm strains, he lets it go limp and says so.
+  If the arm switch (SW-A) is off, he says "My arm power is switched off" instead of moving it.
 - **Teaching him an arm position:** say **"teach your arm"**, then move one joint at a time:
   **"shoulder up/down"**, **"elbow up/down"**, **"wrist up/down"**, **"wrist left/right"**,
   **"arm left/right"** (turns the base), **"open/close your hand"**. **"More"** repeats the last

@@ -126,3 +126,11 @@ def test_feedback_that_does_not_read_open_at_the_start_is_not_trusted():
     sent.clear()
     gc=grip.GripCloser(sent.append,lambda: config.GRIP_FB_OPEN_RATIO+0.01)
     assert gc.step() is None and sent==[]                 # a sane open reading: normal close
+
+
+def test_handoff_is_the_jaw_closing_not_any_change():
+    # 2026-10-15: the jaw CLOSES (ratio rises) when the object is pulled out; opening is not a take
+    assert not grip.released_by_person(0.30,0.30-config.GRIP_HANDOFF_DELTA*2)
+    # the squeeze travel is ~0.010; the threshold must sit well inside it
+    travel=config.GRIP_SQUEEZE_US*config.GRIP_FB_PER_US
+    assert 0.003<config.GRIP_HANDOFF_DELTA<0.8*travel

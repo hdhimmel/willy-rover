@@ -402,6 +402,9 @@ class RetrievalTask:
         dist_cm,_=self.detector.localize(det)
         if dist_cm>config.RETRIEVAL_PERSON_MAX_RANGE_CM: return
         if self.voice: self.voice.speak("Here you go — say 'got it' once you have it.")
+        # Hand-off baseline taken now, not at the grasp: carrying can shift the object in the jaws.
+        if self._fb_hold is not None: self._fb_hold=self.feedback() or self._fb_hold
+        self._handoff_hits=0
         self._confirm_deadline=time.time()+config.RETRIEVAL_HANDOFF_WAIT_S
         self.state='AWAIT_CONFIRM'
 
@@ -419,8 +422,11 @@ class RetrievalTask:
                 pass
         # FR-1700-006: sensed hand-off -- the jaw is held GRIP_SQUEEZE_US past the object, so it
         # moves when the person pulls the object out.
-        if not confirmed and grip.released_by_person(self._fb_hold,self.feedback()):
-            confirmed=True; log.info('Hand-off sensed: the gripper jaw moved as the object was taken')
+        if not confirmed:
+            hit=grip.released_by_person(self._fb_hold,self.feedback())
+            self._handoff_hits=getattr(self,'_handoff_hits',0)+1 if hit else 0
+            if self._handoff_hits>=config.GRIP_HANDOFF_READS:
+                confirmed=True; log.info('Hand-off sensed: the gripper jaw closed as the object was taken')
         if confirmed:
             self.arm.set_pulse('gripper',config.GRIP_OPEN_US)  # release, to the measured open
             self.state='DONE'

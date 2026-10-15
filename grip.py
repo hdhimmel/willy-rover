@@ -106,9 +106,10 @@ def camera_check(detect,spot_xy,frames=None,radius=None):
 
 def released_by_person(fb_at_hold,fb_now):
     """FR-1700-006 hand-off sensing: with the jaw held GRIP_SQUEEZE_US past the object, pulling the
-    object out lets the jaw move -- the feedback changes. True once it has moved enough."""
+    object out lets the jaw CLOSE that last bit -- the feedback rises (open 0.19, closed 0.45).
+    True for one reading that has closed enough; the caller wants several in a row."""
     if fb_at_hold is None or fb_now is None: return False
-    return abs(fb_now-fb_at_hold)>=config.GRIP_HANDOFF_DELTA
+    return fb_now-fb_at_hold>=config.GRIP_HANDOFF_DELTA-1e-9
 
 
 def _ramp(joint,a,b,last_delay=0.3,step=None,dt=None):

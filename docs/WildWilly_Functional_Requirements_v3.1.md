@@ -666,8 +666,12 @@ route closed on 2026-08-28** when 0x44 moved upstream to the +12V main input,
 reopening the motor side of G-1. ✅ **CLOSED — hardware
 2026-09-08/14, software 2026-09-15.** 0x45 now sits on the +12V bus (measured 11.174V against
 an owner-metered pack of 11.36V) and `brain.py::_check_motor_rail()` reads it via the
-`'bus_12v'` key, pinned by `tests/test_motor_rail_identity.py`. The arm side (SW-A)
-still needs either a new INA260 or a direct switch-state sense.
+`'bus_12v'` key, pinned by `tests/test_motor_rail_identity.py`. ✅ **Arm side (SW-A) closed in
+software 2026-10-15:** `brain._check_arm_rail()` reads 0x44 (the 6V arm rail, which SW-A
+collapses); below `ARM_RAIL_MIN_V` (4.0 V) for `ARM_RAIL_GRACE_S` it logs `ARM_POWER_OFF`, stops
+any arm work, releases the PWM (so the arm cannot snap back to a held pose when power returns)
+and refuses arm requests with "My arm power is switched off." The start-up check names it.
+`tests/test_arm_rail.py`. Not yet run on the rover with SW-A thrown.
 SW-M and SW-A are branch switches, not the E-stop. **There is no mushroom switch:
 the E-stop is the main power switch** (owner, 2026-10-02), which takes everything
 down, the Pi included.
@@ -810,8 +814,11 @@ free-travel curve and `_await_confirm()` uses it: jaw stalled short of its
 command = holding; jaw jumped back to its command = taken.
 ✅ **Software half built 2026-10-08, not yet run on the rover:** `_await_confirm()` now calls
 `grip.released_by_person()` — the jaw is held 40 µs past the object, so it moves when the
-person takes it. Feedback is read as wiper ÷ arm rail. The thresholds are starting values
-until the A2 curve has been run on the new ADS1115.
+person takes it. Feedback is read as wiper ÷ arm rail. ✅ **Thresholds set 2026-10-15** from
+the calibration (open 0.189 / closed 0.451 over 1150–2150 µs, re-read 10-15 as 0.195 / 0.46):
+the 40 µs squeeze is ~0.010 of travel, so a take = the jaw **closing** by ≥ 60% of that
+(`GRIP_HANDOFF_DELTA` ≈ 0.0063) on `GRIP_HANDOFF_READS` (3) readings in a row, measured from a
+baseline taken at the hand-off, not at the grasp. Not yet run live (fetch still off).
 
 **G-5 --- watchdog and tick-overrun thresholds are inconsistent.**
 `willy-rover.service` now sets `WatchdogSec=500ms`, which requires the process

@@ -39,6 +39,10 @@ def failures(b):
     chk('encoders',lambda: None if b.encoders.is_healthy else 'not reporting')
     chk('battery reading',lambda: None if b.adc.battery_volts>0 else 'not reporting')
     chk('current monitors',lambda: None if b.current.is_healthy else 'not reporting')
+    def arm_power():
+        v=b.current.rail('arm_6v')['voltage_v']
+        if v<config.ARM_RAIL_MIN_V: return f'switched off ({v:.1f} V)'
+    chk('arm power',arm_power)
     def front_cam():
         d=getattr(b,'detector',None)
         if d is None or not getattr(d,'available',False): return 'not available'

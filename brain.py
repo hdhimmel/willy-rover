@@ -358,6 +358,8 @@ class RoverBrain:
         self._stuck_alert_t=0.0; self._stuck_alert_count=0
         # Motor-power-loss detection (2026-08-24) -- see _check_motor_rail().
         self._motor_rail_low_since=None; self._motor_rail_lost=False
+        # Arm-power (SW-A) detection, 2026-10-15 -- see _check_arm_rail().
+        self._arm_rail_low_since=None; self._arm_rail_lost=False
         # Encoder-rail (R5) warning, 2026-10-01 -- see _check_r5(). Warn only, never a stop.
         self._r5_low_since=None; self._r5_low=False
         self._bat_halt_since=None   # battery-tier halt confirmation clock, see _battery_halt()
@@ -1116,6 +1118,7 @@ class RoverBrain:
         motor_rail_msg=self._check_motor_rail()
         # Encoder rail (detection only -- see _check_r5); feeds _upd's prefix and _stall_reason.
         self._check_r5()
+        self._check_arm_rail()
         self._check_arm_current()
         self._check_sonar_channels()
         self._check_uncommanded_motion()
@@ -1473,6 +1476,8 @@ class RoverBrain:
         if cmd.get('intent')=='retrieve' and not config.ENABLE_RETRIEVAL_TASK:
             log.info('Voice retrieve refused: ENABLE_RETRIEVAL_TASK is off')
             self._say("I can't fetch things yet. My arm isn't safe for that.")
+        elif cmd.get('intent')=='retrieve' and self._arm_power_refused():
+            pass
         elif cmd.get('intent')=='retrieve':
             target=cmd.get('args',{}).get('object','object')
             ok,msg=self.retrieval.start(target)
@@ -2091,6 +2096,7 @@ class RoverBrain:
         return int(self.arm.pulse('shoulder') if self.arm.was_driven('shoulder') else config.ARM_POSE_REST['shoulder'])
 
     def _start_arm_sequence(self,plan):
+        if self._arm_power_refused(): return
         self._wave_seq=plan; self._wave_step=0; self._wave_deadline=None; self._go('WAVE')
 
     def _start_wave(self):
@@ -2274,6 +2280,7 @@ class RoverBrain:
         self._start_arm_sequence(self._rest_plan(self._shoulder_now(),self._arm_now('elbow')))
 
     def _start_pick_lineup(self,cls,colour,spoken):
+        if self._arm_power_refused(): return
         ok,msg=self.retrieval.start(cls,pick_only=True,colour=colour)
         if ok:
             self._say(f"Lining up on the {spoken}."); self._go('RETRIEVE')
@@ -2760,6 +2767,43 @@ class RoverBrain:
             log.error(f'MOTOR POWER LOST — +12V motor bus reads {v:.2f}V (E-stop or SW-M cut?). '
                       f'Motion commands will have no effect until power returns.')
         return f'MOTOR POWER LOST ({v:.2f}V)'
+
+    def _check_arm_rail(self):
+        """G-1 arm side (2026-10-15): SW-A cuts the 6V arm converter's input, so INA260 0x44 on the
+        arm rail reads the drop. Before this, a switched-off arm took commands silently and every
+        arm request just did nothing. On a cut: stop any arm work and release the PWM (the arm has
+        already fallen -- its servos have no power -- and a held pulse would make it jump back to
+        that pose the moment power returns). Arm requests are refused while it lasts
+        (_arm_power_refused)."""
+        try: v=self.current.rail('arm_6v')['voltage_v']
+        except Exception: return       # monitor unreadable -- _check_health() owns that
+        now=time.time()
+        if v>=config.ARM_RAIL_MIN_V:
+            if self._arm_rail_lost:
+                log.warning(f'Arm power RESTORED ({v:.2f}V) -- the arm stays limp until asked to move')
+            self._arm_rail_low_since=None; self._arm_rail_lost=False
+            return
+        if self._arm_rail_low_since is None:
+            self._arm_rail_low_since=now; return
+        if self._arm_rail_lost or now-self._arm_rail_low_since<config.ARM_RAIL_GRACE_S: return
+        self._arm_rail_lost=True
+        log_event(log,'ARM_POWER_OFF',severity='warning',subsystem='arm',status='lost',volts=f'{v:.2f}')
+        log.warning(f'ARM POWER OFF -- arm rail reads {v:.2f}V (SW-A off?). Arm requests refused.')
+        if self.retrieval.active: self.retrieval.abort('arm power off')
+        self._release_after_seq=False; self._pick=None; self._pick_after_stow=None
+        if self._state in ('WAVE','RETRIEVE'):
+            self._wave_seq=[]; self._wave_step=0; self._wave_deadline=None
+            self.safety.emergency_stop('arm power off')
+            self._go('IDLE')
+        try: self.arm.release()
+        except Exception: pass
+
+    def _arm_power_refused(self):
+        """True (and says why) when the arm rail is off -- checked by every arm request."""
+        if not self._arm_rail_lost: return False
+        log.info('Arm request refused: arm power is off')
+        self._say('My arm power is switched off.')
+        return True
 
     def _check_arm_current(self):
         """FR-700-001: release the arm when the 6V arm rail stays above ARM_CURRENT_LIMIT_A for

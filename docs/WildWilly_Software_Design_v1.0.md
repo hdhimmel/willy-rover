@@ -172,6 +172,9 @@ Order within `_tick()`:
 8. **Detection checks**, each reporting and only `_check_arm_current()` acting:
    - `_check_motor_rail()` — +12V bus (INA260 0x45) below `MOTOR_RAIL_MIN_V` (6.0 V) for
      `MOTOR_RAIL_GRACE_S` → logged and shown on the face (SW-M motor-cut observability).
+   - `_check_arm_rail()` (2026-10-15) — 6V arm rail (0x44) below `ARM_RAIL_MIN_V` (4.0 V) for
+     `ARM_RAIL_GRACE_S` → `ARM_POWER_OFF`: arm work stopped, PWM released, arm requests refused
+     (`_arm_power_refused()`, "My arm power is switched off.") until the rail returns.
    - `_check_r5()` — Pico A's R5-low flag past `ENCODER_R5_GRACE_S` (0.5 s) → status prefix
      `⚠ENCODER RAIL LOW`; stall stops name the rail. No stop of its own.
    - `_check_arm_current()` — arm rail above `ARM_CURRENT_LIMIT_A` (2.5 A) for
@@ -904,7 +907,7 @@ cut produces, logs it and shows it on the face; detection only. Rail identities:
 R2 5V, 0x44 = R3 6V arm, 0x45 = +12V bus** (`INA260_5V_ADDR`, `INA260_ARM_6V_ADDR`,
 `INA260_BUS_12V_ADDR`, rail keys `steering_5v`, `arm_6v`, `bus_12v`);
 `tests/test_motor_rail_identity.py` pins them. The arm-rail collapse a SW-A cut produces is
-readable on 0x44 but not monitored.
+watched by `_check_arm_rail()` (2026-10-15), which also acts: see the detection checks above.
 
 **S-2 — Encoder sampling. Closed by Pico A.** Decode is in PIO on Pico A, signed ×2 (both
 edges of Phase A, Phase B sampled at each), 763 counts per wheel revolution; the Pi reads

@@ -927,7 +927,15 @@ GRIP_FB_MIN_DELTA=0.004       # ratio change that counts as "the jaw moved" over
 GRIP_MIN_TRAVEL_US=90         # ignore the first few steps (servo starting to move)
 GRIP_SQUEEZE_US=40            # hold this far past where the jaw stopped: grips, and lets hand-off be sensed
 GRIP_UNSENSED_US=1800         # no feedback: close only this far (well short of the 2210 stall)
-GRIP_HANDOFF_DELTA=0.01       # feedback change while holding that means the person took it
+# Hand-off (FR-1700-006), set 2026-10-15 from the 10-11 calibration (re-checked 10-15: open 0.195,
+# closed 0.46): ~0.00026 ratio per us, so the GRIP_SQUEEZE_US the jaw is held past the object is
+# ~0.010 of travel when the object is pulled out. The old 0.01 threshold needed ALL of it -- a
+# take could easily read short. Now 60% of it, toward CLOSED only (the jaw closes when the object
+# leaves), on GRIP_HANDOFF_READS readings in a row, measured from the hold at the hand-off
+# itself, not from the grasp (carrying can shift the object in the jaws).
+GRIP_FB_PER_US=(0.451-0.189)/(2150-1150)
+GRIP_HANDOFF_DELTA=round(0.6*GRIP_SQUEEZE_US*GRIP_FB_PER_US,4)   # ~0.0063
+GRIP_HANDOFF_READS=3
 GRIP_RAIL_MIN_V=5.0           # arm rail below this = no trustworthy ratio
 # Reach-down pose for the floor, MEASURED 2026-10-13 with the owner: upper arm flat forward over
 # the top, forearm straight down, hand at the floor just in front of the right-front wheel; held
@@ -1170,6 +1178,10 @@ INA_FRESH_S=1.0   # an INA260 rail older than this is NOT a reading (sensors.fre
 BUS_TO_PACK_DROP_V=0.16   # F1 + SW-MAIN + Q1 between the pack and the 0x45 bus monitor. Measured 0.157V
                           # 2026-10-10 (12.23 metered vs 12.073 bus) and 0.16V 10-07, motors idle; was 0.08
 MOTOR_RAIL_GRACE_S=1.0            # sustained below threshold before it's reported, not a blip
+# Arm power (SW-A) seen on INA260 0x44, 2026-10-15 (brain._check_arm_rail). The rail sits at ~6.04 V
+# and dips toward ~5.5 V on a servo stall; a switched-off converter reads near 0.
+ARM_RAIL_MIN_V=4.0
+ARM_RAIL_GRACE_S=1.0
 ENABLE_STUCK_ALERT_EMAIL=True
 STUCK_ALERT_COOLDOWN_S=600.0      # min seconds between stuck alerts (10 min)
 STUCK_ALERT_MAX_PER_SESSION=5     # hard cap per service run, regardless of cooldown

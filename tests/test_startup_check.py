@@ -12,7 +12,8 @@ def _brain(**over):
     tof=types.SimpleNamespace(available=True,profile=object())
     b=types.SimpleNamespace(
         sonars=types.SimpleNamespace(is_healthy=True,failed_channels={},tof=tof,tof_rear=tof),
-        imu=ok,encoders=ok,current=ok,adc=types.SimpleNamespace(battery_volts=11.8),
+        imu=ok,encoders=ok,adc=types.SimpleNamespace(battery_volts=11.8),
+        current=types.SimpleNamespace(is_healthy=True,rail=lambda n: {'voltage_v':6.04,'current_a':0.1}),
         detector=types.SimpleNamespace(available=True,_hailo_backend=True,capture_frame=lambda: 'frame'),
         rear_cam=types.SimpleNamespace(grab=lambda: 'frame'),
         said=[],display=types.SimpleNamespace(update_state=lambda *a: None))
