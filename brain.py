@@ -1905,14 +1905,33 @@ class RoverBrain:
             log.warning('Experience not stored',exc_info=True)
 
     def _note_sightings(self,dets):
-        """Remember seeing a person or a dog -- at most once per EXPERIENCE_SIGHTING_GAP_S each."""
+        """Remember seeing a person or a dog -- at most once per EXPERIENCE_SIGHTING_GAP_S each.
+        2026-10-15 (FR-2400): movable things too (memory.things), and the time each was last seen
+        BEFORE this sighting goes to self._engage_prev for engagement ('back after hours',
+        'new here'). Read before the update, or every sighting would look fresh."""
         now=time.time(); last=self.__dict__.setdefault('_sighted',{})
+        prev=self.__dict__.setdefault('_engage_prev',{})
+        room=None
+        try:
+            p=self.world_model.get_robot_pose(); r=self.world_model.get_room(p.x,p.y); room=r.name if r else None
+        except Exception: pass
         for d in dets:
             c=d.get('class')
+            if c in config.ENGAGE_THING_CLASSES:
+                key=f'thing:{c}@{room}'
+                if now-last.get(key,0.0)>=config.EXPERIENCE_SIGHTING_GAP_S:
+                    last[key]=now
+                    try: prev[key]=self.memory.upsert_thing(c,room,at=now)
+                    except Exception: log.warning('Thing sighting not recorded',exc_info=True)
+                continue
             if c not in config.EXPERIENCE_SIGHT_CLASSES: continue
             if now-last.get(c,0.0)<config.EXPERIENCE_SIGHTING_GAP_S: continue
             last[c]=now
-            self._experience('saw',self._called(c))
+            name=self._called(c)
+            try:
+                e=self.memory.last_experience(name,'saw'); prev[f'saw:{name}']=e['at'] if e else None
+            except Exception: pass
+            self._experience('saw',name)
 
     @staticmethod
     def _when(t):
@@ -2467,8 +2486,9 @@ class RoverBrain:
             return getattr(self,'_cam_brake_cm',None)
         self._cam_brake_t=now
         try:
-            dets=self.detector.detect(classes=list(config.CAMERA_BRAKE_CLASSES))
-            cm=arm_ik.obstacle_cm(dets)
+            dets=self.detector.detect()             # all classes: the brake filters, engagement reads all (2026-10-15)
+            self._last_dets=(time.time(),dets)
+            cm=arm_ik.obstacle_cm([d for d in dets if d.get('class') in config.CAMERA_BRAKE_CLASSES])
         except Exception:
             log.warning('Camera brake: detect failed',exc_info=True); cm=None; dets=[]
         try: self._note_sightings(dets)      # memory only -- must never cost the brake

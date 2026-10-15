@@ -24,6 +24,7 @@ class FaceRecognizer:
         self._scan=threading.Event(); self._running=False; self._thread=None
         self._lock=threading.Lock()
         self.available=False
+        self.frame_w=1280                       # width of the last scanned frame (2026-10-15)
         if not config.ENABLE_FACE_RECOGNITION: return
         root=os.path.dirname(os.path.abspath(__file__))
         det=os.path.join(root,config.FACE_DET_MODEL_PATH); rec=os.path.join(root,config.FACE_REC_MODEL_PATH)
@@ -70,7 +71,9 @@ class FaceRecognizer:
             if not self._scan.wait(1.0): continue
             if not self._running: break
             try:
-                faces=self.embed(self._frame_source())
+                frame=self._frame_source()
+                if frame is not None: self.frame_w=int(frame.shape[1])   # 2026-10-15
+                faces=self.embed(frame)
             except Exception:
                 log.warning('Face scan failed',exc_info=True); faces=[]
             try: self._results.get_nowait()          # single slot: newest result wins
