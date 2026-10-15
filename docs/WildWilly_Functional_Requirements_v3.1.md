@@ -405,6 +405,11 @@ Requirements are implemented and unit-tested off-hardware unless noted.
   FR-2300 GPS             Specified only          No code. PA1010D on order
                                                   (I²C, 0x10).
 
+  FR-2400 Engagement      Built 2026-10-15,       engage.py, engage_words.py,
+                          not yet live-verified   brain.py wiring; greets,
+                                                  asks and remarks while IDLE
+                                                  or roaming.
+
   M-009 Thermal           Built 2026-10-08,       thermal.py: SoC temperature
                           not run hot             and fan tach, log, spoken
                                                   warning, face readout.
@@ -627,6 +632,10 @@ hardware; it is not evidence of live behaviour.
   requests                (2026-10-02)             (2026-10-02)
 
   FR-2300 GPS             --- (not built)          ---
+
+  FR-2400 Engagement      engage.py,               test_engage.py,
+                          engage_words.py          test_engage_words.py,
+                          (2026-10-15)             test_memory_things.py
 
   M-009 Thermal           thermal.py               test_thermal.py
   -----------------------------------------------------------------------
@@ -4153,7 +4162,8 @@ bands — recognised / uncertain / unknown (FR-2100-003) — pending-is-inert en
 OpenCV **YuNet** detection + **SFace** 128-d embedding on the **CPU** (not
 ArcFace/SCRFD), models in `models/` — **gitignored, not in the repo**; missing models
 or no camera → recognition disables itself and nothing else changes. Its own thread,
-single-slot result queue, one frame every `FACE_SCAN_S` (2 s) **from `IDLE` only**.
+single-slot result queue, one frame every `FACE_SCAN_S` (2 s) **from `IDLE` only** (since
+2026-10-15 also in `ROAM`/`SLOW`, for FR-2400).
 `brain.py` and `voice.py` now import and wire it; `config.ENABLE_FACE_RECOGNITION` is
 **True**. Distance bands re-based for SFace: **`FACE_MATCH_MAX_DISTANCE` 0.55,
 `FACE_STRANGER_MIN_DISTANCE` 0.78** (was 0.40/0.60) — **provisional**, to be tuned on real
@@ -4200,13 +4210,16 @@ already enrolled unless `--force`. **Pets are not built.** Per-criterion notes b
     **PENDING**, then *"Nice to meet you … Howard will confirm you by email"* and a wave
     from the next `IDLE` tick.
 
--   **FR-2100-002 (greeting).** A recognised person is greeted by name once per
+-   **FR-2100-002 (greeting).** *Superseded by FR-2400 (2026-10-15): now FR-2400-001, once per
+    visit (`ENGAGE_VISIT_S`); `FACE_GREET_SESSION_S` is removed.* A recognised person is greeted by name once per
     session (`FACE_GREET_SESSION_S`). Verified by walking in and out of frame and
     confirming a single greeting.
     ✅ **Built 2026-10-02:** *"Hi, <name>!"* via `identity.greeting_due()`; only a frame
     with exactly one face is matched.
 
--   **FR-2100-003 (strangers).** Matching resolves into **three bands**, not two:
+-   **FR-2100-003 (strangers).** *Superseded by FR-2400 (2026-10-15) for what he says to a
+    stranger (FR-2400-002); the three bands and the no-vector rule stand. "Who are you?",
+    "Stranger danger!" and `FACE_GREET_SESSION_S` below are historical.* Matching resolves into **three bands**, not two:
     recognised (greet), uncertain (**silent**, recorded present but unnamed), and
     confidently unknown. Only the third asks "who are you?", and only an unknown name
     or no reply produces the stranger response. Announcing a stranger requires
@@ -4415,6 +4428,79 @@ stored on the rover only (gitignored `gps_home.json`); "who are your owners/pare
     biased), and a rule for what to do when the fix drops out on the way. Until those exist,
     "go home" outdoors must refuse and say why, rather than attempt it. Indoors, "go home" means
     the charger/dock, which is a separate, deferred feature.
+
+# FR-2400 Engagement: Greeting, Asking and Remarking
+
+Added 2026-10-15 (owner: "make Willie more engaging with people and the environment").
+Design: `docs/superpowers/specs/2026-10-15-engagement-design.md`. **Built 2026-10-15, not yet
+live-verified** (`engage.py`, `engage_words.py`, `brain.py`; `ENABLE_ENGAGEMENT`). Supersedes
+the greeting and stranger text of FR-2100-002/003. Known limit: "things" are the classes his
+detector knows (`ENGAGE_THING_CLASSES`, movable COCO classes); a novel object is invisible to him.
+
+  -----------------------------------------------------------------------
+  Requirement ID    Requirement                  Priority     Verification
+  ----------------- ---------------------------- ------------ ------------
+  FR-2400-001       Greet a recognised person    Medium       Test
+                    once per visit
+
+  FR-2400-002       Say hello to a stranger and  Medium       Test
+                    ask their name
+
+  FR-2400-003       Ask what room he is in       Low          Test
+
+  FR-2400-004       Ask whose a kind of thing    Low          Test
+                    is, once
+
+  FR-2400-005       Recall something he          Low          Test
+                    remembers
+
+  FR-2400-006       Remark on a change in a      Low          Test
+                    named room
+
+  FR-2400-007       Ask a known person about     Low          Test
+                    their day
+
+  FR-2400-008       Engage only when safe and    High         Test
+                    quiet; never drive on his
+                    own
+  -----------------------------------------------------------------------
+
+# Acceptance Criteria
+
+-   **FR-2400-001 (greet).** A recognised face not yet greeted this visit gets one greeting by
+    name (with when he last saw them if that was over `ENGAGE_CALLBACK_MIN_H`, 2 h, ago). A visit
+    ends after `ENGAGE_VISIT_S` (30 min) unseen. A greeting ignores the 5-minute gap but
+    **starts** it, so no question follows straight after a hello.
+-   **FR-2400-002 (stranger).** An UNKNOWN face on `ENGAGE_STRANGER_CONFIRM_N` (3) consecutive
+    scans, not asked this visit: *"Hi, I'm Willie! What's your name?"* and one prompted listen.
+    The name is kept **for the visit only** (`set_current_person`); no face vector is stored
+    (FR-2100-005/006 unchanged). An enrolled name keeps "Sorry, I didn't recognise you". The old
+    "Who are you? ... Stranger danger!" is gone.
+-   **FR-2400-003 (room).** In no named room, with a person in view: "What room is this?", at
+    most once per `ENGAGE_ASK_ROOM_GAP_S` (1 h) and once per 1 m map cell per day. The answer
+    names the room at his pose.
+-   **FR-2400-004 (thing).** A thing of `ENGAGE_THING_CLASSES` and a person in view: "Whose X is
+    that?" **only** if he has no named thing of that kind in *any* room. The answer is stored as
+    a label and owner ("Storm's ball").
+-   **FR-2400-005 (callback).** A named thing last seen here over 2 h ago, or a stored note
+    about a greeted person, is mentioned ("last time you told me you ...").
+-   **FR-2400-006 (change).** Only in a named room: a kind of thing seen here for the first time
+    while *that kind is already known in another room* ("I haven't seen a X in the kitchen
+    before"), or a named thing of this room unseen for `ENGAGE_MISSING_H` (4 h) after he has been
+    in the room `ENGAGE_LOOK_ROOM_S` (60 s).
+-   **FR-2400-007 (person).** A known person greeted at least `ENGAGE_ASK_PERSON_AFTER_S` (2 min)
+    ago and still in view: "How's your day going?". The answer is kept as a note (30-day
+    retention, like experiences) and offered to the cloud chat context.
+-   **FR-2400-008 (gates).** Only in `IDLE`/`ROAM`/`SLOW`; never during a task, AVOID, STUCK, a
+    fault, a non-normal battery tier, privacy mode, or while voice is busy. Topics other than
+    greetings need a person in view and the 5-minute gap (`ENGAGE_GAP_S`); no (kind, subject)
+    repeats in a day, and choosing a topic counts as said even if never spoken. The stop goes
+    through `SafetyController` and the turn through `Rotation` (refused turn: he speaks from
+    where he is). New state `ENGAGE`, at most `ENGAGE_MAX_S` (20 s). **"Stop" (voice or screen)
+    ends it**, also when said while he waits for an answer (it is not taken as the answer), and
+    a voice stop leaves him `IDLE`, not resuming a roam. The cloud gets a text fact sheet only,
+    never an image (FR-1800); slow or offline (3 s) uses `ENGAGE_TEMPLATES`. Off switch:
+    `ENABLE_ENGAGEMENT=False`.
 
 # Mission-Level Functional Requirements (M-001--M-020)
 

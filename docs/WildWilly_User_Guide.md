@@ -54,6 +54,35 @@ me to shut down?".
 **Yes lasts until he's restarted.** To take it back, say **"stop"** — that halts him *and*
 revokes permission. He always starts up without permission, so a reboot never leaves him roaming.
 
+## Willie starts conversations
+
+When he is idle or exploring, Willie now speaks first. He stops, turns toward you or the thing he
+means, says one short sentence, and (for a question) beeps and listens.
+
+**What he says:**
+- **A greeting** when he sees someone he knows: *"Hi Carolyn!"* (or *"…I last saw you yesterday
+  morning"*). Once per visit; a visit ends after 30 minutes of not seeing you.
+- **A stranger:** *"Hi, I'm Willie! What's your name?"* He remembers the name only until the
+  visit ends and does not learn the face.
+- **Questions:** *"What room is this?"*, *"Whose ball is that?"* (once per kind of thing), and
+  later *"How's your day going?"*.
+- **Remarks:** things he remembers (*"There's Storm's ball. I last saw it this morning."*) and
+  changes (*"I haven't seen a ball in the kitchen before."*).
+
+At most one remark or question every 5 minutes (a greeting also starts that wait), and never the
+same one twice in a day. He needs someone in view for anything but a greeting. He stays quiet
+while he is doing a job, listening or talking, in privacy mode, or on a low battery.
+
+**To answer:** wait for the **beep**, then speak while the **green circle** is on. No "Hey Willie"
+needed. If you don't answer he drops it. Say **"stop"** to end it.
+
+**Answers are remembered:** room names, who owns what (*"it's Storm's"*) and what you tell him about
+your day, kept for 30 days (room names stay). Say **"forget everyone"** to wipe faces.
+
+**To turn it off:** set `ENABLE_ENGAGEMENT=False` in `config.py` and restart him.
+
+---
+
 ## Waking Willie up
 
 Say **"Hey Willie"**, then your request. Wait for him to answer before the next one.
@@ -151,9 +180,9 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
 **People:**
 - **"This is Carolyn"** — with that person in front of him, he learns their face and greets
   them by name afterwards. New faces need Howard's approval by email.
-- **Someone he doesn't know:** if he's confident he has never seen a person, he asks who they
-  are. If he's only unsure (bad light, a turned head) he stays quiet rather than treat a family
-  member as a stranger.
+- **Someone he doesn't know:** if he's confident he has never seen a person, he says hello and
+  asks their name (see "Willie starts conversations"). If he's only unsure (bad light, a turned
+  head) he stays quiet rather than treat a family member as a stranger.
 - **"Forget everyone"** — deletes every face he has learned.
 
 **Remembering things:**

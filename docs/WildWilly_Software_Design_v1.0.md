@@ -63,7 +63,7 @@ stubbed, disabled, approximate or not yet run on the rover, it says so.
 | `pursuit_task.py` | 111 | Come-here and follow-me sub-FSM |
 | `arm.py` | 109 | Arm servo primitives; idle release; `center_all()` excludes the elbow |
 | `odometry.py` | 99 | Dead-reckoning pose; optional IMU-yaw rotation source |
-| `recognition.py` | 97 | FR-2100 embeddings: OpenCV YuNet detection + SFace 128-d embedding on the CPU, own thread, `IDLE`-only scan every `FACE_SCAN_S`; `capture_for_enrolment()`. Frames are embedded and dropped. Disables itself if models or camera are missing |
+| `recognition.py` | 97 | FR-2100 embeddings: OpenCV YuNet detection + SFace 128-d embedding on the CPU, own thread, scan every `FACE_SCAN_S` in `IDLE`/`ROAM`/`SLOW`; `capture_for_enrolment()`. Frames are embedded and dropped. Disables itself if models or camera are missing |
 | `diagnostics.py` | 96 | Standalone read-only self-test |
 | `remote_cmd.py` | 90 | Inbound Home Assistant commands on `:8765` (S-8) |
 | `smart_home.py` | 84 | Home Assistant REST client (outbound; disabled) |
@@ -907,6 +907,56 @@ drops placeholder `args` values; prompts carry no angle-bracket placeholders.
 
 **Hailo STT** (`hailo_stt.py`, `ENABLE_HAILO_STT=False`) is scaffolding only: it needs a
 Whisper HEF compiled on an x86 machine (the Dataflow Compiler does not run on ARM).
+
+### 7.1 Engagement (FR-2400, 2026-10-15)
+
+`engage.py` decides, `engage_words.py` writes the words, `brain.py` acts. `ENABLE_ENGAGEMENT`
+turns it off (face scanning and `note_seen` stay).
+
+- **Flow.** `_engage_step()` runs each tick in `IDLE`/`ROAM`/`SLOW`: `_face_tick()` returns
+  `[FaceSeen(band, name, bearing)]` for a new scan (or `None`), IDLE runs a detection every
+  `ENGAGE_LOOK_S` (2 s; roaming reuses `_last_dets`), then `Engagement.tick(state, dets, faces,
+  pose, room, busy, prev_seen)` returns at most one `Topic(kind, subject, facts, question,
+  bearing_deg)`. `prev_seen` is the last-seen time of each person/thing from before this tick's
+  sightings (`saw:<name>`, `thing:<kind>@<room>`), filled by `_note_sightings`.
+- **`ENGAGE` state.** `_start_engage()` stops through `SafetyController`, turns toward the target
+  through `start_rotation(..., then='ENGAGE')` if over `ENGAGE_TURN_MIN_DEG` (a refused turn:
+  speak from here), then `_engage_tick` holds still while a thread runs `engage_words.line()` and
+  `voice.speak`; a question follows with `voice.prompt_listen(cb, FACE_ASK_TIMEOUT_S)`. The answer
+  goes to `extract()` and `_engage_store()`. `_engage_end()` returns to the previous state
+  (`SLOW` resumes as `ROAM`). Limit `ENGAGE_MAX_S` (20 s). Workers re-check
+  `self._engage_topic is t` under a lock so a stop or timeout cannot be followed by speech.
+- **Stop.** "Stop" while waiting for an answer is not taken as the answer: it sets
+  `stop_requested`. A voice or screen stop ends `ENGAGE` and leaves him `IDLE`.
+
+| # | kind | fires when | gap? |
+|---|------|------------|------|
+| 1 | `greet_known` | RECOGNISED face not greeted this visit | no (starts it) |
+| 2 | `greet_stranger` | UNKNOWN on 3 consecutive scans | no (starts it) |
+| 3 | `ask_room` | in no named room, once per hour | yes |
+| 4 | `ask_thing` | thing in view, no named thing of that kind in any room | yes |
+| 5 | `callback` | named thing unseen 2 h+, or stored note on a greeted person | yes |
+| 6 | `change` | named room: kind new here but known elsewhere, or named thing missing 4 h+ | yes |
+| 7 | `ask_person` | known person greeted 2 min+ ago, still in view | yes |
+
+Rules 3-7 also need a person in view (a face, a RECOGNISED name, or a `person` detection) and are
+chosen in that order. Picking a topic adds (kind, subject) to the said-today set and starts the
+gap, spoken or not.
+
+- **Busy** = privacy on, voice busy or unavailable, battery tier not normal, or a topic open.
+- **Words.** `line()` asks `CloudAIProvider.ask_sync` for one short sentence from text facts only
+  (`ENGAGE_WORDS_TIMEOUT_S` 3 s, reply under `ENGAGE_LINE_MAX_CHARS`); slow, offline, refusal or
+  junk falls back to `ENGAGE_TEMPLATES[kind_about or kind]`, rotated. `extract()` asks for JSON per
+  kind (`name`, `room`, `label`+`owner`, `note`); offline it uses regex patterns. Names and rooms
+  that are filler ("yes", "I don't know") are rejected. Unusable answer: nothing stored, logged
+  `Engage answer not used`.
+- **Memory** (`memory_store.py`): `things(kind, label, owner, room, first_seen, last_seen)` via
+  `upsert_thing` (sightings of `ENGAGE_THING_CLASSES`) and `name_thing`; `person_notes(name, note,
+  at)` via `add_person_note`, purged with experiences. `get_context_for` adds labels and the 3
+  latest notes. A stranger's name goes to `voice.set_current_person` only; rooms are applied by
+  the tick thread (`_engage_apply_pending`).
+- **Log.** `ENGAGE` events: `start`, the end reason, `said`, `stored`. Tests:
+  `test_engage.py`, `test_engage_words.py`, `test_memory_things.py`.
 
 ---
 
