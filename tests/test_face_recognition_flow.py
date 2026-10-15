@@ -1,11 +1,12 @@
 import os,sys,subprocess
 sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# FR-2100 behaviour (built 2026-10-02), with the camera/model replaced by fixed vectors:
-#   recognised -> greeted once per session; uncertain -> silent; confidently unknown -> asked
-#   only after N in a row, only once per session, never with nobody enrolled; a claimed name
-#   resolves only an ACTIVE identity; enrolment approval only flips a pending identity;
-#   per-person facts; the voice intents.
+# FR-2100 behaviour (built 2026-10-02), with the camera/model replaced by fixed vectors.
+# 2026-10-15 (FR-2400): greetings and the stranger question moved to engage.py; _face_tick now only
+#   matches and returns FaceSeen (recognised -> note_seen + current person; uncertain -> silent,
+#   kept for enrolment). A stranger's spoken name (engage greet_stranger) resolves only an ACTIVE
+#   identity ("Sorry, I didn't recognise you", no vector), else "Nice to meet you"; no identity made.
+#   Enrolment approval only flips a pending identity; per-person facts; the voice intents.
 
 _REPO_ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -20,34 +21,35 @@ from memory_store import MemoryStore
 store=IdentityStore(os.path.join(tempfile.mkdtemp(),"id.db"))
 base=np.ones(128,dtype=np.float32)/np.sqrt(128)
 said=[]; prompts=[]; slot=[None]
-ns=types.SimpleNamespace(identity=store,_face_unknown_run=0,_face_asked_t=0.0,_face_asking=False,
-    faces=types.SimpleNamespace(available=True,set_scanning=lambda on:None,latest=lambda: slot[0]),
+met=[]
+ns=types.SimpleNamespace(identity=store,_engage_topic=None,_experience=lambda k,w: met.append(w),cloud_ai=None,
+    faces=types.SimpleNamespace(available=True,set_scanning=lambda on:None,latest=lambda: slot[0],frame_w=1280),
     voice=types.SimpleNamespace(available=True,speak=lambda t,**k:said.append(t),set_current_person=lambda n:None,
                                 prompt_listen=lambda cb,t: prompts.append(cb)),
     world_model=types.SimpleNamespace(get_robot_pose=lambda: types.SimpleNamespace(x=0,y=0),get_room=lambda x,y:None))
-for m in ("_face_tick","_stranger_answer"): setattr(ns,m,types.MethodType(getattr(RoverBrain,m),ns))
+for m in ("_face_tick","_engage_store"): setattr(ns,m,types.MethodType(getattr(RoverBrain,m),ns))
 def show(v): slot[0]=(time.time(),[((0,0,1,1),v)])
 
-# nobody enrolled: a stranger is never asked about
-for _ in range(5): show(store.vector_at_distance(base,0.95)); ns._face_tick()
-assert said==[] and prompts==[]
+slot[0]=None; assert ns._face_tick() is None                          # no new scan
+show(store.vector_at_distance(base,0.95)); f=ns._face_tick()          # nobody enrolled: UNCERTAIN, so
+assert [x.band for x in f]==[UNCERTAIN] and said==[] and prompts==[]  # engage never greets a 'stranger'
 
 store.enrol("Carolyn",[base]); store.approve("Carolyn")
-show(store.vector_at_distance(base,0.1)); ns._face_tick(); ns._face_tick()
-assert said==["Hi, Carolyn!"], said                                   # once per session
-said.clear()
-show(store.vector_at_distance(base,0.65)); ns._face_tick()           # uncertain band: silent
-assert said==[] and prompts==[]
-for i in range(config.FACE_STRANGER_CONFIRM_N-1):
-    show(store.vector_at_distance(base,0.95)); ns._face_tick()
-assert prompts==[]                                                     # not yet N in a row
-show(store.vector_at_distance(base,0.95)); ns._face_tick()
-assert said==["Hello! Who are you?"] and len(prompts)==1
+show(store.vector_at_distance(base,0.1)); f=ns._face_tick()
+assert f[0].name=="Carolyn" and said==[], (f,said)                    # greeting is engage.py's now
+show(store.vector_at_distance(base,0.65)); f=ns._face_tick()          # uncertain band: silent, kept
+assert f[0].band==UNCERTAIN and f[0].name is None and said==[] and ns._face_last_uncertain
+show(store.vector_at_distance(base,0.95)); f=ns._face_tick()          # confidently unknown, still silent
+assert [x.band for x in f]==[UNKNOWN] and said==[] and prompts==[]
+
+from engage import Topic
+t=Topic('greet_stranger','stranger',{},True,None); ns._engage_topic=t
 n_before=store.vector_count("Carolyn")
-prompts[0]("I'm Carolyn")                                             # asked from UNKNOWN band:
-assert "Oh, hi Carolyn" in said[-1] and store.vector_count("Carolyn")==n_before   # no vector added
-ns._face_asking=True; ns._stranger_answer("I'm Bob",base,UNKNOWN); assert said[-1]=="Stranger danger!"
-ns._stranger_answer(None,base,UNKNOWN); assert said[-1]=="Stranger danger!"
+ns._engage_store(t,"I'm Carolyn")                                      # claimed enrolled name:
+assert said[-1]=="Oh, hi Carolyn! Sorry, I didn't recognise you." and store.vector_count("Carolyn")==n_before
+ns._engage_store(t,"I'm Bob"); assert said[-1]=="Nice to meet you, Bob!" and met==["Bob"]
+assert "Bob" not in store.names()                                     # a name never creates an identity
+assert "Stranger danger!" not in said
 
 # enrolment approval: only flips a PENDING identity, codes are single-use
 store.enrol("Dave",[store.vector_at_distance(base,0.9)])

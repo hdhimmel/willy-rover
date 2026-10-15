@@ -1665,7 +1665,7 @@ ENABLE_FACE_RECOGNITION=True
 FACE_DET_MODEL_PATH='models/face_detection_yunet_2023mar.onnx'
 FACE_REC_MODEL_PATH='models/face_recognition_sface_2021dec.onnx'
 FACE_DET_SCORE=0.8              # YuNet confidence for a face
-FACE_SCAN_S=2.0                 # one frame every this long, IDLE only
+FACE_SCAN_S=2.0                 # one frame every this long, IDLE/ROAM/SLOW (FR-2400, 2026-10-15)
 FACE_ENROL_FRAMES=6; FACE_ENROL_S=2.0       # FR-2100-001: ~2 s of frames, one face each
 FACE_ENROL_AUTHORISED=('Howard','Carolyn')  # FR-2100-006 soft gate (deterrent, not enforcement)
 FACE_ENROL_SEEN_WINDOW_S=600

@@ -56,7 +56,7 @@ class FaceRecognizer:
                 if n>0: out.append((tuple(int(x) for x in f[:4]),v/n))
             return out
 
-    # --- background scanning (IDLE only; brain turns it on and off) ---
+    # --- background scanning (IDLE/ROAM/SLOW since 2026-10-15; brain turns it on and off) ---
     def start(self):
         if not self.available: return
         self._running=True

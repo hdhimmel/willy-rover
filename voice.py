@@ -599,6 +599,13 @@ class VoicePipeline:
     @property
     def available(self): return self._enabled
 
+    @property
+    def busy(self):
+        """2026-10-15 (FR-2400): speaking, recording or answering, or a prompted listen is open --
+        engagement must not start a new remark on top."""
+        return (self._speaking.is_set() or getattr(self,'_prompt',None) is not None
+                or getattr(self,'_in_utterance',False) or not self._speak_queue.empty())
+
     def start(self):
         if not self._enabled: return
         self._running=True
@@ -859,9 +866,9 @@ class VoicePipeline:
         # behaviour exactly -- a full VOICE_CAPTURE_MAX_S window -- whenever endpointing can't
         # decide (nothing above threshold, or a room noisy enough that nothing reads as silence).
         if self.display: self.display.update_state(state='listening',status='Listening...')
-        self._set_listening(True)
+        self._set_listening(True); self._in_utterance=True
         try: self._capture_utterance(stream,frame_len,t_wake,on_text)
-        finally: self._set_listening(False)
+        finally: self._set_listening(False); self._in_utterance=False
 
     def _set_listening(self,on):
         try:

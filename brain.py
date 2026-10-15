@@ -339,7 +339,11 @@ class RoverBrain:
         self.identity=IdentityStore()
         self.faces=FaceRecognizer(self.detector.capture_frame)
         self.email.add_approval_handler(self._approve_enrolment)
-        self._face_unknown_run=0; self._face_asked_t=0.0; self._face_asking=False
+        # FR-2400 engagement (2026-10-15) -- engage.py decides, _engage_* act.
+        from engage import Engagement
+        self.engage=Engagement(self.memory)
+        self._engage_topic=None; self._engage_prev_state=None; self._engage_thread=None
+        self._engage_prev={}; self._engage_look_t=0.0; self._last_dets=(0.0,[])
         self.witty=WittyPi()
         self._state='INIT'; self._stuck_count=0; self._last_action='none'; self._manual_action=None
         self._idle_t=0.0; self._avoid_start=0.0; self._avoid_phase=None; self._running=False
@@ -780,57 +784,140 @@ class RoverBrain:
         return min(f,max(0.0,(best-config.STAIR_STANDOFF_M)*100.0+config.DIST_STOP)),True
 
     # --- FR-2100 person recognition (2026-10-02) -----------------------------------------
-    # Personality, not security: no alert, no event log, no photo, no behaviour change on a
-    # stranger (design §5). Every bit of this runs from IDLE only and only reads the
+    # Personality, not security: no alert, no event log, no photo (design §5). Runs in
+    # IDLE/ROAM/SLOW since 2026-10-15 (FR-2400; was IDLE only) and only reads the
     # recognizer's single-slot result, so the tick thread never waits on a model.
     def _face_tick(self):
-        if not self.faces.available: return
+        """FR-2100 matching + presence; greetings moved to engage.py (FR-2400, 2026-10-15).
+        Returns [FaceSeen] for a NEW scan, or None when no new scan arrived."""
+        if not self.faces.available: return None
         self.faces.set_scanning(True)
         res=self.faces.latest()
-        if res is None or self._face_asking: return
-        _,faces=res
-        if len(faces)!=1:
-            self._face_unknown_run=0; return
-        m=self.identity.match(faces[0][1])
-        if m.band==RECOGNISED:
-            self._face_unknown_run=0
-            if self.identity.greeting_due(m.name) and self.voice.available:
-                self.voice.speak(f'Hi, {m.name}!')
-            pose=self.world_model.get_robot_pose(); room=self.world_model.get_room(pose.x,pose.y)
-            self.identity.note_seen(m.name,room.name if room else None)
-            self.voice.set_current_person(m.name)
-            return
-        if m.band==UNCERTAIN:
-            self._face_unknown_run=0
-            self._face_last_uncertain=(time.time(),faces[0][1]); return   # silent (design §5)
-        # Confidently unknown: ask, but only after FACE_STRANGER_CONFIRM_N in a row, only once
-        # per session, and never while nobody is enrolled.
-        self._face_unknown_run+=1
-        if (self._face_unknown_run>=config.FACE_STRANGER_CONFIRM_N
-                and self.identity.names(include_pending=False)
-                and time.time()-self._face_asked_t>config.FACE_GREET_SESSION_S
-                and self.voice.available):
-            self._face_unknown_run=0; self._face_asked_t=time.time(); self._face_asking=True
-            vec=faces[0][1]
-            self.voice.speak('Hello! Who are you?')
-            self.voice.prompt_listen(lambda text: self._stranger_answer(text,vec,UNKNOWN),
-                                     config.FACE_ASK_TIMEOUT_S)
+        if res is None: return None
+        from engage import FaceSeen
+        _,faces=res; out=[]; w=getattr(self.faces,'frame_w',1280) or 1280
+        pose=self.world_model.get_robot_pose(); room=self.world_model.get_room(pose.x,pose.y)
+        for box,vec in faces:
+            m=self.identity.match(vec)
+            x,_,bw,_=box; bearing=(0.5-(x+bw/2)/w)*config.CAM_FRONT_HFOV_DEG
+            if m.band==RECOGNISED:
+                self.identity.note_seen(m.name,room.name if room else None)
+                self.voice.set_current_person(m.name)
+            elif m.band==UNCERTAIN:
+                self._face_last_uncertain=(time.time(),vec)   # silent (design §5); enrolment reads it
+            out.append(FaceSeen(m.band,m.name if m.band==RECOGNISED else None,bearing))
+        return out
 
-    def _stranger_answer(self,text,vec,band):
-        """FR-2100-003. A spoken name may RESOLVE an identity, never create one. A vector is
-        only added from the UNCERTAIN band -- a stranger claiming a name must not poison it."""
-        self._face_asking=False
-        import re as _re
-        from voice import _NAME_REPLY
-        m=_NAME_REPLY.fullmatch((text or '').strip()) if text else None
-        name=m.group(1).capitalize() if m else None
-        active=self.identity.names(include_pending=False)
-        if name and name in active:
-            if band==UNCERTAIN: self.identity.add_vector(name,vec)
-            self.identity.note_seen(name); self.voice.set_current_person(name)
-            if self.voice.available: self.voice.speak(f'Oh, hi {name}! Sorry, I didn\'t recognise you.')
-            return
-        if self.voice.available: self.voice.speak('Stranger danger!')
+    # --- FR-2400 engagement (2026-10-15): stop, turn toward it, say one thing, listen once ---
+    def _engage_busy(self):
+        try: priv=not privacy.mic_enabled()
+        except Exception: priv=False
+        return (priv or getattr(self.voice,'busy',False) or not self.voice.available
+                or getattr(self,'_bat_tier','normal')!='normal' or self._engage_topic is not None)
+
+    def _engage_step(self):
+        faces=self._face_tick()
+        if not config.ENABLE_ENGAGEMENT: return
+        # Only IDLE/ROAM/SLOW get here, so a topic still set means ENGAGE/ROTATE was left some other
+        # way (a fault, a task): end it, or _engage_busy() would block engagement for good.
+        if self._engage_topic is not None: self._engage_end('interrupted')
+        now=time.time()
+        if self._state=='IDLE' and now-self._engage_look_t>=config.ENGAGE_LOOK_S:
+            self._engage_look_t=now
+            try:
+                dets=self.detector.detect(); self._last_dets=(now,dets); self._note_sightings(dets)
+            except Exception: log.warning('Engagement look failed',exc_info=True)
+        t,dets=self._last_dets
+        dets=dets if now-t<=2*config.ENGAGE_LOOK_S else []
+        pose=self.world_model.get_robot_pose(); r=self.world_model.get_room(pose.x,pose.y)
+        prev=self._engage_prev; self._engage_prev={}
+        topic=self.engage.tick(self._state,dets,faces,pose,r.name if r else None,self._engage_busy(),prev)
+        if topic is not None: self._start_engage(topic)
+
+    def _start_engage(self,topic):
+        log_event(log,'ENGAGE',subsystem='engage',kind=topic.kind,subject=topic.subject,status='start')
+        self._engage_topic=topic; self._engage_prev_state=self._state
+        self._engage_t0=time.time(); self._engage_phase='say'; self._engage_answer_text=None
+        if self._state in ('ROAM','SLOW'): self.safety.stop()
+        b=topic.bearing_deg
+        if b is not None and abs(b)>=config.ENGAGE_TURN_MIN_DEG:
+            ok,msg=self.start_rotation(b,then='ENGAGE')
+            if ok: return
+            log.info(f'Engage: not turning ({msg}); speaking from here')
+        self._go('ENGAGE')
+
+    def _engage_tick(self,d,tilt):
+        self._upd('idle','',d,tilt)
+        t=self._engage_topic
+        if t is None: return self._engage_end('no topic')
+        if time.time()-self._engage_t0>config.ENGAGE_MAX_S: return self._engage_end('timed out')
+        if self._engage_phase=='say':
+            self._engage_phase='talking'
+            self._engage_thread=threading.Thread(target=self._engage_say,args=(t,),daemon=True,name='engage')
+            self._engage_thread.start(); return
+        if self._engage_phase=='done' and not getattr(self.voice,'busy',False):
+            self._engage_end('done')
+
+    def _engage_say(self,t):
+        import engage_words
+        try:
+            text=engage_words.line(t,getattr(self,'cloud_ai',None))
+            self.voice.speak(text)
+            log.info(f'ENGAGE said kind={t.kind} subject={t.subject}: {text!r}')
+            if t.question:
+                self._engage_phase='listening'
+                self.voice.prompt_listen(lambda ans,t=t: self._engage_answer(t,ans),config.FACE_ASK_TIMEOUT_S)
+                return
+        except Exception: log.warning('Engage: saying failed',exc_info=True)
+        self._engage_phase='done'
+
+    def _engage_answer(self,t,text):
+        if self._engage_topic is not t:
+            log.info(f'Engage answer ignored (topic ended): {text!r}'); return
+        def work():
+            try: self._engage_store(t,text)
+            except Exception: log.warning('Engage: storing failed',exc_info=True)
+            finally: self._engage_phase='done'
+        self._engage_thread=threading.Thread(target=work,daemon=True,name='engage-answer'); self._engage_thread.start()
+
+    def _engage_store(self,t,text):
+        import engage_words
+        if not text:
+            log.info(f'ENGAGE answered=no kind={t.kind}'); return
+        data=engage_words.extract(t,text,getattr(self,'cloud_ai',None))
+        if self._engage_topic is not t: return
+        if not data:
+            log.info(f'Engage answer not used: {t.kind} heard {text!r}'); return
+        log.info(f'ENGAGE stored kind={t.kind} {data}')
+        if t.kind=='greet_stranger':
+            # FR-2100-003 kept: a spoken name may resolve an identity, never create one; no vector stored.
+            name=data['name']; self.voice.set_current_person(name)
+            if name in self.identity.names(include_pending=False):
+                self.identity.note_seen(name)
+                self.voice.speak(f"Oh, hi {name}! Sorry, I didn't recognise you.")
+            else:
+                self._experience('met',name)
+                self.voice.speak(f'Nice to meet you, {name}!')
+        elif t.kind=='ask_room':
+            pose=self.world_model.get_robot_pose()
+            self.world_model.add_room(data['room'],pose.x,pose.y); self.world_model.save()
+            self.voice.speak(f"Got it, this is the {data['room']}.")
+        elif t.kind=='ask_thing':
+            label=data.get('label') or f"the {t.facts.get('thing','thing')}"
+            self.memory.name_thing(t.facts['thing'],t.facts.get('room'),data.get('owner'),label)
+            self.voice.speak(f"Thanks, I'll remember that's {label}.")
+        elif t.kind=='ask_person':
+            self.memory.add_person_note(t.facts['name'],data['note'])
+            self.voice.speak('Thanks for telling me.')
+
+    def _engage_end(self,reason):
+        t=self._engage_topic; self._engage_topic=None
+        if t is not None: log_event(log,'ENGAGE',subsystem='engage',kind=t.kind,subject=t.subject,status=reason)
+        back=self._engage_prev_state if self._engage_prev_state in config.ENGAGE_STATES else 'IDLE'
+        if reason=='voice stop': back='IDLE'   # stop means stop: never resume a roam
+        if (back in ('ROAM','SLOW') and config.ROAM_PERMISSION_REQUIRED
+                and not getattr(self,'_roam_permission',True)): back='IDLE'
+        if self._state=='ENGAGE': self._go('ROAM' if back=='SLOW' else back)
 
     def _start_enrolment(self,name):
         """FR-2100-001/006: soft gate, capture ~2 s off the tick thread, store PENDING (inert),
@@ -992,6 +1079,7 @@ class RoverBrain:
             try: self.arm.drop_pair()              # outside review 2026-10-13
             except Exception: pass
             self._abandon_stuck_if_active()
+            if self._engage_topic is not None: self._engage_end('voice stop')   # FR-2400: drops a pending answer
             self.safety.emergency_stop('voice stop')
             self._revoke_roam_permission()  # stop means stop, not "pause for 30 seconds"
             # LEAVE THE MOTION STATE. Found 2026-10-01 (FRD gap audit): this branch braked and
@@ -1295,11 +1383,15 @@ class RoverBrain:
         if (self._state=='IDLE' or self.mapping.active) and not self.retrieval.active and not self.pursuit.active:
             self._drain_voice_commands()
         self._teach_tick()
+        # FR-2400 (2026-10-15): faces + engagement before dispatch; with engagement off, IDLE still scans faces.
+        if self._state in config.ENGAGE_STATES and (config.ENABLE_ENGAGEMENT or self._state=='IDLE'):
+            try: self._engage_step()
+            except Exception: log.warning('Engagement step failed',exc_info=True)
 
         {'IDLE':self._idle,'ROAM':self._roam,'SLOW':self._slow,'AVOID':self._avoid,
          'STUCK':self._stuck,'DOCK':self._dock,'WARN':self._warn,'RETRIEVE':self._retrieve,
          'NAVIGATE':self._navigate,'MANUAL':self._manual,'PURSUE':self._pursue,'WAVE':self._wave,
-         'COME_TO_ME':self._come_to_me_tick,'ROTATE':self._rotate_tick,
+         'COME_TO_ME':self._come_to_me_tick,'ROTATE':self._rotate_tick,'ENGAGE':self._engage_tick,
          'TILT_FAULT':lambda d,t:None,'SAFE_MODE':lambda d,t:None,'SHUTDOWN':lambda d,t:None,
          'LOW_BATTERY':lambda d,t:None,'OVERCURRENT_FAULT':lambda d,t:None,
         }.get(self._state,lambda d,t:None)(d,tilt)
@@ -2439,7 +2531,6 @@ class RoverBrain:
     def _idle(self,d,tilt):
         self.safety.stop(); self._idle_t+=0.05
         self._retention_sweep()
-        self._face_tick()
         if getattr(self,'_wave_requested',False):
             self._wave_requested=False
             try: self._start_wave()
@@ -2749,8 +2840,8 @@ class RoverBrain:
                                      if now-getattr(self,'_last_avoid_t',-1e9)<config.SIDESTEP_WINDOW_S else 1)
                 self._last_avoid_t=now
             if state=='IDLE': self._idle_t=0.0
-            elif getattr(self,'faces',None) is not None:
-                self.faces.set_scanning(False)   # FR-2100: face scans run from IDLE only
+            if getattr(self,'faces',None) is not None and state not in config.ENGAGE_STATES+('ENGAGE','ROTATE'):
+                self.faces.set_scanning(False)   # FR-2400: scans run in IDLE/ROAM/SLOW (+ENGAGE) since 2026-10-15
             # Hooked here rather than in _stuck() because _go() fires exactly once on entry --
             # _stuck() runs every tick while stuck, which would be ~20Hz of email.
             if state=='STUCK': self._send_stuck_alert()
