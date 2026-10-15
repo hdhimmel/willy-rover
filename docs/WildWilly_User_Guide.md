@@ -179,7 +179,8 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
   him nothing — he only knows where he moved it himself.
 - **Picking things up:** *"Pick up the red ball"* — he finds it (by colour if he can't name it),
   lines it up on his left side, reaches down, grips and lifts it, and holds it until you say
-  **"let go"**. After the lift he looks with his camera: if the ball is still on the floor he says
+  **"let go"** (opens his hand where it is) or **"put it down"** (sets it gently back on the floor).
+  If nobody takes it within a minute, he puts it back down by himself. After the lift he looks with his camera: if the ball is still on the floor he says
   he missed and tries again (twice), so "Got the ball" now means it left the floor.
   *(2026-10-14: the reach still misses until his arm angles are measured; a camera-guided reach
   is built and switches on once they are.)*

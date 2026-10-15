@@ -1166,6 +1166,11 @@ retry, otherwise `uncertain` -> HOLDING with `hold_message` (never DELIVER). `_a
 opens on the deadline: it re-asks up to `RETRIEVAL_HANDOFF_ASKS` times, then HOLDING with
 `pick_outcome='handoff_unconfirmed'`. brain's HOLDING handler speaks `hold_message` when set.
 
+**Put it down (2026-10-15).** brain keeps `_held_pose` / `_held_cm` / `_hold_since` when he starts
+holding; `_put_down()` runs `grip.place_plan()` (reach plan minus the opening, then open, then
+`fold_first`) + `_rest_plan()` with `_release_after_seq`. Voice `put_down` (`voice._PUT_DOWN`)
+and `_teach_tick` after `HOLD_PLACE_AFTER_S` in IDLE call it; "let go" still opens in place.
+
 **Gripper feedback sanity (2026-10-14).** `grip.GripCloser` distrusts a first reading further
 than `GRIP_FB_SANE_TOL` from `GRIP_FB_OPEN_RATIO` (the jaw is open when closing starts) and closes
 unsensed (`GRIP_UNSENSED_US`) with the camera check deciding; every grasp that day had "gripped" at

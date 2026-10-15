@@ -1559,6 +1559,7 @@ RETRIEVAL_TURN_PULSE_S=0.12
 RETRIEVAL_CREEP_PULSE_S=(0.12,0.3)   # forward pulse when close / far from the target row
 RETRIEVAL_GRASP_RETRIES=2       # FR-1700-005
 RETRIEVAL_HANDOFF_WAIT_S=15.0   # wait this long for "got it" / a sensed hand-off...
+HOLD_PLACE_AFTER_S=60.0         # holding with nobody taking it: set it back down gently (2026-10-15, owner)
 RETRIEVAL_HANDOFF_ASKS=2        # ...this many times, then KEEP HOLDING (never open on a timeout, 2026-10-14)
 RETRIEVAL_PERSON_MAX_RANGE_CM=150  # FR-1700-008: hand-off proximity gate
 PURSUIT_STANDOFF_CM=60          # FR-1000 come_here/follow: how close is "arrived" -- stop short of a person, not into them

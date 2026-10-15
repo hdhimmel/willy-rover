@@ -80,7 +80,7 @@ _ROUTINE_QUEUED=_EMAIL_QUEUEABLE|{'arm_teach','arm_teach_done','arm_jog','arm_mo
 # Teaching the arm and saved poses (teach.py, 2026-10-13), handled by RoverBrain._teach_cmd().
 _TEACH_INTENTS=frozenset({'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save',
                           'pose_go','pose_forget','pose_list','reach_learn','reach_save','reach_forget','reach_touch',
-                          'pick_up','let_go'})
+                          'pick_up','let_go','put_down'})
 
 # Intents answered while the startup self-test is failing (2026-10-01). _tick() returns early in
 # that state, before either drain pass, so Willie heard every command and answered none -- with
@@ -1767,7 +1767,9 @@ class RoverBrain:
                 self.retrieval.abort(f"can't turn: {msg}")
             return
         if self.retrieval.state=='HOLDING':
-            self._holding=True
+            self._holding=True; self._hold_since=time.time()
+            self._held_pose=getattr(self.retrieval,'_reach_pose',None)
+            self._held_cm=getattr(self.retrieval,'_object_cm',None)
             obj=getattr(self,'_spoken_object',None) or self.retrieval._target_class
             msg=getattr(self.retrieval,'hold_message',None)
             if msg: self._say(msg.replace(self.retrieval._target_class,obj))
@@ -2041,9 +2043,11 @@ class RoverBrain:
             log.info(f'Pick up {det["class"]} at {xy} -> {pose}')
             plan=grip.reach_plan(config.ARM_SERVO_CENTER_US,self._shoulder_now(),self._arm_now('elbow'),pose=pose)
             if not plan: self._say("I can't reach right now."); return
-            self._pick={'phase':'reach','closer':None,'obj':det['class'],'deadline':None,'xy':xy,'colour':None}
+            self._pick={'phase':'reach','closer':None,'obj':det['class'],'deadline':None,'xy':xy,'colour':None,'pose':pose}
             self._say(f"Picking up the {a.get('object')}.")
             self._start_arm_sequence(plan)
+        elif i=='put_down':
+            self._put_down('asked')
         elif i=='let_go':
             self._holding=False
             self.arm.set_pulse('gripper',config.GRIP_OPEN_US)
@@ -2155,7 +2159,7 @@ class RoverBrain:
             self._say(f"I missed the {p['obj']}, it's still on the floor. I'll put my arm away.")
             self._release_after_seq=False; self._go('IDLE'); self._stow_and_release('missed')
             return True
-        self._holding=True
+        self._holding=True; self._hold_since=time.time(); self._held_pose=p.get('pose'); self._held_cm=None
         if p.get('result')=='gripped' and look in('gone','in_hand'): self._say(f"Got the {p['obj']}.")
         else: self._say(f"I think I have the {p['obj']}, but I couldn't check. Say let go to drop it.")
         self._go('IDLE'); return True
@@ -2177,7 +2181,29 @@ class RoverBrain:
                 return d
         return None
 
+    def _put_down(self,why):
+        """Set what he is holding back down on the floor where he picked it up, open, stand back up,
+        stow and release (2026-10-15, owner). Gentle: the reach plan's slow descent."""
+        if not getattr(self,'_holding',False):
+            self._say("I'm not holding anything."); return False
+        pose=getattr(self,'_held_pose',None) or config.ARM_POSE_REACH
+        plan=grip.place_plan(pose.get('base',config.ARM_SERVO_CENTER_US),self._shoulder_now(),
+                             self._arm_now('elbow'),pose=pose,object_cm=getattr(self,'_held_cm',None))
+        if not plan:
+            self._say("I don't know where to put it down. Say let go and I'll open my hand."); return False
+        log.info(f'Putting it down ({why}) at {pose}')
+        self._holding=False
+        self._say('Putting it down.')
+        plan+=self._rest_plan(pose['shoulder'],pose['elbow'])
+        self._release_after_seq=True
+        self._start_arm_sequence(plan); return True
+
     def _teach_tick(self):
+        if getattr(self,'_holding',False) and self._state=='IDLE' and \
+                time.time()-getattr(self,'_hold_since',time.time())>config.HOLD_PLACE_AFTER_S:
+            # 2026-10-15 (owner): nobody took it and he was not told where to put it
+            self._say("Nobody has taken it, so I'm putting it back down.")
+            self._put_down('not taken'); return
         if getattr(self,'_holding',False) and not self.arm.released:
             self.arm.keep_alive()                    # holding something: no idle stow until "let go"
         if getattr(self,'_stow_requested',False) and self._state=='IDLE' and not self.teacher.active \

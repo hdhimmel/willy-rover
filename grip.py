@@ -178,6 +178,18 @@ def reach_plan(base_us,shoulder_from,elbow_from,pose=None,object_cm=None):
     return plan
 
 
+def place_plan(base_us,shoulder_from,elbow_from,pose=None,object_cm=None):
+    """2026-10-15 (owner): set a held object back down gently -- the reach plan's slow, elbow-first
+    descent to the hover height and then down, WITHOUT opening the gripper first, then open, then
+    stand back up. None when there is no reach pose."""
+    plan=reach_plan(base_us,shoulder_from,elbow_from,pose=pose,object_cm=object_cm)
+    if plan is None: return None
+    plan=[s for s in plan if s[0]!='gripper']          # keep holding all the way down
+    pose=pose or config.ARM_POSE_REACH
+    plan.append(('gripper',config.GRIP_OPEN_US,0.6))   # let go on the floor
+    return plan+fold_first(pose['shoulder'],pose['elbow'])
+
+
 def fold_first(shoulder_from,elbow_from):
     """Get to upright with the elbow folded, never sweeping the hand low: if the arm is forward
     of upright, fold the elbow FIRST (hand comes up) then stand up; if it is back (stow side),

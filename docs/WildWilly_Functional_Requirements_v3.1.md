@@ -468,6 +468,12 @@ Requirements are implemented and unit-tested off-hardware unless noted.
   says he couldn't check, and the task ends. Hand-off: a timeout no longer opens the gripper -- he
   asks again (`RETRIEVAL_HANDOFF_ASKS`, `RETRIEVAL_HANDOFF_WAIT_S`), then keeps holding and says
   "let go" drops it.
+- **FR-1700 Put it down (owner, 2026-10-15).** If what he is holding is not handed to someone or
+  put somewhere specific, he sets it back down gently: "put it down" / "set it down" / "place it on
+  the floor" (new `put_down` intent; "let go" still opens in place), and automatically after
+  `HOLD_PLACE_AFTER_S` (60 s) holding in IDLE. `grip.place_plan` = the reach plan's slow
+  elbow-first descent with the gripper kept closed, open on the floor, fold back up, stow and
+  release. It goes back to the pose he picked it up with -- approximate until the arm is calibrated.
 - **Battery log.** Rows were written at every restart and hours-on-charge only counted 2 min per
   restart; fixed (heartbeat). ~0.1 V/h, about 4%/h with some driving.
 

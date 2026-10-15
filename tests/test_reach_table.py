@@ -145,3 +145,39 @@ def test_pick_up_phrases():
     v=object.__new__(voice.VoicePipeline)
     assert v._fast_path('pick up the red ball')=={'intent':'pick_up','args':{'object':'red ball'},'reply':''}
     assert v._fast_path('let go')['intent']=='let_go'
+
+
+# ---- 2026-10-15 (owner): set it back down gently instead of dropping it ----
+def test_put_it_down_is_its_own_command():
+    import voice
+    v=object.__new__(voice.VoicePipeline)
+    for t in ('put it down','set it down','put the ball down','place it on the floor','put it back down'):
+        assert v._fast_path(t)['intent']=='put_down', t
+    for t in ('let go','drop it','release it'):
+        assert v._fast_path(t)['intent']=='let_go', t
+
+def test_place_plan_keeps_holding_until_down_then_opens_and_lifts():
+    import grip
+    pose={'shoulder':1300,'elbow':1300,'wrist_pitch':1275,'base':1950}
+    plan=grip.place_plan(1950,1900,1825,pose=pose)
+    grips=[i for i,(j,_,_) in enumerate(plan) if j=='gripper']
+    assert len(grips)==1 and plan[grips[0]][1]==config.GRIP_OPEN_US        # opens exactly once...
+    elbows=[(i,us) for i,(j,us,_) in enumerate(plan) if j=='elbow']
+    lowest=min(elbows,key=lambda e: e[1])
+    assert grips[0]>lowest[0]                                              # ...after the lowest point
+    assert any(j=='elbow' for j,_,_ in plan[grips[0]+1:])                  # then folds back up
+
+def test_put_down_and_the_auto_place_when_nobody_takes_it(monkeypatch):
+    b=_run_pick(monkeypatch,ball_leaves_floor=True)
+    assert b._holding and b._held_pose
+    import types
+    from brain import RoverBrain
+    for m in ('_put_down','_teach_tick','_rest_plan'): setattr(b,m,types.MethodType(getattr(RoverBrain,m),b) if m!='_rest_plan' else RoverBrain._rest_plan)
+    b._shoulder_now=lambda: 1500; b._arm_now=lambda j: 1825
+    b.teacher=types.SimpleNamespace(active=False,timed_out=lambda: False); b._stow_requested=False
+    b._hold_since-=config.HOLD_PLACE_AFTER_S+1
+    b._teach_tick()
+    assert not b._holding and b._state=='WAVE' and b._release_after_seq
+    assert any('putting it back down' in s for s in b.said)
+    b._holding=False; b._put_down('asked')
+    assert "not holding" in b.said[-1]
