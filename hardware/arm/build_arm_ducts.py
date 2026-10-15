@@ -41,7 +41,7 @@ for t in np.linspace(0,1,9):
 # the gap is filled with that cross-section, so both ends are unchanged.
 import math,os
 from trimesh.creation import extrude_polygon
-FOREARM_PIVOT_MM=220.0
+FOREARM_PIVOT_MM=float(os.environ.get("FOREARM_PIVOT_MM","220"))   # 265 for the new body (2026-10-15)
 WRIST_AXLE=np.array([12.4,0,12.5]); ELBOW_HUB=np.array([152.3,0,20.0])   # hole centres (y = hole axis)
 CUT_X=60.0
 fa0=trimesh.load(os.path.expanduser('~/Downloads/Arm B.stl'))
