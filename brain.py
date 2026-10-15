@@ -1476,7 +1476,7 @@ class RoverBrain:
         if cmd.get('intent')=='retrieve' and not config.ENABLE_RETRIEVAL_TASK:
             log.info('Voice retrieve refused: ENABLE_RETRIEVAL_TASK is off')
             self._say("I can't fetch things yet. My arm isn't safe for that.")
-        elif cmd.get('intent')=='retrieve' and self._arm_power_refused():
+        elif cmd.get('intent')=='retrieve' and getattr(self,'_arm_rail_lost',False) and self._arm_power_refused():
             pass
         elif cmd.get('intent')=='retrieve':
             target=cmd.get('args',{}).get('object','object')
@@ -2096,7 +2096,7 @@ class RoverBrain:
         return int(self.arm.pulse('shoulder') if self.arm.was_driven('shoulder') else config.ARM_POSE_REST['shoulder'])
 
     def _start_arm_sequence(self,plan):
-        if self._arm_power_refused(): return
+        if getattr(self,'_arm_rail_lost',False) and self._arm_power_refused(): return
         self._wave_seq=plan; self._wave_step=0; self._wave_deadline=None; self._go('WAVE')
 
     def _start_wave(self):
@@ -2280,7 +2280,7 @@ class RoverBrain:
         self._start_arm_sequence(self._rest_plan(self._shoulder_now(),self._arm_now('elbow')))
 
     def _start_pick_lineup(self,cls,colour,spoken):
-        if self._arm_power_refused(): return
+        if getattr(self,'_arm_rail_lost',False) and self._arm_power_refused(): return
         ok,msg=self.retrieval.start(cls,pick_only=True,colour=colour)
         if ok:
             self._say(f"Lining up on the {spoken}."); self._go('RETRIEVE')
@@ -2778,6 +2778,7 @@ class RoverBrain:
         try: v=self.current.rail('arm_6v')['voltage_v']
         except Exception: return       # monitor unreadable -- _check_health() owns that
         now=time.time()
+        if not hasattr(self,'_arm_rail_lost'): self._arm_rail_lost=False; self._arm_rail_low_since=None
         if v>=config.ARM_RAIL_MIN_V:
             if self._arm_rail_lost:
                 log.warning(f'Arm power RESTORED ({v:.2f}V) -- the arm stays limp until asked to move')
@@ -2800,7 +2801,7 @@ class RoverBrain:
 
     def _arm_power_refused(self):
         """True (and says why) when the arm rail is off -- checked by every arm request."""
-        if not self._arm_rail_lost: return False
+        if not getattr(self,'_arm_rail_lost',False): return False
         log.info('Arm request refused: arm power is off')
         self._say('My arm power is switched off.')
         return True
