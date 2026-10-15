@@ -72,6 +72,7 @@ _NON_SPOKEN_SOURCES=frozenset({'remote','email','routine'})
 # What an email may queue: everything a spoken command could, through the same gating.
 _EMAIL_QUEUEABLE=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve','map',
     'stop_map','status','battery','arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','follow','diagnostics',
+    'find_storm','tidy_toys','toy_box_here',
     'where_are_you','what_do_you_see','see_object','what_doing','privacy_on','privacy_off','name_room','mark_stairs','shutdown','demo_replay','roam','check_logs','learn_home','home_address',
     'routine','pose_go','pose_list'})
 # What a routine step is queued as: everything the brain executes (the rest just speak a reply).
@@ -1616,6 +1617,13 @@ class RoverBrain:
                     self._idle_t=0.0; self._say('Off I go.'); self._go('ROAM')
                 else:
                     self._say("Okay, I'll explore when I'm done with this.")
+        elif cmd.get('intent') in ('find_storm','tidy_toys'):
+            self._start_purpose(cmd['intent'])
+        elif cmd.get('intent')=='toy_box_here':
+            pose=self.odometry.pose
+            self.world_model.remember_landmark('toy box',pose.x,pose.y,kind='toy_box')
+            log.info(f'Toy box remembered at ({pose.x:.2f},{pose.y:.2f})')
+            self._say("Got it, this is the toy box.")
         elif cmd.get('intent')=='steer':
             # FR-600-004. Applied in this same tick (one control cycle), parked only, clamped.
             r=self.safety.approve_steer(cmd.get('args',{}).get('degrees',0))
@@ -1737,7 +1745,7 @@ class RoverBrain:
                 best={}
                 for det in self.detector.detect():
                     c=det['class']; best[c]=max(best.get(c,0.0),det.get('conf',0.0))
-                names=[c for c,_ in sorted(best.items(),key=lambda kv:-kv[1])]
+                names=[self._called(c) for c,_ in sorted(best.items(),key=lambda kv:-kv[1])]
                 if not names: reply="Nothing in particular."
                 else:
                     shown=names[:3]
@@ -1863,8 +1871,83 @@ class RoverBrain:
     def _pursue(self,d,tilt):
         self.pursuit.tick(d,tilt)
         if self.pursuit.state in('DONE','FAILED','ABORTED'):
-            if self.pursuit.state=='DONE' and self.voice.available: self.voice.speak('Here I am!')
+            storm=getattr(self.pursuit,'who','you')=='Storm'
+            if self.pursuit.state=='DONE':
+                self._say("I'm next to Storm." if storm else 'Here I am!')
+            elif storm and self.pursuit.state=='FAILED':
+                self._say(f"I lost Storm: {self.pursuit._fail_reason}.")
             self.pursuit.reset(); self._go('IDLE')
+
+    def _called(self,cls):
+        """'Storm' if he has been told the dog's name, else 'a dog' / 'an apple' (2026-10-15)."""
+        try: name=self.memory.get_fact(f'name of the {cls}') if self.memory else None
+        except Exception: name=None
+        if name: return name
+        return ('an ' if cls[:1] in 'aeiou' else 'a ')+cls
+
+    # ---- purposeful exploring (2026-10-15, owner: "find Storm", "tidy up the toys") ----
+    def _start_purpose(self,kind):
+        if not self._motion_enabled:
+            self._say(f"I can't go looking yet. My self-test is failing: {self._init_fail_reason}."); return
+        if self._roam_ask_pending: self._roam_ask_pending=False; self.display.offer_roam(False)
+        self._roam_permission=True
+        self._roam_purpose=(kind,time.time()); self._purpose_seen=0; self._toys_found=[]
+        log.info(f'Purposeful exploring: {kind}')
+        self._say("I'll go and find Storm." if kind=='find_storm' else "I'll look for Storm's toys.")
+        if self._state=='IDLE': self._idle_t=0.0; self._go('ROAM')
+
+    def _end_purpose(self,why):
+        p=getattr(self,'_roam_purpose',None)
+        if not p: return
+        self._roam_purpose=None
+        if p[0]=='tidy_toys':
+            toys=getattr(self,'_toys_found',[])
+            if toys:
+                names=[t[0] for t in toys]
+                summary=', '.join(f'{names.count(n)} {n}{"s" if names.count(n)>1 else ""}' for n in dict.fromkeys(names))
+                self._say(f"I found {len(toys)} toy{'s' if len(toys)>1 else ''}: {summary}.")
+            else: self._say("I didn't find any of Storm's toys.")
+        elif why=='timeout': self._say("I couldn't find Storm.")
+        log.info(f'Purposeful exploring ended: {p[0]} ({why})')
+
+    def _purpose_tick(self):
+        """Called from ROAM/SLOW. True when it took over this tick."""
+        p=getattr(self,'_roam_purpose',None)
+        if not p: return False
+        kind,t0=p; now=time.time()
+        if now-t0>config.PURPOSE_MAX_S:
+            self.safety.stop(); self._end_purpose('timeout'); self._go('IDLE'); return True
+        if now-getattr(self,'_purpose_look_t',0.0)<config.PURPOSE_LOOK_S: return False
+        self._purpose_look_t=now
+        classes=['dog'] if kind=='find_storm' else list(config.TOY_CLASSES)
+        try: dets=self.detector.detect(classes=classes)
+        except Exception: dets=[]
+        if not dets: self._purpose_seen=0; return False
+        self._purpose_seen=getattr(self,'_purpose_seen',0)+1
+        if self._purpose_seen<config.PURPOSE_CONFIRM_LOOKS: return False
+        self._purpose_seen=0
+        det=max(dets,key=lambda x:x['conf'])
+        if kind=='find_storm':
+            self.safety.stop()
+            ok,_=self.pursuit.start('come_here',target_class='dog',standoff_cm=config.STORM_STANDOFF_CM,who='Storm')
+            if not ok: return False
+            self._say("I found Storm! I'm going over to her.")
+            self._roam_purpose=None; self._go('PURSUE'); return True
+        # a toy: where is it in the room? skip it if already found
+        name=config.TOY_CLASSES.get(det['class'],det['class'])
+        fc=arm_ik.floor_contact(det); pose=self.odometry.pose
+        if fc is not None:
+            dist_m=math.hypot(*fc)/1000.0; bearing=-math.degrees(math.atan2(fc[1],fc[0]))
+            wx,wy=project_point(pose,bearing,dist_m)
+        else: wx,wy=pose.x,pose.y
+        for _,x,y in getattr(self,'_toys_found',[]):
+            if math.hypot(wx-x,wy-y)<config.TOY_DEDUPE_M: return False
+        self._toys_found.append((name,wx,wy))
+        try: self.world_model.update_observation(Observation('object',wx,wy,payload={'cls':det['class'],'confidence':det['conf']}))
+        except Exception: log.warning('Toy not stored in the world model',exc_info=True)
+        log.info(f'Toy found: {name} at ({wx:.2f},{wy:.2f})')
+        self._say(f"I found a {name}.")
+        return False
 
     # Fixed primitive sequence, not calibrated IK — same category of gap as
     # retrieval_task.py's _grasp() (§20.6 pending, see its module docstring). wrist_rot
@@ -2329,6 +2412,7 @@ class RoverBrain:
             self.safety.stop(); self._go('IDLE')
             self._upd('idle','Not roaming: can\'t check the stair map (no fresh position)',d,tilt); return
         f=self._front_with_camera(f)
+        if self._purpose_tick(): return
         if tilt>config.IMU_TILT_WARN: self._go('WARN'); return
         if f<config.DIST_STOP: self.safety.obstacle_stop(); self._go('AVOID'); return   # brake, not ramp
         # 2026-10-14: setting off with something already close -> turn away, don't creep at it
@@ -2344,6 +2428,7 @@ class RoverBrain:
         f,ok=self._stair_planning_front(d)
         if not ok: self.safety.stop(); self._go('IDLE'); return
         f=self._front_with_camera(f)
+        if self._purpose_tick(): return
         if f>config.DIST_CLEAR: self._go('ROAM'); return
         if f<config.DIST_STOP: self.safety.obstacle_stop(); self._go('AVOID'); return   # brake, not ramp
         self.safety.forward(config.SPEED_SLOW); self._upd('slow',f'Slowing f={f:.0f}cm',d,tilt,config.SPEED_SLOW)
@@ -3016,6 +3101,7 @@ class RoverBrain:
         if self._roam_permission:
             self._roam_permission=False
             log.info('Roam permission revoked -- he must ask again.')
+        self._end_purpose('stopped')
 
     def _voice_reset_requested(self):
         # FR-300-003, voice half (owner decision 2026-09-17: reset is a voice command OR a

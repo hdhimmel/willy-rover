@@ -474,6 +474,17 @@ Requirements are implemented and unit-tested off-hardware unless noted.
   `HOLD_PLACE_AFTER_S` (60 s) holding in IDLE. `grip.place_plan` = the reach plan's slow
   elbow-first descent with the gripper kept closed, open on the floor, fold back up, stow and
   release. It goes back to the pose he picked it up with -- approximate until the arm is calibrated.
+- **FR-1000 Purposeful exploring (owner, 2026-10-15), only when asked.** "Find Storm" (the dog,
+  a girl): roam and look for a dog every 0.5 s; seen twice -> "I found Storm! I'm going over to
+  her", PursuitTask (now any class, own standoff, camera floor-contact distance) to 1 m, "I'm next
+  to Storm". "Tidy up the toys": roam and find ball / stuffed toy / frisbee (bones, antlers, rope
+  need teaching), say each, remember where (world model), skip ones already found, summary at the
+  end. "This is the toy box" remembers the box. Picking toys up and carrying them to the box waits
+  on the arm calibration and route driving. 10-minute limit; "stop" ends it.
+- **FR-2100 Naming what he sees (2026-10-15).** "That dog's name is Storm" / "the dog is called
+  Storm" stores `name of the dog` = Storm (on 10-14 it went to the AI and was lost); "what do you
+  see" then says "I can see Storm" and uses articles ("a cup"). Any dog counts as Storm until pet
+  recognition is built.
 - **Battery log.** Rows were written at every restart and hours-on-charge only counted 2 min per
   restart; fixed (heartbeat). ~0.1 V/h, about 4%/h with some driving.
 

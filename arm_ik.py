@@ -88,6 +88,17 @@ def _cam():
     return (*vals,getattr(config,'CAM_FRONT_Y_MM',0.0) or 0.0)
 
 
+def floor_contact(det,cam=None):
+    """(x forward, y left) mm from the base axis where the box's bottom centre meets the floor,
+    or None (uncalibrated camera / above the horizon)."""
+    c=cam or _cam()
+    if c is None: return None
+    hgt,tilt,hfov,cx,cy=c
+    x1,y1,x2,y2=det['bbox']
+    hit=_hit(_ray((x1+x2)/2,min(y2,det['frame_h']-1),det['frame_w'],det['frame_h'],hfov,tilt),(cx,cy,hgt),0.0)
+    return None if hit is None else hit[0]
+
+
 def obstacle_cm(dets,cam=None):
     """Camera brake (2026-10-14): distance in cm from the FRONT OF THE WHEELS to the nearest
     detection standing in his path, judged where its box meets the floor, or None.

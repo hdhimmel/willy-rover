@@ -1560,6 +1560,15 @@ RETRIEVAL_TURN_PULSE_S=0.12
 RETRIEVAL_CREEP_PULSE_S=(0.12,0.3)   # forward pulse when close / far from the target row
 RETRIEVAL_GRASP_RETRIES=2       # FR-1700-005
 RETRIEVAL_HANDOFF_WAIT_S=15.0   # wait this long for "got it" / a sensed hand-off...
+# PURPOSEFUL EXPLORING (2026-10-15, owner): only when asked -- "find Storm" (the dog; she is a girl)
+# or "tidy up the toys". He roams as usual and looks with the camera every PURPOSE_LOOK_S.
+PURPOSE_LOOK_S=0.5
+PURPOSE_CONFIRM_LOOKS=2         # seen this many looks in a row before he acts on it
+PURPOSE_MAX_S=600.0             # give up after this long
+STORM_STANDOFF_CM=100           # stop this far from Storm (owner: keep ~1 m)
+# toys the COCO detector knows -> what he calls them (bones, antlers, rope toys need teaching)
+TOY_CLASSES={'sports ball':'ball','teddy bear':'stuffed toy','frisbee':'frisbee'}
+TOY_DEDUPE_M=0.5                # a toy seen within this of one already found is the same toy
 HOLD_PLACE_AFTER_S=60.0         # holding with nobody taking it: set it back down gently (2026-10-15, owner)
 RETRIEVAL_HANDOFF_ASKS=2        # ...this many times, then KEEP HOLDING (never open on a timeout, 2026-10-14)
 RETRIEVAL_PERSON_MAX_RANGE_CM=150  # FR-1700-008: hand-off proximity gate

@@ -152,6 +152,11 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
 - **"Forget everyone"** — deletes every face he has learned.
 
 **Remembering things:**
+- **Find Storm:** *"Hey Willie, find Storm"* -- he explores until he sees her, says so, goes over and
+  stops about a metre away. *"Tidy up the toys"* -- he explores, tells you each toy he finds and
+  sums up at the end (picking them up and putting them in the toy box comes once his arm is
+  calibrated). *"This is the toy box"* -- tells him where the box is. *"Stop"* ends either.
+- **Names:** *"That dog's name is Storm"* -- he remembers it and says "I can see Storm" from then on.
 - **Start-up check:** about 12 seconds after he starts, he checks every sensor is actually giving
   readings and tells you any that are not ("Start-up check: my rear sonar is not working").
 - **Battery log:** every 2 hours while he is on, he records his battery voltage, estimated %, and how many hours he has been running since his last charge (counted minute by minute; restarting him no longer adds a row), and pushes it to the `battery-log` branch on GitHub (https://github.com/hdhimmel/willy-rover/blob/battery-log/battery_log.csv). Readings taken offline go up with the next one.

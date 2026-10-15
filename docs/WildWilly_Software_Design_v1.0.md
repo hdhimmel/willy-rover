@@ -448,6 +448,16 @@ are unchanged and remain the backstop.
 - **Voice persona.** `config.WILLIE_BODY` leads `CLAUDE_CHAT_SYSTEM` and the on-board intent
   prompt (`voice._interpret_local`), so answers stop claiming he has no body.
 
+- **Purposeful exploring (2026-10-15).** Intents `find_storm`, `tidy_toys`, `toy_box_here`.
+  `_start_purpose()` grants roam and sets `_roam_purpose`; `_purpose_tick()` (from `_roam`/`_slow`)
+  looks every `PURPOSE_LOOK_S` for `dog` or `TOY_CLASSES`, needs `PURPOSE_CONFIRM_LOOKS` in a row,
+  then starts `PursuitTask(target_class='dog', standoff_cm=STORM_STANDOFF_CM, who='Storm')` or
+  records a toy (`arm_ik.floor_contact` -> `project_point` -> world model, deduped within
+  `TOY_DEDUPE_M`). `_end_purpose()` speaks the toy summary; `_revoke_roam_permission` ends it.
+  PursuitTask uses the camera floor contact for distance when calibrated.
+- **Names for things seen.** `voice._NAME_THING` stores `name of the <class>`; `_called()` uses it in
+  "what do you see".
+
 ## 4. Startup and Shutdown
 
 ### 4.1 Startup sequence

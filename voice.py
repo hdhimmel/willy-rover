@@ -277,6 +277,9 @@ _NAME_REPLY=re.compile(r"(?:(?:hi|hello|hey)[\s,]+)?(?:i'?m|i am|it'?s|it is|my 
 _FORGET=re.compile(r"(?:please )?forget (?:about |that )?(.+)",re.I)
 # 2026-10-13 (owner): "Remember, my name is Howard" fell through to the local model (5 s) and was
 # lost -- only "remember that ..." was stored. Wider, still anchored at the start of the utterance.
+# 2026-10-15: naming what he sees -- "that dog's name is Storm", "the dog is called Storm". On
+# 2026-10-14 "That dog's name is Storm." went to the AI as a question and was never stored.
+_NAME_THING=re.compile(r"(?:that|the|this) ([a-z]+)(?:'s|’s| s) name is ([a-z]+)|(?:that|the|this) ([a-z]+) is called ([a-z]+)",re.I)
 _REMEMBER=re.compile(r"(?:(?:please|i want you to|i'd like you to|can you|could you)\s+)?remember(?:\s+that|\s*[,:])?\s+(.+)",re.I)
 _MY_NAME=re.compile(r"(?:my name is|my name's|call me)\s+([a-z][a-z'-]+)",re.I)
 _WHATS_MY_NAME=re.compile(r"what(?:'s| is) my name|do you (?:know|remember) my name|who am i",re.I)
@@ -291,7 +294,8 @@ _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_
     'come_here','come_to_me','rotate','steer','roam','follow','diagnostics','check_logs','learn_home','go_home','home_address','where_are_you','what_do_you_see','what_doing','name_room','mark_stairs',
     'privacy_on','privacy_off','demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date',
     'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save','pose_go','pose_forget','pose_list','routine',
-    'reach_learn','reach_save','reach_forget','reach_touch','pick_up','let_go','put_down','see_object'})
+    'reach_learn','reach_save','reach_forget','reach_touch','pick_up','let_go','put_down','see_object',
+    'find_storm','tidy_toys','toy_box_here'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
 def _fp(core):
@@ -382,6 +386,10 @@ _FAST_PATH_PATTERNS=[
     # 2026-10-10 (owner): roam by voice, no screen tap. Saying it IS the permission.
     # FR-2300 (2026-10-11): learn GPS home outdoors; "go home" refuses (stretch goal).
     (_fp(r'this is (?:your )?home|(?:learn|remember|set) (?:your |this as )?home(?: here)?'),'learn_home',''),
+    # 2026-10-15 (owner): purposeful exploring, only when asked
+    (_fp(r"(?:go |can you |please )?(?:find|look for|go get|search for) storm|where(?: is|'s) storm"),'find_storm',''),
+    (_fp(r"(?:tidy|clean|pick) up (?:the |storm's |all the )?(?:dog )?toys|put (?:the |storm's )?(?:dog )?toys away|(?:find|look for) (?:the |storm's )?(?:dog )?toys"),'tidy_toys',''),
+    (_fp(r"this is (?:the |storm's )?toy box|the toy box is here|(?:remember|learn) (?:the )?toy box(?: here)?"),'toy_box_here',''),
     (_fp(r'go home|drive home|head home|come home'),'go_home',''),
     # 2026-10-11 (owner): who he belongs to. A fixed reply, answered on the spot ('chat': spoken,
     # nothing queued, no model).
@@ -1065,6 +1073,11 @@ class VoicePipeline:
             self.speak(('I remember: '+'; '.join(str(x) for x in items)+'.') if items
                        else "I don't have anything stored about that.")
             return True
+        m=_NAME_THING.fullmatch(norm)
+        if m:
+            thing=(m.group(1) or m.group(3)).lower(); name=(m.group(2) or m.group(4)).title()
+            self.memory.add_fact(f'name of the {thing}',name)
+            self.speak(f"Nice to meet you, {name}."); return True
         m=_REMEMBER.fullmatch(norm)
         if m and m.group(1).strip().lower() in ('my name','me'):
             self.speak("Sure. Tell me: my name is, and your name."); return True
@@ -1142,6 +1155,8 @@ class VoicePipeline:
             return {'intent':'rotate','args':{'degrees':deg if m.group(1).lower()=='left' else -deg},'reply':''}
         m=_COME_TO_ME.fullmatch(norm)
         if m: return {'intent':'come_to_me','args':{'room':(m.group(1) or m.group(2)).strip().lower()},'reply':''}
+        # 2026-10-15: "this is the toy box" is a place, not a room name
+        if re.fullmatch(r"this is (?:the |storm's )?toy box",norm,re.I): return {'intent':'toy_box_here','args':{},'reply':''}
         m=_NAME_ROOM.fullmatch(norm)
         if m: return {'intent':'name_room','args':{'room':m.group(1).strip().lower()},'reply':''}
         if _MARK_STAIRS.fullmatch(norm): return {'intent':'mark_stairs','args':{},'reply':''}
@@ -1262,7 +1277,7 @@ class VoicePipeline:
                          'demo_start','demo_stop','demo_replay','enrol','forget_everyone',
                          'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save','pose_go',
                          'pose_forget','pose_list','routine','reach_learn','reach_save','reach_forget','reach_touch',
-                         'pick_up','let_go','put_down','see_object'}
+                         'pick_up','let_go','put_down','see_object','find_storm','tidy_toys','toy_box_here'}
         if name in motion_intents:
             # FR-1500-007: queued only — brain.py applies full Directive 1-5 gating before this
             # is ever executed.
