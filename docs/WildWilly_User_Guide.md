@@ -156,6 +156,10 @@ always said plainly. When he talks, his mouth moves with the words. *(New, not y
   stops about a metre away. *"Tidy up the toys"* -- he explores, tells you each toy he finds and
   sums up at the end (picking them up and putting them in the toy box comes once his arm is
   calibrated). *"This is the toy box"* -- tells him where the box is. *"Stop"* ends either.
+- **Memory:** he keeps what you tell him ("remember that ...", "... remember that", "my name is
+  Howard") and, by himself, when he saw people and Storm, toys he found and places he learned.
+  Ask *"When did you last see Storm?"* or *"What did you do today?"*. If he only half-heard, he
+  asks you to say it again instead of saving it.
 - **Names:** *"That dog's name is Storm"* -- he remembers it and says "I can see Storm" from then on.
 - **Start-up check:** about 12 seconds after he starts, he checks every sensor is actually giving
   readings and tells you any that are not ("Start-up check: my rear sonar is not working").

@@ -185,7 +185,7 @@ AVOID_USE_CAMERA=True
 # under. The calibrated front camera (CAM_FRONT_*) turns where these objects meet the floor into a
 # distance, and ROAM/SLOW use the nearer of that and the sonar/ToF reading (arm_ik.obstacle_cm).
 CAMERA_BRAKE=True
-CAMERA_BRAKE_CLASSES=('chair','couch','dining table','bed','person','bench','potted plant','toilet','suitcase','tv')
+CAMERA_BRAKE_CLASSES=('chair','couch','dining table','bed','person','dog','cat','bench','potted plant','toilet','suitcase','tv')
 CAMERA_BRAKE_PERIOD_S=0.3       # look this often while roaming (a detect costs ~50 ms)
 CAMERA_BRAKE_HALF_WIDTH_MM=250  # his path: body/wheels half-width plus margin
 CAMERA_BRAKE_OVERHANG_CM=10     # table tops / seats stick out past their legs
@@ -1062,7 +1062,7 @@ BAT_CROSSCHECK_GRACE_S=5.0   # sustained disagreement before reporting -- rides 
 # §13: the directory itself is now WILLY_LOG_ROOT above (was a bare 'logs' joined against the
 # script's own directory here — that join now happens once, in storage.resolve_root()).
 LOG_FILE='willy.log'
-LOG_MAX_BYTES=2_000_000; LOG_BACKUP_COUNT=5
+LOG_MAX_BYTES=5_000_000; LOG_BACKUP_COUNT=10   # 2026-10-15 (owner): keep more (still swept at DATA_RETENTION_DAYS)
 
 # World model (§9/§10, WildWilly_Claude_Fix_Implementation_Plan.md) — spatial/semantic memory,
 # a separate SQLite file from memory.db per the master doc's §13.4 storage design ("SQLite on
@@ -1562,6 +1562,9 @@ RETRIEVAL_GRASP_RETRIES=2       # FR-1700-005
 RETRIEVAL_HANDOFF_WAIT_S=15.0   # wait this long for "got it" / a sensed hand-off...
 # PURPOSEFUL EXPLORING (2026-10-15, owner): only when asked -- "find Storm" (the dog; she is a girl)
 # or "tidy up the toys". He roams as usual and looks with the camera every PURPOSE_LOOK_S.
+# EXPERIENCES (2026-10-15): sightings he writes to memory.db himself, at most once per gap each
+EXPERIENCE_SIGHT_CLASSES=('dog','person','cat')
+EXPERIENCE_SIGHTING_GAP_S=1800.0
 PURPOSE_LOOK_S=0.5
 PURPOSE_CONFIRM_LOOKS=2         # seen this many looks in a row before he acts on it
 PURPOSE_MAX_S=600.0             # give up after this long

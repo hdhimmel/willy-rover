@@ -72,7 +72,7 @@ _NON_SPOKEN_SOURCES=frozenset({'remote','email','routine'})
 # What an email may queue: everything a spoken command could, through the same gating.
 _EMAIL_QUEUEABLE=frozenset({'forward','reverse','turn_left','turn_right','go_to','retrieve','map',
     'stop_map','status','battery','arm_stow','arm_home','wave','come_here','come_to_me','rotate','steer','follow','diagnostics',
-    'find_storm','tidy_toys','toy_box_here',
+    'find_storm','tidy_toys','toy_box_here','last_seen','my_day',
     'where_are_you','what_do_you_see','see_object','what_doing','privacy_on','privacy_off','name_room','mark_stairs','shutdown','demo_replay','roam','check_logs','learn_home','home_address',
     'routine','pose_go','pose_list'})
 # What a routine step is queued as: everything the brain executes (the rest just speak a reply).
@@ -1619,9 +1619,14 @@ class RoverBrain:
                     self._say("Okay, I'll explore when I'm done with this.")
         elif cmd.get('intent') in ('find_storm','tidy_toys'):
             self._start_purpose(cmd['intent'])
+        elif cmd.get('intent')=='last_seen':
+            self._say(self._last_seen_reply(cmd.get('args',{}).get('what','')))
+        elif cmd.get('intent')=='my_day':
+            self._say(self._my_day_reply())
         elif cmd.get('intent')=='toy_box_here':
             pose=self.odometry.pose
             self.world_model.remember_landmark('toy box',pose.x,pose.y,kind='toy_box')
+            self._experience('learned','where the toy box is')
             log.info(f'Toy box remembered at ({pose.x:.2f},{pose.y:.2f})')
             self._say("Got it, this is the toy box.")
         elif cmd.get('intent')=='steer':
@@ -1743,7 +1748,8 @@ class RoverBrain:
                 reply="My camera isn't available right now."
             else:
                 best={}
-                for det in self.detector.detect():
+                dets=self.detector.detect(); self._note_sightings(dets)
+                for det in dets:
                     c=det['class']; best[c]=max(best.get(c,0.0),det.get('conf',0.0))
                 names=[self._called(c) for c,_ in sorted(best.items(),key=lambda kv:-kv[1])]
                 if not names: reply="Nothing in particular."
@@ -1781,7 +1787,8 @@ class RoverBrain:
             obj=getattr(self,'_spoken_object',None) or self.retrieval._target_class
             msg=getattr(self.retrieval,'hold_message',None)
             if msg: self._say(msg.replace(self.retrieval._target_class,obj))
-            elif getattr(self.retrieval,'pick_outcome',None)=='confirmed': self._say(f"Got the {obj}.")
+            elif getattr(self.retrieval,'pick_outcome',None)=='confirmed':
+                self._say(f"Got the {obj}."); self._experience('did',f'picked up the {obj}')
             else: self._say(f"I think I have the {obj}, but I couldn't check with my camera. Say let go to drop it.")
             self.retrieval.reset(); self._go('IDLE'); return
         if self.retrieval.state in('DONE','FAILED','ABORTED'):
@@ -1878,6 +1885,63 @@ class RoverBrain:
                 self._say(f"I lost Storm: {self.pursuit._fail_reason}.")
             self.pursuit.reset(); self._go('IDLE')
 
+    # ---- experiences (2026-10-15, owner: persistent memory of what he did and saw) ----
+    def _experience(self,kind,what,x=None,y=None):
+        """Write one experience to memory.db (with the room, if he knows it). Never raises."""
+        try:
+            if x is None:
+                pose=self.odometry.pose; x,y=pose.x,pose.y
+            room=None
+            try:
+                r=self.world_model.get_room(x,y); room=r.name if r else None
+            except Exception: pass
+            self.memory.add_experience(kind,what,x,y,room)
+        except Exception:
+            log.warning('Experience not stored',exc_info=True)
+
+    def _note_sightings(self,dets):
+        """Remember seeing a person or a dog -- at most once per EXPERIENCE_SIGHTING_GAP_S each."""
+        now=time.time(); last=self.__dict__.setdefault('_sighted',{})
+        for d in dets:
+            c=d.get('class')
+            if c not in config.EXPERIENCE_SIGHT_CLASSES: continue
+            if now-last.get(c,0.0)<config.EXPERIENCE_SIGHTING_GAP_S: continue
+            last[c]=now
+            self._experience('saw',self._called(c))
+
+    @staticmethod
+    def _when(t):
+        now=time.localtime(); lt=time.localtime(t)
+        hm=time.strftime('%I:%M %p',lt).lstrip('0')
+        if lt.tm_yday==now.tm_yday and lt.tm_year==now.tm_year: return f'today at {hm}'
+        if (time.mktime(now)-t)<2*86400 and (now.tm_yday-lt.tm_yday)%366==1: return f'yesterday at {hm}'
+        return time.strftime('%A %B %d at ',lt)+hm
+
+    def _last_seen_reply(self,what):
+        said=what.strip(); what=said.lower()
+        name=self._called(what) if what in config.EXPERIENCE_SIGHT_CLASSES else said
+        for q in (name,what.title(),'a '+what,'an '+what):
+            e=self.memory.last_experience(q,'saw') or self.memory.last_experience(q)
+            if e: break
+        if not e: return f"I don't remember seeing {name}."
+        where=f" in the {e['room']}" if e.get('room') else ''
+        return f"I last saw {e['what']} {self._when(e['at'])}{where}."
+
+    def _my_day_reply(self):
+        t0=time.mktime(time.localtime()[:3]+(0,0,0,0,0,-1))
+        ex=self.memory.experiences_since(t0)
+        if not ex: return "Nothing worth remembering yet today."
+        saw=list(dict.fromkeys(e['what'] for e in ex if e['kind']=='saw'))
+        found=[e['what'] for e in ex if e['kind']=='found']
+        learned=list(dict.fromkeys(e['what'] for e in ex if e['kind']=='learned'))
+        did=list(dict.fromkeys(e['what'] for e in ex if e['kind']=='did'))
+        parts=[]
+        if saw: parts.append('I saw '+', '.join(saw[:4]))
+        if found: parts.append(f"I found {len(found)} toy{'s' if len(found)>1 else ''}")
+        if learned: parts.append('I learned '+', and '.join(learned[:3]))
+        if did: parts.append('I '+', '.join(did[:3]))
+        return 'Today '+'; '.join(parts)+'.'
+
     def _called(self,cls):
         """'Storm' if he has been told the dog's name, else 'a dog' / 'an apple' (2026-10-15)."""
         try: name=self.memory.get_fact(f'name of the {cls}') if self.memory else None
@@ -1932,6 +1996,7 @@ class RoverBrain:
             ok,_=self.pursuit.start('come_here',target_class='dog',standoff_cm=config.STORM_STANDOFF_CM,who='Storm')
             if not ok: return False
             self._say("I found Storm! I'm going over to her.")
+            self._experience('saw',self._called('dog'))
             self._roam_purpose=None; self._go('PURSUE'); return True
         # a toy: where is it in the room? skip it if already found
         name=config.TOY_CLASSES.get(det['class'],det['class'])
@@ -1946,6 +2011,7 @@ class RoverBrain:
         try: self.world_model.update_observation(Observation('object',wx,wy,payload={'cls':det['class'],'confidence':det['conf']}))
         except Exception: log.warning('Toy not stored in the world model',exc_info=True)
         log.info(f'Toy found: {name} at ({wx:.2f},{wy:.2f})')
+        self._experience('found',f'a {name}',wx,wy)
         self._say(f"I found a {name}.")
         return False
 
@@ -2393,9 +2459,13 @@ class RoverBrain:
         if now-getattr(self,'_cam_brake_t',0.0)<config.CAMERA_BRAKE_PERIOD_S:
             return getattr(self,'_cam_brake_cm',None)
         self._cam_brake_t=now
-        try: cm=arm_ik.obstacle_cm(self.detector.detect(classes=list(config.CAMERA_BRAKE_CLASSES)))
+        try:
+            dets=self.detector.detect(classes=list(config.CAMERA_BRAKE_CLASSES))
+            cm=arm_ik.obstacle_cm(dets)
         except Exception:
-            log.warning('Camera brake: detect failed',exc_info=True); cm=None
+            log.warning('Camera brake: detect failed',exc_info=True); cm=None; dets=[]
+        try: self._note_sightings(dets)      # memory only -- must never cost the brake
+        except Exception: log.warning('Sighting not recorded',exc_info=True)
         if cm is not None and cm<config.DIST_SLOW and (getattr(self,'_cam_brake_cm',None) is None
                                                          or self._cam_brake_cm>=config.DIST_SLOW):
             log.info(f'Camera brake: obstacle in my path at {cm:.0f} cm')

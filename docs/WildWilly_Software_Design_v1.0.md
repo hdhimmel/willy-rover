@@ -455,6 +455,11 @@ are unchanged and remain the backstop.
   records a toy (`arm_ik.floor_contact` -> `project_point` -> world model, deduped within
   `TOY_DEDUPE_M`). `_end_purpose()` speaks the toy summary; `_revoke_roam_permission` ends it.
   PursuitTask uses the camera floor contact for distance when calibrated.
+- **Experiences (2026-10-15).** `MemoryStore.add_experience/last_experience/experiences_since`
+  (table `experiences`: at, kind saw/found/learned/did, what, x, y, room). brain `_experience()`,
+  `_note_sightings()` (camera-brake looks + "what do you see", `EXPERIENCE_SIGHT_CLASSES`, once per
+  `EXPERIENCE_SIGHTING_GAP_S`), intents `last_seen` / `my_day`. A failed sighting write never
+  costs the camera brake. voice: `_REMEMBER_AFTER`, standalone `_MY_NAME`, `_DANGLING` refusal.
 - **Names for things seen.** `voice._NAME_THING` stores `name of the <class>`; `_called()` uses it in
   "what do you see".
 

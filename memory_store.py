@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS instructions(
 CREATE TABLE IF NOT EXISTS routines(
     id INTEGER PRIMARY KEY, pattern_desc TEXT UNIQUE NOT NULL, count INTEGER NOT NULL,
     last_seen REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS experiences(
+    id INTEGER PRIMARY KEY, at REAL NOT NULL, kind TEXT NOT NULL, what TEXT NOT NULL,
+    x REAL, y REAL, room TEXT);
 """
 
 class MemoryStore:
@@ -176,6 +179,26 @@ class MemoryStore:
             self._conn.execute('PRAGMA wal_checkpoint(FULL)'); self._conn.commit()
         log.info('Memory store checkpointed for shutdown.')
 
+    # --- experiences (2026-10-15, owner: persistent memory of what he did and saw) ---
+    def add_experience(self,kind,what,x=None,y=None,room=None,at=None):
+        """kind: 'saw', 'learned', 'found', 'did'. what: plain words ('Storm', 'a ball')."""
+        with self._lock:
+            self._conn.execute('INSERT INTO experiences(at,kind,what,x,y,room) VALUES(?,?,?,?,?,?)',
+                               (at or time.time(),kind,what,x,y,room))
+            self._conn.commit()
+
+    def last_experience(self,what,kind=None):
+        q='SELECT at,kind,what,x,y,room FROM experiences WHERE lower(what)=lower(?)'
+        args=[what]
+        if kind: q+=' AND kind=?'; args.append(kind)
+        row=self._conn.execute(q+' ORDER BY at DESC LIMIT 1',args).fetchone()
+        return dict(zip(('at','kind','what','x','y','room'),row)) if row else None
+
+    def experiences_since(self,since):
+        rows=self._conn.execute('SELECT at,kind,what,x,y,room FROM experiences WHERE at>=? ORDER BY at',
+                                (since,)).fetchall()
+        return [dict(zip(('at','kind','what','x','y','room'),r)) for r in rows]
+
     def purge_expired(self,max_age_days=None):
         # FR-1800-004/FR-1900-010: demonstrations/facts/instructions are small structured rows,
         # not raw audio/frames, but still subject to the same retention ceiling.
@@ -184,6 +207,7 @@ class MemoryStore:
         with self._lock:
             self._conn.execute('DELETE FROM demonstrations WHERE created_at<?',(cutoff,))
             self._conn.execute('DELETE FROM instructions WHERE created_at<?',(cutoff,))
+            self._conn.execute('DELETE FROM experiences WHERE at<?',(cutoff,))
             self._conn.commit()
 
     def close(self):

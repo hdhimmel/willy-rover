@@ -280,6 +280,11 @@ _FORGET=re.compile(r"(?:please )?forget (?:about |that )?(.+)",re.I)
 # 2026-10-15: naming what he sees -- "that dog's name is Storm", "the dog is called Storm". On
 # 2026-10-14 "That dog's name is Storm." went to the AI as a question and was never stored.
 _NAME_THING=re.compile(r"(?:that|the|this) ([a-z]+)(?:'s|’s| s) name is ([a-z]+)|(?:that|the|this) ([a-z]+) is called ([a-z]+)",re.I)
+# 2026-10-15: "<fact>. Remember that." (remember LAST) and half-heard facts
+_REMEMBER_AFTER=re.compile(r"(.+?)[.,!]?\s+(?:please\s+)?remember (?:that|this|it)",re.I)
+_DANGLING=('is','are','was','the','a','an','my','your','that','to','of','and','called','name')
+_LAST_SEEN=re.compile(r"when did you (?:last )?see (?:the |a |an )?([a-z ]+?)(?: last)?",re.I)
+_MY_DAY=re.compile(r"what did you (?:do|see|find|learn)(?: today)?|what have you (?:done|seen|found|learned)(?: today)?|tell me about your day",re.I)
 _REMEMBER=re.compile(r"(?:(?:please|i want you to|i'd like you to|can you|could you)\s+)?remember(?:\s+that|\s*[,:])?\s+(.+)",re.I)
 _MY_NAME=re.compile(r"(?:my name is|my name's|call me)\s+([a-z][a-z'-]+)",re.I)
 _WHATS_MY_NAME=re.compile(r"what(?:'s| is) my name|do you (?:know|remember) my name|who am i",re.I)
@@ -295,7 +300,7 @@ _ACTIONABLE_INTENTS=frozenset({'forward','reverse','turn_left','turn_right','go_
     'privacy_on','privacy_off','demo_start','demo_stop','demo_replay','enrol','forget_everyone','stop','smart_home','chat','time','date',
     'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save','pose_go','pose_forget','pose_list','routine',
     'reach_learn','reach_save','reach_forget','reach_touch','pick_up','let_go','put_down','see_object',
-    'find_storm','tidy_toys','toy_box_here'})
+    'find_storm','tidy_toys','toy_box_here','last_seen','my_day'})
 _TRAILER=r'(?: please| now| for me| ok| okay| buddy)?'
 
 def _fp(core):
@@ -1007,6 +1012,8 @@ class VoicePipeline:
         already has a name, so this is for whoever is talking when no face is in view."""
         name=name.strip().capitalize()
         self.memory.add_fact('my name',name)
+        try: self.memory.add_experience('learned',f'your name is {name}')
+        except Exception: pass
         self.speak(f"Nice to meet you, {name}. I'll remember that."); return True
 
     def _routine_intent(self,ins):
@@ -1073,10 +1080,18 @@ class VoicePipeline:
             self.speak(('I remember: '+'; '.join(str(x) for x in items)+'.') if items
                        else "I don't have anything stored about that.")
             return True
+        # 2026-10-15: the fact may come first ("My name is Howard. Remember that.")
+        m=_REMEMBER_AFTER.fullmatch(norm)
+        if m: norm=f'remember {m.group(1)}'
+        # "my name is Howard" on its own is worth keeping too
+        n=_MY_NAME.fullmatch(norm)
+        if n: return self._learn_name(n.group(1))
         m=_NAME_THING.fullmatch(norm)
         if m:
             thing=(m.group(1) or m.group(3)).lower(); name=(m.group(2) or m.group(4)).title()
             self.memory.add_fact(f'name of the {thing}',name)
+            try: self.memory.add_experience('learned',f'the {thing} is called {name}')
+            except Exception: pass
             self.speak(f"Nice to meet you, {name}."); return True
         m=_REMEMBER.fullmatch(norm)
         if m and m.group(1).strip().lower() in ('my name','me'):
@@ -1084,6 +1099,10 @@ class VoicePipeline:
         if m:
             n=_MY_NAME.fullmatch(m.group(1).strip())
             if n: return self._learn_name(n.group(1))
+            # 2026-10-15: a half-heard fact ("remember that my name is...") is not stored
+            words=m.group(1).strip().rstrip('.').split()
+            if len(words)<2 or words[-1].lower() in _DANGLING:
+                self.speak(f"Sorry, I only caught '{m.group(1).strip()}'. Please say it again."); return True
             # FR-2100-004: scoped to whoever he last recognised (within FACE_SPEAKER_WINDOW_S).
             who=self.current_person()
             key=(f'[{who}] ' if who else '')+m.group(1)[:60]
@@ -1155,6 +1174,9 @@ class VoicePipeline:
             return {'intent':'rotate','args':{'degrees':deg if m.group(1).lower()=='left' else -deg},'reply':''}
         m=_COME_TO_ME.fullmatch(norm)
         if m: return {'intent':'come_to_me','args':{'room':(m.group(1) or m.group(2)).strip().lower()},'reply':''}
+        m=_LAST_SEEN.fullmatch(norm)
+        if m: return {'intent':'last_seen','args':{'what':m.group(1).strip()},'reply':''}
+        if _MY_DAY.fullmatch(norm): return {'intent':'my_day','args':{},'reply':''}
         # 2026-10-15: "this is the toy box" is a place, not a room name
         if re.fullmatch(r"this is (?:the |storm's )?toy box",norm,re.I): return {'intent':'toy_box_here','args':{},'reply':''}
         m=_NAME_ROOM.fullmatch(norm)
@@ -1277,7 +1299,7 @@ class VoicePipeline:
                          'demo_start','demo_stop','demo_replay','enrol','forget_everyone',
                          'arm_teach','arm_teach_done','arm_jog','arm_more','arm_step','pose_save','pose_go',
                          'pose_forget','pose_list','routine','reach_learn','reach_save','reach_forget','reach_touch',
-                         'pick_up','let_go','put_down','see_object','find_storm','tidy_toys','toy_box_here'}
+                         'pick_up','let_go','put_down','see_object','find_storm','tidy_toys','toy_box_here','last_seen','my_day'}
         if name in motion_intents:
             # FR-1500-007: queued only — brain.py applies full Directive 1-5 gating before this
             # is ever executed.

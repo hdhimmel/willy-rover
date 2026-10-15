@@ -41,6 +41,7 @@ def brain(dets):
     b.memory=types.SimpleNamespace(get_fact=lambda k: 'Storm' if k=='name of the dog' else None)
     started=[]
     b.pursuit=types.SimpleNamespace(start=lambda *a,**k: (started.append(k),(True,'started'))[1])
+    b._experience=lambda *a,**k: None                       # memory: tested in test_experiences
     for m in ('_start_purpose','_end_purpose','_purpose_tick','_called'): setattr(b,m,types.MethodType(getattr(RoverBrain,m),b))
     return b,started
 # find Storm: two looks in a row -> say so, pursue the dog at 1 m

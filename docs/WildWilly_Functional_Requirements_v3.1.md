@@ -485,6 +485,15 @@ Requirements are implemented and unit-tested off-hardware unless noted.
   Storm" stores `name of the dog` = Storm (on 10-14 it went to the AI and was lost); "what do you
   see" then says "I can see Storm" and uses articles ("a cup"). Any dog counts as Storm until pet
   recognition is built.
+- **FR-1900 Persistent memory (owner, 2026-10-15).** memory.db always persisted (SQLite, WAL) --
+  what was missing was input. Now: "<fact>, remember that" (remember last) and "my name is X" on
+  its own are stored; a half-heard fact (under 2 words, or ending on "is", "the", "my", ...) is
+  refused with "please say it again" (on 10-15 "Remember that my name is..." had stored the junk
+  fact "my name is"). New `experiences` table he writes himself: first sighting of a person / dog
+  / cat each 30 min (from the camera-brake looks and "what do you see"), Storm found, toys found,
+  names and places learned, pick-ups done -- with time and room. "When did you last see Storm?"
+  and "What did you do today?" answer from it. Swept at DATA_RETENTION_DAYS like other records.
+  Logs: willy.log 5 MB x 10; the system journal is now kept across reboots (on Willie).
 - **Battery log.** Rows were written at every restart and hours-on-charge only counted 2 min per
   restart; fixed (heartbeat). ~0.1 V/h, about 4%/h with some driving.
 
