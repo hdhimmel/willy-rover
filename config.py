@@ -205,8 +205,8 @@ ROAM_STEER_HOLD_S=1.0           # keep a curve at least this long before switchi
 # SIDESTEP_AFTER-th avoid within SIDESTEP_WINDOW_S, with one side under SIDESTEP_BLOCKED_CM and the
 # other over SIDESTEP_OPEN_CM, all six wheels turn SIDESTEP_DEG toward the open side ("crab") and he
 # drives SIDESTEP_TIME_S at slow speed: forward-diagonal if the front has room, else in reverse with
-# the wheels the other way (still toward the open side). Then straight again. The middles have never
-# been steered this far on the rover -- watch the first one.
+# the wheels the other way (still toward the open side). Then straight again. Owner 2026-10-14: the
+# wheels do not touch the body at this angle.
 SIDESTEP=True
 SIDESTEP_AFTER=3
 SIDESTEP_WINDOW_S=15.0
