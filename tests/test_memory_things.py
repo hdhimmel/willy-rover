@@ -47,3 +47,11 @@ def test_person_notes_newest_first_and_purged(tmp_path,monkeypatch):
     assert [n['note'] for n in m.person_notes('Howard',n=2)]==['is fixing the arm','had a long day']
     m.purge_expired(max_age_days=30)
     assert [n['note'] for n in m.person_notes('Howard',n=5)]==['is fixing the arm','had a long day']
+
+def test_context_includes_things_and_notes(tmp_path,monkeypatch):
+    m=_store(tmp_path,monkeypatch)
+    m.name_thing('sports ball','kitchen','Storm',"Storm's ball",at=1.0)
+    m.add_person_note('Howard','were fixing the arm')
+    ctx=m.get_context_for("where is Storm's ball?",person='Howard')
+    assert any("Storm's ball" in t for t in ctx['things'])
+    assert ctx['notes']==['were fixing the arm']

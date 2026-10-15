@@ -2072,6 +2072,12 @@ class RoverBrain:
         for q in (name,what.title(),'a '+what,'an '+what):
             e=self.memory.last_experience(q,'saw') or self.memory.last_experience(q)
             if e: break
+        # FR-2400 (2026-10-15): a thing he has been told the label of ("Storm's ball").
+        if not e:
+            for r in self.memory.things(any_room=True):
+                if r.get('label') and r['label'].lower()==what:
+                    where=f" in the {r['room']}" if r.get('room') else ''
+                    return f"I last saw {r['label']} {self._when(r['last_seen'])}{where}."
         if not e: return f"I don't remember seeing {name}."
         where=f" in the {e['room']}" if e.get('room') else ''
         return f"I last saw {e['what']} {self._when(e['at'])}{where}."

@@ -165,7 +165,15 @@ class MemoryStore:
                if not k.startswith('[') or (person and k.startswith(f'[{person}] '))}
         matched_facts={k:v for k,v in facts.items() if k.lower() in q or q in k.lower()}
         matched_instr=[i for i in self.all_instructions() if i['trigger_phrase'].lower() in q]
-        return {'facts':matched_facts,'instructions':matched_instr}
+        ctx={'facts':matched_facts,'instructions':matched_instr}
+        # FR-2400 (2026-10-15): things he has been told about, and what this person told him.
+        q=(query_text or '').lower()
+        rows=self._conn.execute('SELECT kind,label,room FROM things WHERE label IS NOT NULL').fetchall()
+        ctx['things']=[f'{lbl} ({kind}, usually in the {room})' if room else f'{lbl} ({kind})'
+                       for kind,lbl,room in rows
+                       if kind in q or any(w in q for w in lbl.lower().replace("'s",'').split() if len(w)>2)][:5]
+        ctx['notes']=[n['note'] for n in self.person_notes(person,n=3)] if person else []
+        return ctx
 
     # --- correction/deletion (FR-1900-008) ---
     def delete_fact(self,key):
