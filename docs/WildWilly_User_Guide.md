@@ -70,14 +70,14 @@ means, says one short sentence, and (for a question) beeps and listens.
   changes (*"I haven't seen a ball in the kitchen before."*).
 
 At most one remark or question every 5 minutes (a greeting also starts that wait), and never the
-same one twice in a day. He needs someone in view for anything but a greeting. He stays quiet
+same question or remark twice in a day. He needs someone in view for anything but a greeting. He stays quiet
 while he is doing a job, listening or talking, in privacy mode, or on a low battery.
 
 **To answer:** wait for the **beep**, then speak while the **green circle** is on. No "Hey Willie"
 needed. If you don't answer he drops it. Say **"stop"** to end it.
 
 **Answers are remembered:** room names, who owns what (*"it's Storm's"*) and what you tell him about
-your day, kept for 30 days (room names stay). Say **"forget everyone"** to wipe faces.
+your day, notes about people are kept 30 days; labels for things and room names stay. Say **"forget everyone"** to wipe faces.
 
 **To turn it off:** set `ENABLE_ENGAGEMENT=False` in `config.py` and restart him.
 

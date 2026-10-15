@@ -4211,7 +4211,7 @@ already enrolled unless `--force`. **Pets are not built.** Per-criterion notes b
     from the next `IDLE` tick.
 
 -   **FR-2100-002 (greeting).** *Superseded by FR-2400 (2026-10-15): now FR-2400-001, once per
-    visit (`ENGAGE_VISIT_S`); `FACE_GREET_SESSION_S` is removed.* A recognised person is greeted by name once per
+    visit (`ENGAGE_VISIT_S`); `FACE_GREET_SESSION_S` is no longer used by `brain.py`; the constant and `greeting_due()` remain.* A recognised person is greeted by name once per
     session (`FACE_GREET_SESSION_S`). Verified by walking in and out of frame and
     confirming a single greeting.
     ✅ **Built 2026-10-02:** *"Hi, <name>!"* via `identity.greeting_due()`; only a frame
@@ -4219,7 +4219,7 @@ already enrolled unless `--force`. **Pets are not built.** Per-criterion notes b
 
 -   **FR-2100-003 (strangers).** *Superseded by FR-2400 (2026-10-15) for what he says to a
     stranger (FR-2400-002); the three bands and the no-vector rule stand. "Who are you?",
-    "Stranger danger!" and `FACE_GREET_SESSION_S` below are historical.* Matching resolves into **three bands**, not two:
+    "Stranger danger!" and `FACE_GREET_SESSION_S` below are historical (no longer used by `brain.py`; the constant and `greeting_due()` remain).* Matching resolves into **three bands**, not two:
     recognised (greet), uncertain (**silent**, recorded present but unnamed), and
     confidently unknown. Only the third asks "who are you?", and only an unknown name
     or no reply produces the stranger response. Announcing a stranger requires

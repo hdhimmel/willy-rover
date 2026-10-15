@@ -49,7 +49,7 @@ stubbed, disabled, approximate or not yet run on the rover, it says so.
 | `ai_provider.py` | 383 | Unified cloud/local LLM abstraction |
 | `email_client.py` | 352 | IMAP/SMTP with allowlists and confirm gates; owner email commands (DKIM-verified, freshness-checked); `approve <code>` handlers |
 | `world_model.py` | 332 | Persistent spatial model — obstacles, rooms, objects, routes, stair edges (`Stair`, `ray_to_segment()`) |
-| `identity.py` | 273 | FR-2100 identity store and matcher — separate SQLite file, three-band cosine match, pending-is-inert enrolment, `approve()`, `forget_all()`, greeting debounce |
+| `identity.py` | 273 | FR-2100 identity store and matcher — separate SQLite file, three-band cosine match, pending-is-inert enrolment, `approve()`, `forget_all()`, presence record and `greeting_due()` (no longer called: greetings are decided in `engage.py`) |
 | `motors.py` | 271 | Drive base and steering primitives; `MOTOR_SIGN`; closed-loop wheel speed (`wheel_duty()`); no-twitch `brake()` |
 | `tof.py` | 270 | SEN0628 frame source (`SerialFrameSource`), background reader thread (`BackgroundFrames`), floor profile, obstacle/drop classification |
 | `feature_requests.py` | 239 | FR-2200: evidence from his own log, cloud-composed request emailed with a one-time code; on approval writes `docs/feature-requests/<date>-<slug>.md`, commits that file alone and pushes. Own low-frequency thread |
@@ -227,7 +227,7 @@ returns a cached value forever after a reset it did not cause. After
 
 ### 3.1 Top-level states
 
-Twenty states. Seventeen are in `_tick()`'s dispatch table; `INIT`, `SENSOR_FAULT` and
+Twenty-two states. Nineteen are in `_tick()`'s dispatch table; `INIT`, `SENSOR_FAULT` and
 `STALL_FAULT` are handled outside it.
 
 | State | Class | Entered when |
@@ -252,6 +252,8 @@ Twenty states. Seventeen are in `_tick()`'s dispatch table; `INIT`, `SENSOR_FAUL
 | `RETRIEVE` | Task | `retrieve` intent, delegates to `retrieval_task.py`; refused unless `ENABLE_RETRIEVAL_TASK` (False) |
 | `PURSUE` | Task | `come_here` / `follow`, delegates to `pursuit_task.py` |
 | `WAVE` | Task | `wave` intent — non-blocking step machine (see Arm control) |
+| `ROTATE` | Task | `start_rotation(deg, then=...)`: a guarded spin to a heading (`rotate.py`) |
+| `ENGAGE` | Nominal | FR-2400: stopped to greet, ask or remark (§7.1); behaves like `IDLE` for safety |
 
 `TILT_FAULT`, `SENSOR_FAULT` and `STALL_FAULT` do not auto-resume when the condition
 clears: they keep braking until the touchscreen "TAP TO RESUME" button is pressed
@@ -911,7 +913,7 @@ Whisper HEF compiled on an x86 machine (the Dataflow Compiler does not run on AR
 ### 7.1 Engagement (FR-2400, 2026-10-15)
 
 `engage.py` decides, `engage_words.py` writes the words, `brain.py` acts. `ENABLE_ENGAGEMENT`
-turns it off (face scanning and `note_seen` stay).
+turns it off (face scanning and `note_seen` stay, in `IDLE` only).
 
 - **Flow.** `_engage_step()` runs each tick in `IDLE`/`ROAM`/`SLOW`: `_face_tick()` returns
   `[FaceSeen(band, name, bearing)]` for a new scan (or `None`), IDLE runs a detection every
