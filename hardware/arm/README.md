@@ -54,3 +54,21 @@ fits the bed easily. Run after `build_arm_ducts.py` with the same `FOREARM_PIVOT
 - `On_Kol_duct10_265_A.stl` (wrist end, 162 mm): print flat; hex nut traps underneath.
 - `On_Kol_duct10_265_B.stl` (elbow end, 180 mm): print upright, supports under the lap only.
 - Pivot distance unchanged (265 mm) when joined.
+
+## `build_shoulder_base.py` (2026-10-15)
+
+**One-servo shoulder** (owner): the two opposed shoulder servos fought each other. One DS3225 MG on
+the +Y cheek (the elbow-servo side of the upper arm), a **608 bearing** (22 x 8 x 7, same as the
+elbow) in the -Y cheek, and an extension spring on a crank as a counterbalance.
+- `Shoulder_Base_1servo.stl`: the original yoke (`Base.stl`, not committed) with the -Y servo window,
+  its outer flange recess and screw holes filled; a 32 mm boss outside; the 608 pressed in from
+  outside against a 5 mm lip (14 mm hole, touches the outer race only); a pocket with a printed
+  4 mm bar in the disk outside the -Y cheek as the spring anchor.
+- `Shoulder_Idler_Axle.stl`: a disk that sits in the upper arm's -Y horn recess (4 x M2 at r=7,
+  like a horn), a 10 mm collar onto the bearing's inner race, 8 mm through the bearing, D-flat end.
+- `Shoulder_Crank.stl`: clamps the D-flat (M3 grub), spring holes at r = 15 / 20 / 25 mm. Fit it
+  pointing opposite the upper arm; spring (via a short cord) from the crank pin to the anchor bar.
+  Start on r=15, move out until the arm stays level with the servo off.
+- **Check before printing:** the axis is taken at the spline end over the turntable centre
+  (`SHOULDER_X=9.7`). If the old base's spline sits at the other end of the window, run with
+  `SHOULDER_X=29.8`.

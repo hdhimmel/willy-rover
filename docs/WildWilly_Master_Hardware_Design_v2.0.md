@@ -1646,6 +1646,12 @@ Item numbers are stable; closed items are removed, not renumbered.
 22. **Arm shoulder rebuild (2026-10-15)** — CH2 shoulder servo decoupled on 10-13; both shoulder
     servos to be replaced with holding servos on metal horns. Then re-map stow / upright / reach /
     base-turn with the cameras (see §8 note). The pose gate was removed 2026-10-14 (owner).
+    **Redesign (owner, 2026-10-15): ONE shoulder servo** (DS3225 MG, 25 kg·cm) on the cheek on the
+    elbow-servo side of the upper arm, a **608 bearing** (same as the elbow) in the other cheek, and an
+    extension-spring counterbalance on a crank — the two opposed servos fought each other.
+    Parts: `hardware/arm/build_shoulder_base.py` (base, idler axle, crank). Before printing, check
+    the spline position on the old base (`SHOULDER_X`). When fitted: `ARM_SHOULDER_B=None`, re-map
+    the shoulder, `ARM_JOINT_CAL`.
 22a. **Rotation overshoot** — "turn left 30°" turned ~76° on 10-13 (full-duty spin, BNO085 ~5 Hz):
     slow the spin for small turns and/or raise the IMU report rate.
 22b. **rf encoder** reads ~0 while turning; left out of the stall check (`STALL_IGNORE_WHEELS`).
