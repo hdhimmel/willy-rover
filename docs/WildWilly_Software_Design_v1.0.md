@@ -227,7 +227,7 @@ returns a cached value forever after a reset it did not cause. After
 
 ### 3.1 Top-level states
 
-Twenty-two states. Nineteen are in `_tick()`'s dispatch table; `INIT`, `SENSOR_FAULT` and
+Twenty-three states. Twenty are in `_tick()`'s dispatch table; `INIT`, `SENSOR_FAULT` and
 `STALL_FAULT` are handled outside it.
 
 | State | Class | Entered when |
@@ -251,6 +251,7 @@ Twenty-two states. Nineteen are in `_tick()`'s dispatch table; `INIT`, `SENSOR_F
 | `NAVIGATE` | Task | `go_to` intent, delegates to `navigation.py` |
 | `RETRIEVE` | Task | `retrieve` intent, delegates to `retrieval_task.py`; refused unless `ENABLE_RETRIEVAL_TASK` (False) |
 | `PURSUE` | Task | `come_here` / `follow`, delegates to `pursuit_task.py` |
+| `COME_TO_ME` | Task | "come to me in <room>": drives to that room, then stops |
 | `WAVE` | Task | `wave` intent — non-blocking step machine (see Arm control) |
 | `ROTATE` | Task | `start_rotation(deg, then=...)`: a guarded spin to a heading (`rotate.py`) |
 | `ENGAGE` | Nominal | FR-2400: stopped to greet, ask or remark (§7.1); behaves like `IDLE` for safety |
