@@ -4469,11 +4469,14 @@ detector knows (`ENGAGE_THING_CLASSES`, movable COCO classes); a novel object is
 
 -   **FR-2400-001 (greet).** A recognised face not yet greeted this visit gets one greeting by
     name (with when he last saw them if that was over `ENGAGE_CALLBACK_MIN_H`, 2 h, ago). A visit
-    ends after `ENGAGE_VISIT_S` (30 min) unseen. A greeting ignores the 5-minute gap but
+    ends after `ENGAGE_VISIT_S` (30 min) unseen. After a restart, someone the identity store last
+    saw within that window counts as already greeted. A greeting ignores the 5-minute gap but
     **starts** it, so no question follows straight after a hello.
 -   **FR-2400-002 (stranger).** An UNKNOWN face on `ENGAGE_STRANGER_CONFIRM_N` (3) consecutive
-    scans, not asked this visit: *"Hi, I'm Willie! What's your name?"* and one prompted listen.
-    The name is kept **for the visit only** (`set_current_person`); no face vector is stored
+    scans, at most once per stranger visit (it ends after `ENGAGE_VISIT_S` with no unknown face, so a
+    guest or a face on a poster is asked once): *"Hi, I'm Willie! What's your name?"* and one
+    prompted listen. The name is kept **for the visit only** (`set_current_person`; no experience,
+    nothing stored); no face vector is stored
     (FR-2100-005/006 unchanged). An enrolled name keeps "Sorry, I didn't recognise you". The old
     "Who are you? ... Stranger danger!" is gone.
 -   **FR-2400-003 (room).** In no named room, with a person in view: "What room is this?", at
@@ -4483,7 +4486,8 @@ detector knows (`ENGAGE_THING_CLASSES`, movable COCO classes); a novel object is
     that?" **only** if he has no named thing of that kind in *any* room. The answer is stored as
     a label and owner ("Storm's ball").
 -   **FR-2400-005 (callback).** A named thing last seen here over 2 h ago, or a stored note
-    about a greeted person, is mentioned ("last time you told me you ...").
+    about a greeted person told at least `ENGAGE_CALLBACK_MIN_H` (2 h) ago, is mentioned ("last
+    time you told me you ..."); each note at most once a day.
 -   **FR-2400-006 (change).** Only in a named room: a kind of thing seen here for the first time
     while *that kind is already known in another room* ("I haven't seen a X in the kitchen
     before"), or a named thing of this room unseen for `ENGAGE_MISSING_H` (4 h) after he has been
@@ -4492,12 +4496,15 @@ detector knows (`ENGAGE_THING_CLASSES`, movable COCO classes); a novel object is
     ago and still in view: "How's your day going?". The answer is kept as a note (30-day
     retention, like experiences) and offered to the cloud chat context.
 -   **FR-2400-008 (gates).** Only in `IDLE`/`ROAM`/`SLOW`; never during a task, AVOID, STUCK, a
-    fault, a non-normal battery tier, privacy mode, or while voice is busy. Topics other than
+    fault, a non-normal battery tier, privacy mode, or while voice is busy. Tasks that run inside
+    `IDLE`/`ROAM` count: a find-Storm/tidy-toys purpose, arm teaching, mapping, a routine, holding
+    an object, a steer override. Topics other than
     greetings need a person in view and the 5-minute gap (`ENGAGE_GAP_S`); no (kind, subject)
     repeats in a day, and choosing a topic counts as said even if never spoken. The stop goes
     through `SafetyController` and the turn through `Rotation` (refused turn: he speaks from
     where he is). New state `ENGAGE`, at most `ENGAGE_MAX_S` (20 s). **"Stop" (voice or screen)
-    ends it**, also when said while he waits for an answer (it is not taken as the answer), and
+    ends it**, also when said while he waits for an answer (it is not taken as the answer, even
+    if the topic has just timed out), and
     a voice stop leaves him `IDLE`, not resuming a roam. The cloud gets a text fact sheet only,
     never an image (FR-1800); slow or offline (3 s) uses `ENGAGE_TEMPLATES`. Off switch:
     `ENABLE_ENGAGEMENT=False`.

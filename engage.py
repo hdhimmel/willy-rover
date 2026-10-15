@@ -21,7 +21,9 @@ class Engagement:
         self.m=memory; self.clock=clock
         self._seen={}            # name -> last time in view (visit tracking)
         self._greeted={}         # name -> when greeted this visit
-        self._unknown_run=0; self._stranger_t=-1e18
+        self._visit_before={}    # name -> last seen before this visit began (for 'back after hours')
+        self._unknown_run=0
+        self._unknown_last=-1e18; self._stranger_asked=False   # a stranger visit: UNKNOWN faces <= ENGAGE_VISIT_S apart
         self._said=set(); self._said_day=None
         self._gap_t=-1e18; self._ask_room_t=-1e18
         self._room=None; self._room_since=0.0
@@ -43,9 +45,18 @@ class Engagement:
         known=[f for f in (faces or []) if f.band==RECOGNISED and f.name]
         if faces is not None:   # a new scan: track visits and strangers
             for f in known:
-                if f.name in self._seen and now-self._seen[f.name]>config.ENGAGE_VISIT_S: self._greeted.pop(f.name,None)
+                last=self._seen.get(f.name)
+                if last is None or now-last>config.ENGAGE_VISIT_S:   # a new visit (or first since start)
+                    before=prev_seen.get(f'saw:{f.name}') or last
+                    if last is None and before and now-before<=config.ENGAGE_VISIT_S:
+                        self._greeted[f.name]=now   # restart mid-visit: already greeted (2026-10-15)
+                    else:
+                        self._greeted.pop(f.name,None); self._visit_before[f.name]=before
                 self._seen.setdefault(f.name,now)
-            self._unknown_run=(self._unknown_run+1 if any(f.band==UNKNOWN for f in faces) else 0)
+            if any(f.band==UNKNOWN for f in faces):
+                if now-self._unknown_last>config.ENGAGE_VISIT_S: self._stranger_asked=False   # new stranger visit
+                self._unknown_last=now; self._unknown_run+=1
+            else: self._unknown_run=0
         if state not in config.ENGAGE_STATES or busy:
             for f in known: self._seen[f.name]=now
             return None
@@ -65,16 +76,15 @@ class Engagement:
             if f.name in self._greeted: continue
             self._greeted[f.name]=now
             facts={'name':f.name}
-            before=prev_seen.get(f'saw:{f.name}')
+            before=self._visit_before.get(f.name)
             if before and now-before>=config.ENGAGE_CALLBACK_MIN_H*3600:
                 facts.update(about='back',when=when_words(before,now))
             return self._pick(now,Topic('greet_known',f.name,facts,False,f.bearing_deg))
         return None
 
     def _stranger(self,now,faces):
-        if (faces and self._unknown_run>=config.ENGAGE_STRANGER_CONFIRM_N
-                and now-self._stranger_t>config.ENGAGE_VISIT_S):
-            self._stranger_t=now; self._unknown_run=0
+        if (faces and self._unknown_run>=config.ENGAGE_STRANGER_CONFIRM_N and not self._stranger_asked):
+            self._stranger_asked=True; self._unknown_run=0   # once per stranger visit
             f=next(f for f in faces if f.band==UNKNOWN)
             return self._pick(now,Topic('greet_stranger','stranger',{},True,f.bearing_deg))
         return None
@@ -110,10 +120,12 @@ class Engagement:
         for f in known:
             g=self._greeted.get(f.name)
             if g is None or now-g<1: continue
-            notes=self.m.person_notes(f.name,n=1)
-            if notes and self._fresh('callback',f'note:{f.name}',now):
-                return Topic('callback',f'note:{f.name}',{'about':'note','name':f.name,'note':notes[0]['note']},
-                             False,f.bearing_deg)
+            # only a note told at least ENGAGE_CALLBACK_MIN_H ago, each at most once a day (2026-10-15)
+            for n in self.m.person_notes(f.name,n=3):
+                subj=f"note:{f.name}:{n['at']}"
+                if now-n['at']>=long_ago and self._fresh('callback',subj,now):
+                    return Topic('callback',subj,{'about':'note','name':f.name,'note':n['note']},
+                                 False,f.bearing_deg)
         return None
 
     def _change(self,now,dets,known,pose,room,prev):

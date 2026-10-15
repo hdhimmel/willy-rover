@@ -164,3 +164,72 @@ assert b._engage_phase=='say', b._engage_phase          # old 'done' did not clo
 assert not any(r.get('label') for r in b.memory.things('sports ball','kitchen'))
 print('OK')
 ''')
+
+# --- final fix wave (2026-10-15) ---
+def test_stop_after_the_topic_ended_still_stops():
+    _run(_ENGAGE+r'''
+b=b2('ROAM')
+t=Topic('ask_thing','sports ball@kitchen',{'thing':'sports ball','room':'kitchen'},True,None)
+b._start_engage(t); b._engage_tick({},0.0); wait(b)
+b._engage_end('timed out'); assert b.went[-1]=='ROAM'   # back to driving, capture already running
+prompts[0]('Willie, stop')
+assert b.voice.stop_requested.is_set()
+print('OK')
+''')
+
+def test_engage_busy_during_tasks():
+    _run(_ENGAGE+r'''
+b=b2('IDLE'); b._engage_busy=types.MethodType(RoverBrain._engage_busy,b)
+off=types.SimpleNamespace(active=False)
+for n in ('teacher','mapping','routine','steer_override'): setattr(b,n,off)
+b._roam_purpose=None; b._holding=False; b._bat_tier='normal'
+assert b._engage_busy() is False
+for n,v in (('_roam_purpose',('storm',0.0)),('_holding',True)):
+    setattr(b,n,v); assert b._engage_busy() is True, n; setattr(b,n,None if n=='_roam_purpose' else False)
+for n in ('teacher','mapping','routine','steer_override'):
+    setattr(b,n,types.SimpleNamespace(active=True)); assert b._engage_busy() is True, n; setattr(b,n,off)
+assert b._engage_busy() is False
+print('OK')
+''')
+
+_FACE=_COMMON+r'''
+import numpy as np
+from identity import IdentityStore
+from engage import Engagement
+store=IdentityStore(os.path.join(tempfile.mkdtemp(),'id.db'))
+base=np.ones(128,dtype=np.float32)/np.sqrt(128)
+store.enrol('Carolyn',[base]); store.approve('Carolyn')
+def seen_ago(s):
+    store.note_seen('Carolyn'); store._c().execute('UPDATE presence SET at=?',(time.time()-s,)); store._c().commit()
+def face_ns():
+    ns=types.SimpleNamespace(identity=store,_engage_prev={},
+        faces=types.SimpleNamespace(available=True,set_scanning=lambda on:None,frame_w=1280,
+                                    latest=lambda: (time.time(),[((600,300,80,80),store.vector_at_distance(base,0.1))])),
+        voice=types.SimpleNamespace(set_current_person=lambda n:None),
+        world_model=types.SimpleNamespace(get_robot_pose=lambda: types.SimpleNamespace(x=0,y=0),get_room=lambda x,y:None))
+    ns._face_tick=types.MethodType(RoverBrain._face_tick,ns); return ns
+def first_tick(ago):
+    seen_ago(ago); ns=face_ns(); f=ns._face_tick()
+    return Engagement(MemoryStore('f.db')).tick('IDLE',[],f,types.SimpleNamespace(x=0,y=0),'den',False,ns._engage_prev)
+'''
+
+def test_face_back_after_hours_and_restart_mid_visit():
+    _run(_FACE.replace('import types,','import os,types,')+r'''
+t=first_tick(3*3600)
+assert t.kind=='greet_known' and t.facts.get('about')=='back', t
+assert first_tick(5*60) is None                          # restart mid-visit: already greeted
+print('OK')
+''')
+
+def test_real_tick_voice_stop_ends_engagement():
+    _run(r'''
+import time,brain
+from engage import Topic
+b=brain.RoverBrain(); b.start(); time.sleep(1.0)
+b._start_engage(Topic('greet_known','Howard',{'name':'Howard'},False,None))
+assert b._state=='ENGAGE', b._state
+b.voice.stop_requested.set(); b._tick()
+assert b._state=='IDLE' and b._engage_topic is None, (b._state,b._engage_topic)
+b.stop()
+print('OK')
+''')

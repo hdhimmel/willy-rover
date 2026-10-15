@@ -921,7 +921,10 @@ turns it off (face scanning and `note_seen` stay, in `IDLE` only).
   `ENGAGE_LOOK_S` (2 s; roaming reuses `_last_dets`), then `Engagement.tick(state, dets, faces,
   pose, room, busy, prev_seen)` returns at most one `Topic(kind, subject, facts, question,
   bearing_deg)`. `prev_seen` is the last-seen time of each person/thing from before this tick's
-  sightings (`saw:<name>`, `thing:<kind>@<room>`), filled by `_note_sightings`.
+  sightings (`saw:<name>`, `thing:<kind>@<room>`), filled by `_note_sightings` and, for a
+  RECOGNISED face, by `_face_tick` from `identity.last_seen()` read before `note_seen`. That value
+  gives 'back after hours' and, on the first sighting after a restart, marks someone seen within
+  `ENGAGE_VISIT_S` as already greeted.
 - **`ENGAGE` state.** `_start_engage()` stops through `SafetyController`, turns toward the target
   through `start_rotation(..., then='ENGAGE')` if over `ENGAGE_TURN_MIN_DEG` (a refused turn:
   speak from here), then `_engage_tick` holds still while a thread runs `engage_words.line()` and
@@ -930,15 +933,15 @@ turns it off (face scanning and `note_seen` stay, in `IDLE` only).
   (`SLOW` resumes as `ROAM`). Limit `ENGAGE_MAX_S` (20 s). Workers re-check
   `self._engage_topic is t` under a lock so a stop or timeout cannot be followed by speech.
 - **Stop.** "Stop" while waiting for an answer is not taken as the answer: it sets
-  `stop_requested`. A voice or screen stop ends `ENGAGE` and leaves him `IDLE`.
+  `stop_requested`, checked before the topic check so a stop after a timeout still lands. A voice or screen stop ends `ENGAGE` and leaves him `IDLE`.
 
 | # | kind | fires when | gap? |
 |---|------|------------|------|
 | 1 | `greet_known` | RECOGNISED face not greeted this visit | no (starts it) |
-| 2 | `greet_stranger` | UNKNOWN on 3 consecutive scans | no (starts it) |
+| 2 | `greet_stranger` | UNKNOWN on 3 consecutive scans, once per stranger visit (ends `ENGAGE_VISIT_S` after the last UNKNOWN face) | no (starts it) |
 | 3 | `ask_room` | in no named room, once per hour | yes |
 | 4 | `ask_thing` | thing in view, no named thing of that kind in any room | yes |
-| 5 | `callback` | named thing unseen 2 h+, or stored note on a greeted person | yes |
+| 5 | `callback` | named thing unseen 2 h+, or a note on a greeted person told 2 h+ ago (subject `note:<name>:<at>`, once a day each) | yes |
 | 6 | `change` | named room: kind new here but known elsewhere, or named thing missing 4 h+ | yes |
 | 7 | `ask_person` | known person greeted 2 min+ ago, still in view | yes |
 
@@ -946,7 +949,9 @@ Rules 3-7 also need a person in view (a face, a RECOGNISED name, or a `person` d
 chosen in that order. Picking a topic adds (kind, subject) to the said-today set and starts the
 gap, spoken or not.
 
-- **Busy** = privacy on, voice busy or unavailable, battery tier not normal, or a topic open.
+- **Busy** = privacy on, voice busy or unavailable, battery tier not normal, a topic open, or a
+  task inside IDLE/ROAM: `_roam_purpose`, `_holding`, `teacher.active`, `mapping.active`,
+  `routine.active`, `steer_override.active`.
 - **Words.** `line()` asks `CloudAIProvider.ask_sync` for one short sentence from text facts only
   (`ENGAGE_WORDS_TIMEOUT_S` 3 s, reply under `ENGAGE_LINE_MAX_CHARS`); slow, offline, refusal or
   junk falls back to `ENGAGE_TEMPLATES[kind_about or kind]`, rotated. `extract()` asks for JSON per

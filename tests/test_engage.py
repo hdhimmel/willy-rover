@@ -174,3 +174,47 @@ def test_stranger_run_survives_a_no_scan_tick(env):
     assert tick(e,faces=[stranger()],room='den') is None
     assert tick(e,faces=None,room='den') is None
     assert tick(e,faces=[stranger()],room='den').kind=='greet_stranger'
+
+
+# --- final fix wave (2026-10-15) ---
+def test_stranger_staying_two_hours_is_asked_once(env):
+    e,m,clk=env
+    asked=0
+    for _ in range(2*3600//60):
+        t=tick(e,faces=[stranger()],room='den'); asked+=bool(t and t.kind=='greet_stranger'); clk.t+=60
+    assert asked==1
+
+def test_stranger_back_after_a_visit_gap_is_asked_again(env):
+    e,m,clk=env
+    for _ in range(3): t=tick(e,faces=[stranger()],room='den')
+    assert t.kind=='greet_stranger'
+    clk.t+=31*60
+    for _ in range(3): t=tick(e,faces=[stranger()],room='den')
+    assert t and t.kind=='greet_stranger'
+
+def test_a_fresh_note_is_not_called_back(env):
+    e,m,clk=env
+    m.add_person_note('Howard','are baking bread',at=T0)
+    assert tick(e,faces=[me()],room='den').kind=='greet_known'
+    clk.t+=config.ENGAGE_GAP_S+1
+    t=tick(e,faces=[me()],room='den')
+    assert t is None or t.kind!='callback', t
+
+def test_each_note_called_back_once_a_day(env):
+    e,m,clk=env
+    m.add_person_note('Howard','were fixing the arm',at=T0-3*3600)
+    assert tick(e,faces=[me()],room='den').kind=='greet_known'
+    clk.t+=config.ENGAGE_GAP_S+1
+    t=tick(e,faces=[me()],room='den'); assert t.kind=='callback' and t.subject==f'note:Howard:{T0-3*3600}'
+    for _ in range(5):
+        clk.t+=config.ENGAGE_GAP_S+1
+        t=tick(e,faces=[me()],room='den'); assert t is None or t.kind!='callback'
+
+def test_restart_mid_visit_does_not_regreet(env):
+    e,m,clk=env
+    assert tick(e,faces=[me()],room='den',prev={'saw:Howard':T0-5*60}) is None
+
+def test_restart_after_hours_greets_back(env):
+    e,m,clk=env
+    t=tick(e,faces=[me()],prev={'saw:Howard':T0-3*3600})
+    assert t.kind=='greet_known' and t.facts.get('about')=='back'

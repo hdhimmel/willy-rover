@@ -801,6 +801,10 @@ class RoverBrain:
             m=self.identity.match(vec)
             x,_,bw,_=box; bearing=(0.5-(x+bw/2)/w)*config.CAM_FRONT_HFOV_DEG
             if m.band==RECOGNISED:
+                # 2026-10-15: last seen BEFORE this sighting, for 'back after hours' and restart-mid-visit
+                try: s=self.identity.last_seen(m.name)
+                except Exception: s=None
+                self._engage_prev.setdefault(f'saw:{m.name}',s.at if s else None)
                 self.identity.note_seen(m.name,room.name if room else None)
                 self.voice.set_current_person(m.name)
             elif m.band==UNCERTAIN:
@@ -812,7 +816,10 @@ class RoverBrain:
     def _engage_busy(self):
         try: priv=not privacy.mic_enabled()
         except Exception: priv=False
-        return (priv or getattr(self.voice,'busy',False) or not self.voice.available
+        def on(obj,attr='active'): return bool(getattr(getattr(self,obj,None),attr,False))
+        task=(getattr(self,'_roam_purpose',None) is not None or getattr(self,'_holding',False)   # never during a task
+              or on('teacher') or on('mapping') or on('routine') or on('steer_override'))
+        return (priv or task or getattr(self.voice,'busy',False) or not self.voice.available
                 or getattr(self,'_bat_tier','normal')!='normal' or self._engage_topic is not None)
 
     def _engage_step(self):
@@ -867,7 +874,7 @@ class RoverBrain:
         if t is None: return self._engage_end('no topic')
         if time.time()-self._engage_t0>config.ENGAGE_MAX_S: return self._engage_end('timed out')
         if self._engage_phase=='say':
-            self._engage_phase='talking'
+            self._engage_phase='talking'; self._engage_t0=time.time()   # the turn does not eat ENGAGE_MAX_S
             self._engage_thread=threading.Thread(target=self._engage_say,args=(t,),daemon=True,name='engage')
             self._engage_thread.start(); return
         if self._engage_phase=='done' and not getattr(self.voice,'busy',False):
@@ -891,13 +898,14 @@ class RoverBrain:
         if self._engage_topic is t: self._engage_phase='done'
 
     def _engage_answer(self,t,text):
-        if self._engage_topic is not t:
-            log.info(f'Engage answer ignored (topic ended): {text!r}'); return
         if text and is_emergency_stop(text):
             # prompt_listen hands the next utterance here, not to the stop matcher: a "stop" said
-            # as the answer must still stop him (the voice-stop branch ends the topic next tick).
+            # as the answer must still stop him -- checked FIRST, so a stop landing after the topic
+            # timed out (and he went back to ROAM) is never dropped. The voice-stop branch does the rest.
             log.info(f'Engage answer was a stop: {text!r}')
             self.voice.stop_requested.set(); return
+        if self._engage_topic is not t:
+            log.info(f'Engage answer ignored (topic ended): {text!r}'); return
         def work():
             try: self._engage_store(t,text)
             except Exception: log.warning('Engage: storing failed',exc_info=True)
@@ -921,8 +929,7 @@ class RoverBrain:
             if name in self.identity.names(include_pending=False):
                 self.identity.note_seen(name)
                 self.voice.speak(f"Oh, hi {name}! Sorry, I didn't recognise you.")
-            else:
-                self._experience('met',name)
+            else:   # a stranger's name lasts the visit only (set_current_person) -- not stored
                 self.voice.speak(f'Nice to meet you, {name}!')
         elif t.kind=='ask_room':
             pose=self.world_model.get_robot_pose()

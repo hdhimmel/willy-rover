@@ -5,7 +5,7 @@ sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # 2026-10-15 (FR-2400): greetings and the stranger question moved to engage.py; _face_tick now only
 #   matches and returns FaceSeen (recognised -> note_seen + current person; uncertain -> silent,
 #   kept for enrolment). A stranger's spoken name (engage greet_stranger) resolves only an ACTIVE
-#   identity ("Sorry, I didn't recognise you", no vector), else "Nice to meet you"; no identity made.
+#   identity ("Sorry, I didn't recognise you", no vector), else "Nice to meet you"; nothing stored.
 #   Enrolment approval only flips a pending identity; per-person facts; the voice intents.
 
 _REPO_ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -22,7 +22,7 @@ store=IdentityStore(os.path.join(tempfile.mkdtemp(),"id.db"))
 base=np.ones(128,dtype=np.float32)/np.sqrt(128)
 said=[]; prompts=[]; slot=[None]
 met=[]
-ns=types.SimpleNamespace(identity=store,_engage_topic=None,_experience=lambda k,w: met.append(w),cloud_ai=None,
+ns=types.SimpleNamespace(identity=store,_engage_topic=None,_engage_prev={},_experience=lambda k,w: met.append(w),cloud_ai=None,
     faces=types.SimpleNamespace(available=True,set_scanning=lambda on:None,latest=lambda: slot[0],frame_w=1280),
     voice=types.SimpleNamespace(available=True,speak=lambda t,**k:said.append(t),set_current_person=lambda n:None,
                                 prompt_listen=lambda cb,t: prompts.append(cb)),
@@ -47,7 +47,7 @@ t=Topic('greet_stranger','stranger',{},True,None); ns._engage_topic=t
 n_before=store.vector_count("Carolyn")
 ns._engage_store(t,"I'm Carolyn")                                      # claimed enrolled name:
 assert said[-1]=="Oh, hi Carolyn! Sorry, I didn't recognise you." and store.vector_count("Carolyn")==n_before
-ns._engage_store(t,"I'm Bob"); assert said[-1]=="Nice to meet you, Bob!" and met==["Bob"]
+ns._engage_store(t,"I'm Bob"); assert said[-1]=="Nice to meet you, Bob!" and met==[]   # a stranger's name is not stored
 assert "Bob" not in store.names()                                     # a name never creates an identity
 assert "Stranger danger!" not in said
 

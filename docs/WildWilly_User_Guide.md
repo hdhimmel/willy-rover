@@ -61,12 +61,14 @@ means, says one short sentence, and (for a question) beeps and listens.
 
 **What he says:**
 - **A greeting** when he sees someone he knows: *"Hi Carolyn!"* (or *"…I last saw you yesterday
-  morning"*). Once per visit; a visit ends after 30 minutes of not seeing you.
-- **A stranger:** *"Hi, I'm Willie! What's your name?"* He remembers the name only until the
-  visit ends and does not learn the face.
+  morning"*, if that was over 2 hours ago). Once per visit; a visit ends after 30 minutes of not
+  seeing you. A restart does not make him greet you again.
+- **A stranger:** *"Hi, I'm Willie! What's your name?"* Once per visit (a guest who stays all
+  evening is asked once). He remembers the name only until the visit ends and does not learn the face.
 - **Questions:** *"What room is this?"*, *"Whose ball is that?"* (once per kind of thing), and
   later *"How's your day going?"*.
-- **Remarks:** things he remembers (*"There's Storm's ball. I last saw it this morning."*) and
+- **Remarks:** things he remembers (*"There's Storm's ball. I last saw it this morning."*, or
+  something you told him at least 2 hours earlier, once a day at most) and
   changes (*"I haven't seen a ball in the kitchen before."*).
 
 At most one remark or question every 5 minutes (a greeting also starts that wait), and never the
