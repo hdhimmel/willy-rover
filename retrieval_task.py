@@ -53,6 +53,7 @@ class RetrievalTask:
         if self.active: return False,'retrieval task already in progress'
         self.pick_only=pick_only      # 2026-10-13 "pick up the X": no hand-off, end HOLDING
         self._blind=None; self._backoff=None; self._backoff_mm=0
+        self.pick_outcome=None; self.hold_message=None; self._handoff_asks=0
         self.colour=colour
         self.state='LOCALIZE'; self._target_class=target_class; self._requester_hint=requester_hint
         self.turn_request=None
@@ -371,7 +372,13 @@ class RetrievalTask:
             look=grip.camera_check(lambda: self._best(self.detector.detect(classes=[self._target_class])),
                                    getattr(self,'_spot_xy',None))
         self.verify_result=look
-        if self._grip_result=='gripped' and look!='on_floor':
+        # 2026-10-14 (review): three outcomes. CONFIRMED = the jaw stopped on something AND the
+        # camera saw it leave the floor. MISS = closed on nothing, or still on the floor (retry).
+        # Anything else (camera failed, feedback missing or contradictory) is UNCERTAIN: never
+        # reported as got-it and never delivered -- he keeps holding, says so, and the task ends.
+        confirmed=self._grip_result=='gripped' and look in ('gone','in_hand')
+        if confirmed:
+            self.pick_outcome='confirmed'; self.hold_message=None
             self.state='HOLDING' if getattr(self,'pick_only',False) else 'DELIVER'; return
         if self._grip_result=='empty' or look=='on_floor':
             self.arm.set_pulse('gripper',config.GRIP_OPEN_US)
@@ -382,7 +389,11 @@ class RetrievalTask:
             else:
                 self.state='APPROACH'
         else:
-            self.state='HOLDING' if getattr(self,'pick_only',False) else 'DELIVER'
+            self.pick_outcome='uncertain'
+            self.hold_message=(f"I think I have the {self._target_class}, but I couldn't check. "
+                               f"I'll keep holding it. Say let go to drop it.")
+            log.warning(f'Pick UNCERTAIN: grip {self._grip_result}, camera {look} -- holding, not delivering')
+            self.state='HOLDING'
 
     def _deliver(self,d,tilt):
         # FR-1700-006/008: never release without a person detected within a safe, defined range.
@@ -391,7 +402,7 @@ class RetrievalTask:
         dist_cm,_=self.detector.localize(det)
         if dist_cm>config.RETRIEVAL_PERSON_MAX_RANGE_CM: return
         if self.voice: self.voice.speak("Here you go — say 'got it' once you have it.")
-        self._confirm_deadline=time.time()+15.0
+        self._confirm_deadline=time.time()+config.RETRIEVAL_HANDOFF_WAIT_S
         self.state='AWAIT_CONFIRM'
 
     def _await_confirm(self,d,tilt):
@@ -410,9 +421,19 @@ class RetrievalTask:
         # moves when the person pulls the object out.
         if not confirmed and grip.released_by_person(self._fb_hold,self.feedback()):
             confirmed=True; log.info('Hand-off sensed: the gripper jaw moved as the object was taken')
-        if confirmed or time.time()>self._confirm_deadline:
-            if not confirmed:
-                log.warning('Hand-off released on timeout, no confirmation received — no tactile '
-                            'sensor exists to verify receipt (see module docstring).')
+        if confirmed:
             self.arm.set_pulse('gripper',config.GRIP_OPEN_US)  # release, to the measured open
             self.state='DONE'
+        elif time.time()>self._confirm_deadline:
+            # 2026-10-14 (review): a timeout means the hand-off is UNCONFIRMED, not done. Never open
+            # on the clock: ask again, then keep holding and end the task (say "let go" to drop).
+            self._handoff_asks=getattr(self,'_handoff_asks',0)+1
+            if self._handoff_asks<config.RETRIEVAL_HANDOFF_ASKS:
+                log.info('Hand-off not confirmed yet: asking again')
+                if self.voice: self.voice.speak("I'm still holding it. Say 'got it' when you have it.")
+                self._confirm_deadline=time.time()+config.RETRIEVAL_HANDOFF_WAIT_S
+            else:
+                log.warning('Hand-off never confirmed: keeping hold of the object, task ended')
+                self.pick_outcome='handoff_unconfirmed'
+                self.hold_message="Nobody took it, so I'm keeping hold of it. Say let go when you want it."
+                self.state='HOLDING'

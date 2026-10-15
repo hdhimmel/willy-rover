@@ -239,3 +239,46 @@ def test_blind_creep_then_reach_then_back_off_before_looking(monkeypatch):
         rt._verify({},0)
     n_back=sum(1 for c in calls if c[0]=='back')
     assert rt.state=='HOLDING' and abs(n_back-n_fwd)<=1
+
+
+# ---- 2026-10-14 review: explicit pick outcomes, and no release on a hand-off timeout ----
+def _verify_task(grip_result,detect,pick_only=False):
+    import types
+    arm=_FakeArm()
+    rt=RetrievalTask(types.SimpleNamespace(timed_move_active=False,stop=lambda: None),arm,
+                     types.SimpleNamespace(detect=detect))
+    rt.start('sports ball',pick_only=pick_only); rt.state='VERIFY'
+    rt._grip_result=grip_result; rt._spot_xy=(0.5,0.9); rt._backoff_mm=0
+    return rt,arm
+
+def test_gripped_and_camera_says_gone_is_confirmed_and_delivered():
+    rt,arm=_verify_task('gripped',lambda classes=None: [])
+    rt._verify({},0)
+    assert rt.state=='DELIVER' and rt.pick_outcome=='confirmed'
+
+def test_a_camera_failure_is_uncertain_never_delivered():
+    def boom(classes=None): raise RuntimeError('camera')
+    rt,arm=_verify_task('gripped',boom)
+    rt._verify({},0)
+    assert rt.state=='HOLDING' and rt.pick_outcome=='uncertain' and "couldn't check" in rt.hold_message
+    assert ('gripper',config.GRIP_OPEN_US) not in arm.pulses           # keeps holding
+
+def test_no_feedback_and_no_camera_answer_is_uncertain():
+    rt,arm=_verify_task('unsensed',lambda classes=None: [])
+    rt._spot_xy=None                                                  # camera cannot judge
+    rt._verify({},0)
+    assert rt.state=='HOLDING' and rt.pick_outcome=='uncertain'
+
+def test_a_handoff_timeout_never_opens_the_gripper(monkeypatch):
+    import types,time as _t
+    arm=_FakeArm(); said=[]
+    rt=RetrievalTask(types.SimpleNamespace(timed_move_active=False,stop=lambda: None),arm,_FakeDetector(),
+                     voice=types.SimpleNamespace(speak=said.append,pending_commands=__import__('queue').Queue()))
+    rt.start('sports ball'); rt.state='AWAIT_CONFIRM'; rt._fb_hold=None
+    t=[1000.0]; monkeypatch.setattr('retrieval_task.time.time',lambda: t[0])
+    rt._confirm_deadline=t[0]+config.RETRIEVAL_HANDOFF_WAIT_S
+    for _ in range(config.RETRIEVAL_HANDOFF_ASKS):
+        t[0]+=config.RETRIEVAL_HANDOFF_WAIT_S+1; rt._await_confirm({},0)
+    assert rt.state=='HOLDING' and rt.pick_outcome=='handoff_unconfirmed'
+    assert ('gripper',config.GRIP_OPEN_US) not in arm.pulses
+    assert any('still holding' in s for s in said)

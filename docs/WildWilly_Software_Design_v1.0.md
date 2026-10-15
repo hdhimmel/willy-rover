@@ -1160,6 +1160,12 @@ reach band, at most `PICK_MAX_BLIND_MM`) measured by the encoders with rf left o
 spot (`arm_ik.reach_after_creep`), then back off the same distance so the camera's check after the
 lift looks at the same floor spot. The hand camera is the proper fix for the blind stretch.
 
+**Pick outcomes and hand-off (2026-10-14, outside review).** `RetrievalTask._verify` sets
+`pick_outcome` = `confirmed` (gripped + camera `gone`/`in_hand`) -> HOLDING/DELIVER, a miss ->
+retry, otherwise `uncertain` -> HOLDING with `hold_message` (never DELIVER). `_await_confirm` never
+opens on the deadline: it re-asks up to `RETRIEVAL_HANDOFF_ASKS` times, then HOLDING with
+`pick_outcome='handoff_unconfirmed'`. brain's HOLDING handler speaks `hold_message` when set.
+
 **Gripper feedback sanity (2026-10-14).** `grip.GripCloser` distrusts a first reading further
 than `GRIP_FB_SANE_TOL` from `GRIP_FB_OPEN_RATIO` (the jaw is open when closing starts) and closes
 unsensed (`GRIP_UNSENSED_US`) with the camera check deciding; every grasp that day had "gripped" at

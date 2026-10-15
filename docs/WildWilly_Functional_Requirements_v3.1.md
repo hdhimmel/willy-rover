@@ -461,6 +461,13 @@ Requirements are implemented and unit-tested off-hardware unless noted.
   (still toward the open side); then straight. The drive keeps the crab angle (the
   straighten-before-moving rule is skipped once). Owner 2026-10-14: the wheels clear the body at
   that angle. Not yet run as a side-step on the rover.
+- **FR-1700-005/006 Pick outcomes and hand-off (outside review, 2026-10-14).** Three outcomes:
+  CONFIRMED (jaw stopped on something AND the camera saw it leave the floor) -> "Got the X" /
+  delivery; MISS (closed on nothing or still on the floor) -> retry; UNCERTAIN (camera failed,
+  feedback missing or contradictory) -> never reported as got-it, never delivered: he keeps holding,
+  says he couldn't check, and the task ends. Hand-off: a timeout no longer opens the gripper -- he
+  asks again (`RETRIEVAL_HANDOFF_ASKS`, `RETRIEVAL_HANDOFF_WAIT_S`), then keeps holding and says
+  "let go" drops it.
 - **Battery log.** Rows were written at every restart and hours-on-charge only counted 2 min per
   restart; fixed (heartbeat). ~0.1 V/h, about 4%/h with some driving.
 

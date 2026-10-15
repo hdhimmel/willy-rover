@@ -1769,9 +1769,10 @@ class RoverBrain:
         if self.retrieval.state=='HOLDING':
             self._holding=True
             obj=getattr(self,'_spoken_object',None) or self.retrieval._target_class
-            look=getattr(self.retrieval,'verify_result','unknown')
-            self._say(f"Got the {obj}." if look in('gone','in_hand') else
-                      f"I think I have the {obj}, but I couldn't check with my camera. Say let go to drop it.")
+            msg=getattr(self.retrieval,'hold_message',None)
+            if msg: self._say(msg.replace(self.retrieval._target_class,obj))
+            elif getattr(self.retrieval,'pick_outcome',None)=='confirmed': self._say(f"Got the {obj}.")
+            else: self._say(f"I think I have the {obj}, but I couldn't check with my camera. Say let go to drop it.")
             self.retrieval.reset(); self._go('IDLE'); return
         if self.retrieval.state in('DONE','FAILED','ABORTED'):
             if self.retrieval.state=='DONE' and self.voice.available: self.voice.speak('All done!')
