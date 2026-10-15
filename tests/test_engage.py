@@ -88,8 +88,8 @@ def test_ask_room_in_an_unnamed_spot_once_an_hour(env):
     t=tick(e,dets=[det('person')])
     assert t.kind=='ask_room' and t.question
     clk.t+=config.ENGAGE_GAP_S+1; assert tick(e,dets=[det('person')]) is None
-    clk.t+=config.ENGAGE_ASK_ROOM_GAP_S; P.x+=3
-    assert tick(e,dets=[det('person')]).kind=='ask_room'; P.x-=3
+    clk.t+=config.ENGAGE_ASK_ROOM_GAP_S
+    assert e.tick('IDLE',[det('person')],None,types.SimpleNamespace(x=4.0,y=2.0),None,False,{}).kind=='ask_room'
 
 def test_ask_thing_then_gap_then_no_repeat_today(env):
     e,m,clk=env
@@ -155,3 +155,22 @@ def test_greeting_ignores_the_gap(env):
     e,m,clk=env
     assert tick(e,dets=[det('cup'),det('person')],room='den').kind=='ask_thing'
     clk.t+=5; assert tick(e,faces=[me()]).kind=='greet_known'
+
+def test_gated_tick_does_not_swallow_a_new_visit(env):
+    e,m,clk=env
+    assert tick(e,faces=[me()]).kind=='greet_known'
+    clk.t+=2*3600; assert tick(e,state='AVOID',faces=[me()]) is None
+    clk.t+=5; assert tick(e,faces=[me()]).kind=='greet_known'
+
+def test_greeting_starts_the_gap(env):
+    e,m,clk=env
+    assert tick(e,faces=[me()],room='den').kind=='greet_known'
+    clk.t+=5; assert tick(e,dets=[det('cup'),det('person')],room='den') is None
+    clk.t+=config.ENGAGE_GAP_S; assert tick(e,dets=[det('cup'),det('person')],room='den').kind=='ask_thing'
+
+def test_stranger_run_survives_a_no_scan_tick(env):
+    e,m,clk=env
+    assert tick(e,faces=[stranger()],room='den') is None
+    assert tick(e,faces=[stranger()],room='den') is None
+    assert tick(e,faces=None,room='den') is None
+    assert tick(e,faces=[stranger()],room='den').kind=='greet_stranger'

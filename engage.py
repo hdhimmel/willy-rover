@@ -32,7 +32,7 @@ class Engagement:
         if self._said_day!=self._day(now): self._said=set(); self._said_day=self._day(now)
         return (kind,subject) not in self._said
 
-    def _pick(self,now,topic,greeting=False):
+    def _pick(self,now,topic):
         self._said.add((topic.kind,topic.subject))
         self._gap_t=now
         return topic
@@ -42,7 +42,9 @@ class Engagement:
         if room!=self._room: self._room=room; self._room_since=now
         known=[f for f in (faces or []) if f.band==RECOGNISED and f.name]
         if faces is not None:   # a new scan: track visits and strangers
-            for f in known: self._seen.setdefault(f.name,now)
+            for f in known:
+                if f.name in self._seen and now-self._seen[f.name]>config.ENGAGE_VISIT_S: self._greeted.pop(f.name,None)
+                self._seen.setdefault(f.name,now)
             self._unknown_run=(self._unknown_run+1 if any(f.band==UNKNOWN for f in faces) else 0)
         if state not in config.ENGAGE_STATES or busy:
             for f in known: self._seen[f.name]=now
@@ -60,16 +62,13 @@ class Engagement:
     # --- 1, 2: greetings ---
     def _greet(self,now,known,prev_seen):
         for f in known:
-            last=self._seen.get(f.name)
-            g=self._greeted.get(f.name)
-            new_visit=g is None or (last is not None and now-last>config.ENGAGE_VISIT_S)
-            if not new_visit: continue
+            if f.name in self._greeted: continue
             self._greeted[f.name]=now
             facts={'name':f.name}
             before=prev_seen.get(f'saw:{f.name}')
             if before and now-before>=config.ENGAGE_CALLBACK_MIN_H*3600:
                 facts.update(about='back',when=when_words(before,now))
-            return self._pick(now,Topic('greet_known',f.name,facts,False,f.bearing_deg),greeting=True)
+            return self._pick(now,Topic('greet_known',f.name,facts,False,f.bearing_deg))
         return None
 
     def _stranger(self,now,faces):
@@ -77,7 +76,7 @@ class Engagement:
                 and now-self._stranger_t>config.ENGAGE_VISIT_S):
             self._stranger_t=now; self._unknown_run=0
             f=next(f for f in faces if f.band==UNKNOWN)
-            return self._pick(now,Topic('greet_stranger','stranger',{},True,f.bearing_deg),greeting=True)
+            return self._pick(now,Topic('greet_stranger','stranger',{},True,f.bearing_deg))
         return None
 
     # --- 3..7 ---
@@ -121,8 +120,8 @@ class Engagement:
         if room is None: return None
         for d in self._things_in_view(dets):
             kind=d['class']; key=f'thing:{kind}@{room}'
-            if key in prev and prev[key] is None and self.m.things(kind,any_room=True) \
-                    and any(r['room']!=room for r in self.m.things(kind,any_room=True)) \
+            elsewhere=self.m.things(kind,any_room=True)
+            if key in prev and prev[key] is None and any(r['room']!=room for r in elsewhere) \
                     and self._fresh('change',f'new:{kind}@{room}',now):
                 return Topic('change',f'new:{kind}@{room}',{'about':'new','thing':kind,'room':room},False,bearing_of(d))
         if now-self._room_since<config.ENGAGE_LOOK_ROOM_S: return None
