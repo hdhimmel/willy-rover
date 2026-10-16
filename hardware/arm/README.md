@@ -96,11 +96,13 @@ elbow (`FOREARM_WRIST_SHIFT=10`; taper now x 36-46, opening from ~x 41) -- at 0 
 
 Two pieces per finger, print 2 of each (same part both sides). Input: the fitted long finger
 `gripper_parts/gripper_finger_jaw10_ext8_jaw+50 (print 2).stl`.
-- `finray_base_PLA.stl`: the original pivot bar (two 3.2 mm holes, 16 mm apart, unchanged) cut just past
-  the jaw root, plus a half-thickness tongue (z 0-5) with two M3 hex nut traps underneath. Print flat.
-- `finray_jaw_TPU.stl` (TPU 95A, print flat): the Fin Ray -- 1.2 mm front beam ON the original gripping
-  face (so the jaws still close to 0 and open to 73 mm), 1.4 mm back beam from 20 mm deep at the root to
-  the tip, 1.0 mm ribs every 7 mm leaning 15 deg toward the root, solid nose. Its base block sits on the
-  tongue (z 5-10). Fix with 2 x M3 x 8 (counterbored 1.8 mm) + 2 x M3 nuts per finger.
-- The back now reaches 10 mm further out at the root than the old 10 mm jaw: check it clears the links
-  when fully open before printing two. Not yet fitted.
+- `finray_base_PLA.stl`: the original 10 mm pivot bar (two 3.2 mm holes, 16 mm apart, unchanged) cut just
+  past the jaw root, plus a full-thickness tongue with two 3.3 mm bolt holes. Print flat.
+- `finray_jaw_TPU.stl` (TPU 95A, print flat): the Fin Ray, **20 mm thick** (centred on the 10 mm finger,
+  5 mm proud each side) -- 1.2 mm front beam ON the original gripping face (jaws still close to 0, open to
+  73 mm), 1.4 mm back beam from 20 mm deep at the root to the tip, **2.0 mm ribs** every 7 mm leaning
+  15 deg toward the root, solid nose. Its base forks round the tongue (5 mm TPU above and below).
+- Fixing: 2 x **M3 x 18** + 2 x M3 nuts per finger -- head counterbored in the TPU top, nut trap in the
+  TPU bottom.
+- Check before printing two: the back reaches 10 mm further out at the root than the old jaw, and the
+  jaw is now 5 mm proud above and below -- open the gripper fully and confirm both clear the links/body.

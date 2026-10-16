@@ -9,7 +9,9 @@ inner face). Outputs to ~/Downloads (print 2 of each -- the same part works on b
                         close to 0 and open to 73 mm), a back beam from the root's back corner to the tip,
                         and angled ribs between them. Pressing on the face makes it wrap round the object.
                         Base block sits on the tongue (z 5-10). TPU 95A, print flat.
-Fixing: 2 x M3 x 8 (button or socket head, counterbored) + 2 x M3 nuts per finger.
+Fixing: 2 x M3 x 18 + 2 x M3 nuts per finger (head counterbored in the TPU top, nut trap in the TPU bottom).
+2026-10-16 (owner): jaw 20 mm thick (centred on the 10 mm finger), ribs 2 mm; the tongue is full
+thickness and the TPU base forks round it.
 
 Jaw frame: s along the jaw from its root on the gripping face to the tip, t across it from the gripping
 face (0) toward the back. The jaw's back is widened from 10 mm to FIN_W at the root (it stays clear of the
@@ -31,7 +33,9 @@ JAW_LEN=82.6                            # original gripping face length
 S_CUT=2.0                               # PLA ends here (just past the root); TPU starts here
 LAP=15.0                                # tongue / base block length along s
 FIN_W=20.0                              # Fin Ray depth at the root (t), tapering to 0 at the tip
-FRONT=1.2; BACK=1.4; RIB=1.0            # TPU wall thicknesses
+FRONT=1.2; BACK=1.4; RIB=2.0            # TPU wall thicknesses (ribs 1.0 -> 2.0, owner 2026-10-16)
+JAW_T=20.0                              # TPU jaw thickness, centred on the 10 mm finger (owner 2026-10-16)
+Z0,Z1=(T_FINGER-JAW_T)/2,(T_FINGER+JAW_T)/2
 RIB_PITCH=7.0; RIB_TILT_DEG=15.0        # ribs lean toward the root (classic Fin Ray)
 TIP_SOLID=4.0                           # solid nose
 BOLT_S=(S_CUT+4.5,S_CUT+LAP-4.5); BOLT_T=4.0   # two bolts on the tongue (tongue spans t 0..10)
@@ -61,9 +65,9 @@ def base_pla():
     # keep everything behind s=S_CUT (the pivot bar and the root), then add the half-thickness tongue
     keep=jaw_poly([(S_CUT,-60),(S_CUT,60),(-200,60),(-200,-60)])
     f=trimesh.boolean.intersection([f,prism(keep,-1,T_FINGER+1)],engine='manifold')
-    tongue=prism(jaw_poly([(S_CUT-0.5,0),(S_CUT+LAP,0),(S_CUT+LAP,10.0),(S_CUT-0.5,10.0)]),0,T_FINGER/2)
+    tongue=prism(jaw_poly([(S_CUT-0.5,0),(S_CUT+LAP,0),(S_CUT+LAP,10.0),(S_CUT-0.5,10.0)]),0,T_FINGER)   # full thickness: the TPU base forks round it
     b=U([f,tongue])
-    cuts=[bolt_cut(-1,T_FINGER+1,s,BOLT_T,BOLT_D) for s in BOLT_S]+[hexagon(NUT_AF,-1,NUT_DEPTH,s,BOLT_T) for s in BOLT_S]
+    cuts=[bolt_cut(-1,T_FINGER+1,s,BOLT_T,BOLT_D) for s in BOLT_S]
     return Dif(b,cuts)
 
 def finray_outline():
@@ -90,11 +94,13 @@ def finray_outline():
 
 def jaw_tpu():
     prof=finray_outline()
-    body=prism(prof,0,T_FINGER)
-    # base block sits on the PLA tongue: remove the tongue's volume (z 0..5) where they overlap
-    tongue=prism(jaw_poly([(S_CUT-1,-1),(S_CUT+LAP,-1),(S_CUT+LAP,10.0),(S_CUT-1,10.0)]),-1,T_FINGER/2)
+    body=prism(prof,Z0,Z1)
+    # the base block forks round the PLA tongue (z 0..T_FINGER): cut the tongue's slot
+    tongue=prism(jaw_poly([(S_CUT-1,-1),(S_CUT+LAP,-1),(S_CUT+LAP,10.0),(S_CUT-1,10.0)]),0,T_FINGER)
     body=Dif(body,[tongue])
-    cuts=[bolt_cut(-1,T_FINGER+1,s,BOLT_T,BOLT_D) for s in BOLT_S]+[bolt_cut(T_FINGER-HEAD_DEPTH,T_FINGER+1,s,BOLT_T,HEAD_D) for s in BOLT_S]
+    cuts=([bolt_cut(Z0-1,Z1+1,s,BOLT_T,BOLT_D) for s in BOLT_S]
+          +[bolt_cut(Z1-HEAD_DEPTH,Z1+1,s,BOLT_T,HEAD_D) for s in BOLT_S]
+          +[hexagon(NUT_AF,Z0-1,Z0+NUT_DEPTH,s,BOLT_T) for s in BOLT_S])
     return Dif(body,cuts)
 
 if __name__=='__main__':
