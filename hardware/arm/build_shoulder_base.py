@@ -100,14 +100,23 @@ def rod():
     r.apply_transform(trimesh.transformations.rotation_matrix(math.pi/2,[1,0,0]))   # flat face down
     r.apply_translation(-r.bounds[0]); return r
 
+SPACER_OD=11.5                       # passes the 14 mm lip hole; presses the 608's inner race only (OD ~12)
+def spacer():
+    """Arm face -> 608 inner race, fitted from OUTSIDE before the bearing: drop it in through the seat and
+    the lip hole, then press the bearing in, then slide the rod through all of it. Printed on end."""
+    L=(-ARM_FACE)-(-BOSS_OUT+BRG_W)-0.2
+    t=D(cylinder(radius=SPACER_OD/2,height=L,sections=96),cylinder(radius=BRG_BORE/2+0.25,height=L+2,sections=96))
+    t.apply_translation([0,0,L/2]); return t
+
 def hub():
     """Keys the rod to the upper arm: disk in the -Y horn recess (4 x M2 at r=7, like a horn), a sleeve
     into the arm's 10 mm centre hole, a collar out to the 608's inner race. D-bore for the rod.
     Built in base coordinates along y, then stood on the disk for printing."""
     y_disk0=-ARM_FACE+RECESS_DEPTH-0.2
     y_inner=-BOSS_OUT+BRG_W
+    # 2026-10-16 (owner): no collar -- with the horn on the servo side the arm can't drop in with 11 mm
+    # sticking out of it. The hub is flush; the separate SPACER does the collar's job, fitted from outside.
     h=U(cyl_y(RECESS_D-0.4,y_disk0,-ARM_FACE),
-        cyl_y(COLLAR_D,-ARM_FACE,y_inner),
         cyl_y(9.8,y_disk0-0.01,ROD_IN_ARM-1.0))                  # sleeve inside the arm's 10 mm hole
     for k in range(4):
         t=k*math.pi/2
@@ -139,7 +148,7 @@ def crank():
     c.apply_translation([0,0,CRANK_T/2]); return c
 
 if __name__=='__main__':
-    parts={'Shoulder_Base_1servo':base(),'Shoulder_Rod':rod(),'Shoulder_Rod_Hub':hub(),'Shoulder_Crank':crank()}
+    parts={'Shoulder_Base_1servo':base(),'Shoulder_Rod':rod(),'Shoulder_Rod_Hub':hub(),'Shoulder_Spacer':spacer(),'Shoulder_Crank':crank()}
     for n,p in parts.items():
         f=os.path.join(OUT,n+'.stl'); p.export(f)
         print(f'{n}: watertight={p.is_watertight} vol={p.volume:.0f} size={np.ptp(p.bounds,axis=0).round(1)} -> {f}')

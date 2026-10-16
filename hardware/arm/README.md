@@ -69,8 +69,14 @@ elbow) in the -Y cheek, and an extension spring on a crank as a counterbalance.
 - `Shoulder_Rod.stl` (2026-10-16, owner: printed rod): 8 mm D-rod, 48 mm, from past the crank through the
   608 into the arm hub, stopping short of the servo horn. **Print lying on its flat** so the layers run
   lengthwise -- the spring bends it at the bearing. The flat also drives the crank.
-- `Shoulder_Rod_Hub.stl`: keys the rod to the arm -- disk in the -Y horn recess (4 x M2 at r=7, like a
-  horn), sleeve into the arm's 10 mm centre hole, 10 mm collar onto the bearing's inner race. Print disk down.
+- `Shoulder_Rod_Hub.stl`: keys the rod to the arm -- disk FLUSH in the -Y horn recess (4 x M2 at r=7, like a
+  horn) and a sleeve inside the arm's 10 mm centre hole; nothing sticks out of the arm. Print disk down.
+- `Shoulder_Spacer.stl` (2026-10-16): 11.5 mm OD x 10.8 mm tube, arm face -> 608 inner race. Replaces the
+  hub's old 11 mm collar, which made the arm impossible to fit once the servo horn was on. Print on end.
+- **Assembly order** (owner found the old one impossible): 1) screw the hub into the arm; 2) fit the arm
+  between the cheeks, servo side first, horn on; 3) from OUTSIDE the bearing cheek, with no bearing in yet,
+  drop the spacer in through the seat and the 14 mm hole onto the hub; 4) press the 608 in; 5) slide the
+  rod in from outside through bearing, spacer and hub into the arm; 6) crank on the rod's flat, grub screw.
 - Fix 2026-10-16: the 14 mm hole through the bearing cheek's inner face printed blind (a 1 mm skin, then a
   1 mm wall before the seat). Now clear through; checked by rays along the axis.
 - `Shoulder_Crank.stl`: clamps the D-flat (M3 grub), spring holes at r = 15 / 20 / 25 mm. Fit it
