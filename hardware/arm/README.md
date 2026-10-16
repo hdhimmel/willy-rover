@@ -34,7 +34,7 @@ InnoMaker U20CAM-1080P hand camera (32 x 32 mm board, four 2.2 mm M2 holes, M12 
 - `hand_back_camera.stl`: the plate with the case's back on its outer face -- a wall leaning to
   look past the **angled end** (the fingertip end) **20 deg down**, a rim the board sits in, a
   24 x 24 mm pocket for the parts on the board's back, and a **12 x 8 mm cable notch** (2026-10-16, owner: was a hole in the middle) open to the case's
-  edge beside corner D -- seen from behind, the left edge just above the bottom-left screw slot, through the
+  bottom (D-C) edge beside corner D -- seen from behind, just right of the bottom-left screw slot, through the
   back wall and the rim, so the cable lies in it.
 - `hand_camera_cap.stl`: the front, 34.4 x 34.4 x 6 mm, with a 17 mm lens hole and corner bosses
   that clamp the board. Print face down.
