@@ -66,13 +66,22 @@ def slots(w0,w1):
             out.append(box(extents=(np.linalg.norm(b-a),SLOT_W,h),transform=T))
     return out
 
+def cable_notch():
+    """2026-10-16 (owner): the cable opening is a notch open to the case's edge beside corner D (seen from
+    behind: the left-hand edge, just above the bottom-left screw slot), through the back wall and the
+    rim, so the cable lies in it instead of threading through a hole. Case frame: that edge is +u; the
+    notch is CABLE[1] deep from the outside and CABLE[0] long along v, starting 1.5 mm above the slot."""
+    o=OUTER/2
+    v0=-SLOT[0]/2+SLOT_W/2+1.5              # 1.5 mm above the corner-D slot
+    return lbox((o-CABLE[1],v0,-WALL-1),(o+1,v0+CABLE[0],BOARD_T+1))
+
 def back_piece(T):
     """Back wall + rim in the case frame, then the leaning support down to the plate."""
     o=OUTER/2; i=CAVITY/2
     wall=lbox((-o,-o,-WALL),(o,o,0))
     rim=trimesh.boolean.difference([lbox((-o,-o,0),(o,o,BOARD_T)),lbox((-i,-i,-1),(i,i,BOARD_T+1))],engine='manifold')
     cuts=[lbox((-POCKET[0]/2,-POCKET[1]/2,-POCKET[2]),(POCKET[0]/2,POCKET[1]/2,1)),
-          lbox((-CABLE[0]/2,-CABLE[1]/2,-WALL-1),(CABLE[0]/2,CABLE[1]/2,1))]+slots(-WALL-1,1)
+          cable_notch()]+slots(-WALL-1,1)
     case=trimesh.boolean.difference([trimesh.boolean.union([wall,rim],engine='manifold'),*cuts],engine='manifold')
     case.apply_transform(T)
     # support: the wall's bottom strip, run straight down to the plate
