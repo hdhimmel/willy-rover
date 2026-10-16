@@ -284,6 +284,11 @@ conservative the stopping behaviour looks.
 **Why:** `tof.py::read_frame()` deliberately raises `NotImplementedError` — the wire format
 had never been observed. `ENABLE_TOF=False`.
 
+> **HISTORICAL — first bench test of the sensor, before it was mounted (2026-09-15).** The zone
+> results below (62–63 of 64 live, rows reading 5–14 mm) describe the loose sensor on the bench, not
+> the mounted ones. Both mounted sensors run with floor profiles re-captured **2026-10-15** (front rows
+> 6–7, rear rows 0–1; see Software Design ToF section). Do not cite these numbers as current.
+>
 > ✅ **LARGELY CLOSED 2026-09-15 — the sensor works.** Transport, protocol and sensor are all
 > verified: **200/200 clean frames** at 0.13s each, 62–63 of 64 zones live.
 >

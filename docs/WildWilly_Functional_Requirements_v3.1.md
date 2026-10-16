@@ -1351,6 +1351,26 @@ visible as a logged overrun before it became a kill.
 > `tests/test_hailo_statelessness.py` (11) continues to cover the separate
 > 2026-08-23 context-accumulation defect. 277 tests pass.
 
+**G-7 --- STUCK escape moves can be chosen by the on-device model (documented 2026-10-16, outside
+review).** When Willie is STUCK, `brain._stuck()` asks the Hailo LLM for an escape move. If the reply
+parses, its action is one of forward / reverse / turn_left / turn_right / stop / wait, and its
+`action_confidence` is at least `HAILO_LLM_CONFIDENCE_FLOOR` (0.7), `_apply_ai_motion()` sends that move
+to `SafetyController.request()` **without asking the cloud model**. Otherwise (parse failure, low or
+missing confidence, timeout) it escalates to the cloud model, whose move is applied the same way.
+
+What bounds it today: `action_confidence` is a *structural* check (known action name, duration and speed
+in range -- `ai_provider._action_confidence`), **not** the model's belief that the move is right. The
+move still passes every motion gate in `safety.approve_motion()` (forward blocked inside `DIST_STOP`,
+reverse blocked by a rear reading inside `DIST_STOP`, tilt, battery tier, failed self-test) and is
+clamped to `MAX_COMMAND_DURATION_S` (3 s) and `SPEED_MAX` (1.0 = full speed). The 2026-10-08 Hailo
+qualification measured 78% usable but only 25% strictly correct replies, so the model picking the
+*direction* is not qualified; the gates above are what keep a wrong pick from becoming a collision.
+
+Open options (owner to choose; not implemented): (a) require the cloud model to agree before a Hailo
+move is applied when online; (b) cap AI-chosen speed at `SPEED_SLOW` and duration at ~1 s; (c) drop the
+Hailo path for motion and keep it for speech only. Until then this is a known gap, not a verified
+behaviour.
+
 
 # 1. Purpose
 

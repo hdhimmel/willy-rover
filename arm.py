@@ -9,9 +9,14 @@ if not config.SIMULATE_HARDWARE:
 # FR-700-002 (preset positions): applied by brain.py's step sequences -- the wave through
 # ARM_POSE_WAVE_HELLO, stow/home to ARM_POSE_REST (elbow opened first if the shoulder must move,
 # 2026-10-06). Not yet run on the rover. center_all() below is no longer used for stow.
-# FR-700-003 (joint limits) -- PARTIAL: _drive() below clamps to manufacturer-default
-# ARM_SERVO_MIN_US/MAX_US, but real per-joint calibrated limits haven't been bench-set.
-# FR-700-004 (arm stops on E-stop) -- PARTIAL: safety.SafetyController still only holds a
+# FR-700-003 (joint limits) -- PARTIAL (corrected 2026-10-16): _drive() clamps each joint to
+# config.ARM_JOINT_LIMITS_US where one is measured (elbow 800-1850, wrist pitch 1075-1475, owner) and to
+# the ARM_SERVO_MIN_US/MAX_US defaults otherwise (base, shoulder, wrist rotate, gripper); the
+# elbow/shoulder interlock ARM_COUPLED_LIMITS_US applies on top, and brain._check_arm_current() stows
+# and releases on ARM_CURRENT_LIMIT_A (2.5 A for 0.4 s). Base/shoulder limits wait on the one-servo
+# shoulder rebuild and ARM_JOINT_CAL.
+# FR-700-004 (arm stops on E-stop) -- PARTIAL: the E-stop is the main power switch and cuts the arm
+# with everything else. A SOFTWARE stop does not freeze the arm: safety.SafetyController still only holds a
 # drive_base reference (see safety.py's __init__), never an Arm instance, and
 # emergency_stop() only calls self._drive.brake() -- there is no explicit "freeze the arm"
 # call anywhere. What was a bigger problem until this fixed (2026-08-18): retrieval_task.py's
