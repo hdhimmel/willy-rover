@@ -73,31 +73,35 @@ to an assumed physical ordering. Until this is confirmed, do not trust per-wheel
 stall attribution, crab steering, or autonomous recovery — every one of those names a
 specific wheel.
 
-**Tooling:** `scripts/encoder_map_check.py` already drives one wheel at a time and reads the
-MCP23017 GPIO registers directly (deliberately not through `sensors.Encoders`, whose decode
-assumes the mapping under test). `scripts/wheel_current_test.py` drives one wheel and reports
-current, which independently confirms *which* motor moved.
+**Tooling (rewritten 2026-10-16 for the Pico cutover):** the MCP23017 expander is off the
+bus (Master Hardware Design §4.7); the six encoders are counted by **Pico A** and read over
+`uart4-pi5` by `sensors.Encoders` (signed ×2 since firmware a-0.3, `ENCODER_COUNTS_PER_REV`=763).
+`scripts/motor_map_check.py` drives each `MOTOR_PORT` alone in rover-forward terms
+(`MOTOR_SIGN` applied, as `motors.py` does) and prints every encoder's count change: a correct
+row moves **only its own** encoder, by a **positive** amount. `scripts/wheel_current_test.py`
+drives one wheel and reports current, which independently confirms a port is connected.
+`scripts/encoder_map_check.py` (MCP23017 pin poll) no longer exists; do not reinstate it.
 
 **Procedure:**
 
-1. Rover on blocks. Service stopped. Label the six wheels physically (LF, LM, LR, RF, RM, RR)
-   with tape so the observer and the recorder mean the same thing.
-2. For each of the six `MOTOR_PORT` entries in turn, drive that port alone, forward, ~2s at
-   a duty above breakaway (`config.py:61` notes this chassis needs roughly 0.5+ duty to turn
-   at all; below that a healthy motor only hums).
-3. Record **which physical wheel turned** and **in which direction**.
-4. Repeat in reverse for any wheel whose direction looked wrong.
+1. Rover on blocks. Service stopped (it owns the motor ports and Pico A's UART). Label the
+   six wheels physically (LF, LM, LR, RF, RM, RR) with tape.
+2. `python3 scripts/motor_map_check.py` -- all six, or name wheels (`lf rr`).
+3. For each row, record **which physical wheel turned**, **whether it rolled forward**, and the
+   script's verdict. The script can only see encoders; your eyes confirm the wheel.
+4. Any non-OK row: wires first (connector, crimp, J3 position), then config
+   (`MOTOR_PORT`, `MOTOR_SIGN`), then the part. Re-run that wheel alone after a fix.
 
 **Record:**
 
-| config key | address, port | wheel that actually turned | direction correct? |
-|---|---|---|---|
-| `lf` | `MOTORKIT_LEFT_ADDR`, 3 | | |
-| `lm` | `MOTORKIT_LEFT_ADDR`, 2 | | |
-| `lr` | `MOTORKIT_LEFT_ADDR`, 1 | | |
-| `rf` | `MOTORKIT_RIGHT_ADDR`, 3 | | |
-| `rm` | `MOTORKIT_RIGHT_ADDR`, 2 | | |
-| `rr` | `MOTORKIT_RIGHT_ADDR`, 1 | | |
+| config key | address, port | wheel that actually turned | rolled forward? | script verdict |
+|---|---|---|---|---|
+| `lf` | `MOTORKIT_LEFT_ADDR`, 3 | | | |
+| `lm` | `MOTORKIT_LEFT_ADDR`, 2 | | | |
+| `lr` | `MOTORKIT_LEFT_ADDR`, 1 | | | |
+| `rf` | `MOTORKIT_RIGHT_ADDR`, 3 | | | |
+| `rm` | `MOTORKIT_RIGHT_ADDR`, 2 | | | |
+| `rr` | `MOTORKIT_RIGHT_ADDR`, 1 | | | |
 
 **Pass:** all six map to the wheel their key names, and forward is forward on both sides.
 **If a whole side runs backward**, that is `MOTOR_SIGN`, not `MOTOR_PORT`: the motors are
@@ -153,6 +157,8 @@ taken under power.
 toggle in step on every wheel (raw pin poll over USB, each wheel driven alone); a-0.3 decodes
 signed x2, direction verified on all six; counts/rev **763**.
 
+**Historical (MCP23017, retired):** the next paragraph describes the old expander method and
+is kept for the record only -- Pico A counts in hardware (PIO), so none of its aliasing applies now.
 **The method matters more than the numbers here.** Do not poll these pins for edges: at 0.6
 duty the edge rate is ~7.7 kHz against a ~1.2 kHz I²C ceiling, and the aliasing reads as a
 CONSTANT. Three attempts concluded "no encoder output at all" and all three were wrong. Drive

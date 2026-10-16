@@ -918,10 +918,17 @@ class RoverBrain:
         if not text:
             log.info(f'ENGAGE answered=no kind={t.kind}'); return
         data=engage_words.extract(t,text,getattr(self,'cloud_ai',None))
-        if self._engage_topic is not t:
-            log.info(f'Engage answer not used (topic ended): {t.kind} heard {text!r}'); return
         if not data:
             log.info(f'Engage answer not used: {t.kind} heard {text!r}'); return
+        # 2026-10-16 (outside review): the topic check and everything it permits run under the lock
+        # _engage_end takes, so a stop either lands first (nothing stored, nothing said) or after
+        # (the answer was fully handled before it). speak() only queues; the writes are small.
+        with self._engage_lock():
+            if self._engage_topic is not t:
+                log.info(f'Engage answer not used (topic ended): {t.kind} heard {text!r}'); return
+            self._engage_act(t,data)
+
+    def _engage_act(self,t,data):
         log.info(f'ENGAGE stored kind={t.kind} {data}')
         if t.kind=='greet_stranger':
             # FR-2100-003 kept: a spoken name may resolve an identity, never create one; no vector stored.

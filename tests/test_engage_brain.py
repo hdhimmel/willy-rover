@@ -60,7 +60,7 @@ def b2(state='ROAM',rotate_ok=True):
     went=[]; b._go=lambda s: (went.append(s),setattr(b,'_state',s)); b.went=went
     b._upd=lambda *a,**k: None
     for n in ('_start_engage','_engage_tick','_engage_say','_engage_answer','_engage_store','_engage_end',
-              '_engage_lock','_engage_apply_pending'):
+              '_engage_lock','_engage_apply_pending','_engage_act'):
         setattr(b,n,types.MethodType(getattr(RoverBrain,n),b))
     return b
 def wait(b):
@@ -231,5 +231,26 @@ assert b._state=='ENGAGE', b._state
 b.voice.stop_requested.set(); b._tick()
 assert b._state=='IDLE' and b._engage_topic is None, (b._state,b._engage_topic)
 b.stop()
+print('OK')
+''')
+
+
+def test_stop_between_the_check_and_the_action_stores_and_says_nothing():
+    # 2026-10-16 (outside review): a stop landing after the answer was extracted but before it is
+    # stored/acknowledged. Deterministic: the test holds the engage lock (as _engage_end does), the
+    # answer worker blocks on it, the topic is ended, the lock released.
+    _run(_ENGAGE+r'''
+import threading
+b=b2('IDLE')
+t=Topic('ask_thing','sports ball@kitchen',{'thing':'sports ball','room':'kitchen'},True,None)
+b._engage_topic=t
+lock=b._engage_lock(); lock.acquire()
+w=threading.Thread(target=b._engage_store,args=(t,"It's Storm's")); w.start()
+time.sleep(0.3)
+assert w.is_alive(), 'the store did not wait for the lock'
+b._engage_topic=None                       # what _engage_end does under the lock
+lock.release(); w.join(2)
+assert not b.memory.things('sports ball','kitchen'), 'stored after stop'
+assert not said, said
 print('OK')
 ''')
