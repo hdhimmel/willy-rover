@@ -27,7 +27,7 @@ ns=types.SimpleNamespace(identity=store,_engage_topic=None,_engage_prev={},_expe
     voice=types.SimpleNamespace(available=True,speak=lambda t,**k:said.append(t),set_current_person=lambda n:None,
                                 prompt_listen=lambda cb,t: prompts.append(cb)),
     world_model=types.SimpleNamespace(get_robot_pose=lambda: types.SimpleNamespace(x=0,y=0),get_room=lambda x,y:None))
-for m in ("_face_tick","_engage_store"): setattr(ns,m,types.MethodType(getattr(RoverBrain,m),ns))
+for m in ("_face_tick","_engage_store","_engage_act","_engage_lock"): setattr(ns,m,types.MethodType(getattr(RoverBrain,m),ns))
 def show(v): slot[0]=(time.time(),[((0,0,1,1),v)])
 
 slot[0]=None; assert ns._face_tick() is None                          # no new scan
