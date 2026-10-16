@@ -17,7 +17,7 @@ from trimesh.creation import box,cylinder
 
 L=float(os.environ.get('FOREARM_PIVOT_MM','265'))
 DUCT_MM=float(os.environ.get('FOREARM_DUCT_MM','10'))   # 14 for the new body (owner, 2026-10-16)
-SRC=os.path.expanduser(f'~/Downloads/On_Kol_duct{round(DUCT_MM)}_{round(L)}.stl')
+SRC=os.path.expanduser(f'~/Downloads/On_Kol_duct{DUCT_MM:g}_{round(L)}.stl')
 WRIST_AXLE=np.array([12.4,0,12.5]); ELBOW_HUB=np.array([152.3,0,20.0])
 S=math.sqrt(L**2-(ELBOW_HUB[2]-WRIST_AXLE[2])**2)-(ELBOW_HUB[0]-WRIST_AXLE[0])
 DUCT_Y,DUCT_Z=28.0,14.0; DUCT_R=DUCT_MM/2

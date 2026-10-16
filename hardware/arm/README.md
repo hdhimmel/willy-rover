@@ -78,8 +78,8 @@ elbow) in the -Y cheek, and an extension spring on a crank as a counterbalance.
   (`SHOULDER_X=9.7`). If the old base's spline sits at the other end of the window, run with
   `SHOULDER_X=29.8`.
 
-### Forearm duct 14 mm (2026-10-16, owner)
+### Forearm duct 12.5 mm (2026-10-16, owner; 14 mm tried first)
 
-`FOREARM_PIVOT_MM=265 FOREARM_DUCT_MM=14 python build_arm_ducts.py` -> `~/Downloads/On_Kol_duct14_265.stl`
-(one piece, 297 mm). Walls along the straight run 2.5 mm (4.5 at 10 mm); nearest elbow servo screw hole
-1.5 mm from the duct. `build_forearm_split.py` takes the same `FOREARM_DUCT_MM` if a split is wanted later.
+`FOREARM_PIVOT_MM=265 FOREARM_DUCT_MM=12.5 python build_arm_ducts.py` -> `~/Downloads/On_Kol_duct12.5_265.stl`
+(one piece, 297 mm). Walls along the straight run 3.2 mm (2.5 at 14, 4.5 at 10); nearest elbow servo screw hole
+2.2 mm from the duct. `build_forearm_split.py` takes the same `FOREARM_DUCT_MM` if a split is wanted later.

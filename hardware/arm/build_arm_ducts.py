@@ -66,7 +66,7 @@ fa_f=trimesh.boolean.union([fa,fill],engine='manifold')
 fa_path=[np.array(p,float) for p in [(36,28,36),(56,28,14),(98+S,28,14),(110+S,64,14)]]
 fa_cut=capsule_path(fa_path,FR)
 fa2=trimesh.boolean.difference([fa_f,fa_cut],engine='manifold')
-out=os.path.expanduser('~/Downloads/On_Kol_duct%d_%d.stl'%(round(FOREARM_DUCT_MM),round(FOREARM_PIVOT_MM)))
+out=os.path.expanduser('~/Downloads/On_Kol_duct%g_%d.stl'%(FOREARM_DUCT_MM,round(FOREARM_PIVOT_MM)))
 fa2.export(out)
 hub=ELBOW_HUB+np.array([S,0,0])
 print(f"fore: stretched {S:.1f} mm -> pivots {np.linalg.norm(hub-WRIST_AXLE):.1f} mm; length {fa2.extents[0]:.1f} mm; "
