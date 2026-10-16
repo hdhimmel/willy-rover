@@ -68,7 +68,8 @@ fa_f=trimesh.boolean.union([fa,fill],engine='manifold')
 # section spread sideways (corner chamfers kept), hulled ring to ring so the rising top edge is followed.
 # The wrist hub and the elbow fork are untouched, so both joints still fit.
 FOREARM_WIDE_MM=float(os.environ.get("FOREARM_WIDE_MM","0"))      # 0 = original width
-WIDE_X0,WIDE_X1=26.0,36.0            # taper from the arm's width (behind the wrist hub) to full width
+WRIST_SHIFT=float(os.environ.get('FOREARM_WRIST_SHIFT','0'))   # 2026-10-16: 10 = duct entry + widening 1 cm further from the wrist servo
+WIDE_X0,WIDE_X1=26.0+WRIST_SHIFT,36.0+WRIST_SHIFT   # taper from the arm's width (behind the wrist hub) to full width
 WIDE_X3=225.0+S-125.0                # elbow end of the widening: where the fork already starts to widen
 if FOREARM_WIDE_MM>0:
     YC=28.0
@@ -84,7 +85,7 @@ if FOREARM_WIDE_MM>0:
     fa_f=trimesh.boolean.union([fa_f]+hulls,engine='manifold')
 EXIT_DX=float(os.environ.get('FOREARM_EXIT_DX','12'))   # exit run along x from the straight to the side
 EXIT_X=float(os.environ.get('FOREARM_EXIT_X','98'))   # 92 for the 18 mm duct: 98 breaks into the elbow servo's screw hole
-fa_path=[np.array(p,float) for p in [(36,28,36),(56,28,14),(EXIT_X+S,28,14),(EXIT_X+EXIT_DX+S,64,14)]]
+fa_path=[np.array(p,float) for p in [(36+WRIST_SHIFT,28,36),(56+WRIST_SHIFT,28,14),(EXIT_X+S,28,14),(EXIT_X+EXIT_DX+S,64,14)]]
 fa_cut=capsule_path(fa_path,FR)
 fa2=trimesh.boolean.difference([fa_f,fa_cut],engine='manifold')
 out=os.path.expanduser('~/Downloads/On_Kol_duct%g_%d.stl'%(FOREARM_DUCT_MM,round(FOREARM_PIVOT_MM)))

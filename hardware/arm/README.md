@@ -80,10 +80,12 @@ elbow) in the -Y cheek, and an extension spring on a crank as a counterbalance.
 
 ### Forearm duct 18 mm, widened arm (2026-10-16, owner; 14 then 12.5 mm tried first)
 
-`FOREARM_PIVOT_MM=265 FOREARM_DUCT_MM=18 FOREARM_WIDE_MM=28 FOREARM_EXIT_X=92 python build_arm_ducts.py`
+`FOREARM_PIVOT_MM=265 FOREARM_DUCT_MM=18 FOREARM_WIDE_MM=28 FOREARM_EXIT_X=92 FOREARM_WRIST_SHIFT=10 python build_arm_ducts.py`
 -> `~/Downloads/On_Kol_duct18_265.stl` (one piece, 297 mm). Same 18 mm duct as the upper arm. The arm is
 widened from 20 to 28 mm (its own section spread sideways, chamfers kept) from just behind the wrist
 joint (taper x 26-36) to the elbow fork, so the duct walls stay 5.0 mm all along (the original 10 mm
 duct had 4.5). The wrist hub and elbow fork are unchanged, so both joints fit as before. The side exit
 moved 6 mm toward the wrist (`FOREARM_EXIT_X` 98 -> 92): at 98 the 18 mm duct broke into the elbow
 servo's screw hole; now 5.2 mm clear.
+Owner 2026-10-16: the wrist-end duct opening and the start of the widening moved 10 mm toward the
+elbow (`FOREARM_WRIST_SHIFT=10`; taper now x 36-46, opening from ~x 41) -- at 0 they hit the wrist servo.
