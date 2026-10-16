@@ -91,3 +91,16 @@ moved 6 mm toward the wrist (`FOREARM_EXIT_X` 98 -> 92): at 98 the 18 mm duct br
 servo's screw hole; now 5.2 mm clear.
 Owner 2026-10-16: the wrist-end duct opening and the start of the widening moved 10 mm toward the
 elbow (`FOREARM_WRIST_SHIFT=10`; taper now x 36-46, opening from ~x 41) -- at 0 they hit the wrist servo.
+
+## `build_finray_finger.py` (2026-10-16, owner: Fin Ray, PLA + TPU)
+
+Two pieces per finger, print 2 of each (same part both sides). Input: the fitted long finger
+`gripper_parts/gripper_finger_jaw10_ext8_jaw+50 (print 2).stl`.
+- `finray_base_PLA.stl`: the original pivot bar (two 3.2 mm holes, 16 mm apart, unchanged) cut just past
+  the jaw root, plus a half-thickness tongue (z 0-5) with two M3 hex nut traps underneath. Print flat.
+- `finray_jaw_TPU.stl` (TPU 95A, print flat): the Fin Ray -- 1.2 mm front beam ON the original gripping
+  face (so the jaws still close to 0 and open to 73 mm), 1.4 mm back beam from 20 mm deep at the root to
+  the tip, 1.0 mm ribs every 7 mm leaning 15 deg toward the root, solid nose. Its base block sits on the
+  tongue (z 5-10). Fix with 2 x M3 x 8 (counterbored 1.8 mm) + 2 x M3 nuts per finger.
+- The back now reaches 10 mm further out at the root than the old 10 mm jaw: check it clears the links
+  when fully open before printing two. Not yet fitted.
