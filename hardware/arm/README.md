@@ -77,3 +77,9 @@ elbow) in the -Y cheek, and an extension spring on a crank as a counterbalance.
 - **Check before printing:** the axis is taken at the spline end over the turntable centre
   (`SHOULDER_X=9.7`). If the old base's spline sits at the other end of the window, run with
   `SHOULDER_X=29.8`.
+
+### Forearm duct 14 mm (2026-10-16, owner)
+
+`FOREARM_PIVOT_MM=265 FOREARM_DUCT_MM=14 python build_arm_ducts.py` -> `~/Downloads/On_Kol_duct14_265.stl`
+(one piece, 297 mm). Walls along the straight run 2.5 mm (4.5 at 10 mm); nearest elbow servo screw hole
+1.5 mm from the duct. `build_forearm_split.py` takes the same `FOREARM_DUCT_MM` if a split is wanted later.

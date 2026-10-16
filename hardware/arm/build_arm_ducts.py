@@ -42,6 +42,8 @@ for t in np.linspace(0,1,9):
 import math,os
 from trimesh.creation import extrude_polygon
 FOREARM_PIVOT_MM=float(os.environ.get("FOREARM_PIVOT_MM","220"))   # 265 for the new body (2026-10-15)
+FOREARM_DUCT_MM=float(os.environ.get("FOREARM_DUCT_MM","10"))     # 14 for the new body (owner, 2026-10-16)
+FR=FOREARM_DUCT_MM/2
 WRIST_AXLE=np.array([12.4,0,12.5]); ELBOW_HUB=np.array([152.3,0,20.0])   # hole centres (y = hole axis)
 CUT_X=60.0
 fa0=trimesh.load(os.path.expanduser('~/Downloads/Arm B.stl'))
@@ -62,17 +64,17 @@ seg=trimesh.boolean.intersection([fa,clip],engine='manifold')
 fill=trimesh.boolean.intersection([seg.convex_hull,box(bounds=[[30,18.5,0],[95+S,37.5,40]])],engine='manifold')
 fa_f=trimesh.boolean.union([fa,fill],engine='manifold')
 fa_path=[np.array(p,float) for p in [(36,28,36),(56,28,14),(98+S,28,14),(110+S,64,14)]]
-fa_cut=capsule_path(fa_path,5.0)
+fa_cut=capsule_path(fa_path,FR)
 fa2=trimesh.boolean.difference([fa_f,fa_cut],engine='manifold')
-out=os.path.expanduser('~/Downloads/On_Kol_duct10_%d.stl'%round(FOREARM_PIVOT_MM))
+out=os.path.expanduser('~/Downloads/On_Kol_duct%d_%d.stl'%(round(FOREARM_DUCT_MM),round(FOREARM_PIVOT_MM)))
 fa2.export(out)
 hub=ELBOW_HUB+np.array([S,0,0])
 print(f"fore: stretched {S:.1f} mm -> pivots {np.linalg.norm(hub-WRIST_AXLE):.1f} mm; length {fa2.extents[0]:.1f} mm; "
       f"vol {round(fa0.volume)} -> {round(fa2.volume)}; watertight {fa2.is_watertight}; wrote {out}")
 for t in np.linspace(0,1,7):
     p=fa_path[1]+(fa_path[2]-fa_path[1])*t
-    _,dist,_=closest_point(fa_f,[p]); print(f"  fore inner x={p[0]:.0f} wall={dist[0]-5:.1f} mm")
+    _,dist,_=closest_point(fa_f,[p]); print(f"  fore inner x={p[0]:.0f} wall={dist[0]-FR:.1f} mm")
 seg2=np.array(fa_path[3])-np.array(fa_path[2])
 for sc in ([116.9+S,53.2,13.2],[117.4+S,53.2,23.1]):
     p=np.array(sc); t=np.clip(np.dot(p-fa_path[2],seg2)/np.dot(seg2,seg2),0,1)
-    print("  screw hole",np.round(sc,1),"clearance to duct edge",round(np.linalg.norm(p-(fa_path[2]+t*seg2))-5-1.5,1),"mm")
+    print("  screw hole",np.round(sc,1),"clearance to duct edge",round(np.linalg.norm(p-(fa_path[2]+t*seg2))-FR-1.5,1),"mm")
