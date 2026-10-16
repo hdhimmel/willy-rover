@@ -64,8 +64,13 @@ elbow) in the -Y cheek, and an extension spring on a crank as a counterbalance.
   its outer flange recess and screw holes filled; a 32 mm boss outside; the 608 pressed in from
   outside against a 5 mm lip (14 mm hole, touches the outer race only); a pocket with a printed
   4 mm bar in the disk outside the -Y cheek as the spring anchor.
-- `Shoulder_Idler_Axle.stl`: a disk that sits in the upper arm's -Y horn recess (4 x M2 at r=7,
-  like a horn), a 10 mm collar onto the bearing's inner race, 8 mm through the bearing, D-flat end.
+- `Shoulder_Rod.stl` (2026-10-16, owner: printed rod): 8 mm D-rod, 48 mm, from past the crank through the
+  608 into the arm hub, stopping short of the servo horn. **Print lying on its flat** so the layers run
+  lengthwise -- the spring bends it at the bearing. The flat also drives the crank.
+- `Shoulder_Rod_Hub.stl`: keys the rod to the arm -- disk in the -Y horn recess (4 x M2 at r=7, like a
+  horn), sleeve into the arm's 10 mm centre hole, 10 mm collar onto the bearing's inner race. Print disk down.
+- Fix 2026-10-16: the 14 mm hole through the bearing cheek's inner face printed blind (a 1 mm skin, then a
+  1 mm wall before the seat). Now clear through; checked by rays along the axis.
 - `Shoulder_Crank.stl`: clamps the D-flat (M3 grub), spring holes at r = 15 / 20 / 25 mm. Fit it
   pointing opposite the upper arm; spring (via a short cord) from the crank pin to the anchor bar.
   Start on r=15, move out until the arm stays level with the servo off.

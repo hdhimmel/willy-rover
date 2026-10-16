@@ -12,9 +12,10 @@ Outputs to ~/Downloads:
   Shoulder_Base_1servo.stl   the yoke: +Y cheek keeps the servo window, -Y cheek window filled, an
                              outer boss with the 608 seat (pressed in from OUTSIDE against a 5 mm lip),
                              a spring-anchor pocket with a printed bar in the disk outside the -Y cheek
-  Shoulder_Idler_Axle.stl    screws into the upper arm's -Y horn recess (4 x M2 at r=7, like a horn),
-                             10 mm collar to the bearing's inner race, 8 mm through the bearing,
-                             D-flat end for the crank
+  Shoulder_Rod.stl           8 mm D-rod (1 mm flat), 48 mm: crank -> 608 -> into the arm hub, stopping short
+                             of the servo horn. Print LYING ON THE FLAT (layers lengthwise = strong in bending)
+  Shoulder_Rod_Hub.stl       keys the rod to the arm: disk in the -Y horn recess (4 x M2 at r=7, like a horn),
+                             sleeve into the arm's 10 mm hole, collar onto the bearing's inner race; D-bore
   Shoulder_Crank.stl         clamps on the D-flat (M3 grub), spring holes at r = 15 / 20 / 25 mm
 
 Base frame (mm): turntable axis = z axis, cheeks at y = +-21..+-29, servo window x -0.5..40,
@@ -68,7 +69,7 @@ def base():
     # outer boss, then the 608 seat from outside against a lip
     m=U(m,cyl_y(BOSS_D,-BOSS_OUT,-CHEEK_OUT+0.5))
     seat=cyl_y(SEAT_D,-BOSS_OUT-1,-BOSS_OUT+BRG_W)
-    lip=cyl_y(LIP_D,-CHEEK_IN-1,-BOSS_OUT+1)
+    lip=cyl_y(LIP_D,-CHEEK_IN+1,-BOSS_OUT+BRG_W-1)   # 2026-10-16: was -CHEEK_IN-1 -- left a 1 mm skin on the inner face
     m=D(m,seat,lip)
     # spring anchor: a pocket in the disk top outside the -Y cheek with a printed 4 mm bar across it
     # (along x) for the spring hook -- a bolt would need a 90 mm hole out to the disk edge
@@ -80,23 +81,44 @@ def base():
     pocket=D(pocket,bar)
     m=D(m,pocket); m.apply_translation([0,0,-dz]); return m
 
-def axle():
-    """Built along y in base coordinates, then laid flat for printing (disk down)."""
-    y_disk0=-ARM_FACE+RECESS_DEPTH-0.2          # inside the recess
-    y_inner=-BOSS_OUT+BRG_W                      # inner face of the bearing
+ROD_FLAT=1.0                        # D-flat depth: the rod prints on it (layers run lengthwise) and drives the crank
+ROD_IN_ARM=8.0                      # rod end, |y| on the far side of the arm centre -- stops short of the servo horn recess
+ROD_CLEAR=0.2
+
+def _d_profile(d,flat,h):
+    """D-section prism along z, the flat on +y, centred on the origin."""
+    c=cylinder(radius=d/2,height=h,sections=96)
+    return trimesh.boolean.intersection([c,box(bounds=[[-d,-d,-h],[d,d/2-flat,h]])],engine='manifold')
+
+def rod():
+    """2026-10-16 (owner: a printed rod): an 8 mm D-rod from past the crank into the arm hub. Printed
+    lying on its flat, so bending (the spring pulls on the crank) runs along the layers."""
     y_end=-BOSS_OUT-CRANK_GAP-CRANK_T-1.0
-    disk=cyl_y(RECESS_D-0.4,y_disk0,-ARM_FACE)
-    collar=cyl_y(COLLAR_D,-ARM_FACE,y_inner)
-    shaft=cyl_y(BRG_BORE,y_inner,y_end)              # press fit in the 608 bore
-    a=U(disk,collar,shaft)
+    L=ROD_IN_ARM-y_end
+    r=_d_profile(BRG_BORE,ROD_FLAT,L)
+    r.apply_transform(trimesh.transformations.rotation_matrix(math.pi/2,[0,1,0]))   # length along x
+    r.apply_transform(trimesh.transformations.rotation_matrix(math.pi/2,[1,0,0]))   # flat face down
+    r.apply_translation(-r.bounds[0]); return r
+
+def hub():
+    """Keys the rod to the upper arm: disk in the -Y horn recess (4 x M2 at r=7, like a horn), a sleeve
+    into the arm's 10 mm centre hole, a collar out to the 608's inner race. D-bore for the rod.
+    Built in base coordinates along y, then stood on the disk for printing."""
+    y_disk0=-ARM_FACE+RECESS_DEPTH-0.2
+    y_inner=-BOSS_OUT+BRG_W
+    h=U(cyl_y(RECESS_D-0.4,y_disk0,-ARM_FACE),
+        cyl_y(COLLAR_D,-ARM_FACE,y_inner),
+        cyl_y(9.8,y_disk0-0.01,ROD_IN_ARM-1.0))                  # sleeve inside the arm's 10 mm hole
     for k in range(4):
         t=k*math.pi/2
-        a=D(a,cyl_y(2.4,y_disk0-1,-ARM_FACE+0.01,x=AX_X+HORN_SCREW_R*math.cos(t),z=AX_Z+HORN_SCREW_R*math.sin(t)))
-    # D-flat on the crank end (1 mm off)
-    a=D(a,box(bounds=[[AX_X-10,y_end-1,AX_Z+BRG_BORE/2-1],[AX_X+10,-BOSS_OUT-0.5,AX_Z+10]]))
-    a.apply_translation([-AX_X,0,-AX_Z])
-    a.apply_transform(trimesh.transformations.rotation_matrix(-math.pi/2,[1,0,0]))
-    a.apply_translation([0,0,-a.bounds[0][2]]); return a
+        h=D(h,cyl_y(2.4,y_disk0-1,-ARM_FACE+0.01,x=AX_X+HORN_SCREW_R*math.cos(t),z=AX_Z+HORN_SCREW_R*math.sin(t)))
+    bore=_d_profile(BRG_BORE+ROD_CLEAR,ROD_FLAT,200)
+    bore.apply_transform(trimesh.transformations.rotation_matrix(math.pi/2,[1,0,0]))
+    bore.apply_translation([AX_X,0,AX_Z])
+    h=D(h,bore)
+    h.apply_translation([-AX_X,0,-AX_Z])
+    h.apply_transform(trimesh.transformations.rotation_matrix(-math.pi/2,[1,0,0]))
+    h.apply_translation([0,0,-h.bounds[0][2]]); return h
 
 def crank():
     """Flat bar: hub on the D-flat with an M3 grub, three spring holes; printed flat."""
@@ -117,7 +139,7 @@ def crank():
     c.apply_translation([0,0,CRANK_T/2]); return c
 
 if __name__=='__main__':
-    parts={'Shoulder_Base_1servo':base(),'Shoulder_Idler_Axle':axle(),'Shoulder_Crank':crank()}
+    parts={'Shoulder_Base_1servo':base(),'Shoulder_Rod':rod(),'Shoulder_Rod_Hub':hub(),'Shoulder_Crank':crank()}
     for n,p in parts.items():
         f=os.path.join(OUT,n+'.stl'); p.export(f)
         print(f'{n}: watertight={p.is_watertight} vol={p.volume:.0f} size={np.ptp(p.bounds,axis=0).round(1)} -> {f}')
