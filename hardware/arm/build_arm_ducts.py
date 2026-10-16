@@ -63,7 +63,28 @@ clip=box(bounds=[[30,0,0],[95+S,56,40]])
 seg=trimesh.boolean.intersection([fa,clip],engine='manifold')
 fill=trimesh.boolean.intersection([seg.convex_hull,box(bounds=[[30,18.5,0],[95+S,37.5,40]])],engine='manifold')
 fa_f=trimesh.boolean.union([fa,fill],engine='manifold')
-fa_path=[np.array(p,float) for p in [(36,28,36),(56,28,14),(98+S,28,14),(110+S,64,14)]]
+# 2026-10-16 (owner): with a big duct (18 mm, like the upper arm) the 20 mm-wide forearm would keep 1 mm
+# walls, so widen it to FOREARM_WIDE_MM from just behind the wrist joint to the elbow fork -- the arm's own
+# section spread sideways (corner chamfers kept), hulled ring to ring so the rising top edge is followed.
+# The wrist hub and the elbow fork are untouched, so both joints still fit.
+FOREARM_WIDE_MM=float(os.environ.get("FOREARM_WIDE_MM","0"))      # 0 = original width
+WIDE_X0,WIDE_X1=26.0,36.0            # taper from the arm's width (behind the wrist hub) to full width
+WIDE_X3=225.0+S-125.0                # elbow end of the widening: where the fork already starts to widen
+if FOREARM_WIDE_MM>0:
+    YC=28.0
+    def ring(x,w=None):
+        v=fa_f.section(plane_origin=[x,0,0],plane_normal=[1,0,0]).vertices.copy()
+        if w is not None:
+            grow=max(0.0,(w-np.ptp(v[:,1]))/2)
+            v[:,1]=np.where(v[:,1]<YC,v[:,1]-grow,v[:,1]+grow)
+        return v
+    xs=[WIDE_X0,WIDE_X1]+list(np.arange(WIDE_X1+20,WIDE_X3-10,20))+[WIDE_X3-10,WIDE_X3]
+    rings=[ring(WIDE_X0)]+[ring(x,FOREARM_WIDE_MM) for x in xs[1:-1]]+[ring(xs[-1],FOREARM_WIDE_MM)]
+    hulls=[trimesh.Trimesh(np.vstack([a,b])).convex_hull for a,b in zip(rings[:-1],rings[1:])]
+    fa_f=trimesh.boolean.union([fa_f]+hulls,engine='manifold')
+EXIT_DX=float(os.environ.get('FOREARM_EXIT_DX','12'))   # exit run along x from the straight to the side
+EXIT_X=float(os.environ.get('FOREARM_EXIT_X','98'))   # 92 for the 18 mm duct: 98 breaks into the elbow servo's screw hole
+fa_path=[np.array(p,float) for p in [(36,28,36),(56,28,14),(EXIT_X+S,28,14),(EXIT_X+EXIT_DX+S,64,14)]]
 fa_cut=capsule_path(fa_path,FR)
 fa2=trimesh.boolean.difference([fa_f,fa_cut],engine='manifold')
 out=os.path.expanduser('~/Downloads/On_Kol_duct%g_%d.stl'%(FOREARM_DUCT_MM,round(FOREARM_PIVOT_MM)))
