@@ -67,13 +67,14 @@ def slots(w0,w1):
     return out
 
 def cable_notch():
-    """2026-10-16 (owner): the cable opening is a notch open to the case's BOTTOM edge (the D-C edge, toward
-    the hand plate) beside corner D -- seen from behind, just right of the bottom-left screw slot -- through
-    the back wall and the rim, so the cable lies in it. Case frame: the bottom edge is -v and corner D is +u
-    (behind, the viewer's left is +u). CABLE[0] long along u, CABLE[1] deep from the edge, 1.5 mm from the slot."""
+    """2026-10-16/17 (owner): the cable opening is a notch open to the case's BOTTOM edge (the D-C edge, toward
+    the hand plate) beside corner C -- seen from behind, just left of the bottom-right screw slot -- through
+    the back wall and the rim, so the cable lies in it. Case frame: the bottom edge is -v and corner C is -u
+    (behind, the viewer's left is +u). CABLE[0] long along u, CABLE[1] deep from the edge, 1.5 mm from the slot.
+    (Was beside D on 10-16; owner moved it to the other side.)"""
     o=OUTER/2
-    u1=SLOT[0]/2-SLOT_W/2-1.5               # 1.5 mm in from the corner-D slot, running toward C
-    return lbox((u1-CABLE[0],-o-1,-WALL-1),(u1,-o+CABLE[1],BOARD_T+1))
+    u0=-(SLOT[0]/2-SLOT_W/2-1.5)            # 1.5 mm in from the corner-C slot, running toward D
+    return lbox((u0,-o-1,-WALL-1),(u0+CABLE[0],-o+CABLE[1],BOARD_T+1))
 
 def back_piece(T):
     """Back wall + rim in the case frame, then the leaning support down to the plate."""
